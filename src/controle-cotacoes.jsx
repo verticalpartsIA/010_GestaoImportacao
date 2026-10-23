@@ -102,6 +102,7 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
   const [abrindo, setAbrindo] = React.useState(null);
   const [abrindoTrat, setAbrindoTrat] = React.useState(null);
   const [escolherForn, setEscolherForn] = React.useState(null);
+  const ord = window.useOrdenacao(); // 23/10 (pedido do usuário) — ordenação por coluna
 
   const carregar = React.useCallback(async () => {
     setRefreshing(true);
@@ -194,6 +195,16 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
   const decididas = conquistadas + (contagem['Perdido'] || 0);
   const emAberto = (rows || []).filter((r) => !['Conquistado', 'Perdido', 'Suspenso', 'concluido'].includes(r.status)).length;
 
+  const linhasOrdenadas = ord.aplicar(filtradas, {
+    numeroCotacao: (r) => r.numero_cotacao,
+    data: (r) => (r.data ? new Date(r.data).getTime() : null),
+    cliente: (r) => r.nome_cliente,
+    vendedor: (r) => r.vendedor,
+    uf: (r) => r.estado_instalacao,
+    status: (r) => r.status,
+    origem: (r) => (r.origem === 'historico' ? 'Planilha' : 'Formulário'),
+  });
+
   return (
     <div className="page fade-in">
       <div className="page-head">
@@ -228,16 +239,16 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
       </div>
 
       <Card title="Cotações" sub="Planilha legada + Formulário digital · clique numa linha do Formulário para abrir a cadeia de tratativas">
-        <div className="table-wrap" style={{ border: 0 }}>
+        <div className="table-wrap table-wrap--sticky" style={{ border: 0 }}>
           <table className="t pcp-grid">
             <thead><tr>
-              <th>Nº Cotação</th>
-              <th>Data</th>
-              <th>Cliente</th>
-              <th>Vendedor</th>
-              <th>UF</th>
-              <th>Status</th>
-              <th>Origem</th>
+              {ord.th('numeroCotacao', 'Nº Cotação')}
+              {ord.th('data', 'Data')}
+              {ord.th('cliente', 'Cliente')}
+              {ord.th('vendedor', 'Vendedor')}
+              {ord.th('uf', 'UF')}
+              {ord.th('status', 'Status')}
+              {ord.th('origem', 'Origem')}
               <th></th>
             </tr></thead>
             <tbody>
@@ -247,7 +258,7 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
               {rows !== null && filtradas.length === 0 && (
                 <tr><td colSpan={99}><div className="empty"><h4>Nenhuma cotação encontrada</h4><p>Nada encontrado com os filtros atuais.</p></div></td></tr>
               )}
-              {filtradas.map((r, i) => {
+              {linhasOrdenadas.map((r, i) => {
                 const clicavel = r.origem === 'formulario' && r.numero_cotacao != null;
                 return (
                   <tr key={r.id ? `${r.origem}-${r.id}` : `${r.origem}-${r.numero_cotacao}-${i}`}

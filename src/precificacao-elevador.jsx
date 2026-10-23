@@ -336,9 +336,39 @@ function PZSelect({ value, onChange, options, placeholder }) {
 // EI_CONTAINER_TIPOS em embarques-importacao.jsx).
 const PZ_CONTAINER_TIPOS = ["20'DV", "40'DV", "40'HC", "20'RF", "40'RF", "20'OT", "40'OT", "20'FR", "40'FR", 'Outro'];
 
+/* 23/10 (pedido do usuário) — busca por texto + ordenação por coluna da
+   fila de Precificação. Função pura (não é hook) — chamada dentro do
+   render, depois do early return de detalhe. */
+function ordenarFiltrarPendentes(pendentes, busca, ord) {
+  const termo = (busca || '').trim().toLowerCase();
+  const filtrados = !termo ? pendentes : pendentes.filter((item) => {
+    const numero = item.numeroCotacao != null ? String(item.numeroCotacao) : '';
+    /* 23/10 — achado real do Codex (PR #1079): a busca só comparava o
+       número cru (ex. "950"), nunca o rótulo formatado que a própria
+       coluna "Cotação Nº" mostra (ex. "VPCT-0950-B", com a letra de
+       revisão) — colar o que está visível na tela não achava nada. */
+    const numeroFormatado = item.numeroCotacao != null ? window.MasterIdEngine.etapaId('cotacao', item.numeroCotacao, item.revisao).toLowerCase() : '';
+    return numero.includes(termo) || numeroFormatado.includes(termo) || (item.clienteNome || '').toLowerCase().includes(termo)
+      || (item.fornecedor || '').toLowerCase().includes(termo) || (item.numeroDocumentoFornecedor || '').toLowerCase().includes(termo);
+  });
+  return ord.aplicar(filtrados, {
+    numeroCotacao: (l) => l.numeroCotacao,
+    clienteNome: (l) => l.clienteNome,
+    fornecedor: (l) => (l.direto ? 'Direto (sem fornecedor)' : l.fornecedor),
+    respondedAt: (l) => (l.respondedAt ? new Date(l.respondedAt).getTime() : null),
+    statusCotacao: (l) => (l.direto ? null : window.CotacaoElevadorFornecedorStore.statusGroupLabel(l.statusCotacao)),
+    precificacaoStatus: (l) => (l.precificacaoStatus === 'finalizado' ? 'Aprovada' : l.precificacaoStatus === 'calculado' ? 'Em análise' : l.precificacaoStatus ? 'Recebida' : 'Não iniciada'),
+  });
+}
+
 /* ---------- Lista — cotações de fornecedor já respondidas ---------- */
 function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }) {
   const [pendentes, setPendentes] = React.useState(null);
+  /* 23/10 (pedido do usuário) — busca + ordenação por coluna na fila. Hooks
+     declarados aqui, ANTES do early return de pzId abaixo (regra do React:
+     hook não pode ser condicional). */
+  const [busca, setBusca] = React.useState('');
+  const ord = window.useOrdenacao();
   /* 23/08 (achado real, Gelson): clicar no nó "Financeiro precificando" da
      Cadeia de Gatilhos caía na lista genérica, não no documento da cotação.
      pzId agora pode nascer do subsel (id de precificacoes_elevador vindo
@@ -387,6 +417,8 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
     }} setRoute={setRoute} setSubsel={setSubsel}/>;
   }
 
+  const linhas = ordenarFiltrarPendentes(pendentes || [], busca, ord);
+
   return (
     <div className="page fade-in pl">
       <div className="page-head">
@@ -398,9 +430,18 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
         <div className="page-head__r"><PrecificacaoModoTabs modo={modo} setModo={setModo}/></div>
       </div>
 
-      <div className="table-wrap">
+      <div style={{ display: 'flex', gap: 8, margin: '0 0 12px', flexWrap: 'wrap' }}>
+        <input className="input" placeholder="Buscar Cotação Nº, cliente ou fornecedor…" value={busca}
+          onChange={(e) => setBusca(e.target.value)} style={{ minWidth: 280 }}/>
+      </div>
+
+      <div className="table-wrap table-wrap--sticky">
         <table className="t">
-          <thead><tr><th>Cotação Nº</th><th>Cliente</th><th>Fornecedor</th><th>Respondido em</th><th>Decisão de compra</th><th>Precificação</th><th></th></tr></thead>
+          <thead><tr>
+            {ord.th('numeroCotacao', 'Cotação Nº')}{ord.th('clienteNome', 'Cliente')}{ord.th('fornecedor', 'Fornecedor')}
+            {ord.th('respondedAt', 'Respondido em')}{ord.th('statusCotacao', 'Decisão de compra')}{ord.th('precificacaoStatus', 'Precificação')}
+            <th></th>
+          </tr></thead>
           <tbody>
             {pendentes === null && (
               <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</td></tr>
@@ -408,7 +449,10 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
             {pendentes !== null && pendentes.length === 0 && (
               <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma cotação respondida nem formulário enviado direto ainda.</td></tr>
             )}
-            {(pendentes || []).map((item) => (
+            {pendentes !== null && pendentes.length > 0 && linhas.length === 0 && (
+              <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhum resultado para "{busca}".</td></tr>
+            )}
+            {linhas.map((item) => (
               <tr key={item.cotacaoFornecedorId || ('direto-' + item.formularioElevadorId)} style={{ cursor: 'pointer' }} onClick={() => abrir(item)}>
                 {/* 23/10 (pedido do usuário) — a letra de revisão também aparece
                    na "mãe" (Nº da cotação), não só no numero_documento do

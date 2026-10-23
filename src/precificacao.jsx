@@ -28,6 +28,8 @@ function PrecificacaoLeadsPage({ setRoute, setSubsel, modo, setModo }) {
   const [loading, setLoading] = React.useState(true);
   const [erro, setErro] = React.useState(false);
   const [selectedProject, setSelectedProject] = React.useState(null);
+  const [busca, setBusca] = React.useState(''); // 23/10 (pedido do usuário)
+  const ord = window.useOrdenacao();
 
   React.useEffect(() => {
     let alive = true;
@@ -82,6 +84,13 @@ function PrecificacaoLeadsPage({ setRoute, setSubsel, modo, setModo }) {
   const prontos = items.filter(i => i.analiseAprovada).length;
   const valorPipeline = items.reduce((s, p) => s + (p.value || 0), 0);
 
+  const termo = busca.trim().toLowerCase();
+  const filtradosItems = !termo ? items : items.filter((i) =>
+    [i.name, i.client, i.status].some((v) => (v || '').toString().toLowerCase().includes(termo)));
+  const itemsOrdenados = ord.aplicar(filtradosItems, {
+    projeto: (i) => i.name, cliente: (i) => i.client, valor: (i) => i.value, status: (i) => i.status,
+  });
+
   return (
     <div className="page fade-in">
       <div className="page-head">
@@ -103,12 +112,17 @@ function PrecificacaoLeadsPage({ setRoute, setSubsel, modo, setModo }) {
         <KPI label="Valor em pipeline" value={fmtBRL(valorPipeline)} sub="soma dos leads convertidos" icon="trending"/>
       </div>
 
-      <div className="table-wrap">
+      <div style={{ display: 'flex', gap: 8, margin: '0 0 12px', flexWrap: 'wrap' }}>
+        <input className="input" placeholder="Buscar projeto, cliente ou status…" value={busca}
+          onChange={(e) => setBusca(e.target.value)} style={{ minWidth: 280 }}/>
+      </div>
+
+      <div className="table-wrap table-wrap--sticky">
         <table className="t">
           <thead><tr>
-            <th>Projeto</th><th>Cliente</th>
-            <th className="text-right">Valor</th>
-            <th>Status</th><th></th>
+            {ord.th('projeto', 'Projeto')}{ord.th('cliente', 'Cliente')}
+            {ord.th('valor', 'Valor', { className: 'text-right' })}
+            {ord.th('status', 'Status')}<th></th>
           </tr></thead>
           <tbody>
             {items.length === 0 && (
@@ -116,7 +130,12 @@ function PrecificacaoLeadsPage({ setRoute, setSubsel, modo, setModo }) {
                 Nenhum registro cadastrado.
               </td></tr>
             )}
-            {items.map((p) => (
+            {items.length > 0 && itemsOrdenados.length === 0 && (
+              <tr><td colSpan={99} style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
+                Nenhum resultado para "{busca}".
+              </td></tr>
+            )}
+            {itemsOrdenados.map((p) => (
               <tr key={p.id}
                 style={{ cursor:'pointer', background: selectedProject?.id === p.id ? 'var(--vp-gray-50)' : '' }}
                 onClick={() => setSelectedProject(p)}>
@@ -490,6 +509,7 @@ function PropostasPage({ setRoute, setSubsel }) {
   const [escopo, setEscopo] = React.useState(null);
   const [podeExcluir, setPodeExcluir] = React.useState(false);
   const [excluindoId, setExcluindoId] = React.useState(null);
+  const ord = window.useOrdenacao(); // 23/10 (pedido do usuário) — ordenação por coluna
 
   // Escopo de visibilidade (Configurações do Sistema › Permissões) — resolve
   // antes de carregar, pra montar a query já filtrada por vendedor_id em vez
@@ -652,6 +672,16 @@ function PropostasPage({ setRoute, setSubsel }) {
     : '—';
   const comMasterId = (rows || []).filter((p) => p.master_id).length;
 
+  const linhasOrdenadas = ord.aplicar(filtradas, {
+    numeroDocumento: (p) => p.numero_documento,
+    cliente: (p) => p.clientes?.razao_social || p.titulo,
+    vendedor: (p) => p.perfis?.nome,
+    masterId: (p) => p.master_id,
+    valor: (p) => (p.valor_total != null ? Number(p.valor_total) : null),
+    status: (p) => p.status,
+    data: (p) => (p.criado_em ? new Date(p.criado_em).getTime() : null),
+  });
+
   const abrirNova = () => { setSubsel && setSubsel(null); setRoute("proposta-editor"); };
   const abrirExistente = (p) => { setSubsel && setSubsel({ __editId: p.id }); setRoute("proposta-editor"); };
 
@@ -737,16 +767,16 @@ function PropostasPage({ setRoute, setSubsel }) {
       </div>
 
       <Card title="Propostas" sub="Clique numa proposta para abrir no editor">
-      <div className="table-wrap" style={{ border: 0 }}>
+      <div className="table-wrap table-wrap--sticky" style={{ border: 0 }}>
         <table className="t pcp-grid">
           <thead><tr>
-            <th>Nº Documento</th>
-            <th>Cliente</th>
-            <th>Vendedor</th>
-            <th>Master ID</th>
-            <th className="text-right">Valor</th>
-            <th>Status</th>
-            <th>Data</th>
+            {ord.th('numeroDocumento', 'Nº Documento')}
+            {ord.th('cliente', 'Cliente')}
+            {ord.th('vendedor', 'Vendedor')}
+            {ord.th('masterId', 'Master ID')}
+            {ord.th('valor', 'Valor', { className: 'text-right' })}
+            {ord.th('status', 'Status')}
+            {ord.th('data', 'Data')}
             {podeExcluir && <th></th>}
           </tr></thead>
           <tbody>
@@ -756,7 +786,7 @@ function PropostasPage({ setRoute, setSubsel }) {
             {rows !== null && filtradas.length === 0 && (
               <tr><td colSpan={99}><div className="empty"><h4>Nenhuma proposta encontrada</h4><p>Nada encontrado com os filtros atuais.</p></div></td></tr>
             )}
-            {filtradas.map((p) => (
+            {linhasOrdenadas.map((p) => (
               <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => abrirExistente(p)}>
                 <td>
                   <span className="mono small">{p.numero_documento || '—'}</span>

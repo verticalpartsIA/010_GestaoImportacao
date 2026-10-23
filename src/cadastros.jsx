@@ -155,6 +155,7 @@ function CadastroClientesPage() {
   const [items, setItems] = React.useState(null);
   const [search, setSearch] = React.useState('');
   const [saving, setSaving] = React.useState(false);
+  const ord = window.useOrdenacao(); // 23/10 (pedido do usuário) — ordenação por coluna
   /* 27/09 — achado real: "Editar" parecia não funcionar. O formulário abre
      no topo da página, mas a lista tem 1200+ linhas — clicando numa linha
      lá embaixo, nada visível mudava. Além disso, com o formulário já
@@ -206,6 +207,11 @@ function CadastroClientesPage() {
     return !q || (c.razao_social || '').toLowerCase().includes(q) || (c.nome_fantasia || '').toLowerCase().includes(q)
       || (c.codigo || '').toLowerCase().includes(q) || (c.cnpj || '').includes(q) || (c.cpf || '').includes(q);
   });
+  const ordenados = ord.aplicar(filtered, {
+    codigo: (c) => c.codigo, razaoSocial: (c) => c.razao_social, doc: (c) => c.cnpj || c.cpf,
+    cidade: (c) => c.endereco_cidade, contato: (c) => c.contato || c.telefone,
+    status: (c) => (c.ativo === false ? 'Inativo' : 'Ativo'),
+  });
 
   return (
     <div className="page fade-in">
@@ -229,12 +235,15 @@ function CadastroClientesPage() {
       <input className="input" style={{ marginBottom: 14 }} placeholder="Buscar por código, nome ou CNPJ/CPF…" value={search} onChange={(e) => setSearch(e.target.value)}/>
       <div className="small muted" style={{ marginBottom: 10 }}>{filtered.length} cliente(s) encontrado(s)</div>
 
-      <div className="table-wrap">
+      <div className="table-wrap table-wrap--sticky">
         <table className="t">
-          <thead><tr><th>Código</th><th>Razão social</th><th>CNPJ/CPF</th><th>Cidade/UF</th><th>Contato</th><th>Status</th><th></th></tr></thead>
+          <thead><tr>
+            {ord.th('codigo', 'Código')}{ord.th('razaoSocial', 'Razão social')}{ord.th('doc', 'CNPJ/CPF')}
+            {ord.th('cidade', 'Cidade/UF')}{ord.th('contato', 'Contato')}{ord.th('status', 'Status')}<th></th>
+          </tr></thead>
           <tbody>
             {filtered.length === 0 && <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhum cliente encontrado.</td></tr>}
-            {filtered.map((c) => (
+            {ordenados.map((c) => (
               <tr key={c.id}>
                 <td className="mono">{c.codigo || '—'}</td>
                 <td><div className="cell-main">{c.razao_social}</div>{c.nome_fantasia ? <div className="cell-sub">{c.nome_fantasia}</div> : null}</td>
@@ -488,6 +497,7 @@ function CadastroFornecedoresPage() {
   const [search, setSearch] = React.useState('');
   const [filterCategoria, setFilterCategoria] = React.useState('Todas');
   const [saving, setSaving] = React.useState(false);
+  const ord = window.useOrdenacao(); // 23/10 (pedido do usuário) — ordenação por coluna
   /* Mesmo ajuste de CadastroClientesPage (rolar até o form + key={id}), e o
      mesmo reflexo de Novo/Editar na URL:
      /cadastros-mestres/cadastro-fornecedores        → lista
@@ -538,6 +548,12 @@ function CadastroFornecedoresPage() {
     const matchCat = filterCategoria === 'Todas' || (f.categorias || []).includes(filterCategoria);
     return matchSearch && matchCat;
   });
+  const ordenados = ord.aplicar(filtered, {
+    codigo: (f) => f.codigo, razaoSocial: (f) => f.razao_social, categorias: (f) => (f.categorias || []).join(', '),
+    doc: (f) => f.cnpj || f.cpf, contato: (f) => f.contato || f.telefone,
+    avaliacao: (f) => (medias[f.id] ? Number(medias[f.id].media) : null),
+    status: (f) => (f.ativo === false ? 'Inativo' : 'Ativo'),
+  });
 
   return (
     <div className="page fade-in">
@@ -567,12 +583,15 @@ function CadastroFornecedoresPage() {
       </div>
       <div className="small muted" style={{ marginBottom: 10 }}>{filtered.length} fornecedor(es) encontrado(s)</div>
 
-      <div className="table-wrap">
+      <div className="table-wrap table-wrap--sticky">
         <table className="t">
-          <thead><tr><th>Código</th><th>Razão social</th><th>Categorias</th><th>CNPJ/CPF</th><th>Contato</th><th>Avaliação</th><th>Status</th><th></th></tr></thead>
+          <thead><tr>
+            {ord.th('codigo', 'Código')}{ord.th('razaoSocial', 'Razão social')}{ord.th('categorias', 'Categorias')}
+            {ord.th('doc', 'CNPJ/CPF')}{ord.th('contato', 'Contato')}{ord.th('avaliacao', 'Avaliação')}{ord.th('status', 'Status')}<th></th>
+          </tr></thead>
           <tbody>
             {filtered.length === 0 && <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhum fornecedor encontrado.</td></tr>}
-            {filtered.map((f) => (
+            {ordenados.map((f) => (
               <tr key={f.id}>
                 <td className="mono">{f.codigo || '—'}</td>
                 <td><div className="cell-main">{f.razao_social}</div>{f.nome_fantasia ? <div className="cell-sub">{f.nome_fantasia}</div> : null}</td>

@@ -684,6 +684,7 @@ function PIPage() {
   const [search, setSearch] = React.useState('');
   const [filterStatus, setFilterStatus] = React.useState('Todos');
   const [saving, setSaving] = React.useState(false);
+  const ord = window.useOrdenacao(); // 23/10 (pedido do usuário) — ordenação por coluna
 
   /* Formulário (Nova/Editar) e o modal de vincular embarque refletidos na URL:
      /gestao-importacao/pi-importacao              → lista
@@ -743,6 +744,18 @@ function PIPage() {
     const matchStatus = filterStatus === 'Todos' || pi.status === filterStatus;
     return matchSearch && matchStatus;
   });
+  const linhasOrdenadas = ord.aplicar(filtered, {
+    numeroPi: (pi) => pi.numero_pi,
+    numeroCotacao: (pi) => pi.numero_cotacao,
+    fornecedor: (pi) => pi.fornecedor,
+    abertura: (pi) => (pi.data_abertura ? new Date(pi.data_abertura).getTime() : null),
+    status: (pi) => pi.status,
+    producao: (pi) => (pi.producao || {}).status,
+    valorTotal: (pi) => (pi.valor_total != null ? Number(pi.valor_total) : null),
+    itens: (pi) => (pi.itens || []).length,
+    percPaga: (pi) => (pi.valor_total ? (window.PIStore.calcValorQuitado(pi) / pi.valor_total) * 100 : 0),
+    embarque: (pi) => embarqueLabel(embarquesMap[pi.embarque_id]),
+  });
 
   return (
     <div className="page fade-in">
@@ -776,15 +789,23 @@ function PIPage() {
       <div className="table-wrap" style={{ maxHeight: 'calc(100vh - 290px)', overflowY: 'auto' }}>
         <table className="t">
           <thead><tr>
-            {['Nº P.I.', 'Nº Cotação', 'Fornecedor', 'Abertura', 'Status', 'Produção', 'Valor total', 'Itens', '% paga', 'Embarque', ''].map((h, i) => (
-              <th key={i} style={{ position: 'sticky', top: 0, zIndex: 2 }}>{h}</th>
-            ))}
+            {ord.th('numeroPi', 'Nº P.I.', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            {ord.th('numeroCotacao', 'Nº Cotação', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            {ord.th('fornecedor', 'Fornecedor', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            {ord.th('abertura', 'Abertura', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            {ord.th('status', 'Status', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            {ord.th('producao', 'Produção', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            {ord.th('valorTotal', 'Valor total', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            {ord.th('itens', 'Itens', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            {ord.th('percPaga', '% paga', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            {ord.th('embarque', 'Embarque', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            <th style={{ position: 'sticky', top: 0, zIndex: 2 }}></th>
           </tr></thead>
           <tbody>
             {filtered.length === 0 && (
               <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma P.I. encontrada.</td></tr>
             )}
-            {filtered.map((pi) => {
+            {linhasOrdenadas.map((pi) => {
               const embarque = embarquesMap[pi.embarque_id];
               const itens = pi.itens || [];
               const percPaga = pi.valor_total ? (window.PIStore.calcValorQuitado(pi) / pi.valor_total) * 100 : 0;

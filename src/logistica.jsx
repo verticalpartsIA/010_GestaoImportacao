@@ -329,7 +329,12 @@ function ImportacaoPage({ setRoute, setSubsel }) {
   const [filterLinha, setFilterLinha] = React.useState("Todas");
   const [showEmbarque, setShowEmbarque] = React.useState(null); // null | {} (branco) | prefill
   const [aguardando, setAguardando] = React.useState([]);
+  const [busca, setBusca] = React.useState(''); // 23/10 (pedido do usuário)
   const filterOptions = ["Todos", "Em trânsito", "Aguardando liberação", "Entregue"];
+  const ordAguardando = window.useOrdenacao();
+  const ordEmbarques = window.useOrdenacao();
+  const ordDocumentos = window.useOrdenacao();
+  const ordAduana = window.useOrdenacao();
 
   const reloadEmbarques = () => {
     setLoading(true);
@@ -355,12 +360,30 @@ function ImportacaoPage({ setRoute, setSubsel }) {
 
   if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
 
+  const termoBusca = busca.trim().toLowerCase();
   const rows = embarques
     .filter(e => filter === "Todos" || e.status === filter)
     .filter(e => filterPorto === "Todos" || (e.origin || e.from) === filterPorto || (e.destination || e.to) === filterPorto)
-    .filter(e => filterLinha === "Todas" || e.line === filterLinha);
+    .filter(e => filterLinha === "Todas" || e.line === filterLinha)
+    .filter(e => !termoBusca || [e.id, e.client, e.vessel, e.bl, e.line].some((v) => (v || '').toString().toLowerCase().includes(termoBusca)));
   const portosDisponiveis = ["Todos", ...new Set(embarques.flatMap(e => [e.origin || e.from, e.destination || e.to]).filter(Boolean))];
   const linhasDisponiveis = ["Todas", ...new Set(embarques.map(e => e.line).filter(Boolean))];
+  const rowsOrdenadas = ordEmbarques.aplicar(rows, {
+    embarque: (e) => e.id, cliente: (e) => e.client, navio: (e) => e.vessel, bl: (e) => e.bl,
+    rota: (e) => `${e.from || e.origin || ''} ${e.to || e.destination || ''}`,
+    eta: (e) => (e.eta ? new Date(e.eta).getTime() : null),
+    progresso: (e) => e.position, aduana: (e) => e.channel, status: (e) => e.status,
+  });
+  const documentosOrdenados = ordDocumentos.aplicar(embarques, {
+    embarque: (e) => e.id, invoice: (e) => e.invoice_number, bl: (e) => e.bl, docs: (e) => (e.docs || []).length,
+  });
+  const aduanaOrdenada = ordAduana.aplicar(embarques, {
+    embarque: (e) => e.id, canal: (e) => e.channel, siscomex: (e) => e.siscomex_status, di: (e) => e.di_number,
+  });
+  const aguardandoOrdenado = ordAguardando.aplicar(aguardando, {
+    cotacao: (a) => a.numeroCotacao, fornecedor: (a) => a.fornecedor, cliente: (a) => a.clienteNome,
+    fob: (a) => (a.fobUsd != null ? Number(a.fobUsd) : null),
+  });
 
   // KPIs derivados
   const emTransito = embarques.filter(e => e.status === "Em trânsito");
@@ -392,11 +415,14 @@ function ImportacaoPage({ setRoute, setSubsel }) {
             <div style={{ fontWeight:700, fontSize:13 }}>Compras aguardando embarque <span style={{ color:'var(--fg3)' }}>({aguardando.length})</span></div>
             <span className="muted small">Compra confirmada no fornecedor · ainda sem embarque na Importação</span>
           </div>
-          <div className="table-wrap">
+          <div className="table-wrap table-wrap--sticky">
             <table className="t">
-              <thead><tr><th>Cotação</th><th>Fornecedor</th><th>Cliente</th><th>FOB (USD)</th><th></th></tr></thead>
+              <thead><tr>
+                {ordAguardando.th('cotacao', 'Cotação')}{ordAguardando.th('fornecedor', 'Fornecedor')}
+                {ordAguardando.th('cliente', 'Cliente')}{ordAguardando.th('fob', 'FOB (USD)')}<th></th>
+              </tr></thead>
               <tbody>
-                {aguardando.map((a) => (
+                {aguardandoOrdenado.map((a) => (
                   <tr key={a.cotacaoFornecedorId}>
                     <td><div className="cell-main">{a.numeroCotacao != null ? window.MasterIdEngine.etapaId('cotacao', a.numeroCotacao) : (a.numeroDocumento || '—')}</div><div className="cell-sub">{a.numeroDocumento}</div></td>
                     <td>{a.fornecedor || '—'}</td>
@@ -444,18 +470,20 @@ function ImportacaoPage({ setRoute, setSubsel }) {
           <select className="input" style={{ width: 160 }} value={filterLinha} onChange={(e) => setFilterLinha(e.target.value)}>
             {linhasDisponiveis.map(l => <option key={l} value={l}>{l === "Todas" ? "Linha: Todas" : l}</option>)}
           </select>
+          <input className="input" placeholder="Buscar embarque, cliente, navio, BL ou linha…" value={busca}
+            onChange={(e) => setBusca(e.target.value)} style={{ minWidth: 240 }}/>
         </div>
 
-        <div className="table-wrap">
+        <div className="table-wrap table-wrap--sticky">
           <table className="t">
             <thead><tr>
-              <th>Embarque</th>
-              <th>Navio / BL</th>
-              <th>Rota</th>
-              <th>ETA</th>
-              <th>Progresso</th>
-              <th>Aduana</th>
-              <th>Status</th>
+              {ordEmbarques.th('embarque', 'Embarque')}
+              {ordEmbarques.th('navio', 'Navio / BL')}
+              {ordEmbarques.th('rota', 'Rota')}
+              {ordEmbarques.th('eta', 'ETA')}
+              {ordEmbarques.th('progresso', 'Progresso')}
+              {ordEmbarques.th('aduana', 'Aduana')}
+              {ordEmbarques.th('status', 'Status')}
               <th></th>
             </tr></thead>
             <tbody>
@@ -464,7 +492,7 @@ function ImportacaoPage({ setRoute, setSubsel }) {
                   Nenhum registro {embarques.length ? 'com esse filtro' : 'cadastrado'}.
                 </td></tr>
               )}
-              {rows.map((e) => (
+              {rowsOrdenadas.map((e) => (
                 <tr key={e.id} onClick={() => { setSubsel(e); setRoute("importacao-detail"); }}>
                   <td>
                     <div className="cell-main">{e.id}</div>
@@ -505,14 +533,17 @@ function ImportacaoPage({ setRoute, setSubsel }) {
       </>}
 
       {tab === "documentos" && (
-        <div className="table-wrap" style={{ marginTop: 20 }}>
+        <div className="table-wrap table-wrap--sticky" style={{ marginTop: 20 }}>
           <table className="t">
-            <thead><tr><th>Embarque</th><th>Nº Invoice</th><th>BL</th><th>Documentos anexados</th><th></th></tr></thead>
+            <thead><tr>
+              {ordDocumentos.th('embarque', 'Embarque')}{ordDocumentos.th('invoice', 'Nº Invoice')}
+              {ordDocumentos.th('bl', 'BL')}{ordDocumentos.th('docs', 'Documentos anexados')}<th></th>
+            </tr></thead>
             <tbody>
               {embarques.length === 0 && (
                 <tr><td colSpan={99} style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>Nenhum embarque cadastrado.</td></tr>
               )}
-              {embarques.map((e) => (
+              {documentosOrdenados.map((e) => (
                 <tr key={e.id} onClick={() => { setSubsel(e); setRoute("importacao-detail"); }}>
                   <td><div className="cell-main">{e.id}</div><div className="cell-sub">{e.client}</div></td>
                   <td className="mono">{e.invoice_number || '—'}</td>
@@ -527,14 +558,17 @@ function ImportacaoPage({ setRoute, setSubsel }) {
       )}
 
       {tab === "aduana" && (
-        <div className="table-wrap" style={{ marginTop: 20 }}>
+        <div className="table-wrap table-wrap--sticky" style={{ marginTop: 20 }}>
           <table className="t">
-            <thead><tr><th>Embarque</th><th>Canal</th><th>Status Siscomex</th><th>DI</th><th></th></tr></thead>
+            <thead><tr>
+              {ordAduana.th('embarque', 'Embarque')}{ordAduana.th('canal', 'Canal')}
+              {ordAduana.th('siscomex', 'Status Siscomex')}{ordAduana.th('di', 'DI')}<th></th>
+            </tr></thead>
             <tbody>
               {embarques.length === 0 && (
                 <tr><td colSpan={99} style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>Nenhum embarque cadastrado.</td></tr>
               )}
-              {embarques.map((e) => (
+              {aduanaOrdenada.map((e) => (
                 <tr key={e.id} onClick={() => { setSubsel(e); setRoute("importacao-detail"); }}>
                   <td><div className="cell-main">{e.id}</div><div className="cell-sub">{e.client}</div></td>
                   <td>{e.channel ? <Badge variant={e.channel === "Verde" ? "success" : e.channel === "Amarelo" ? "warning" : "danger"} dot>{e.channel}</Badge> : <span className="muted">—</span>}</td>
