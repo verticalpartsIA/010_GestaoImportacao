@@ -505,7 +505,7 @@ function PropostasPage({ setRoute, setSubsel }) {
   const carregar = React.useCallback(() => {
     if (!escopo) return;
     let q = window.__VP_SB.sb.from('propostas')
-      .select('id, numero_documento, titulo, status, valor_total, master_id, numero_cotacao, proposal_type, criado_em, revisao_texto, clientes(razao_social, cnpj), perfis(nome, email)');
+      .select('id, numero_documento, titulo, status, valor_total, master_id, numero_cotacao, proposal_type, criado_em, revisao_texto, vigencia, substituida_por_id, clientes(razao_social, cnpj), perfis(nome, email)');
     if (!escopo.veTudo && escopo.vendedorId) q = q.eq('vendedor_id', escopo.vendedorId);
     q.order('criado_em', { ascending: false }).limit(300)
       .then(({ data }) => setRows(data || []));
@@ -534,9 +534,15 @@ function PropostasPage({ setRoute, setSubsel }) {
     const { data: pz } = await window.__VP_SB.sb.from('precificacoes_elevador')
       .select('id, numero_documento, numero_cotacao').in('status', ['calculado', 'finalizado'])
       .order('numero_cotacao', { ascending: false });
-    const { data: props } = await window.__VP_SB.sb.from('propostas').select('numero_cotacao').not('numero_cotacao', 'is', null);
-    const jaTemProposta = new Set((props || []).map((p) => p.numero_cotacao));
-    setProntas((pz || []).filter((p) => p.numero_cotacao != null && !jaTemProposta.has(p.numero_cotacao)));
+    const { data: props } = await window.__VP_SB.sb.from('propostas')
+      .select('numero_cotacao, numero_documento').not('numero_cotacao', 'is', null).eq('proposal_type', 'elevador');
+    /* 23/10 — "já tem proposta" é por REVISÃO (letra do numero_documento,
+       ver master-id-engine.js parseRevisao), não só pelo Nº da cotação —
+       senão uma Precificação de revisão nova (VPPC-0990-B) nunca aparecia
+       aqui, escondida atrás da Proposta da revisão anterior (VPPR-0990). */
+    const chaveRevisao = (numCot, numDoc) => `${numCot}|${window.MasterIdEngine.parseRevisao(numDoc) || ''}`;
+    const revisoesComProposta = new Set((props || []).map((p) => chaveRevisao(p.numero_cotacao, p.numero_documento)));
+    setProntas((pz || []).filter((p) => p.numero_cotacao != null && !revisoesComProposta.has(chaveRevisao(p.numero_cotacao, p.numero_documento))));
   }, []);
   React.useEffect(() => { carregarProntas(); }, [carregarProntas]);
 
@@ -545,7 +551,13 @@ function PropostasPage({ setRoute, setSubsel }) {
      "de onde vêm os dados da proposta" (antes vivia em Precificação). */
   const abrirDaPrecificacao = async (pz) => {
     try {
-      const r = await window.PropostaHeranca.prefillPorNumeroCotacao(pz.numero_cotacao);
+      /* precificacaoId: pz.id — pina NESTA precificação (achado real do
+         Codex, 23/10): a tela "Prontas para enviar" pode listar uma
+         revisão B ainda só 'calculado' enquanto a original já está
+         'finalizado'; sem o pin, prefillPorNumeroCotacao() prefere a
+         'finalizado' e devolveria os preços da revisão ERRADA, mesmo com
+         o Nº da Proposta rotulado "-B" (ver `letra` abaixo). */
+      const r = await window.PropostaHeranca.prefillPorNumeroCotacao(pz.numero_cotacao, { precificacaoId: pz.id });
       if (!r.encontrado) {
         window.toast?.('Não foi possível localizar o formulário desta cotação.', 'error');
         return;
@@ -553,8 +565,12 @@ function PropostasPage({ setRoute, setSubsel }) {
       /* Nº da Proposta pré-preenchido com o Master ID universal de ETAPA
          (VPPR-0950 — mesmo número da cotação, prefixo da Proposta), não um
          rótulo inventado. Vendedor pode editar, mas o padrão precisa ser o
-         código que todo mundo na empresa reconhece. */
-      const numero = pz.numero_cotacao != null ? window.MasterIdEngine.etapaId('proposta', pz.numero_cotacao) : (pz.numero_documento || '');
+         código que todo mundo na empresa reconhece. Herda a letra de
+         revisão da própria Precificação (VPPC-0950-B → VPPR-0950-B, 23/10)
+         — sem isso, abrir manualmente a Precificação de uma revisão nova
+         geraria um Nº de Proposta que colide com a da revisão anterior. */
+      const letra = pz.numero_documento != null ? window.MasterIdEngine.parseRevisao(pz.numero_documento) : null;
+      const numero = pz.numero_cotacao != null ? window.MasterIdEngine.etapaId('proposta', pz.numero_cotacao, letra) : (pz.numero_documento || '');
       const prefill = { ...r.prefill, numero };
       setSubsel(prefill);
       setRoute('proposta-editor');
@@ -569,6 +585,40 @@ function PropostasPage({ setRoute, setSubsel }) {
   }, [rows]);
 
   const EQUIPAMENTO_LABEL = { elevador: 'Elevador', escada: 'Escada Rolante', esteira: 'Esteira Rolante' };
+
+  /* 23/10 — mesmo aviso que a fila da Precificação já mostra ("substituída
+     por VPEL-EL0990-B") pra quando o fornecedor manda uma revisão nova.
+     Fonte PRIMÁRIA: vigencia/substituida_por_id (colunas reais do sistema
+     "Revisões Comerciais", migration 20261022100000/PR #1054, mantidas por
+     proposta_aplicar_vigencia() — ao contrário de "mais nova por
+     criado_em", essas colunas sabem que uma proposta APROVADA continua
+     vigente mesmo com um rascunho mais novo por cima, achado real do
+     Codex nesta mesma revisão). Só cai pro heurístico (mais nova por
+     criado_em) quando vigencia ainda não foi calculada pro par (ex.:
+     sibling recém-criado por este fluxo, 'em_negociacao', cujo trigger só
+     roda ao mudar de status — substituida_por_id ainda null). */
+  const substituidasPor = React.useMemo(() => {
+    const porId = {}; (rows || []).forEach((p) => { porId[p.id] = p; });
+    const map = {};
+    (rows || []).forEach((p) => {
+      if (p.numero_cotacao == null || p.vigencia === 'vigente') return; // vigência já diz que esta é a atual
+      if (p.substituida_por_id) {
+        // Vigência já calculada pelo motor real — confia nela, mesmo sem
+        // achar a linha-alvo na página (não arrisca o heurístico por cima).
+        const alvo = porId[p.substituida_por_id];
+        if (alvo) map[p.id] = alvo.numero_documento;
+        return;
+      }
+      // vigencia != 'vigente' mas o motor ainda não apontou quem a sucede
+      // (ex.: sibling recém-criado 'em_negociacao' — o trigger só roda ao
+      // mudar de status) — heurístico só pra não deixar a tela muda.
+      const irmas = (rows || []).filter((o) => o.id !== p.id && o.numero_cotacao === p.numero_cotacao && o.proposal_type === p.proposal_type);
+      const maisNovas = irmas.filter((o) => String(o.criado_em) > String(p.criado_em));
+      maisNovas.sort((a, b) => String(b.criado_em).localeCompare(String(a.criado_em)));
+      if (maisNovas[0]) map[p.id] = maisNovas[0].numero_documento;
+    });
+    return map;
+  }, [rows]);
 
   const filtradas = React.useMemo(() => {
     if (!rows) return [];
@@ -708,7 +758,10 @@ function PropostasPage({ setRoute, setSubsel }) {
             )}
             {filtradas.map((p) => (
               <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => abrirExistente(p)}>
-                <td style={{ whiteSpace: 'nowrap' }}><span className="mono small">{p.numero_documento || '—'}</span></td>
+                <td>
+                  <span className="mono small">{p.numero_documento || '—'}</span>
+                  {substituidasPor[p.id] ? <span className="small" style={{ color: 'var(--vp-danger)', fontWeight: 700 }} title={`O cliente já tem uma proposta mais nova (${substituidasPor[p.id]}), de uma revisão do fornecedor. Envie essa, não esta.`}> · substituída por {substituidasPor[p.id]}</span> : null}
+                </td>
                 <td style={{ fontSize: 12.5 }}>{p.clientes?.razao_social || p.titulo || <span className="muted">—</span>}</td>
                 <td style={{ fontSize: 12.5 }}>{p.perfis?.nome || <span className="muted">—</span>}</td>
                 <td><span className="mono small">{p.master_id || <span className="muted">—</span>}</span></td>

@@ -839,6 +839,22 @@
       const ehFkPrecificacaoMorta = (err) => /precificacao_id_fkey/i.test(err?.message || '');
       let precificacaoOrfa = false;
 
+      /* 23/10 (achado real do Codex, PR #1070) — "Revisões Comerciais Etapa
+         1" (migration 20261022100000, PR #1054) já colocou em `propostas`
+         dois índices únicos PARCIAIS: uma só vigência='vigente' por
+         (numero_cotacao, tipo) e um só revisao_indice por família — e os
+         dois DEFAULT pra 'vigente'/0. Um insert cru da 2ª proposta de uma
+         família (ver abaixo) colidiria com esses índices contra a proposta
+         original, que também está em 'vigente'/0 por default. `extrasRevisao`
+         preenche esses campos só quando já existe irmã — família com 1
+         membro só (o caso de sempre) continua nos defaults do banco, sem
+         mudança nenhuma. Não integra com as RPCs daquele sistema
+         (proposta_criar_revisao etc. exigem sessão autenticada via
+         vp_usuario_ativo(), que este fluxo — chave anon — não tem ainda);
+         só respeita as mesmas colunas/vocabulário pra não quebrar o
+         constraint nem os relatórios que aquele sistema vier a usar. */
+      let extrasRevisao = {};
+
       /* Trava (02/10, cotação 982): um Nº de cotação digitado ANTES de a cotação
          andar virou "Proposta elaborada" de verdade, pulou Fornecedor e
          Precificação na linha do tempo e colou a proposta de outro vendedor na
@@ -854,13 +870,34 @@
           numeroAnterior = ant ? ant.numero_cotacao : null;
         }
         if (!existing?.id || numeroAnterior !== payload.numero_cotacao) {
-          /* Um Nº de cotação, uma proposta por tipo de equipamento — outra
-             pessoa não pode "pegar" o Nº de uma proposta que já existe. */
+          /* Um Nº de cotação, uma proposta por tipo de equipamento POR
+             REVISÃO — outra pessoa não pode "pegar" o Nº de uma proposta
+             que já existe, mas uma revisão nova do fornecedor (Nº com
+             sufixo de letra próprio, ver master-id-engine.js) tem direito à
+             SUA própria proposta ao lado da anterior (23/10 — pedido do
+             usuário: a proposta precisa dizer qual revisão venceu). */
+          const letraNova = window.MasterIdEngine.parseRevisao(chave);
           const { data: dup, error: dupErr } = await c.from('propostas')
-            .select('id, numero_documento').eq('numero_cotacao', payload.numero_cotacao).eq('proposal_type', eq).limit(1);
+            .select('id, numero_documento, revisao_indice').eq('numero_cotacao', payload.numero_cotacao).eq('proposal_type', eq);
           if (dupErr) throw dupErr;
-          if (dup && dup.length && dup[0].id !== existing?.id) {
-            return { erro: `A cotação Nº ${payload.numero_cotacao} já tem a proposta ${dup[0].numero_documento}. Abra essa proposta em vez de criar outra com o mesmo Nº.` };
+          const conflito = (dup || []).find((d) => d.id !== existing?.id && (window.MasterIdEngine.parseRevisao(d.numero_documento) || null) === letraNova);
+          if (conflito) {
+            return { erro: `A cotação Nº ${payload.numero_cotacao} já tem a proposta ${conflito.numero_documento}. Abra essa proposta em vez de criar outra com o mesmo Nº.` };
+          }
+          const irmas = (dup || []).filter((d) => d.id !== existing?.id);
+          if (irmas.length) {
+            const raiz = irmas.find((d) => !window.MasterIdEngine.parseRevisao(d.numero_documento)) || irmas[0];
+            extrasRevisao = {
+              revisao_indice: Math.max(0, ...irmas.map((d) => Number(d.revisao_indice) || 0)) + 1,
+              revisao_codigo: letraNova,
+              // 'em_negociacao' (não 'vigente') — evita colidir com a índice
+              // parcial; quem decide qual revisão vira a vigente de verdade
+              // é o motor do próprio sistema (proposta_aplicar_vigencia) ou,
+              // até essa integração chegar, a tela (ver "substituídasPor").
+              vigencia: 'em_negociacao',
+              proposta_raiz_id: raiz ? raiz.id : null,
+              proposta_base_id: raiz ? raiz.id : null,
+            };
           }
           if (eq === 'elevador') {
             const { data: precif, error: precifErr } = await c.from('precificacoes_elevador')
@@ -899,10 +936,10 @@
         if (error) throw error;
         return { ...row, precificacaoOrfa };
       } else {
-        let { data: row, error } = await c.from('propostas').insert([{ ...payload, status: 'rascunho' }]).select('id, token').single();
+        let { data: row, error } = await c.from('propostas').insert([{ ...payload, ...extrasRevisao, status: 'rascunho' }]).select('id, token').single();
         if (error && ehFkPrecificacaoMorta(error)) {
           precificacaoOrfa = true;
-          ({ data: row, error } = await c.from('propostas').insert([{ ...payload, precificacao_id: null, status: 'rascunho' }]).select('id, token').single());
+          ({ data: row, error } = await c.from('propostas').insert([{ ...payload, ...extrasRevisao, precificacao_id: null, status: 'rascunho' }]).select('id, token').single());
         }
         if (error) throw error;
         if (window.EventosFluxo) window.EventosFluxo.registrar({

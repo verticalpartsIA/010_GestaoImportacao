@@ -111,5 +111,21 @@
     return m ? parseInt(m[1], 10) : null;
   }
 
-  window.MasterIdEngine = { PREFIXO_TIPO, baseId, proximaRevisao, masterId, parseNumeroCotacao, PREFIXO_ETAPA, etapaId };
+  /* Extrai a letra de revisão de um numero_documento no formato etapaId
+     ("VPPR-0990-B" → "B"; "VPPR-0990" → null) — inverso de etapaId(etapa,
+     numero, revisao). 23/10: usado pra escopar "já existe um documento
+     dessa etapa pra essa cotação" POR REVISÃO (não só pelo Nº da cotação) —
+     sem isso, uma reprecificação (revisão B do fornecedor) nunca conseguia
+     gerar a Proposta própria dela: a trava de "uma proposta por cotação"
+     barrava contra a Proposta já existente da revisão ANTERIOR. Só
+     reconhece o formato de etapa (PREFIXO-0000[-LETRA]); numero_documento
+     fora desse padrão (digitado à mão) devolve null, tratado como "sem
+     revisão" — igual sempre foi. */
+  function parseRevisao(numeroDocumento) {
+    const s = String(numeroDocumento == null ? '' : numeroDocumento).trim();
+    const m = s.match(/^VP[A-Z]{2}-\d+-([A-Za-z]+)$/);
+    return m ? m[1] : null;
+  }
+
+  window.MasterIdEngine = { PREFIXO_TIPO, baseId, proximaRevisao, masterId, parseNumeroCotacao, parseRevisao, PREFIXO_ETAPA, etapaId };
 }());
