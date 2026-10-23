@@ -140,8 +140,10 @@ test('código inexistente é recusado', () => {
 });
 
 test('último equipamento: rascunho permite, mas não há equipamento visível (publicar/enviar bloqueiam) e total = 0', () => {
-  let d = p990();
-  for (let n = 1; n <= 9; n++) d = O.alternarOculto(d, cod(n), true).data;
+  /* A tela agora exige no mínimo 2 visíveis; zero visível só existe em dado antigo/gravado fora da tela — a guarda continua. */
+  const d = p990();
+  d.elevador.valores.ocultos = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(cod);
+  d.elevador.valores.parcelas = [];
   assert.equal(O.semEquipamentoVisivel(d), true);
   assert.equal(O.totalOficial(d), 0); // sem cair no valorUnit×quantidade agregado
   assert.equal(O.semEquipamentoVisivel(p990()), false);

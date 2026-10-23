@@ -817,7 +817,7 @@ function S_ItemDescontoLog({ log }) {
   );
 }
 
-function S_ItensValores({ eq, itens, onChangeItens, proposta, ocultos, onToggleOculto, bloqueioOcultar, ocupado }) {
+function S_ItensValores({ eq, itens, onChangeItens, proposta, ocultos, onToggleOculto, bloqueioOcultar, ocupado, podeOcultarMais }) {
   const [modalItem, setModalItem] = React.useState(null);
   const ocSet = new Set(ocultos || []);
   const engine = window.PropostaDesconto;
@@ -884,7 +884,7 @@ function S_ItensValores({ eq, itens, onChangeItens, proposta, ocultos, onToggleO
               {temDesconto && !it.descontoPendente && (
                 <button type="button" className="pe-acab-addfield" onClick={() => remover(it)}>Remover desconto</button>
               )}
-              {onToggleOculto && (
+              {onToggleOculto && (oculto || podeOcultarMais) && (
                 <button type="button" className="pe-acab-addfield" disabled={!!ocupado || !!bloqueioOcultar || (!oculto && !!it.descontoPendente)}
                   title={bloqueioOcultar || (!oculto && it.descontoPendente ? "Resolva o pedido de desconto antes de ocultar" : (oculto ? "Volta a aparecer na proposta, no PDF e no total" : "Tira este equipamento da proposta, do PDF e do total (o dado continua guardado)"))}
                   onClick={() => onToggleOculto(it, !oculto)}>
@@ -1001,7 +1001,10 @@ function S_Valores({ d, set, eq, recordId, travada }) {
 
 Ele deixa de aparecer na proposta, no PDF e no contrato, e sai do total:
 ${rs(antes)} → ${rs(depois)}
-As parcelas serão recalculadas. Você pode reexibir depois.`
+As parcelas serão recalculadas. Você pode reexibir depois.` + (O.qtdVisiveis(r.data, eq) <= O.MINIMO_VISIVEIS ? `
+
+ATENÇÃO — limite de ocultação: depois desta ação a proposta fica com ${O.MINIMO_VISIVEIS} equipamentos, que é o mínimo. O botão "Ocultar" some dos demais.
+Motivo: a Precificação é calculada com o container dividido por 2 só quando a cotação tem UM equipamento; com 2 ou mais o container é pago inteiro e rateado. Se o cliente quer um único equipamento, peça uma Precificação própria.` : "")
       : `Reexibir ${item.id}?
 
 Ele volta para a proposta, o PDF e o total:
@@ -1056,6 +1059,7 @@ As parcelas serão recalculadas.`;
           onToggleOculto={O ? alternarOculto : null}
           bloqueioOcultar={bloqueioOcultar}
           ocupado={ocupado}
+          podeOcultarMais={!O || O.podeOcultarMais(d, eq)}
         />
       ) : (
         <div className="pe-grid cols-4">

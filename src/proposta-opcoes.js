@@ -523,6 +523,17 @@
     if (Array.isArray(d.ativos)) out.ativos = d.ativos.filter((a) => !set.has(String((a && (a.codigo || a.identificador)) || '')));
     return out;
   }
+  /* Mínimo de equipamentos visíveis (23/10/2026): a Precificação é calculada com o container pago UMA vez e rateado
+     pela quantidade; só a cotação de UM equipamento usa container dividido por 2 (regra do Financeiro). Ocultar até sobrar 1
+     faria a proposta mostrar um preço de "único elevador" que a Precificação não calculou. Por isso o mínimo é 2. */
+  const MINIMO_VISIVEIS = 2;
+  function qtdVisiveis(d, eq) {
+    const v = valores(projetar(d, eq), eq);
+    if (Array.isArray(v.itens)) return v.itens.reduce((s, it) => s + Math.max(1, Math.round(parseFloat(it.quantidade) || 1)), 0);
+    return Math.max(0, Math.round(parseFloat(v.quantidade) || 0));
+  }
+  /* O botão "Ocultar" só existe enquanto sobrariam pelo menos MINIMO_VISIVEIS depois de ocultar mais um. */
+  function podeOcultarMais(d, eq) { return qtdVisiveis(d, eq) - 1 >= MINIMO_VISIVEIS; }
   /* Não há equipamento comercial visível? (publicar/enviar/assinar são bloqueados nesse caso). */
   function semEquipamentoVisivel(d, eq) {
     const v = valores(projetar(d, eq), eq);
@@ -537,6 +548,9 @@
     const item = (Array.isArray(v.itens) ? v.itens : []).find((it) => String(it && it.id) === id);
     if (!item) return { data: d, erro: 'Equipamento não encontrado na proposta.' };
     if (ocultar && temOpcao90(d, chave)) return { data: d, erro: 'Proposta com opção de entrega em 90 dias (1 equipamento): não há equipamento para ocultar.' };
+    if (ocultar && !ocultosDe(d, chave).includes(id) && !podeOcultarMais(d, chave)) {
+      return { data: d, erro: `Limite de ocultação atingido: a proposta precisa manter pelo menos ${MINIMO_VISIVEIS} equipamentos visíveis. A Precificação é calculada com o container dividido por 2 só quando a cotação tem UM equipamento; com 2 ou mais o container é pago inteiro e rateado. Para um único equipamento, peça uma Precificação própria.` };
+    }
     if (ocultar && item.descontoPendente) return { data: d, erro: 'Este equipamento tem um pedido de desconto aguardando aprovação. Resolva o desconto antes de ocultar.' };
     const atual = ocultosDe(d, chave);
     const novos = ocultar ? (atual.includes(id) ? atual : [...atual, id]) : atual.filter((x) => x !== id);
@@ -551,5 +565,5 @@
     return { data: nd };
   }
 
-  window.PropostaOpcoes = { semDifal, blocosCondicoes, itensNomeados, itensTexto, c2, textoBR, parcelasPadrao, TEXTOS, temOpcoes, temOpcao90, opcoes, aplicarEscolha, totalOficial, modalidadeEscolhida, ocultosDe, projetar, semEquipamentoVisivel, alternarOculto, montarOpcao90, linhasUnitarias, totaisValores, ordenarEspecs, resumoEquipamentos, paradasDe, modelosDistintos, linhasAcabamento, tipoChave, rotuloTipo, nomePerfil, faixaCodigos, perfisAcabamento, tituloPerfil, perfisConteudo, contagemPorTipo, resumoFornecimento, tituloEquipamentos, blocosAjustes, eqInfo, linhasEspecEscEst, resumoEscEst, linhasEspecificidades, blocosInstalacao, _num: num };
+  window.PropostaOpcoes = { semDifal, blocosCondicoes, itensNomeados, itensTexto, c2, textoBR, parcelasPadrao, TEXTOS, temOpcoes, temOpcao90, opcoes, aplicarEscolha, totalOficial, modalidadeEscolhida, ocultosDe, projetar, qtdVisiveis, podeOcultarMais, MINIMO_VISIVEIS, semEquipamentoVisivel, alternarOculto, montarOpcao90, linhasUnitarias, totaisValores, ordenarEspecs, resumoEquipamentos, paradasDe, modelosDistintos, linhasAcabamento, tipoChave, rotuloTipo, nomePerfil, faixaCodigos, perfisAcabamento, tituloPerfil, perfisConteudo, contagemPorTipo, resumoFornecimento, tituloEquipamentos, blocosAjustes, eqInfo, linhasEspecEscEst, resumoEscEst, linhasEspecificidades, blocosInstalacao, _num: num };
 }());
