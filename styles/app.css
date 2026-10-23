@@ -918,8 +918,18 @@ table.t tbody tr:last-child td { border-bottom: 0; }
    .table-wrap--sticky dá rolagem vertical própria à tabela (sem depender da
    altura de cada página, que varia tela a tela) e o cabeçalho acompanha a
    rolagem. Lista curta não aciona a barra (max-height só limita, não força).
-   Classe nova — não muda nada nas ~45 telas que já usam .table-wrap puro. */
+   Classe nova — não muda nada nas ~45 telas que já usam .table-wrap puro.
+
+   Achado real do usuário (cadastro de Clientes, 1000+ linhas): com o visual
+   "Suave" ligado (html[data-ui="suave"]), a regra `html[data-ui="suave"]
+   .table-wrap { overflow-y: hidden; }` de ui-suave.css tem especificidade
+   MAIOR que .table-wrap--sticky sozinha e vencia, cortando a lista em 70vh
+   sem deixar rolar ("congelou a tela"). Mesma pegadinha já documentada em
+   pcp-tabelas.css pro .pcp-rolagem — resolvida do mesmo jeito: combinar as
+   duas classes no seletor (.table-wrap.table-wrap--sticky) pra ganhar
+   especificidade e vencer de vez, não só empatar por ordem de arquivo. */
 .table-wrap--sticky { max-height: 70vh; overflow-y: auto; }
+html[data-ui="suave"] .table-wrap.table-wrap--sticky { overflow-y: auto; }
 .table-wrap--sticky table.t thead th { position: sticky; top: 0; z-index: 1; }
 
 .cell-main { font-weight: 600; color: var(--fg1); }
