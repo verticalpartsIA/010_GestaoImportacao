@@ -109,7 +109,14 @@ test('definirFeriados — a etapa Precificação pula o feriado carregado; os de
   try {
     const p = E().prazoEfetivo({ evento_key: 'PRECIFICACAO', nascido_em: '2026-10-23T19:00:00Z' });   // sex 16:00 BRT
     assert.deepEqual(p, z('2026-10-27T13:00:00Z'));
-    const fornecedor = E().prazoEfetivo({ evento_key: 'SLA_FORNECEDOR', nascido_em: new Date(2026, 9, 2, 12).toISOString() });
-    assert.deepEqual(fornecedor, new Date(2026, 9, 4 + 2, 12));   // 48h seguidas pulando fim de semana, como antes
+    // fornecedor: só acompanhamento, nunca prazo (24/10)
+    assert.equal(E().prazoEfetivo({ evento_key: 'SLA_FORNECEDOR', nascido_em: new Date(2026, 9, 2, 12).toISOString() }), null);
   } finally { E().definirFeriados(new Set()); }
+});
+
+test('Precificação aberta (iniciado_em) cumpre o prazo; fornecedor muito atrasado não gera atraso', () => {
+  const velho = new Date(Date.now() - 400 * 86400000).toISOString();
+  assert.equal(E().emAtraso({ evento_key: 'PRECIFICACAO', nascido_em: velho }), true);
+  assert.equal(E().emAtraso({ evento_key: 'PRECIFICACAO', nascido_em: velho, iniciado_em: velho }), false);
+  assert.equal(E().emAtraso({ evento_key: 'SLA_FORNECEDOR', nascido_em: velho }), false);
 });

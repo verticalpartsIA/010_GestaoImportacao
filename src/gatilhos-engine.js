@@ -23,7 +23,7 @@
   function sb() { return (window.__VP_SB || {}).sb; }
 
   const SLA_HORAS = {
-    SLA_FORNECEDOR: 48,
+    /* 24/10/2026 (Gelson): o tempo do fornecedor é só ACOMPANHADO (a tela mostra quanto já passou), nunca gera atraso — SLA_FORNECEDOR sem prazo. */
     PRECIFICACAO: 4,               // 24/10: 4h em horário comercial (08–18 BRT, seg–sex, sem feriados) — decisão do Gelson; era 2h (29/09) e antes 5h
     /* 10 dias (23/08, Gelson) — não é mais só um SLA informativo: é o
        limiar do "Cemitério". Depois disso, verificarPrazos() marca
@@ -123,6 +123,8 @@
      sem prazo (ex.: Proposta pronta), o calculado pelo SLA atual do nó. */
   function prazoEfetivo(g) {
     if (!g || String(g.evento_key || '').startsWith('LEMBRETE__')) return null;
+    /* 24/10/2026: as 4h comerciais da Precificação medem o tempo até a Financeiro ABRIR a cotação (existir precificação). Aberta = prazo cumprido, a etapa segue até a proposta nascer. */
+    if (g.iniciado_em) return null;
     if (g.prazo_em) return new Date(g.prazo_em);
     if (!g.nascido_em) return null;
     return prazoDe(g.evento_key, g.nascido_em);
@@ -226,12 +228,12 @@
       predecessores: [], nasce: 'FORMULARIO_PREENCHIDO', fecha: 'COTACAO_ENVIADA_FORNECEDOR',
       fechamentoTipo: 'automatico', rota: 'formulario-elevador', resolverSubsel: resolverIdDireto },
 
-    { key: 'SLA_FORNECEDOR', label: 'Aguardando resposta do Fornecedor (SLA 48h)',
+    { key: 'SLA_FORNECEDOR', label: 'Aguardando resposta do Fornecedor',
       predecessores: [{ key: 'FORMULARIO', rel: 'FS' }],
       nasce: 'COTACAO_ENVIADA_FORNECEDOR', fecha: 'FORNECEDOR_RESPONDEU',
       fechamentoTipo: 'automatico', rota: 'cotacao-fornecedor-detail', resolverSubsel: resolverCotacaoFornecedor },
 
-    { key: 'PRECIFICACAO', label: 'Financeiro precificando (SLA 4h comerciais)',
+    { key: 'PRECIFICACAO', label: 'Financeiro precificando (4h comerciais para abrir)',
       predecessores: [{ key: 'SLA_FORNECEDOR', rel: 'FS' }],
       nasce: 'FORNECEDOR_RESPONDEU', fecha: 'PROPOSTA_ELABORADA',
       fechamentoTipo: 'automatico', rota: 'precificacao', resolverSubsel: resolverPrecificacaoElevador },
