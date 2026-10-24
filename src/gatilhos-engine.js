@@ -39,10 +39,8 @@
     AVAL_PAGAMENTO: 4,
     NEGOCIACAO_COMPRA: 7 * 24,     // 168h
     EMBARQUE_CHEGADA: 90 * 24,     // 2160h
-    /* 03/10: "Proposta pronta — aguardando envio manual" não tinha prazo, então
-       uma proposta parada desde agosto nunca aparecia como atrasada. 24h úteis
-       é uma escolha minha (o usuário não passou número) — ajuste aqui. */
-    PROPOSTA_PREP: 24,
+    /* 24/10/2026 (decisão do Gelson, Q-11): "Proposta pronta — aguardando envio manual" NÃO tem prazo.
+       Só lembrete visual: o SLA de 24h era escolha minha, nunca aprovado, e gerava alarme em rascunho antigo. */
   };
 
   /* Prazos que correm em dia corrido (espera do cliente / navio). Os demais
