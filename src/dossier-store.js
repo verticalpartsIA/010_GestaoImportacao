@@ -235,6 +235,21 @@ window.__DOSSIER = window.__DOSSIER || (() => {
       if (error) throw error;
     },
 
+    /* ---- Pausa de obra (25/10/2026) ----
+       "Pausada até dd/mm" + motivo: a obra sai da cobrança diária de previsão/Diário da Evolução até a data.
+       Quem decide é o banco (função evolucao_pausar_obra: alçada mapa-obras.pausar, motivo >= 10 letras, até 60 dias).
+       ate = null cancela a pausa (o histórico fica). */
+    async pausarObra(dossierId, ate, motivo) {
+      const m = String(motivo || '').trim();
+      if (ate) {
+        if (m.length < 10) throw new Error('Informe o motivo da pausa (mínimo 10 letras).');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(ate)) throw new Error('Informe a data até quando a obra fica pausada.');
+      }
+      const { error } = await sb.rpc('evolucao_pausar_obra', { p_dossier: dossierId, p_ate: ate || null, p_motivo: ate ? m : null });
+      if (error) throw new Error(error.message || 'Não foi possível salvar a pausa.');
+      if (window.VPLog) window.VPLog.registrar({ modulo: 'Dossiê da Obra', acao: ate ? 'Pausou a obra' : 'Cancelou a pausa da obra', alvo: dossierId, alvo_id: dossierId, detalhe: ate ? { ate, motivo: m } : null });
+    },
+
     /* ---- Atualizar status mestre + registra transição ---- */
     async atualizarStatus(dossierId, novoStatus, notas = '') {
       if (!STATUS_FLOW.includes(novoStatus)) {

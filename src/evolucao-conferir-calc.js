@@ -21,6 +21,9 @@
   const DIAS_REPLANEJAR = 14;      // real × previsto acima disso = previsão desatualizada
   const DIAS_DESTOA_IRMAOS = 60;   // chegada real muito diferente da dos irmãos
   const ALTA_APOS_DIAS = 30;
+const DIAS_AVISA_PAUSA_VENCIDA = 3; // depois de vencer, a pausa avisa "venceu" por este tempo
+/* Pausa de obra (25/10/2026): enquanto vale, calam-se só os achados de PREVISÃO/Diário; erro de dado segue cobrando. */
+const CALADOS_PELA_PAUSA = ['previsao_vencida', 'previsao_antes_da_chegada', 'previsao_desatualizada', 'sem_diario'];
 
   function ev() { return (typeof window !== 'undefined' && window.EvolucaoEquipamentosCalc) || null; }
   function paraData(v) {
@@ -48,6 +51,13 @@
 
   const chaveObra = (o) => [o.client_name, o.building_name, o.city].map((x) => String(x || '').trim().toLowerCase()).join('|');
   const achado = (codigo, gravidade, motivo, quem, extra) => ({ codigo, gravidade, motivo, quem: quem || 'felipe', ...(extra || {}) });
+
+  /* { ate: Date, motivo } da pausa da obra; null se não há data válida. */
+  function pausaDaObra(o) {
+    const ate = paraData(o && o.pausada_ate);
+    return ate ? { ate: inicioDoDia(ate), motivo: String((o && o.pausa_motivo) || '').trim() } : null;
+  }
+  const pausaVigente = (o, hoje) => { const p = pausaDaObra(o); return !!(p && p.ate >= hoje); };
 
   function avaliarUm(it, irmaos, hoje) {
     const o = it.obra || {}, e = it.eq || {};
@@ -153,6 +163,12 @@
         }
       }
     }
+    /* Pausa de obra: vigente cala previsão/Diário; vencida há pouco avisa que venceu. */
+    const pausa = pausaDaObra(o);
+    if (pausa && pausa.ate >= hoje) return out.filter((a) => CALADOS_PELA_PAUSA.indexOf(a.codigo) < 0);
+    if (pausa && !concluida && dias(pausa.ate, hoje) <= DIAS_AVISA_PAUSA_VENCIDA) {
+      out.push(achado('pausa_vencida', 'media', `A pausa da obra venceu em ${fmt(pausa.ate)}${pausa.motivo ? ` (motivo: ${pausa.motivo})` : ''} — atualize as previsões ou renove a pausa.`));
+    }
     return out;
   }
 
@@ -177,9 +193,10 @@
     }));
     const ord = (a, b) => (peso(a) - peso(b)) || ((b.dias || 0) - (a.dias || 0));
     felipe.sort(ord); montador.sort(ord);
-    return { felipe, montador, total: felipe.length + montador.length, porItem };
+    const pausados = (itens || []).filter((it) => pausaVigente(it.obra, inicioDoDia((ctx && ctx.hoje) || new Date()))).length;
+    return { felipe, montador, total: felipe.length + montador.length, pausados, porItem };
   }
 
-  const api = { avaliar, resumo, diasUteis, LIMITES: { DIAS_PARADO, DIAS_UTEIS_SEM_DIARIO, DIAS_REPLANEJAR, DIAS_DESTOA_IRMAOS } };
+  const api = { avaliar, resumo, diasUteis, pausaVigente: (o, hoje) => pausaVigente(o, inicioDoDia(hoje || new Date())), LIMITES: { DIAS_PARADO, DIAS_UTEIS_SEM_DIARIO, DIAS_REPLANEJAR, DIAS_DESTOA_IRMAOS, DIAS_AVISA_PAUSA_VENCIDA } };
   if (typeof window !== 'undefined') window.EvolucaoConferirCalc = api;
 }());

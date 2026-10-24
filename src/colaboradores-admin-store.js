@@ -233,7 +233,11 @@
         /* 13/10/2026: declarada no vpsistema; antes sem caixa nesta tela. */
         { chave: 'editar_status_obra', label: 'Edita status do Acompanhamento de Obra' },
       ]},
-      { modulo: 'mapa-obras', label: 'Mapa de Obras' },
+      { modulo: 'mapa-obras', label: 'Mapa de Obras', capacidades: [
+        ...ACOES_PADRAO,
+        /* 25/10/2026: pausa de obra legitimamente parada (para de cobrar o Felipe até a data). */
+        { chave: 'pausar', label: 'Pausa a obra (some da cobrança diária até a data)' },
+      ]},
       { modulo: 'status-obras', label: 'Status de Obras' },
       { modulo: 'linha-do-tempo', label: 'Linha do Tempo da Cotação' },
       { modulo: 'art', label: 'ART' },

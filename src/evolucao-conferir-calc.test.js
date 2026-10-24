@@ -147,3 +147,74 @@ test('resumo separa Felipe × montador e ordena por gravidade', () => {
   assert.equal(res.felipe[0].gravidade, 'alta');
   assert.equal(res.total, res.felipe.length + res.montador.length);
 });
+
+/* ---- Pausa de obra (25/10/2026, pendência 4.3) ---- */
+const comPausa = (ate, extraObra, extraEq) => item(
+  { id: 'P1', updated_at: '2026-09-02T10:00:00Z', pausada_ate: ate, pausa_motivo: 'Cliente pediu para segurar', ...(extraObra || {}) },
+  { numero_serie: 'P-1', previsao_termino: '2026-08-31', ...(extraEq || {}) },
+  { diario: { pct: 0, iniciadoEm: null } });
+
+test('pausa vigente cala previsão vencida e "sem Diário"', () => {
+  const it = comPausa('2026-11-10');
+  const c = codigos(it);
+  assert.ok(!c.includes('previsao_vencida'));
+  assert.ok(!c.includes('sem_diario'));
+  assert.deepEqual(c, []);
+});
+
+test('pausa vigente cala previsão desatualizada e previsão anterior à chegada', () => {
+  const it = comPausa('2026-11-10', null, { chegada_real_material: '2026-10-14', previsao_inicio: '2026-08-17', previsao_termino: '2026-12-01', data_real_inicio: null });
+  const c = codigos(it);
+  assert.ok(!c.includes('previsao_antes_da_chegada'));
+  assert.ok(!c.includes('previsao_desatualizada'));
+});
+
+test('pausa que vence hoje ainda vale (até a data, inclusive)', () => {
+  assert.deepEqual(codigos(comPausa('2026-10-24')), []);
+});
+
+test('erros de dado continuam cobrando durante a pausa', () => {
+  const it = comPausa('2026-11-10', null, { data_real_inicio: '2026-11-05', numero_serie: null });
+  it.serie = null;
+  const c = codigos(it);
+  assert.ok(c.includes('real_no_futuro'));
+  assert.ok(c.includes('sem_serie'));
+});
+
+test('pausa vencida: volta a cobrar e avisa que a pausa venceu', () => {
+  const it = comPausa('2026-10-23');
+  const r = K.avaliar([it], { hoje }).get(it);
+  const c = r.map((x) => x.codigo);
+  assert.ok(c.includes('previsao_vencida'));
+  const v = r.find((x) => x.codigo === 'pausa_vencida');
+  assert.ok(v);
+  assert.equal(v.quem, 'felipe');
+  assert.match(v.motivo, /23\/10\/2026/);
+  assert.match(v.motivo, /Cliente pediu para segurar/);
+});
+
+test('pausa vencida há mais de 3 dias deixa de avisar "venceu" (a cobrança normal basta)', () => {
+  const it = comPausa('2026-10-10');
+  const c = codigos(it);
+  assert.ok(c.includes('previsao_vencida'));
+  assert.ok(!c.includes('pausa_vencida'));
+});
+
+test('sem pausa ou pausa sem data: nada muda', () => {
+  assert.ok(codigos(comPausa(null)).includes('previsao_vencida'));
+  assert.ok(!codigos(comPausa(null)).includes('pausa_vencida'));
+  assert.ok(codigos(comPausa('lixo')).includes('previsao_vencida'));
+});
+
+test('pausa não vale para outra obra do mesmo cliente', () => {
+  const a = comPausa('2026-11-10');
+  const b = item({ id: 'P2', client_name: 'OUTRO', updated_at: '2026-09-02T10:00:00Z' }, { numero_serie: 'P-2', previsao_termino: '2026-08-31' });
+  assert.ok(K.avaliar([a, b], { hoje }).get(b).some((x) => x.codigo === 'previsao_vencida'));
+});
+
+test('resumo informa quantas obras estão pausadas', () => {
+  const a = comPausa('2026-11-10');
+  const res = K.resumo([a], { hoje });
+  assert.equal(res.total, 0);
+  assert.equal(res.pausados, 1);
+});
