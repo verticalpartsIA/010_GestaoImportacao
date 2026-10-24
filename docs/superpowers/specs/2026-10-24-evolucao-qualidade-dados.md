@@ -104,3 +104,33 @@ Decididas pelo Gelson: **1 resumo por dia útil às 09:30 ao Felipe, com cópia 
 Limitações conhecidas: (a) "sem Diário" só detecta quem **nunca** lançou (o último lançamento não vem do `resumoProgressoBatch`; a Task 4 pode ler a data direto do banco); (b) "dias úteis" ignora feriados (só o aviso do gi-avisos os respeita); (c) a regra "real posterior à última edição" usa a edição mais recente entre o dossiê e o equipamento (`equipamentos_obra.atualizado_em`; corrigido após o achado do Codex no PR #1089, migration `20261024130000`) — com isso 500.0373 e 500.0378 deixaram de ser apontados por essa regra, mas 500.0378 continua apontado por "chegada destoa dos irmãos"; (d) a previsão vencida na tela de atraso (anel vermelho existente) continua só na etapa atual — o selo novo cobre as demais.
 
 **Task 4 (migration + cron) e 6 (WhatsApp do Felipe) só com o seu "CONFIRMO"/definição.** Nada é commitado/subido sem pedido seu.
+
+## PENDÊNCIA 4.3 — Pausa/justificativa para obra legitimamente parada (25/10/2026)
+
+### SPECIFY
+Obra parada de propósito (cliente pediu, falta liberação) hoje cobra o Felipe todo dia, igual a uma esquecida. Objetivo: registrar **"Pausada até dd/mm" + motivo**; enquanto a pausa vale, a obra sai da cobrança diária e do selo "Dado a conferir"; ao vencer, volta sozinha. Nada é apagado e a pausa fica no histórico.
+
+### Onde mexer (levantado)
+- Dossiê da Obra (`src/dossier-obra.jsx`, hoje já tem o botão "Editar endereço" → modal `DossierEnderecoModal`; mesmo padrão para um `DossierPausaModal`) e `src/dossier-store.js`.
+- Regras: `src/evolucao-conferir-calc.js` e a cópia SQL `evolucao_conferir_achados` (migration nova, `create or replace`), com o teste de paridade.
+- Coluna nova em `dossier_obra` (pausa por OBRA, não por equipamento — as regras já agrupam por obra).
+
+### CLARIFY — decisões que dependem do Gelson (recomendação em negrito)
+1. Quem pausa? **Felipe e Gelson** (alçada nova `mapa-obras.pausar`, Administrador sempre passa) / só Felipe.
+2. Prazo obrigatório? **Sim, máximo de 60 dias, renovável com novo motivo** (senão a pausa vira esconderijo).
+3. O que a pausa cala? **Só previsão vencida/desatualizada, "parado" e "sem Diário"**. Erros de dado (data no futuro, ordem inválida, sem série) continuam cobrando — pausa não justifica dado errado.
+4. Aviso quando a pausa vence? **Sim, o resumo do dia do vencimento cita "pausa de X venceu"** (volta a cobrar no mesmo dia).
+5. Pausa no Diário do montador? **Não nesta rodada.**
+
+### PLAN / TASKS (só depois das respostas)
+1. Testes primeiro (JS): obra pausada some das regras caladas; pausa vencida volta; erros de dado continuam.
+2. Migration (CONFIRMO): colunas `pausada_ate date`, `pausa_motivo text`, `pausa_por text`, `pausa_em timestamptz` + histórico imutável `dossier_obra_pausas`; função SQL atualizada.
+3. Modal "Pausar obra" no Dossiê + selo "Pausada até dd/mm" na Evolução/Mapa.
+4. Paridade JS×SQL, CLAUDE.md, aviso de tutorial desatualizado.
+
+### ANALYZE
+- Mexe em tela de dossiê (não é área blindada) e na função da cobrança (já em produção): migration exige CONFIRMO.
+- Risco: pausa esconder atraso real → mitigado por prazo máximo, motivo obrigatório e histórico.
+
+### IMPLEMENT — pausa (25/10/2026, local, não commitado)
+Decisões 1–5 aceitas como recomendadas. Feito: testes (9 novos) → regra JS → migration `20261025100000` **aplicada com CONFIRMO** → alçada `mapa-obras.pausar` no catálogo → `DossierPausaModal` + botão no Dossiê → selo "Pausada até" na Evolução. Verificado: `npm test` 812/812; no navegador local o modal abre e bloqueia sem motivo; no banco real (transação desfeita) pausar zera os achados de previsão da DOS-M035 e prazo > 60 dias é recusado. Pendente: conceder a alçada ao Felipe/Gelson; commit/PR sob pedido; regenerar o tutorial pela sessão de tutoriais.

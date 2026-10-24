@@ -210,6 +210,59 @@ function DossierEnderecoModal({ dossier, onClose, onSalvo }) {
   );
 }
 
+/* Pausa de obra (25/10/2026): "Pausada até dd/mm" + motivo. Enquanto vale, a Evolução dos Equipamentos para de
+   cobrar previsão vencida/desatualizada e "sem Diário" desta obra; erro de dado continua. Máx. 60 dias, renovável. */
+function dossierHojeISO(add) {
+  const d = new Date(); d.setDate(d.getDate() + (add || 0));
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function DossierPausaModal({ dossier, onClose, onSalvo }) {
+  const vigente = !!dossier.pausada_ate && dossier.pausada_ate >= dossierHojeISO(0);
+  const [ate, setAte] = React.useState(vigente ? dossier.pausada_ate : dossierHojeISO(14));
+  const [motivo, setMotivo] = React.useState(vigente ? (dossier.pausa_motivo || '') : '');
+  const [salvando, setSalvando] = React.useState(false);
+  const [erro, setErro] = React.useState(null);
+  const faltam = Math.max(0, 10 - motivo.trim().length);
+
+  const salvar = async (cancelar) => {
+    setErro(null); setSalvando(true);
+    try {
+      await window.__DOSSIER.pausarObra(dossier.id, cancelar ? null : ate, motivo);
+      window.toast && window.toast(cancelar ? 'Pausa cancelada: a obra volta a ser cobrada.' : 'Obra pausada até ' + ate.split('-').reverse().join('/') + '.', 'success');
+      onSalvo();
+    } catch (e) { setErro(e.message || String(e)); }
+    finally { setSalvando(false); }
+  };
+
+  const campo = { width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' };
+  const rot = { fontSize: 11, fontWeight: 600, color: 'var(--fg2)', marginBottom: 4, display: 'block' };
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg, #fff)', borderRadius: 8, padding: 24, width: 'min(520px, 100%)', maxHeight: '90vh', overflow: 'auto' }}>
+        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{vigente ? 'Pausa da obra' : 'Pausar obra'}</div>
+        <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 16 }}>
+          Use quando a obra está parada de propósito (cliente pediu, falta liberação). Até a data, a Evolução dos Equipamentos não cobra previsão vencida nem Diário
+          desta obra. Erros de dado (data no futuro, sem nº de série…) continuam sendo apontados. No máximo 60 dias; depois a obra volta a ser cobrada.
+        </div>
+        <label style={{ display: 'block', marginBottom: 12 }}>
+          <span style={rot}>Pausada até</span>
+          <input type="date" style={campo} value={ate} min={dossierHojeISO(0)} max={dossierHojeISO(60)} onChange={(e) => setAte(e.target.value)}/>
+        </label>
+        <label style={{ display: 'block', marginBottom: 12 }}>
+          <span style={rot}>Motivo {faltam > 0 ? <span style={{ color: 'var(--vp-danger)' }}>(faltam {faltam} letras)</span> : <span style={{ color: 'var(--vp-success, #2e7d32)' }}>✓</span>}</span>
+          <textarea style={{ ...campo, minHeight: 72 }} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: Cliente pediu para segurar até a liberação do elevador social"/>
+        </label>
+        {erro && <div style={{ color: 'var(--vp-danger)', fontSize: 13, marginBottom: 12 }}>{erro}</div>}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
+          {vigente && <button type="button" className="btn btn--outline" onClick={() => salvar(true)} disabled={salvando}>Cancelar pausa</button>}
+          <button type="button" className="btn btn--outline" onClick={onClose} disabled={salvando}>Fechar</button>
+          <button type="button" className="btn btn--primary" onClick={() => salvar(false)} disabled={salvando || faltam > 0 || !ate}>{salvando ? 'Salvando…' : (vigente ? 'Renovar pausa' : 'Pausar obra')}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DossierObraPage({ dossierId, setRoute, setSubsel }) {
   const [dossier, setDossier] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -219,6 +272,14 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
     (window.VpRouter && window.VpRouter.parseLocation().tab) || 'visao-geral');
   const [modalOpen, setModalOpen] = React.useState(null);
   const [editandoEndereco, setEditandoEndereco] = React.useState(false);
+  const [pausando, setPausando] = React.useState(false);
+  const [podePausar, setPodePausar] = React.useState(false);
+  React.useEffect(() => {
+    let vivo = true;
+    const PS = window.PropostaStore;
+    if (PS && PS.temCapacidade) PS.temCapacidade('mapa-obras', 'pausar').then((ok) => { if (vivo) setPodePausar(!!ok); }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
 
   React.useEffect(() => {
     carregarDossier();
@@ -280,6 +341,10 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
         <DossierEnderecoModal dossier={dossier} onClose={() => setEditandoEndereco(false)}
           onSalvo={() => { setEditandoEndereco(false); carregarDossier(); }}/>
       )}
+      {pausando && (
+        <DossierPausaModal dossier={dossier} onClose={() => setPausando(false)}
+          onSalvo={() => { setPausando(false); carregarDossier(); }}/>
+      )}
       {/* ---- HEADER DO DOSSIER ---- */}
       <div style={{
         background: 'var(--vp-info)',
@@ -308,6 +373,17 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
                 style={{ background: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.5)', borderRadius: 12, padding: '2px 10px', fontSize: 12, cursor: 'pointer' }}>
                 {dossier.endereco_logradouro ? 'Editar endereço' : 'Informar endereço'}
               </button>
+              {dossier.pausada_ate && dossier.pausada_ate >= dossierHojeISO(0) && (
+                <span title={dossier.pausa_motivo || ''} style={{ background: 'rgba(255,255,255,0.9)', color: '#7a5200', borderRadius: 12, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>
+                  ⏸ Pausada até {dossier.pausada_ate.split('-').reverse().join('/')}
+                </span>
+              )}
+              {podePausar && (
+                <button type="button" onClick={() => setPausando(true)}
+                  style={{ background: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.5)', borderRadius: 12, padding: '2px 10px', fontSize: 12, cursor: 'pointer' }}>
+                  {dossier.pausada_ate && dossier.pausada_ate >= dossierHojeISO(0) ? 'Ver / renovar pausa' : 'Pausar obra'}
+                </button>
+              )}
             </div>
             {dossier.propostaVinculada ? (
               <div style={{ fontSize: 12, opacity: 0.9, marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 6,

@@ -158,6 +158,11 @@ function EvConferir({ lista }) {
   );
 }
 
+function evHojeISO() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
 function EvCard({ item, onAbrirDossie, onVerNoMapa, abrirOcorrencias, conferir }) {
   const S = window.MapaObrasCalc.SITUACOES[item.obra.situacao];
   const { linha } = item;
@@ -171,6 +176,11 @@ function EvCard({ item, onAbrirDossie, onVerNoMapa, abrirOcorrencias, conferir }
           <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <span className="ev-serie">{item.serie || "Equipamento sem nº de série"}</span>
             <span style={{ fontSize: 11, fontWeight: 600, color: S.cor, border: `1px solid ${S.cor}`, borderRadius: 999, padding: "1px 8px" }}>{S.rotulo}</span>
+            {o.pausada_ate && String(o.pausada_ate) >= evHojeISO() && (
+              <span title={o.pausa_motivo || ""} style={{ fontSize: 11, fontWeight: 600, color: "#7a5200", background: "#fff3cd", border: "1px solid #e0b100", borderRadius: 999, padding: "1px 8px" }}>
+                ⏸ Pausada até {String(o.pausada_ate).split("-").reverse().join("/")}
+              </span>
+            )}
             {linha.atrasada && <span style={{ fontSize: 11, fontWeight: 600, color: "#dc2626", border: "1px solid #dc2626", borderRadius: 999, padding: "1px 8px" }}>Previsão vencida</span>}
           </div>
           <div className="ev-tit">{[o.client_name, o.building_name].filter(Boolean).join(" — ") || o.id}</div>

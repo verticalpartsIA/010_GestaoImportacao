@@ -146,7 +146,7 @@ function MapaObrasPage({ setRoute, setSubsel }) {
     (async () => {
       try {
         const { data: dossies, error } = await sb.from("dossier_obra")
-          .select("id, client_name, building_name, city, state, equip_type, status_master, numero_cotacao, equipamento_entregue, equipamento_entregue_em, parceiro_instalador_id, updated_at, endereco_logradouro, endereco_numero, endereco_complemento, endereco_bairro, endereco_cep, latitude, longitude, geo_precisao");
+          .select("id, client_name, building_name, city, state, equip_type, status_master, numero_cotacao, equipamento_entregue, equipamento_entregue_em, parceiro_instalador_id, updated_at, endereco_logradouro, endereco_numero, endereco_complemento, endereco_bairro, endereco_cep, latitude, longitude, geo_precisao, pausada_ate, pausa_motivo");
         if (error) throw error;
         const lista = (dossies || [])
           .map((d) => ({ ...d, situacao: window.MapaObrasCalc.classificar(d) }))
