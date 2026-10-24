@@ -36,26 +36,3 @@ end $$;
 
 -- Só o banco (cron) executa; o navegador (anon) não.
 revoke all on function public.gatilhos_alertar_prazos(boolean) from public, anon, authenticated;
-
-do $$ begin perform cron.unschedule(jobid) from cron.job where jobname = 'gatilhos-alerta-prazos-diario'; end $$;
-select cron.schedule('gatilhos-alerta-prazos-diario', '20 10 * * 1-5', $$ select public.gatilhos_alertar_prazos(false) $$);
-
--- Link padrão por prefixo também para `gat-prazos-` (caso algum produtor futuro não informe a rota).
-create or replace function public.alertas_rota_por_id(p_id text) returns text
-language sql immutable as $$
-  select case
-    when p_id like 'prop-%'      then '/comercial/propostas'
-    when p_id like 'cv-%'        then '/juridico/contrato-venda-equipamentos'
-    when p_id like 'ci-%'        then '/juridico/contrato-instalador'
-    when p_id like 'dec\_%'      then '/geral/decisoes'
-    when p_id like 'estouro-%'   then '/adm-financeiro/aval-financeiro'
-    when p_id like 'avais-%'     then '/adm-financeiro/aval-financeiro'
-    when p_id like 'fw-%'        then '/engenharia/ficha-tecnica'
-    when p_id like 'sol-%'       then '/engenharia/solicitacoes-produto'
-    when p_id like 'vist%'       then '/engenharia/dossier-obra'
-    when p_id like 'pf-%'        then '/adm-financeiro/cotacoes-fornecedor'
-    when p_id like 'inbox-%'     then '/geral/inbox'
-    when p_id like 'gat-prazos-%' then '/adm-financeiro/financeiro'
-    else null
-  end
-$$;
