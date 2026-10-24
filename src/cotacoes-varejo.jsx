@@ -181,6 +181,21 @@ function CVModalAprovar({ resumo, cambio, onClose, onConfirmar, enviando }) {
   );
 }
 
+/* ---------- Modal de confirmação própria (window.confirm é bloqueado em alguns navegadores embutidos e some sem avisar) ---------- */
+function CVModalConfirmar({ cfg, onClose }) {
+  const [rodando, setRodando] = React.useState(false);
+  const ok = async () => { setRodando(true); try { await cfg.acao(); onClose(); } catch (e) { window.toast?.(String((e && e.message) || e), 'error'); setRodando(false); } };
+  return (
+    <Modal title={cfg.titulo} onClose={onClose} width={460}
+      footer={<>
+        <Button variant="ghost" onClick={onClose} disabled={rodando}>Voltar</Button>
+        <Button variant="primary" onClick={ok} disabled={rodando}>{rodando ? 'Aguarde…' : cfg.rotulo}</Button>
+      </>}>
+      <p className="small">{cfg.texto}</p>
+    </Modal>
+  );
+}
+
 /* ---------- Detalhe do lote: mapa comparativo ---------- */
 function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const C = window.CotacoesVarejoCalc; const S = window.CotacoesVarejoStore;
@@ -194,6 +209,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const [salvando, setSalvando] = React.useState(false);
   const [aprovando, setAprovando] = React.useState(false);
   const [modalAprovar, setModalAprovar] = React.useState(false);
+  const [confirmar, setConfirmar] = React.useState(null);   // { titulo, texto, rotulo, acao }
   const [sujo, setSujo] = React.useState(false);
   const fotosTentadas = React.useRef(false);
 
@@ -278,7 +294,21 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     try { await S.marcarEnviado({ ...cv, lote_id: lote.id }, 'whatsapp', tel); await carregar(); } catch (e) {}
   };
   const rodada = async (cv) => { try { await S.novaRodada(cv); window.toast?.('Nova rodada aberta — reenvie o link ao fornecedor.', 'success'); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
-  const tirar = async (cv) => { if (!window.confirm('Remover ' + cv.fornecedor_nome + ' deste lote? As respostas dele também saem.')) return; try { await S.removerConvite(cv.id); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
+  const tirar = (cv) => setConfirmar({
+    titulo: 'Remover fornecedor do lote', rotulo: 'Remover fornecedor',
+    texto: 'Remover ' + cv.fornecedor_nome + ' deste lote? Os preços que ele já respondeu e as quantidades que você digitou para ele também saem. O link que ele recebeu deixa de funcionar. Depois você pode convidar outro fornecedor no lugar.',
+    acao: async () => {
+      await S.removerConvite(cv.id);
+      setQtd((p) => { const n = {}; Object.keys(p).forEach((k) => { if (k.split('|')[1] !== cv.id) n[k] = p[k]; }); return n; });
+      window.toast?.(cv.fornecedor_nome + ' removido do lote.', 'success');
+      await carregar();
+    },
+  });
+  const cancelarLoteConfirmado = () => setConfirmar({
+    titulo: 'Cancelar este lote', rotulo: 'Cancelar o lote',
+    texto: 'Cancelar o lote ' + lote.numero + '? Ele sai da lista e os produtos deixam de aparecer "em cotação". Nada é enviado ao Omie.',
+    acao: async () => { await S.cancelarLote(lote.id); window.toast?.('Lote ' + lote.numero + ' cancelado.', 'success'); onVoltar(); },
+  });
   const trocarFoto = async (item, file) => {
     if (!file) return;
     try { const url = await S.enviarFoto(item.codigo, file); await S.atualizarItem(item.id, { foto_url: url }); await carregar(); window.toast?.('Foto salva no banco de fotos (' + item.codigo + ').', 'success'); }
@@ -299,7 +329,11 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     try { await S.removerFotoManual(item, url); await carregar(); } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
   };
   const editarItem = async (item, campo, valor) => { try { await S.atualizarItem(item.id, { [campo]: valor }); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
-  const tirarItem = async (item) => { if (!window.confirm('Tirar ' + item.codigo + ' deste lote?')) return; try { await S.removerItem(item.id); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
+  const tirarItem = (item) => setConfirmar({
+    titulo: 'Tirar produto do lote', rotulo: 'Tirar produto',
+    texto: 'Tirar ' + item.codigo + ' deste lote? As respostas dos fornecedores para ele também saem.',
+    acao: async () => { await S.removerItem(item.id); await carregar(); },
+  });
 
   const aprovar = async () => {
     setAprovando(true);
@@ -328,7 +362,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
           <Button variant="outline" onClick={onVoltar}>← Lotes</Button>
           {editavel && sujo && <Button variant="outline" icon="check" onClick={() => salvar(false)} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar decisões'}</Button>}
           {editavel && <Button variant="primary" icon="send" onClick={() => setModalAprovar(true)} disabled={!decisoesAtuais.length}>Aprovar e enviar ao Omie</Button>}
-          {editavel && <Button variant="ghost" onClick={async () => { if (window.confirm('Cancelar este lote de cotação?')) { await S.cancelarLote(lote.id); onVoltar(); } }}>Cancelar lote</Button>}
+          {editavel && <Button variant="ghost" onClick={cancelarLoteConfirmado}>Cancelar lote</Button>}
         </div>
       </div>
 
@@ -352,7 +386,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                     <button className="link-btn" onClick={() => zap(cv)}>WhatsApp</button>
                     <button className="link-btn" onClick={() => copiarLink(cv)}>Link</button>
                     {cv.status === 'respondido' && <button className="link-btn" onClick={() => rodada(cv)} title="Pede ao fornecedor que atualize os preços (2ª rodada de negociação)">Nova rodada</button>}
-                    <button className="link-btn muted" onClick={() => tirar(cv)}>remover</button>
+                    <Button variant="outline" size="sm" onClick={() => tirar(cv)} title="Tira este fornecedor do lote (para trocar por outro ou desistir de cotar com ele)">Remover fornecedor</Button>
                   </div>
                 )}
               </div>
@@ -456,6 +490,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
         </div>
       </Card>
 
+      {confirmar && <CVModalConfirmar cfg={confirmar} onClose={() => setConfirmar(null)} />}
       {modalAprovar && <CVModalAprovar resumo={resumoModal} cambio={cambioNum} enviando={aprovando} onClose={() => setModalAprovar(false)} onConfirmar={aprovar} />}
     </div>
   );
