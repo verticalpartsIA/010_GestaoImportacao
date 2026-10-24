@@ -24,7 +24,7 @@
 
   const SLA_HORAS = {
     SLA_FORNECEDOR: 48,
-    PRECIFICACAO: 2,               // 29/09: era 5h — pedido do usuário
+    PRECIFICACAO: 4,               // 24/10: 4h em horário comercial (08–18 BRT, seg–sex, sem feriados) — decisão do Gelson; era 2h (29/09) e antes 5h
     /* 10 dias (23/08, Gelson) — não é mais só um SLA informativo: é o
        limiar do "Cemitério". Depois disso, verificarPrazos() marca
        status 'revisao_necessaria' e a tela de Gatilhos destaca "parado
@@ -71,9 +71,53 @@
     return new Date(t);
   }
 
+  /* SLA em HORÁRIO COMERCIAL (24/10/2026, Gelson): 08:00–18:00 BRT, segunda a sexta, sem feriados. O relógio só anda dentro do
+     expediente; evento fora dele (ex.: resposta do fornecedor às 23:58) começa a contar na próxima abertura. Só os nós listados
+     aqui usam este calendário — os demais seguem o cálculo de antes. BRT = UTC-3 fixo (o Brasil não tem horário de verão desde 2019). */
+  const SLA_COMERCIAL = { PRECIFICACAO: true };
+  const EXPEDIENTE = { ini: 8, fim: 18, deslocaMs: -3 * 3600000 };
+
+  /* Feriados que valem para o prazo (calendario_feriados.ativo e conta_no_sla), 'aaaa-mm-dd'. Vazio = só fim de semana. */
+  let feriadosSet = new Set();
+  let feriadosCarregadosEm = 0;
+  function definirFeriados(set) { feriadosSet = set instanceof Set ? set : new Set(set || []); feriadosCarregadosEm = Date.now(); }
+
+  /* Lê calendario_feriados no banco (cache de 10 min). Falha de leitura NÃO derruba o fluxo: segue com o que já tinha
+     (na pior hipótese, só fim de semana) e avisa no console. */
+  async function carregarFeriados() {
+    if (Date.now() - feriadosCarregadosEm < 600000) return feriadosSet;
+    const c = sb(); if (!c) return feriadosSet;
+    try {
+      const { data, error } = await c.from('calendario_feriados').select('data, conta_no_sla').eq('ativo', true);
+      if (error) throw error;
+      definirFeriados(new Set((data || []).filter((l) => l.conta_no_sla !== false).map((l) => l.data)));
+    } catch (e) { console.warn('[GatilhosEngine] calendario_feriados indisponível — prazo comercial usa só fim de semana', e); }
+    return feriadosSet;
+  }
+
+  function somarHorasComerciais(inicio, horas, feriados) {
+    const f = feriados || feriadosSet;
+    const H = 3600000, DIA = 24 * H;
+    let t = new Date(inicio).getTime() + EXPEDIENTE.deslocaMs;     // relógio de parede de Brasília, lido como UTC
+    let resto = horas * H;
+    let guarda = 0;
+    while (resto > 0 && guarda++ < 4000) {
+      const dia0 = Math.floor(t / DIA) * DIA;
+      const dow = new Date(dia0).getUTCDay();
+      const iso = new Date(dia0).toISOString().slice(0, 10);
+      const abre = dia0 + EXPEDIENTE.ini * H, fecha = dia0 + EXPEDIENTE.fim * H;
+      if (dow === 0 || dow === 6 || f.has(iso) || t >= fecha) { t = dia0 + DIA + EXPEDIENTE.ini * H; continue; }   // dia parado ou expediente acabou: próxima abertura
+      if (t < abre) t = abre;
+      const cabe = fecha - t;
+      if (resto <= cabe) { t += resto; resto = 0; } else { resto -= cabe; t = fecha; }
+    }
+    return new Date(t - EXPEDIENTE.deslocaMs);
+  }
+
   function prazoDe(key, inicio) {
     const h = SLA_HORAS[key];
     if (h == null) return null;
+    if (SLA_COMERCIAL[key]) return somarHorasComerciais(inicio, h);
     return SLA_CALENDARIO[key] ? new Date(new Date(inicio).getTime() + h * 3600000) : somarHorasUteis(inicio, h);
   }
 
@@ -189,7 +233,7 @@
       nasce: 'COTACAO_ENVIADA_FORNECEDOR', fecha: 'FORNECEDOR_RESPONDEU',
       fechamentoTipo: 'automatico', rota: 'cotacao-fornecedor-detail', resolverSubsel: resolverCotacaoFornecedor },
 
-    { key: 'PRECIFICACAO', label: 'Financeiro precificando (SLA 2h)',
+    { key: 'PRECIFICACAO', label: 'Financeiro precificando (SLA 4h comerciais)',
       predecessores: [{ key: 'SLA_FORNECEDOR', rel: 'FS' }],
       nasce: 'FORNECEDOR_RESPONDEU', fecha: 'PROPOSTA_ELABORADA',
       fechamentoTipo: 'automatico', rota: 'precificacao', resolverSubsel: resolverPrecificacaoElevador },
@@ -673,6 +717,7 @@
     const now = new Date();
     const nowIso = now.toISOString();
     const slaHoras = SLA_HORAS[node.key] ?? null;
+    if (SLA_COMERCIAL[node.key]) await carregarFeriados();   // prazo comercial precisa do calendário de feriados
     const prazoEm = prazoDe(node.key, now);
     const relPrincipal = (node.predecessores[0] || {}).rel || 'FS';
     const row = {
@@ -874,5 +919,5 @@
   }
 
   window.GatilhosEngine = { NODES, SLA_HORAS, LEMBRETES, onEvento, verificarPrazos, fecharLembrete, fecharComMotivo, navegarPara, profundidade,
-    nodeByKey, somarHorasUteis, prazoEfetivo, emAtraso, ehRetroativo };
+    nodeByKey, somarHorasUteis, somarHorasComerciais, definirFeriados, carregarFeriados, prazoEfetivo, emAtraso, ehRetroativo };
 }());
