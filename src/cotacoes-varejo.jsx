@@ -181,6 +181,39 @@ function CVModalAprovar({ resumo, cambio, onClose, onConfirmar, enviando }) {
   );
 }
 
+/* ---------- Modal: pedir a cotação aos fornecedores convidados (e-mail / WhatsApp / link) ---------- */
+function CVModalPedirCotacao({ convites, forn, onClose, onEmail, onZap, onLink, onTodosEmail, enviandoTodos }) {
+  const pendentes = convites.filter((cv) => cv.status === 'rascunho' && cv.email);
+  return (
+    <Modal title="Pedir cotação ao fornecedor" onClose={onClose} width={640}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Fechar</Button>
+        <Button variant="primary" icon="send" onClick={onTodosEmail} disabled={!pendentes.length || enviandoTodos}>
+          {enviandoTodos ? 'Enviando…' : 'Enviar por e-mail a todos que ainda não receberam (' + pendentes.length + ')'}
+        </Button>
+      </>}>
+      <div className="stack" style={{ gap: 10 }}>
+        <p className="small">Cada fornecedor recebe um link próprio para informar preço por faixa de quantidade, prazo e quantidade mínima. Ele nunca vê os preços dos outros. Nada vai ao Omie nesta etapa.</p>
+        {convites.map((cv) => {
+          const s = CV_STATUS_CONVITE[cv.status] || CV_STATUS_CONVITE.rascunho;
+          const f = forn.find((x) => x.id === cv.fornecedor_id);
+          return (
+            <div key={cv.id} style={{ border: '1px solid var(--border, #e5e7eb)', borderRadius: 8, padding: '8px 10px' }}>
+              <div style={{ fontWeight: 800 }}>{cv.fornecedor_nome} <Badge variant={s.variant}>{s.label}</Badge></div>
+              <div className="small muted">{cv.email || 'sem e-mail no cadastro'}{f && f.telefone ? ' · ' + f.telefone : ''}</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+                <Button variant="outline" size="sm" onClick={() => onEmail(cv)} disabled={!cv.email} title={cv.email ? '' : 'Complete o e-mail em Cadastros › Fornecedores'}>E-mail</Button>
+                <Button variant="outline" size="sm" onClick={() => onZap(cv)} disabled={!(f && f.telefone)}>WhatsApp</Button>
+                <Button variant="outline" size="sm" onClick={() => onLink(cv)}>Copiar link</Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Modal>
+  );
+}
+
 /* ---------- Modal de confirmação própria (window.confirm é bloqueado em alguns navegadores embutidos e some sem avisar) ---------- */
 function CVModalConfirmar({ cfg, onClose }) {
   const [rodando, setRodando] = React.useState(false);
@@ -210,6 +243,8 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const [aprovando, setAprovando] = React.useState(false);
   const [modalAprovar, setModalAprovar] = React.useState(false);
   const [confirmar, setConfirmar] = React.useState(null);   // { titulo, texto, rotulo, acao }
+  const [modalPedir, setModalPedir] = React.useState(false);
+  const [enviandoTodos, setEnviandoTodos] = React.useState(false);
   const [sujo, setSujo] = React.useState(false);
   const fotosTentadas = React.useRef(false);
 
@@ -281,6 +316,17 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
       else { window.toast?.('Não consegui enviar direto — abrindo seu programa de e-mail.', 'warning'); window.open(r.mailto, '_blank'); }
       await carregar();
     } catch (e) { window.toast?.('Erro ao enviar: ' + (e.message || e), 'error'); }
+  };
+  const enviarTodosEmail = async () => {
+    setEnviandoTodos(true);
+    let ok = 0, falha = 0;
+    try {
+      for (const cv of convites.filter((x) => x.status === 'rascunho' && x.email)) {
+        try { const r = await S.enviarPorEmail(lote, cv); if (r.enviouDireto) ok++; else falha++; } catch (e) { falha++; }
+      }
+      window.toast?.(ok + ' e-mail(s) enviado(s)' + (falha ? ' · ' + falha + ' não saiu(ram) — use "Copiar link" ou WhatsApp nesses.' : '.'), falha ? 'warning' : 'success');
+      await carregar();
+    } finally { setEnviandoTodos(false); }
   };
   const copiarLink = async (cv) => {
     const link = S.portalUrl(cv.token);
@@ -361,7 +407,8 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
         <div className="page-head__r">
           <Button variant="outline" onClick={onVoltar}>← Lotes</Button>
           {editavel && sujo && <Button variant="outline" icon="check" onClick={() => salvar(false)} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar decisões'}</Button>}
-          {editavel && <Button variant="primary" icon="send" onClick={() => setModalAprovar(true)} disabled={!decisoesAtuais.length}>Aprovar e enviar ao Omie</Button>}
+          {editavel && <Button variant={convites.some((c) => c.status !== 'rascunho') ? 'outline' : 'primary'} icon="send" onClick={() => setModalPedir(true)} disabled={!convites.length} title={convites.length ? '' : 'Convide ao menos um fornecedor abaixo'}>Pedir cotação ao fornecedor</Button>}
+          {editavel && <Button variant={convites.some((c) => c.status !== 'rascunho') ? 'primary' : 'outline'} icon="check" onClick={() => setModalAprovar(true)} disabled={!decisoesAtuais.length} title={decisoesAtuais.length ? '' : 'Só depois que os fornecedores responderem e você digitar as quantidades a comprar'}>Aprovar compra e enviar ao Omie</Button>}
           {editavel && <Button variant="ghost" onClick={cancelarLoteConfirmado}>Cancelar lote</Button>}
         </div>
       </div>
@@ -490,6 +537,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
         </div>
       </Card>
 
+      {modalPedir && <CVModalPedirCotacao convites={convites} forn={forn} onClose={() => setModalPedir(false)} onEmail={enviarEmail} onZap={zap} onLink={copiarLink} onTodosEmail={enviarTodosEmail} enviandoTodos={enviandoTodos} />}
       {confirmar && <CVModalConfirmar cfg={confirmar} onClose={() => setConfirmar(null)} />}
       {modalAprovar && <CVModalAprovar resumo={resumoModal} cambio={cambioNum} enviando={aprovando} onClose={() => setModalAprovar(false)} onConfirmar={aprovar} />}
     </div>
