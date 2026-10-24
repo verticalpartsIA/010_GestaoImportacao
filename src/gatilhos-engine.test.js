@@ -15,18 +15,19 @@ test('somarHorasUteis — pula sábado e domingo', () => {
   assert.deepEqual(E().somarHorasUteis(new Date(2026, 9, 3, 15), 24), new Date(2026, 9, 6, 0));
 });
 
-test('prazoEfetivo — usa o gravado; sem prazo usa o SLA atual (Proposta pronta = 24h); lembrete não tem prazo', () => {
+test('prazoEfetivo — usa o gravado; sem prazo usa o SLA atual; Proposta pronta e lembrete não têm prazo', () => {
   const gravado = '2026-10-01T10:00:00.000Z';
   assert.equal(E().prazoEfetivo({ evento_key: 'PRECIFICACAO', prazo_em: gravado, nascido_em: '2026-09-01T00:00:00Z' }).toISOString(), gravado);
   const sem = E().prazoEfetivo({ evento_key: 'PROPOSTA_PREP', nascido_em: new Date(2026, 9, 5, 9).toISOString() });
-  assert.deepEqual(sem, new Date(2026, 9, 6, 9));
+  assert.equal(sem, null);
   assert.equal(E().prazoEfetivo({ evento_key: 'FORMULARIO', nascido_em: '2026-09-01T00:00:00Z' }), null);
   assert.equal(E().prazoEfetivo({ evento_key: 'LEMBRETE__AGUARDA_CLIENTE', nascido_em: '2026-09-01T00:00:00Z' }), null);
 });
 
 test('emAtraso — só etapa aberta, não encerrada e com prazo vencido', () => {
   const velho = new Date(Date.now() - 30 * 86400000).toISOString();
-  assert.equal(E().emAtraso({ evento_key: 'PROPOSTA_PREP', nascido_em: velho }), true);
+  assert.equal(E().emAtraso({ evento_key: 'PRECIFICACAO', nascido_em: velho }), true);
+  assert.equal(E().emAtraso({ evento_key: 'PROPOSTA_PREP', nascido_em: velho }), false);   // Q-11: sem SLA
   assert.equal(E().emAtraso({ evento_key: 'PROPOSTA_PREP', nascido_em: velho, concluido_em: velho }), false);
   assert.equal(E().emAtraso({ evento_key: 'PROPOSTA_PREP', nascido_em: velho, status: 'encerrado' }), false);
   assert.equal(E().emAtraso({ evento_key: 'FORMULARIO', nascido_em: velho }), false);   // sem SLA nunca atrasa
