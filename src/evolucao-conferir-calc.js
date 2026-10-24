@@ -54,7 +54,10 @@
     const out = [];
     const concluida = o.situacao === 'concluida';
     const fase = String(o.status_master || '').trim();
-    const upd = o.updated_at ? inicioDoDia(new Date(o.updated_at)) : null;
+    /* Última edição = a mais recente entre o dossiê e o equipamento: editar o equipamento
+       (atualizarEquipamento) grava só equipamentos_obra.atualizado_em, não dossier_obra.updated_at. */
+    const edicoes = [o.updated_at, e.atualizado_em].filter(Boolean).map((v) => new Date(v)).filter((d) => !isNaN(d));
+    const upd = edicoes.length ? inicioDoDia(new Date(Math.max.apply(null, edicoes))) : null;
 
     const real = {
       chegada: paraData(e.chegada_real_material),

@@ -24,6 +24,19 @@ test('500.0373: término real posterior à última edição + fase ainda Instala
   assert.ok(c.includes('fase_nao_avancou'));
 });
 
+test('chegada real digitada hoje no equipamento (dossiê editado antes) NÃO é "após a edição" — achado do Codex, PR #1089', () => {
+  const it = item({ id: 'X', updated_at: '2026-10-20T10:00:00Z' }, { numero_serie: 'S9', chegada_real_material: '2026-10-24', atualizado_em: '2026-10-24T09:00:00Z' });
+  assert.ok(!codigos(it).includes('real_apos_edicao'));
+  const sem = item({ id: 'Y', updated_at: '2026-10-20T10:00:00Z' }, { numero_serie: 'S8', chegada_real_material: '2026-10-24' });
+  assert.ok(codigos(sem).includes('real_apos_edicao'), 'sem a edição do equipamento, continua apontando');
+});
+
+test('"sem edição há N dias" usa a edição mais recente (dossiê ou equipamento)', () => {
+  const it = item({ id: 'Z', updated_at: '2026-09-02T10:00:00Z' }, { numero_serie: 'S7', previsao_termino: '2026-08-31', atualizado_em: '2026-10-20T10:00:00Z' });
+  const r = K.avaliar([it], { hoje }).get(it).find((x) => x.codigo === 'previsao_vencida');
+  assert.doesNotMatch(r.motivo, /sem edição/);
+});
+
 test('500.0374: término real registrado e fase ainda Instalação', () => {
   const it = item({ id: 'DOS-M037', updated_at: '2026-09-08T10:00:00Z' }, { numero_serie: '500.0374', data_real_inicio: '2026-08-04', data_real_termino: '2026-09-01' });
   const c = codigos(it);

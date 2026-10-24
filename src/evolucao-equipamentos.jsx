@@ -226,7 +226,7 @@ function useEvolucaoItens(obras) {
     (async () => {
       try {
         const [eqRes, embRes, prog] = await Promise.all([
-          ids.length ? sb.from("equipamentos_obra").select("id, dossier_id, numero_serie, tipo, previsao_chegada_material, chegada_real_material, previsao_inicio, data_real_inicio, previsao_termino, data_real_termino").in("dossier_id", ids) : { data: [] },
+          ids.length ? sb.from("equipamentos_obra").select("id, dossier_id, numero_serie, tipo, atualizado_em, previsao_chegada_material, chegada_real_material, previsao_inicio, data_real_inicio, previsao_termino, data_real_termino").in("dossier_id", ids) : { data: [] },
           cotacoes.length ? sb.from("embarques_importacao").select("id, nome_embarque, numero_cotacao, etd_original, etd_atual, eta_santos, data_entrega, data_limite_entrega, arquivado, updated_at, created_at, houve_rolagem, historico_rolagens, historico_eta, canal_parametrizacao").in("numero_cotacao", cotacoes) : { data: [] },
           window.AcompanhamentoObraStore && ids.length ? window.AcompanhamentoObraStore.resumoProgressoBatch(ids).catch(() => ({})) : {},
         ]);

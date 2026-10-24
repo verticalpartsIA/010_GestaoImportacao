@@ -9,7 +9,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const js = fs.readFileSync(path.join(__dirname, 'evolucao-conferir-calc.js'), 'utf8');
-const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20261024110000_evolucao_alerta_felipe.sql'), 'utf8');
+/* A definição VIGENTE de evolucao_conferir_achados é a da migration mais nova que a contém. */
+const migDir = path.join(__dirname, '..', 'supabase', 'migrations');
+const migs = fs.readdirSync(migDir).filter((f) => /_evolucao_/.test(f)).sort();
+const comFuncao = migs.filter((f) => /create or replace function public\.evolucao_conferir_achados/.test(fs.readFileSync(path.join(migDir, f), 'utf8')));
+const sql = fs.readFileSync(path.join(migDir, comFuncao[comFuncao.length - 1]), 'utf8');
 
 const codigosJs = new Set([...js.matchAll(/achado\('([a-z_]+)'/g)].map((m) => m[1]));
 const codigosSql = new Set([...sql.matchAll(/b\.serie, '([a-z_]+)'/g)].map((m) => m[1]));
