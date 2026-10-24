@@ -67,3 +67,48 @@ test('EMBARQUE_CHEGADA (SLA 90 dias) — fecha quando o embarque chega ao Brasil
   assert.equal(node.fecha, 'EMBARQUE_CHEGOU_BRASIL');
   assert.equal(node.fechamentoTipo, 'automatico');
 });
+
+/* ---- SLA em horário comercial (24/10/2026): 08:00–18:00 BRT (UTC-3), seg–sex, sem feriados ---- */
+const z = (s) => new Date(s);  // instantes em UTC; BRT = UTC-3
+
+test('somarHorasComerciais — dentro do expediente soma direto (seg 09:00 BRT + 4h = 13:00)', () => {
+  assert.deepEqual(E().somarHorasComerciais(z('2026-10-26T12:00:00Z'), 4), z('2026-10-26T16:00:00Z'));
+});
+
+test('somarHorasComerciais — sexta 16:00 BRT + 4h = segunda 10:00 BRT', () => {
+  assert.deepEqual(E().somarHorasComerciais(z('2026-10-23T19:00:00Z'), 4), z('2026-10-26T13:00:00Z'));
+});
+
+test('somarHorasComerciais — quinta 23:58 BRT (o aviso das 23:58) conta só a partir de sexta 08:00 = sexta 12:00', () => {
+  assert.deepEqual(E().somarHorasComerciais(z('2026-10-23T02:58:00Z'), 4), z('2026-10-23T15:00:00Z'));
+});
+
+test('somarHorasComerciais — antes das 08:00 começa às 08:00; sábado e domingo começam na segunda', () => {
+  assert.deepEqual(E().somarHorasComerciais(z('2026-10-26T09:00:00Z'), 4), z('2026-10-26T15:00:00Z'));   // seg 06:00 BRT
+  assert.deepEqual(E().somarHorasComerciais(z('2026-10-24T13:00:00Z'), 4), z('2026-10-26T15:00:00Z'));   // sáb 10:00 BRT
+});
+
+test('somarHorasComerciais — feriado não conta: sexta 16:00 + 4h com segunda feriada = terça 10:00', () => {
+  const f = new Set(['2026-10-26']);
+  assert.deepEqual(E().somarHorasComerciais(z('2026-10-23T19:00:00Z'), 4, f), z('2026-10-27T13:00:00Z'));
+});
+
+test('somarHorasComerciais — exatamente 18:00 BRT já é fora do expediente (vai para o próximo dia 08:00)', () => {
+  assert.deepEqual(E().somarHorasComerciais(z('2026-10-26T21:00:00Z'), 1), z('2026-10-27T12:00:00Z'));   // seg 18:00 BRT + 1h = ter 09:00 BRT
+});
+
+test('Precificação: SLA de 4h em horário comercial (prazo sem gravação usa o calendário)', () => {
+  assert.equal(E().SLA_HORAS.PRECIFICACAO, 4);
+  const p = E().prazoEfetivo({ evento_key: 'PRECIFICACAO', nascido_em: '2026-10-23T02:58:00Z' });
+  assert.deepEqual(p, z('2026-10-23T15:00:00Z'));
+});
+
+test('definirFeriados — a etapa Precificação pula o feriado carregado; os demais SLAs não mudam de regra', () => {
+  E().definirFeriados(new Set(['2026-10-26']));
+  try {
+    const p = E().prazoEfetivo({ evento_key: 'PRECIFICACAO', nascido_em: '2026-10-23T19:00:00Z' });   // sex 16:00 BRT
+    assert.deepEqual(p, z('2026-10-27T13:00:00Z'));
+    const fornecedor = E().prazoEfetivo({ evento_key: 'SLA_FORNECEDOR', nascido_em: new Date(2026, 9, 2, 12).toISOString() });
+    assert.deepEqual(fornecedor, new Date(2026, 9, 4 + 2, 12));   // 48h seguidas pulando fim de semana, como antes
+  } finally { E().definirFeriados(new Set()); }
+});
