@@ -375,6 +375,35 @@ function cadFmtEstrelas(media) {
   return '★'.repeat(cheias) + '☆'.repeat(5 - cheias) + ` (${media.toFixed(1)})`;
 }
 
+/* ---------- NPS das cotações (0 a 5 em 6 critérios) — alimentado em Cotações de Varejo ---------- */
+function FornecedorNPS({ fornecedorId, nome }) {
+  const [linhas, setLinhas] = React.useState(null);
+  React.useEffect(() => {
+    const S = window.CotacoesVarejoStore; if (!S) { setLinhas([]); return; }
+    S.avaliacoesDoFornecedor(fornecedorId, nome).then(setLinhas).catch(() => setLinhas([]));
+  }, [fornecedorId]);
+  if (linhas === null || !window.NpsMini) return null;
+  const S = window.CotacoesVarejoStore;
+  const resumo = linhas.length ? (() => { const r = { avaliacoes: linhas.length }; S.NPS_CRITERIOS.forEach(([k]) => { const v = linhas.map((h) => h['nota_' + k]).filter((n) => n != null); r[k] = v.length ? v.reduce((a, b) => a + Number(b), 0) / v.length : null; }); return r; })() : null;
+  return (
+    <Card title="Avaliação nas cotações (NPS 0–5)" sub={linhas.length ? 'Notas dadas pelo comprador ao fechar cada cotação de varejo.' : 'Nenhuma avaliação ainda — elas nascem em Cotações de Varejo, no cartão do fornecedor.'}>
+      {linhas.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 20 }}>
+          <window.NpsMini resumo={resumo} linhas={linhas} />
+          <div className="stack" style={{ gap: 6 }}>
+            {linhas.slice().reverse().slice(0, 8).map((a) => (
+              <div key={a.id} className="small" style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 8 }}>
+                <b>★ {a.nota_geral}</b> · {a.lote_numero || 'lote'}{a.comentario ? ' — ' + a.comentario : ''}
+                <div className="cell-sub">{a.avaliado_por || '—'} · {new Date(a.avaliado_em).toLocaleDateString('pt-BR')}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /* ---------- Avaliações de um fornecedor (só aparece editando) ---------- */
 function FornecedorAvaliacoes({ fornecedorId }) {
   const [avaliacoes, setAvaliacoes] = React.useState(null);
@@ -488,6 +517,7 @@ function FornecedorForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
         <Button variant="primary" onClick={submit} disabled={saving}>{saving ? 'Salvando…' : (isEdit ? 'Salvar alterações' : 'Cadastrar fornecedor')}</Button>
       </div>
       {isEdit && <div style={{ marginTop: 16 }}><FornecedorAvaliacoes fornecedorId={initialData.id}/></div>}
+      {isEdit && <div style={{ marginTop: 16 }}><FornecedorNPS fornecedorId={initialData.id} nome={initialData.razao_social || initialData.nome_fantasia}/></div>}
     </Card>
   );
 }

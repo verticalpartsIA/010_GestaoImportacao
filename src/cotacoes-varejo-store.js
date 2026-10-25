@@ -280,6 +280,99 @@
     return { completo, requisicoes: registros, erros };
   }
 
+  /* ---------- Descrição técnica do produto para o fornecedor (PT/EN/中文) ---------- */
+  /* IA = o Copiloto da VPS (copiloto.vpsistema.com), o mesmo da bolinha: só leitura, 20 perguntas/hora/pessoa, login conferido lá.
+     ATENÇÃO: 'chat' + novaConversa reinicia a conversa da bolinha de quem pediu. Quando a sessão da VPS ganhar um modo próprio
+     (sem memória), trocar COPILOTO_MODE aqui — é o único ponto. */
+  const COPILOTO_URL = 'https://copiloto.vpsistema.com/perguntar';
+  const COPILOTO_MODE = 'chat';
+  const CAMPOS_DESC = ['aplicacao', 'equipamento', 'tensao', 'potencia', 'medidas', 'material', 'observacao'];
+
+  async function obterDescricao(codigo) {
+    const c = sb(); if (!c || !codigo) return null;
+    const { data, error } = await c.from('produto_descricoes_exportacao').select('*').eq('codigo', String(codigo).toUpperCase()).maybeSingle();
+    if (error) { console.warn('[CotacoesVarejo] descrição', error); return null; }
+    return data;
+  }
+  async function descricoesGuardadas(codigos) {
+    const c = sb(); if (!c || !codigos.length) return {};
+    const { data, error } = await c.from('produto_descricoes_exportacao').select('*').in('codigo', codigos.map((x) => String(x).toUpperCase()));
+    if (error) return {};
+    const m = {}; (data || []).forEach((r) => { m[r.codigo] = r; }); return m;
+  }
+  async function salvarDescricao(codigo, d) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const row = { codigo: String(codigo).toUpperCase(), gerado_por_ia: !!d.gerado_por_ia, atualizado_por: usuario().email || null, atualizado_em: new Date().toISOString() };
+    CAMPOS_DESC.forEach((k) => { row[k] = (d[k] || '').trim() || null; });
+    ['texto_pt', 'texto_en', 'texto_zh'].forEach((k) => { row[k] = (d[k] || '').trim() || null; });
+    const { error } = await c.from('produto_descricoes_exportacao').upsert(row, { onConflict: 'codigo' });
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Cotações de Varejo', acao: 'Salvou a descrição do produto para o fornecedor', alvo: row.codigo, detalhe: { ia: row.gerado_por_ia } });
+  }
+  /* O que o fornecedor lê no portal ("VerticalParts: …"): inglês e chinês primeiro, depois o nosso português. */
+  function montarObsVP(t) { return [t.texto_en, t.texto_zh, t.texto_pt].map((x) => (x || '').trim()).filter(Boolean).join('\n\n'); }
+  /* Itens sem observação ganham a descrição já guardada do produto (reaproveitada de lotes anteriores). */
+  async function aplicarDescricoesGuardadas(itens) {
+    const alvo = itens.filter((i) => !(i.obs_vp || '').trim()); if (!alvo.length) return 0;
+    const m = await descricoesGuardadas(alvo.map((i) => i.codigo)); let n = 0;
+    for (const i of alvo) { const d = m[String(i.codigo).toUpperCase()]; const t = d ? montarObsVP(d) : ''; if (t) { await atualizarItem(i.id, { obs_vp: t }); n++; } }
+    return n;
+  }
+  function lerJsonDaResposta(txt) {
+    const a = String(txt || '').indexOf('{'); const b = String(txt || '').lastIndexOf('}');
+    if (a < 0 || b <= a) throw new Error('A IA não devolveu a descrição no formato esperado. Tente de novo ou escreva à mão.');
+    let j; try { j = JSON.parse(String(txt).slice(a, b + 1)); } catch (e) { throw new Error('A IA devolveu um texto que não consegui ler. Tente de novo ou escreva à mão.'); }
+    const out = { texto_pt: String(j.texto_pt || '').trim(), texto_en: String(j.texto_en || '').trim(), texto_zh: String(j.texto_zh || '').trim(), perguntas: Array.isArray(j.perguntas) ? j.perguntas.map(String).slice(0, 8) : [] };
+    if (!out.texto_pt && !out.texto_en && !out.texto_zh) throw new Error('A IA não gerou nenhum texto. Tente de novo ou escreva à mão.');
+    return out;
+  }
+  async function sugerirDescricaoIA(d) {
+    const token = (window.VpAuth && window.VpAuth.getAccessToken) ? await window.VpAuth.getAccessToken() : null;
+    if (!token) throw new Error('Não encontrei seu login. Saia e entre de novo pelo vpsistema.com.');
+    const dados = ['Código: ' + d.codigo, 'Descrição no Omie: ' + (d.descricao || '—')].concat(CAMPOS_DESC.map((k) => (d[k] ? k + ': ' + d[k] : null)).filter(Boolean)).join('\n');
+    const message = 'TAREFA INTERNA (não é conversa): escreva a descrição técnica de uma peça para um fornecedor chinês cotar com precisão. '
+      + 'Responda SOMENTE um JSON válido, sem texto fora dele: {"texto_pt":"","texto_en":"","texto_zh":"","perguntas":[]}. '
+      + 'Regras: use apenas os dados abaixo, NÃO invente medida, tensão, potência ou material; explique a função da peça e em que tipo de equipamento (elevador, escada rolante…) ela se aplica; '
+      + 'peça ao fornecedor para confirmar se o produto dele é idêntico ou diferente (medida, material, acabamento); texto_en em inglês técnico claro e texto_zh em chinês simplificado; '
+      + 'o que faltar e fizer diferença para cotar vira pergunta em "perguntas" (português, para o nosso comprador responder).\n\nDADOS:\n' + dados;
+    const res = await fetch(COPILOTO_URL, {
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: COPILOTO_MODE, message, novaConversa: true, history: [], page: { route: 'cotacoes-varejo', title: 'Cotações de Varejo', fields: [] } }),
+    });
+    if (!res.ok) { let m = ''; try { m = (await res.json()).error || ''; } catch (e) {} throw new Error(m || ('A IA não respondeu (HTTP ' + res.status + '). Pode ter chegado ao limite de 20 perguntas por hora.')); }
+    const j = await res.json();
+    return lerJsonDaResposta(j.reply);
+  }
+
+  /* ---------- NPS do fornecedor (0 a 5, histórico imutável) ---------- */
+  const NPS_CRITERIOS = [['geral', 'Geral'], ['respostas', 'Respostas'], ['prazos', 'Prazos'], ['preco', 'Preço'], ['envio', 'Envio'], ['sla', 'SLAs']];
+  async function avaliarFornecedor({ lote, convite, notas, comentario }) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    if (notas.geral == null) throw new Error('Dê ao menos a nota geral.');
+    const row = {
+      fornecedor_id: convite.fornecedor_id || null, fornecedor_nome: convite.fornecedor_nome, lote_id: lote.id, lote_numero: lote.numero, convite_id: convite.id,
+      comentario: (comentario || '').trim() || null,
+    };
+    NPS_CRITERIOS.forEach(([k]) => { row['nota_' + k] = notas[k] == null ? null : Number(notas[k]); });
+    const { error } = await c.from('fornecedor_avaliacoes').insert(row);
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Cotações de Varejo', acao: 'Avaliou o fornecedor (NPS)', alvo: convite.fornecedor_nome + ' · ' + lote.numero, alvo_id: convite.id, detalhe: { geral: row.nota_geral } });
+  }
+  /* Médias por fornecedor (view): { chave -> linha }, chave = id do cadastro (texto) ou nome em minúsculas. */
+  async function npsDosFornecedores() {
+    const c = sb(); if (!c) return {};
+    const { data, error } = await c.from('fornecedor_nps_v').select('*');
+    if (error) return {};
+    const m = {}; (data || []).forEach((r) => { m[r.chave] = r; }); return m;
+  }
+  async function avaliacoesDoFornecedor(fornecedorId, nome) {
+    const c = sb(); if (!c) return [];
+    let q = c.from('fornecedor_avaliacoes').select('*').order('avaliado_em', { ascending: true }).limit(500);
+    q = fornecedorId ? q.eq('fornecedor_id', fornecedorId) : q.ilike('fornecedor_nome', String(nome || '').replace(/[%_]/g, ''));
+    const { data, error } = await q; if (error) return [];
+    return data || [];
+  }
+
   /* ---------- Dólar do dia ---------- */
   function hojeISO() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   /* Guarda a PTAX do dia (1 linha por dia); a resposta do fornecedor herda o último valor gravado por trigger no banco. */
@@ -432,7 +525,7 @@
   window.CotacoesVarejoStore = {
     MAX_FOTOS_MANUAIS, adicionarFotoManual, removerFotoManual, convitesEmCotacao, registrarRespostaPorEmail,
     portalUrl, codigosEmCotacao, listarLotes, obterLote, criarLote, atualizarLote, atualizarItem, removerItem, cancelarLote,
-    registrarCambioDia, fixarCambioCotacao, fornecedoresCadastrados, convidarFornecedor, removerConvite, substituirConvite, atualizarConvite, marcarEnviado, novaRodada,
+    obterDescricao, descricoesGuardadas, salvarDescricao, montarObsVP, aplicarDescricoesGuardadas, sugerirDescricaoIA, NPS_CRITERIOS, avaliarFornecedor, npsDosFornecedores, avaliacoesDoFornecedor, registrarCambioDia, fixarCambioCotacao, fornecedoresCadastrados, convidarFornecedor, removerConvite, substituirConvite, atualizarConvite, marcarEnviado, novaRodada,
     textoConvite, enviarPorEmail, whatsAppHref, salvarDecisoes, aprovarLote, fotosDoBanco, enviarFoto, resolverFotos,
   };
 }());

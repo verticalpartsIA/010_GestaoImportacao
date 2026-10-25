@@ -41,6 +41,8 @@ function Portal() {
   const [feito, setFeito] = useState(false);
   const [erro, setErro] = useState(null);
   const [subindo, setSubindo] = useState(null);
+  const [busca, setBusca] = useState('');
+  const [aviso, setAviso] = useState(null);
 
   useEffect(() => {
     sbc().rpc('public_ivc_obter', { p_token: token }).then(({ data, error }) => {
@@ -49,10 +51,21 @@ function Portal() {
       setMoeda(data.convite.moeda || 'USD');
       const m = {}; (data.respostas || []).forEach((r) => { m[r.item_id] = r; });
       const f = {}; data.itens.forEach((i) => { f[i.id] = inicial(i, m[i.id]); });
+      // Lote grande: o que foi digitado e ainda não enviado volta sozinho (guardado só neste navegador).
+      try {
+        const salvo = JSON.parse(localStorage.getItem('ivc-rascunho:' + token) || 'null');
+        if (salvo) data.itens.forEach((i) => { if (!m[i.id] && salvo[i.id] && Array.isArray(salvo[i.id].f) && salvo[i.id].f.length === NFAIXAS) f[i.id] = salvo[i.id]; });
+      } catch (e) { /* sem rascunho */ }
       setForm(f);
       sbc().rpc('public_ivc_visualizado', { p_token: token }).then(() => {});
     });
   }, []);
+
+  useEffect(() => {
+    if (!dados || feito || !Object.keys(form).length) return;
+    const t = setTimeout(() => { try { localStorage.setItem('ivc-rascunho:' + token, JSON.stringify(form)); } catch (e) { /* armazenamento bloqueado */ } }, 600);
+    return () => clearTimeout(t);
+  }, [form]);
 
   if (dados === undefined) return <Caixa>{T('Loading…', 'Carregando…', '加载中…')}</Caixa>;
   if (dados === null) return <Caixa><h2>{T('Invalid or expired link', 'Link inválido ou expirado', '链接无效或已过期')}</h2><p>{T('Please ask VerticalParts for a new link.', 'Peça um novo link à VerticalParts.', '请向 VerticalParts 索取新链接。')}</p></Caixa>;
@@ -101,7 +114,49 @@ function Portal() {
       setErro(data && data.erro === 'cotacao_encerrada' ? T('This quotation is closed.', 'Esta cotação foi encerrada.', '此询价已关闭。') : T('Could not save. Try again.', 'Não foi possível salvar. Tente novamente.', '保存失败，请重试。'));
       return;
     }
+    try { localStorage.removeItem('ivc-rascunho:' + token); } catch (e) { /* ok */ }
     setFeito(true); window.scrollTo(0, 0);
+  };
+
+  /* Planilha (CSV abre no Excel): baixa com os nossos itens, o fornecedor preenche e importa de volta — sem digitar item por item. */
+  const CSV_COLS = ['ref', 'description', 'qty_needed', 'unit', 'from_qty_1', 'unit_price_1', 'from_qty_2', 'unit_price_2', 'from_qty_3', 'unit_price_3', 'lead_time_days', 'moq', 'remarks'];
+  const csvCel = (v) => { const s = v == null ? '' : String(v); return /[",\n\r;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const baixarPlanilha = () => {
+    const linhas = itens.map((i) => { const x = form[i.id] || inicial(i, null); return [i.codigo, i.descricao || '', i.quantidade, i.unidade || '', x.f[0].min, x.f[0].preco, x.f[1].min, x.f[1].preco, x.f[2].min, x.f[2].preco, x.lt, x.moq, x.obs]; });
+    const csv = '\ufeff' + [CSV_COLS].concat(linhas).map((r) => r.map(csvCel).join(',')).join('\r\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = lote.numero + '-quotation.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+  const lerCSV = (txt) => {
+    const sep = (txt.split('\n')[0].match(/;/g) || []).length > (txt.split('\n')[0].match(/,/g) || []).length ? ';' : ',';
+    const rows = []; let r = []; let c = ''; let q = false;
+    for (let k = 0; k < txt.length; k++) {
+      const ch = txt[k];
+      if (q) { if (ch === '"') { if (txt[k + 1] === '"') { c += '"'; k++; } else q = false; } else c += ch; }
+      else if (ch === '"') q = true;
+      else if (ch === sep) { r.push(c); c = ''; }
+      else if (ch === '\n') { r.push(c); rows.push(r); r = []; c = ''; }
+      else if (ch !== '\r') c += ch;
+    }
+    if (c !== '' || r.length) { r.push(c); rows.push(r); }
+    return rows;
+  };
+  const importarPlanilha = async (file) => {
+    if (!file) return;
+    try {
+      const rows = lerCSV((await file.text()).replace(/^\ufeff/, ''));
+      const cab = (rows[0] || []).map((h) => String(h).trim().toLowerCase()); const col = (n) => cab.indexOf(n);
+      if (col('ref') < 0) throw new Error('x');
+      let n = 0; const novo = { ...form };
+      rows.slice(1).forEach((r) => {
+        const it = itens.find((i) => String(i.codigo).toUpperCase() === String(r[col('ref')] || '').trim().toUpperCase()); if (!it) return;
+        const g = (nome) => (col(nome) >= 0 ? String(r[col(nome)] == null ? '' : r[col(nome)]).trim() : '');
+        const base = novo[it.id] || inicial(it, null);
+        const f = base.f.map((x, idx) => ({ min: g('from_qty_' + (idx + 1)) || (idx === 0 ? '1' : ''), preco: g('unit_price_' + (idx + 1)) }));
+        novo[it.id] = { ...base, f, lt: g('lead_time_days') || base.lt, moq: g('moq') || base.moq, obs: g('remarks') || base.obs }; n++;
+      });
+      setForm(novo); setErro(null);
+      setAviso(T(n + ' item(s) loaded from the file. Review and click Send.', n + ' item(ns) carregados da planilha. Confira e clique em Enviar.', '已从文件载入 ' + n + ' 个产品。请核对后点击提交。'));
+    } catch (e) { setErro(T('Could not read the file. Use the template downloaded here (CSV).', 'Não consegui ler o arquivo. Use o modelo baixado aqui (CSV).', '无法读取文件。请使用此处下载的模板（CSV）。')); }
   };
 
   const th = { textAlign: 'left', padding: '8px 6px', fontSize: 12, borderBottom: '2px solid #222', background: '#ece9e0', position: 'sticky', top: 0 };
@@ -126,10 +181,19 @@ function Portal() {
       </p>
 
       <div style={{ margin: '0 0 10px', fontSize: 13 }}>
+        {!encerrado && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+            <input style={{ ...inp, width: 260 }} placeholder={T('Search item by REF. or description…', 'Buscar item por REF. ou descrição…', '按编号或描述搜索…')} value={busca} onChange={(e) => setBusca(e.target.value)} />
+            <button type="button" onClick={baixarPlanilha} style={{ ...inp, width: 'auto', cursor: 'pointer', background: '#fff' }}>{T('Download spreadsheet (CSV)', 'Baixar planilha (CSV)', '下载表格（CSV）')}</button>
+            <label style={{ ...inp, width: 'auto', cursor: 'pointer', background: '#fff' }}>{T('Upload filled spreadsheet', 'Enviar planilha preenchida', '上传已填写的表格')}<input type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={(e) => { importarPlanilha(e.target.files && e.target.files[0]); e.target.value = ''; }} /></label>
+            <span style={{ fontSize: 11, color: '#666' }}>{T('Your typing is kept on this computer until you send.', 'O que você digita fica guardado neste computador até enviar.', '您输入的内容会保存在本机，直到提交。')}</span>
+          </div>
+        )}
+        {aviso && <div style={{ background: '#e6f6ea', border: '1px solid #8bc79a', padding: 8, borderRadius: 8, marginBottom: 8, fontSize: 13 }}>{aviso}</div>}
         <label>{T('Currency', 'Moeda', '币种')}: <select value={moeda} onChange={(e) => setMoeda(e.target.value)} disabled={encerrado} style={{ ...inp, width: 'auto' }}><option value="USD">USD</option><option value="RMB">RMB (CNY)</option><option value="EUR">EUR</option><option value="BRL">BRL</option></select></label>
       </div>
 
-      <div style={{ overflowX: 'auto', background: '#fff', borderRadius: 12, border: '1px solid #e5e5e0' }}>
+      <div style={{ overflow: 'auto', maxHeight: '78vh', background: '#fff', borderRadius: 12, border: '1px solid #e5e5e0' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 980 }}>
           <thead>
             <tr>
@@ -144,13 +208,13 @@ function Portal() {
             </tr>
           </thead>
           <tbody>
-            {itens.map((i) => {
+            {itens.filter((i) => { const t = busca.trim().toLowerCase(); return !t || ((i.codigo || '') + ' ' + (i.descricao || '')).toLowerCase().includes(t); }).map((i) => {
               const x = form[i.id]; if (!x) return null;
               return (
                 <tr key={i.id}>
                   <td style={td}><div style={{ display: 'flex', gap: 6 }}>{[i.foto_url, i.foto_url2].concat(i.fotos_manuais || []).filter(Boolean).map((u, k) => <a key={k} href={u} target="_blank" rel="noopener noreferrer" title="Click to enlarge · 点击放大"><img src={u} alt={i.codigo} style={{ width: 96, height: 96, objectFit: 'contain', background: '#fff', border: '1px solid #e5e5df', borderRadius: 6 }} /></a>)}{!i.foto_url && !(i.fotos_manuais || []).length && <div style={{ width: 64, height: 64, background: '#f0f0ec', borderRadius: 6 }} />}</div></td>
                   <td style={{ ...td, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{i.codigo}</td>
-                  <td style={{ ...td, maxWidth: 260 }}>{i.descricao}{i.obs_vp && <div style={{ fontSize: 12, color: '#8a6d00', marginTop: 4 }}>VerticalParts: {i.obs_vp}</div>}</td>
+                  <td style={{ ...td, maxWidth: 260 }}>{i.descricao}{i.obs_vp && <div style={{ fontSize: 12, color: '#8a6d00', marginTop: 4, whiteSpace: 'pre-wrap' }}><b>VerticalParts:</b> {i.obs_vp}</div>}</td>
                   <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}><b>{Number(i.quantidade).toLocaleString('en-US')}</b> {i.unidade || T('pcs', 'un.', '件')}<div style={{ fontSize: 10, color: '#666' }}>{T('we need', 'precisamos', '需求量')}</div></td>
                   <td style={{ ...td, minWidth: 250 }}>
                     {x.f.map((r, idx) => (
@@ -161,7 +225,7 @@ function Portal() {
                         <input style={{ ...inp, width: 96 }} inputMode="decimal" placeholder={moeda} value={r.preco} disabled={encerrado} onChange={(e) => setFaixa(i.id, idx, 'preco', e.target.value)} />
                       </div>
                     ))}
-                    {(() => { const fo = faixasForaDeOrdem(x.f); return fo ? <div style={{ fontSize: 11, color: '#b91c1c', marginTop: 2 }}>{T('Price goes up with quantity (' + fo.de.preco + ' → ' + fo.para.preco + ')' + (fo.salto ? ' — is there a typo?' : '') + '. Please check.', 'O preço sobe com a quantidade (' + fo.de.preco + ' → ' + fo.para.preco + ')' + (fo.salto ? ' — digitou errado?' : '') + '. Confira.', '单价随数量上升（' + fo.de.preco + ' → ' + fo.para.preco + '）' + (fo.salto ? ' — 是否输入有误？' : '') + '。请检查。')}</div> : null; })()}
+                    {(() => { const fo = faixasForaDeOrdem(x.f); return fo ? <div style={{ fontSize: 11, color: '#b91c1c', marginTop: 2 }}>{T('Price goes up with quantity (' + fo.de.preco + ' → ' + fo.para.preco + ')' + (fo.salto ? ' — is there a typo? Please check.' : '. Please check.'), 'O preço sobe com a quantidade (' + fo.de.preco + ' → ' + fo.para.preco + ')' + (fo.salto ? ' — digitou errado? Confira.' : '. Confira.'), '单价随数量上升（' + fo.de.preco + ' → ' + fo.para.preco + '）' + (fo.salto ? ' — 是否输入有误？请检查。' : '。请检查。'))}</div> : null; })()}
                   </td>
                   <td style={td}><input style={{ ...inp, width: 80 }} inputMode="numeric" value={x.lt} disabled={encerrado} onChange={(e) => set(i.id, 'lt', e.target.value)} /></td>
                   <td style={td}><input style={{ ...inp, width: 80 }} inputMode="decimal" value={x.moq} disabled={encerrado} onChange={(e) => set(i.id, 'moq', e.target.value)} /></td>
