@@ -246,6 +246,9 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const [modalPedir, setModalPedir] = React.useState(false);
   const [enviandoTodos, setEnviandoTodos] = React.useState(false);
   const [sujo, setSujo] = React.useState(false);
+  const [substituir, setSubstituir] = React.useState(null);   // convite que está sendo substituído
+  const [subForn, setSubForn] = React.useState('');
+  const [subMotivo, setSubMotivo] = React.useState('');
   const fotosTentadas = React.useRef(false);
 
   React.useEffect(() => { window.PropostaStore?.temCapacidade?.('cotacoes-varejo', 'criar').then(setPodeGerenciar).catch(() => setPodeGerenciar(false)); }, []);
@@ -308,7 +311,14 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     const f = forn.find((x) => x.id === novoForn); if (!f) return;
     try { await S.convidarFornecedor(lote.id, f); setNovoForn(''); await carregar(); } catch (e) { window.toast?.(e.message || String(e), 'error'); }
   };
+  const semQtd = itens.filter((i) => !(cvNum(i.quantidade_pedida) > 0));
+  const travaQtd = () => {
+    if (!semQtd.length) return false;
+    window.toast?.('Informe a quantidade de ' + semQtd.length + ' produto(s) antes de pedir a cotação (' + semQtd.slice(0, 3).map((i) => i.codigo).join(', ') + (semQtd.length > 3 ? '…' : '') + '). O fornecedor precisa saber quanto queremos.', 'warning');
+    return true;
+  };
   const enviarEmail = async (cv) => {
+    if (travaQtd()) return;
     try {
       const r = await S.enviarPorEmail(lote, cv);
       if (r.semEmail) { window.toast?.('Este fornecedor não tem e-mail no cadastro. Use "Link" ou "WhatsApp", ou complete o cadastro.', 'warning'); return; }
@@ -318,6 +328,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     } catch (e) { window.toast?.('Erro ao enviar: ' + (e.message || e), 'error'); }
   };
   const enviarTodosEmail = async () => {
+    if (travaQtd()) return;
     setEnviandoTodos(true);
     let ok = 0, falha = 0;
     try {
@@ -329,11 +340,13 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     } finally { setEnviandoTodos(false); }
   };
   const copiarLink = async (cv) => {
+    if (travaQtd()) return;
     const link = S.portalUrl(cv.token);
     try { await navigator.clipboard.writeText(link); window.toast?.('Link copiado.', 'success'); } catch (e) { window.prompt('Copie o link:', link); }
     try { await S.marcarEnviado({ ...cv, lote_id: lote.id }, 'link'); await carregar(); } catch (e) {}
   };
   const zap = async (cv) => {
+    if (travaQtd()) return;
     const f = forn.find((x) => x.id === cv.fornecedor_id); const tel = f && f.telefone;
     if (!tel) { window.toast?.('Sem telefone no cadastro deste fornecedor.', 'warning'); return; }
     window.open(S.whatsAppHref(tel, lote, cv), '_blank');
@@ -342,9 +355,9 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const rodada = async (cv) => { try { await S.novaRodada(cv); window.toast?.('Nova rodada aberta — reenvie o link ao fornecedor.', 'success'); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
   const tirar = (cv) => setConfirmar({
     titulo: 'Remover fornecedor do lote', rotulo: 'Remover fornecedor',
-    texto: 'Remover ' + cv.fornecedor_nome + ' deste lote? Os preços que ele já respondeu e as quantidades que você digitou para ele também saem. O link que ele recebeu deixa de funcionar. Depois você pode convidar outro fornecedor no lugar.',
+    texto: 'Remover ' + cv.fornecedor_nome + ' deste lote? Ele sai do mapa e as quantidades que você digitou para ele são zeradas. O link que ele recebeu deixa de funcionar. O que ele respondeu e as conversas continuam guardados em "Fornecedores removidos" — nada é apagado. Para trocar por outro, use "Substituir".',
     acao: async () => {
-      await S.removerConvite(cv.id);
+      await S.removerConvite(cv.id, 'Removido pelo comprador');
       setQtd((p) => { const n = {}; Object.keys(p).forEach((k) => { if (k.split('|')[1] !== cv.id) n[k] = p[k]; }); return n; });
       window.toast?.(cv.fornecedor_nome + ' removido do lote.', 'success');
       await carregar();
@@ -377,7 +390,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const editarItem = async (item, campo, valor) => { try { await S.atualizarItem(item.id, { [campo]: valor }); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
   const tirarItem = (item) => setConfirmar({
     titulo: 'Tirar produto do lote', rotulo: 'Tirar produto',
-    texto: 'Tirar ' + item.codigo + ' deste lote? As respostas dos fornecedores para ele também saem.',
+    texto: 'Tirar ' + item.codigo + ' deste lote? Ele sai do mapa e da cotação; as respostas já dadas pelos fornecedores ficam guardadas no histórico.',
     acao: async () => { await S.removerItem(item.id); await carregar(); },
   });
 
@@ -395,6 +408,16 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   };
 
   const fornecedoresLivres = forn.filter((f) => !convites.some((c) => c.fornecedor_id === f.id));
+  const abrirSubstituir = (cv) => { setSubstituir(cv); setSubForn(''); setSubMotivo(''); };
+  const confirmarSubstituir = async () => {
+    const f = forn.find((x) => x.id === subForn); if (!f || !substituir) return;
+    try {
+      await S.substituirConvite(lote.id, substituir, f, subMotivo.trim() || null);
+      setQtd((p) => { const n = {}; Object.keys(p).forEach((k) => { if (k.split('|')[1] !== substituir.id) n[k] = p[k]; }); return n; });
+      window.toast?.(substituir.fornecedor_nome + ' substituído por ' + (f.nome_fantasia || f.razao_social) + '. Envie a cotação ao novo fornecedor.', 'success');
+      setSubstituir(null); await carregar();
+    } catch (e) { window.toast?.(String(e.message || e), 'error'); }
+  };
 
   return (
     <div className="page fade-in">
@@ -407,7 +430,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
         <div className="page-head__r">
           <Button variant="outline" onClick={onVoltar}>← Lotes</Button>
           {editavel && sujo && <Button variant="outline" icon="check" onClick={() => salvar(false)} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar decisões'}</Button>}
-          {editavel && <Button variant={convites.some((c) => c.status !== 'rascunho') ? 'outline' : 'primary'} icon="send" onClick={() => setModalPedir(true)} disabled={!convites.length} title={convites.length ? '' : 'Convide ao menos um fornecedor abaixo'}>Pedir cotação ao fornecedor</Button>}
+          {editavel && <Button variant={convites.some((c) => c.status !== 'rascunho') ? 'outline' : 'primary'} icon="send" onClick={() => { if (!travaQtd()) setModalPedir(true); }} disabled={!convites.length} title={convites.length ? '' : 'Convide ao menos um fornecedor abaixo'}>Pedir cotação ao fornecedor</Button>}
           {editavel && <Button variant={convites.some((c) => c.status !== 'rascunho') ? 'primary' : 'outline'} icon="check" onClick={() => setModalAprovar(true)} disabled={!decisoesAtuais.length} title={decisoesAtuais.length ? '' : 'Só depois que os fornecedores responderem e você digitar as quantidades a comprar'}>Aprovar compra e enviar ao Omie</Button>}
           {editavel && <Button variant="ghost" onClick={cancelarLoteConfirmado}>Cancelar lote</Button>}
         </div>
@@ -433,6 +456,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                     <button className="link-btn" onClick={() => zap(cv)}>WhatsApp</button>
                     <button className="link-btn" onClick={() => copiarLink(cv)}>Link</button>
                     {cv.status === 'respondido' && <button className="link-btn" onClick={() => rodada(cv)} title="Pede ao fornecedor que atualize os preços (2ª rodada de negociação)">Nova rodada</button>}
+                    <Button variant="outline" size="sm" onClick={() => abrirSubstituir(cv)} title="Troca este fornecedor por outro cadastrado; o antigo fica no histórico">Substituir</Button>
                     <Button variant="outline" size="sm" onClick={() => tirar(cv)} title="Tira este fornecedor do lote (para trocar por outro ou desistir de cotar com ele)">Remover fornecedor</Button>
                   </div>
                 )}
@@ -455,6 +479,31 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
           </div>
         )}
       </Card>
+
+      {semQtd.length > 0 && editavel && (
+        <div className="alert warning" style={{ marginTop: 12 }}><Icon.warning /><div><div className="alert__title">{semQtd.length} produto(s) sem quantidade</div><div className="alert__sub">Estes itens não tinham sugestão de compra. Preencha a coluna "Qtd. pedida" (campo amarelo) antes de enviar a cotação.</div></div></div>
+      )}
+      {(dados.convitesRemovidos || []).length > 0 && (
+        <>
+          <div style={{ height: 12 }} />
+          <Card title="Fornecedores removidos ou substituídos (histórico)" sub="Ficam guardados: respostas, preços e conversas não se perdem. O link que receberam deixou de funcionar.">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+              {dados.convitesRemovidos.map((cv) => {
+                const nResp = (dados.respostas || []).filter((r) => r.convite_id === cv.id).length;
+                const novo = dados.convites.find((x) => x.substitui_convite_id === cv.id);
+                return (
+                  <div key={cv.id} style={{ border: '1px dashed var(--border, #cbd5e1)', borderRadius: 8, padding: '8px 10px', minWidth: 230, opacity: .85 }}>
+                    <div style={{ fontWeight: 800 }}>{cv.fornecedor_nome} <Badge variant="neutral">removido</Badge></div>
+                    <div className="small muted">{cvFmtData(cv.removido_em)}{cv.removido_por ? ' · ' + cv.removido_por : ''}</div>
+                    <div className="small">{cv.removido_motivo || '—'}{novo ? ' → substituído por ' + novo.fornecedor_nome : ''}</div>
+                    <div className="small muted">{nResp} resposta(s) guardada(s){cv.respondido_em ? ' · respondeu ' + cvFmtData(cv.respondido_em) : ''}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        </>
+      )}
 
       <div style={{ height: 12 }} />
       <Card title="Mapa comparativo" sub={convites.length ? 'Verde = menor preço para a quantidade em questão. ★ = comprar a quantidade pedida deste fornecedor.' : 'Convide fornecedores acima para montar o comparativo.'}>
@@ -506,7 +555,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                     </td>
                     <td className="text-right">
                       {editavel
-                        ? <input className="input text-right" style={{ width: 80 }} type="number" min="1" step="any" defaultValue={it.quantidade_pedida} onBlur={(e) => { const v = cvNum(e.target.value); if (v > 0 && v !== cvNum(it.quantidade_pedida)) editarItem(it, 'quantidade_pedida', v); }} />
+                        ? <input className="input text-right" style={{ width: 80, ...(cvNum(it.quantidade_pedida) > 0 ? {} : { borderColor: '#d97706', background: '#fffbeb' }) }} placeholder="a definir" title={cvNum(it.quantidade_pedida) > 0 ? '' : 'Sem sugestão de compra: informe a quantidade que queremos cotar'} type="number" min="1" step="any" defaultValue={cvNum(it.quantidade_pedida) > 0 ? it.quantidade_pedida : ''} onBlur={(e) => { const v = cvNum(e.target.value); if (v > 0 && v !== cvNum(it.quantidade_pedida)) editarItem(it, 'quantidade_pedida', v); }} />
                         : cvFmtNum(it.quantidade_pedida)}
                       {editavel && <div><button className="link-btn muted" onClick={() => tirarItem(it)}>tirar</button></div>}
                     </td>
@@ -539,6 +588,19 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
 
       {modalPedir && <CVModalPedirCotacao convites={convites} forn={forn} onClose={() => setModalPedir(false)} onEmail={enviarEmail} onZap={zap} onLink={copiarLink} onTodosEmail={enviarTodosEmail} enviandoTodos={enviandoTodos} />}
       {confirmar && <CVModalConfirmar cfg={confirmar} onClose={() => setConfirmar(null)} />}
+      {substituir && (
+        <Modal title={'Substituir ' + substituir.fornecedor_nome} onClose={() => setSubstituir(null)} width={480}
+          footer={<><Button variant="ghost" onClick={() => setSubstituir(null)}>Voltar</Button><Button variant="primary" onClick={confirmarSubstituir} disabled={!subForn}>Substituir</Button></>}>
+          <div className="stack" style={{ gap: 10 }}>
+            <p className="small">O novo fornecedor recebe um link próprio e entra no mapa. {substituir.fornecedor_nome} sai do mapa, mas o que ele respondeu e as conversas ficam guardados no histórico.</p>
+            <select className="input" value={subForn} onChange={(e) => setSubForn(e.target.value)}>
+              <option value="">Escolha o novo fornecedor cadastrado…</option>
+              {fornecedoresLivres.map((f) => <option key={f.id} value={f.id}>{f.nome_fantasia || f.razao_social}{f.email ? '' : ' (sem e-mail)'}</option>)}
+            </select>
+            <input className="input" placeholder="Motivo (opcional) — ex.: preço alto, não respondeu" value={subMotivo} onChange={(e) => setSubMotivo(e.target.value)} />
+          </div>
+        </Modal>
+      )}
       {modalAprovar && <CVModalAprovar resumo={resumoModal} cambio={cambioNum} enviando={aprovando} onClose={() => setModalAprovar(false)} onConfirmar={aprovar} />}
     </div>
   );

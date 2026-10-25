@@ -610,9 +610,10 @@ function ImportacaoVarejoPage({ setRoute }) {
     setPedindoCotacao(true);
     try {
       const lote = await window.CotacoesVarejoStore.criarLote(itensSelecionados.map((i) => ({
-        codigo: i.codigo, descricao: i.descricao, quantidade: i.sugestaoCompra > 0 ? i.sugestaoCompra : 1,
+        codigo: i.codigo, descricao: i.descricao, unidade: i.unidade || null, quantidade: i.sugestaoCompra > 0 ? i.sugestaoCompra : 0,
       })));
-      window.toast?.('Lote ' + lote.numero + ' criado com ' + itensSelecionados.length + ' produto(s). Escolha os fornecedores e envie.', 'success');
+      const semQtd = itensSelecionados.filter((i) => !(i.sugestaoCompra > 0)).length;
+      window.toast?.('Lote ' + lote.numero + ' criado com ' + itensSelecionados.length + ' produto(s).' + (semQtd ? ' ' + semQtd + ' sem sugestão de compra: informe a quantidade antes de enviar.' : ' Escolha os fornecedores e envie.'), semQtd ? 'warning' : 'success');
       setSelecionados(new Set());
       window.VpRouter.navigate('cotacoes-varejo', lote.id);
       setRoute && setRoute('cotacoes-varejo');

@@ -27,8 +27,8 @@
     const ids = (lotes || []).map((l) => l.id);
     if (!ids.length) return [];
     const [it, cv] = await Promise.all([
-      c.from('iv_cotacao_itens').select('lote_id').in('lote_id', ids),
-      c.from('iv_cotacao_convites').select('lote_id, status').in('lote_id', ids),
+      c.from('iv_cotacao_itens').select('lote_id').in('lote_id', ids).is('removido_em', null),
+      c.from('iv_cotacao_convites').select('lote_id, status').in('lote_id', ids).is('removido_em', null),
     ]);
     const nItens = {}; (it.data || []).forEach((r) => { nItens[r.lote_id] = (nItens[r.lote_id] || 0) + 1; });
     const nConv = {}; const nResp = {};
@@ -55,14 +55,20 @@
       respostas = r.data || [];
     }
     const respostasMap = {}; respostas.forEach((r) => { respostasMap[r.convite_id + '|' + r.item_id] = r; });
-    return { lote, itens: itens.data || [], convites: convites.data || [], decisoes: decisoes.data || [], respostas, respostasMap };
+    /* Removidos (soft-delete) saem do mapa/envio mas continuam guardados: respostas, histórico de preço e tratativas não morrem. */
+    const todosItens = itens.data || []; const todosConvites = convites.data || [];
+    return {
+      lote, itens: todosItens.filter((x) => !x.removido_em), convites: todosConvites.filter((x) => !x.removido_em),
+      itensRemovidos: todosItens.filter((x) => x.removido_em), convitesRemovidos: todosConvites.filter((x) => x.removido_em),
+      decisoes: decisoes.data || [], respostas, respostasMap,
+    };
   }
 
   /* Cria o lote (rascunho) com os itens marcados na Importação Varejo. itens: [{codigo, descricao, quantidade, unidade?}] */
   async function criarLote(itens, opts) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const validos = (itens || []).filter((i) => i && i.codigo && Number(i.quantidade) > 0);
-    if (!validos.length) throw new Error('Nenhum item com quantidade para cotar.');
+    const validos = (itens || []).filter((i) => i && i.codigo && Number(i.quantidade) >= 0); // 0 = quantidade a definir (bloqueia o envio até preencher)
+    if (!validos.length) throw new Error('Nenhum item para cotar.');
     const u = usuario();
     const { data: lote, error } = await c.from('iv_cotacao_lotes').insert({
       titulo: (opts && opts.titulo) || null, observacao: (opts && opts.observacao) || null,
@@ -88,9 +94,12 @@
     const c = sb(); const { error } = await c.from('iv_cotacao_itens').update(campos).eq('id', id);
     if (error) throw error;
   }
+  /* Tirar produto do lote = marcar como removido (nada é apagado). As decisões de compra dele saem; as respostas ficam no histórico. */
   async function removerItem(id) {
-    const c = sb(); const { error } = await c.from('iv_cotacao_itens').delete().eq('id', id);
+    const c = sb();
+    const { error } = await c.from('iv_cotacao_itens').update({ removido_em: new Date().toISOString(), removido_por: usuario().email || null }).eq('id', id);
     if (error) throw error;
+    await c.from('iv_cotacao_decisoes').delete().eq('item_id', id);
   }
   async function cancelarLote(id) {
     await atualizarLote(id, { status: 'cancelado' });
@@ -102,7 +111,7 @@
   async function codigosEmCotacao() {
     const c = sb(); if (!c) return {};
     try {
-      const { data, error } = await c.from('iv_cotacao_itens').select('codigo, lote:iv_cotacao_lotes!inner(id, numero, status)').in('lote.status', ['rascunho', 'em_cotacao']).limit(5000);
+      const { data, error } = await c.from('iv_cotacao_itens').select('codigo, lote:iv_cotacao_lotes!inner(id, numero, status)').is('removido_em', null).in('lote.status', ['rascunho', 'em_cotacao']).limit(5000);
       if (error) return {};
       const m = {}; (data || []).forEach((r) => { if (r.lote) m[String(r.codigo).toUpperCase()] = { id: r.lote.id, numero: r.lote.numero }; });
       return m;
@@ -115,12 +124,13 @@
     return window.CadastrosFornecedoresStore.listarAtivos();
   }
 
-  async function convidarFornecedor(loteId, f) {
+  async function convidarFornecedor(loteId, f, opts) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     if (!f || !f.id) throw new Error('Escolha um fornecedor já cadastrado (Cadastros › Fornecedores).');
     const nome = f.nome_fantasia || f.razao_social || 'Fornecedor';
     const { data, error } = await c.from('iv_cotacao_convites').insert({
       lote_id: loteId, fornecedor_id: f.id, fornecedor_nome: nome, email: f.email || null, token: uuidCurto(),
+      substitui_convite_id: (opts && opts.substitui) || null,
     }).select().single();
     if (error) {
       if (String(error.message || '').includes('duplicate')) throw new Error('Este fornecedor já foi convidado neste lote.');
@@ -128,9 +138,22 @@
     }
     return data;
   }
-  async function removerConvite(id) {
-    const c = sb(); const { error } = await c.from('iv_cotacao_convites').delete().eq('id', id);
+  /* Remover fornecedor = marcar como removido (o link dele deixa de funcionar; respostas, preços e tratativas continuam guardados). */
+  async function removerConvite(id, motivo) {
+    const c = sb();
+    const { error } = await c.from('iv_cotacao_convites').update({
+      removido_em: new Date().toISOString(), removido_por: usuario().email || null, removido_motivo: motivo || null,
+    }).eq('id', id);
     if (error) throw error;
+    await c.from('iv_cotacao_decisoes').delete().eq('convite_id', id);
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Cotações de Varejo', acao: 'Removeu fornecedor do lote', alvo_id: id, detalhe: { motivo: motivo || null } });
+  }
+  /* Substituir = remove o antigo (com motivo) e convida o novo, ligando um ao outro no histórico. */
+  async function substituirConvite(loteId, conviteAntigo, fornecedorNovo, motivo) {
+    const novo = await convidarFornecedor(loteId, fornecedorNovo, { substitui: conviteAntigo.id });
+    try { await removerConvite(conviteAntigo.id, motivo || ('Substituído por ' + (novo.fornecedor_nome || 'outro fornecedor'))); }
+    catch (e) { throw new Error('O novo fornecedor foi convidado, mas não consegui remover o antigo: ' + (e.message || e)); }
+    return novo;
   }
   async function atualizarConvite(id, campos) {
     const c = sb(); const { error } = await c.from('iv_cotacao_convites').update({ ...campos, updated_at: new Date().toISOString() }).eq('id', id);
@@ -321,7 +344,7 @@
     const { data: lotes, error } = await c.from('iv_cotacao_lotes').select('id, numero').eq('status', 'em_cotacao').order('created_at', { ascending: false }).limit(50);
     if (error) throw error;
     if (!(lotes || []).length) return [];
-    const { data: cv, error: e2 } = await c.from('iv_cotacao_convites').select('*').in('lote_id', lotes.map((l) => l.id)).neq('status', 'rascunho');
+    const { data: cv, error: e2 } = await c.from('iv_cotacao_convites').select('*').in('lote_id', lotes.map((l) => l.id)).neq('status', 'rascunho').is('removido_em', null);
     if (e2) throw e2;
     const num = {}; lotes.forEach((l) => { num[l.id] = l.numero; });
     return (cv || []).map((x) => ({ ...x, lote_numero: num[x.lote_id] }));
@@ -364,7 +387,7 @@
   window.CotacoesVarejoStore = {
     MAX_FOTOS_MANUAIS, adicionarFotoManual, removerFotoManual, convitesEmCotacao, registrarRespostaPorEmail,
     portalUrl, codigosEmCotacao, listarLotes, obterLote, criarLote, atualizarLote, atualizarItem, removerItem, cancelarLote,
-    fornecedoresCadastrados, convidarFornecedor, removerConvite, atualizarConvite, marcarEnviado, novaRodada,
+    fornecedoresCadastrados, convidarFornecedor, removerConvite, substituirConvite, atualizarConvite, marcarEnviado, novaRodada,
     textoConvite, enviarPorEmail, whatsAppHref, salvarDecisoes, aprovarLote, fotosDoBanco, enviarFoto, resolverFotos,
   };
 }());
