@@ -181,6 +181,54 @@ function CVModalAprovar({ resumo, cambio, onClose, onConfirmar, enviando }) {
   );
 }
 
+/* ---------- Modal: pedir a cotação aos fornecedores convidados (e-mail / WhatsApp / link) ---------- */
+function CVModalPedirCotacao({ convites, forn, onClose, onEmail, onZap, onLink, onTodosEmail, enviandoTodos }) {
+  const pendentes = convites.filter((cv) => cv.status === 'rascunho' && cv.email);
+  return (
+    <Modal title="Pedir cotação ao fornecedor" onClose={onClose} width={640}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Fechar</Button>
+        <Button variant="primary" icon="send" onClick={onTodosEmail} disabled={!pendentes.length || enviandoTodos}>
+          {enviandoTodos ? 'Enviando…' : 'Enviar por e-mail a todos que ainda não receberam (' + pendentes.length + ')'}
+        </Button>
+      </>}>
+      <div className="stack" style={{ gap: 10 }}>
+        <p className="small">Cada fornecedor recebe um link próprio para informar preço por faixa de quantidade, prazo e quantidade mínima. Ele nunca vê os preços dos outros. Nada vai ao Omie nesta etapa.</p>
+        {convites.map((cv) => {
+          const s = CV_STATUS_CONVITE[cv.status] || CV_STATUS_CONVITE.rascunho;
+          const f = forn.find((x) => x.id === cv.fornecedor_id);
+          return (
+            <div key={cv.id} style={{ border: '1px solid var(--border, #e5e7eb)', borderRadius: 8, padding: '8px 10px' }}>
+              <div style={{ fontWeight: 800 }}>{cv.fornecedor_nome} <Badge variant={s.variant}>{s.label}</Badge></div>
+              <div className="small muted">{cv.email || 'sem e-mail no cadastro'}{f && f.telefone ? ' · ' + f.telefone : ''}</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+                <Button variant="outline" size="sm" onClick={() => onEmail(cv)} disabled={!cv.email} title={cv.email ? '' : 'Complete o e-mail em Cadastros › Fornecedores'}>E-mail</Button>
+                <Button variant="outline" size="sm" onClick={() => onZap(cv)} disabled={!(f && f.telefone)}>WhatsApp</Button>
+                <Button variant="outline" size="sm" onClick={() => onLink(cv)}>Copiar link</Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Modal>
+  );
+}
+
+/* ---------- Modal de confirmação própria (window.confirm é bloqueado em alguns navegadores embutidos e some sem avisar) ---------- */
+function CVModalConfirmar({ cfg, onClose }) {
+  const [rodando, setRodando] = React.useState(false);
+  const ok = async () => { setRodando(true); try { await cfg.acao(); onClose(); } catch (e) { window.toast?.(String((e && e.message) || e), 'error'); setRodando(false); } };
+  return (
+    <Modal title={cfg.titulo} onClose={onClose} width={460}
+      footer={<>
+        <Button variant="ghost" onClick={onClose} disabled={rodando}>Voltar</Button>
+        <Button variant="primary" onClick={ok} disabled={rodando}>{rodando ? 'Aguarde…' : cfg.rotulo}</Button>
+      </>}>
+      <p className="small">{cfg.texto}</p>
+    </Modal>
+  );
+}
+
 /* ---------- Detalhe do lote: mapa comparativo ---------- */
 function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const C = window.CotacoesVarejoCalc; const S = window.CotacoesVarejoStore;
@@ -194,6 +242,9 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const [salvando, setSalvando] = React.useState(false);
   const [aprovando, setAprovando] = React.useState(false);
   const [modalAprovar, setModalAprovar] = React.useState(false);
+  const [confirmar, setConfirmar] = React.useState(null);   // { titulo, texto, rotulo, acao }
+  const [modalPedir, setModalPedir] = React.useState(false);
+  const [enviandoTodos, setEnviandoTodos] = React.useState(false);
   const [sujo, setSujo] = React.useState(false);
   const fotosTentadas = React.useRef(false);
 
@@ -266,6 +317,17 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
       await carregar();
     } catch (e) { window.toast?.('Erro ao enviar: ' + (e.message || e), 'error'); }
   };
+  const enviarTodosEmail = async () => {
+    setEnviandoTodos(true);
+    let ok = 0, falha = 0;
+    try {
+      for (const cv of convites.filter((x) => x.status === 'rascunho' && x.email)) {
+        try { const r = await S.enviarPorEmail(lote, cv); if (r.enviouDireto) ok++; else falha++; } catch (e) { falha++; }
+      }
+      window.toast?.(ok + ' e-mail(s) enviado(s)' + (falha ? ' · ' + falha + ' não saiu(ram) — use "Copiar link" ou WhatsApp nesses.' : '.'), falha ? 'warning' : 'success');
+      await carregar();
+    } finally { setEnviandoTodos(false); }
+  };
   const copiarLink = async (cv) => {
     const link = S.portalUrl(cv.token);
     try { await navigator.clipboard.writeText(link); window.toast?.('Link copiado.', 'success'); } catch (e) { window.prompt('Copie o link:', link); }
@@ -278,7 +340,21 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     try { await S.marcarEnviado({ ...cv, lote_id: lote.id }, 'whatsapp', tel); await carregar(); } catch (e) {}
   };
   const rodada = async (cv) => { try { await S.novaRodada(cv); window.toast?.('Nova rodada aberta — reenvie o link ao fornecedor.', 'success'); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
-  const tirar = async (cv) => { if (!window.confirm('Remover ' + cv.fornecedor_nome + ' deste lote? As respostas dele também saem.')) return; try { await S.removerConvite(cv.id); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
+  const tirar = (cv) => setConfirmar({
+    titulo: 'Remover fornecedor do lote', rotulo: 'Remover fornecedor',
+    texto: 'Remover ' + cv.fornecedor_nome + ' deste lote? Os preços que ele já respondeu e as quantidades que você digitou para ele também saem. O link que ele recebeu deixa de funcionar. Depois você pode convidar outro fornecedor no lugar.',
+    acao: async () => {
+      await S.removerConvite(cv.id);
+      setQtd((p) => { const n = {}; Object.keys(p).forEach((k) => { if (k.split('|')[1] !== cv.id) n[k] = p[k]; }); return n; });
+      window.toast?.(cv.fornecedor_nome + ' removido do lote.', 'success');
+      await carregar();
+    },
+  });
+  const cancelarLoteConfirmado = () => setConfirmar({
+    titulo: 'Cancelar este lote', rotulo: 'Cancelar o lote',
+    texto: 'Cancelar o lote ' + lote.numero + '? Ele sai da lista e os produtos deixam de aparecer "em cotação". Nada é enviado ao Omie.',
+    acao: async () => { await S.cancelarLote(lote.id); window.toast?.('Lote ' + lote.numero + ' cancelado.', 'success'); onVoltar(); },
+  });
   const trocarFoto = async (item, file) => {
     if (!file) return;
     try { const url = await S.enviarFoto(item.codigo, file); await S.atualizarItem(item.id, { foto_url: url }); await carregar(); window.toast?.('Foto salva no banco de fotos (' + item.codigo + ').', 'success'); }
@@ -299,7 +375,11 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     try { await S.removerFotoManual(item, url); await carregar(); } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
   };
   const editarItem = async (item, campo, valor) => { try { await S.atualizarItem(item.id, { [campo]: valor }); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
-  const tirarItem = async (item) => { if (!window.confirm('Tirar ' + item.codigo + ' deste lote?')) return; try { await S.removerItem(item.id); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
+  const tirarItem = (item) => setConfirmar({
+    titulo: 'Tirar produto do lote', rotulo: 'Tirar produto',
+    texto: 'Tirar ' + item.codigo + ' deste lote? As respostas dos fornecedores para ele também saem.',
+    acao: async () => { await S.removerItem(item.id); await carregar(); },
+  });
 
   const aprovar = async () => {
     setAprovando(true);
@@ -327,8 +407,9 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
         <div className="page-head__r">
           <Button variant="outline" onClick={onVoltar}>← Lotes</Button>
           {editavel && sujo && <Button variant="outline" icon="check" onClick={() => salvar(false)} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar decisões'}</Button>}
-          {editavel && <Button variant="primary" icon="send" onClick={() => setModalAprovar(true)} disabled={!decisoesAtuais.length}>Aprovar e enviar ao Omie</Button>}
-          {editavel && <Button variant="ghost" onClick={async () => { if (window.confirm('Cancelar este lote de cotação?')) { await S.cancelarLote(lote.id); onVoltar(); } }}>Cancelar lote</Button>}
+          {editavel && <Button variant={convites.some((c) => c.status !== 'rascunho') ? 'outline' : 'primary'} icon="send" onClick={() => setModalPedir(true)} disabled={!convites.length} title={convites.length ? '' : 'Convide ao menos um fornecedor abaixo'}>Pedir cotação ao fornecedor</Button>}
+          {editavel && <Button variant={convites.some((c) => c.status !== 'rascunho') ? 'primary' : 'outline'} icon="check" onClick={() => setModalAprovar(true)} disabled={!decisoesAtuais.length} title={decisoesAtuais.length ? '' : 'Só depois que os fornecedores responderem e você digitar as quantidades a comprar'}>Aprovar compra e enviar ao Omie</Button>}
+          {editavel && <Button variant="ghost" onClick={cancelarLoteConfirmado}>Cancelar lote</Button>}
         </div>
       </div>
 
@@ -352,7 +433,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                     <button className="link-btn" onClick={() => zap(cv)}>WhatsApp</button>
                     <button className="link-btn" onClick={() => copiarLink(cv)}>Link</button>
                     {cv.status === 'respondido' && <button className="link-btn" onClick={() => rodada(cv)} title="Pede ao fornecedor que atualize os preços (2ª rodada de negociação)">Nova rodada</button>}
-                    <button className="link-btn muted" onClick={() => tirar(cv)}>remover</button>
+                    <Button variant="outline" size="sm" onClick={() => tirar(cv)} title="Tira este fornecedor do lote (para trocar por outro ou desistir de cotar com ele)">Remover fornecedor</Button>
                   </div>
                 )}
               </div>
@@ -456,6 +537,8 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
         </div>
       </Card>
 
+      {modalPedir && <CVModalPedirCotacao convites={convites} forn={forn} onClose={() => setModalPedir(false)} onEmail={enviarEmail} onZap={zap} onLink={copiarLink} onTodosEmail={enviarTodosEmail} enviandoTodos={enviandoTodos} />}
+      {confirmar && <CVModalConfirmar cfg={confirmar} onClose={() => setConfirmar(null)} />}
       {modalAprovar && <CVModalAprovar resumo={resumoModal} cambio={cambioNum} enviando={aprovando} onClose={() => setModalAprovar(false)} onConfirmar={aprovar} />}
     </div>
   );

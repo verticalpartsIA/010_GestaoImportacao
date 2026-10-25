@@ -46,6 +46,12 @@ const EV_CSS = `
 .ev-grupo-h{display:flex;align-items:baseline;gap:10px;margin:22px 0 10px}
 .ev-grupo-h h2{font-size:16px;margin:0}
 .ev-grupo-h span{font-size:12px;color:var(--fg3)}
+.ev-conf{margin-top:10px;border:1px solid #f59e0b;background:#fffbeb;border-radius:8px;padding:8px 10px;font-size:12px;color:#78350f}
+.ev-conf b{font-weight:700}
+.ev-conf ul{margin:4px 0 0;padding-left:18px}
+.ev-conf li{margin:2px 0}
+.ev-conf .quem{font-size:10.5px;font-weight:600;border:1px solid currentColor;border-radius:999px;padding:0 6px;margin-left:6px;white-space:nowrap}
+.ev-conf .alta{color:#b91c1c}
 .ev-legenda{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--fg2)}
 .ev-legenda i{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;vertical-align:-2px;border:2px solid var(--border)}
 `;
@@ -133,7 +139,31 @@ function EvEspinha({ oc, abrir }) {
   );
 }
 
-function EvCard({ item, onAbrirDossie, onVerNoMapa, abrirOcorrencias }) {
+/* "Dado a conferir": incoerências/paradas nos cadastros que alimentam esta tela (regras em evolucao-conferir-calc.js). */
+const EV_QUEM = { felipe: "cadastro (Felipe)", montador: "Diário de Obra (montador)" };
+function EvConferir({ lista }) {
+  if (!lista || !lista.length) return null;
+  return (
+    <div className="ev-conf" role="note">
+      <b>Dado a conferir ({lista.length})</b> — o sistema aponta, mas não corrige.
+      <ul>
+        {lista.map((a, i) => (
+          <li key={a.codigo + i}>
+            <span className={a.gravidade === "alta" ? "alta" : ""}>{a.motivo}</span>
+            <span className="quem">{EV_QUEM[a.quem] || a.quem}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function evHojeISO() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+function EvCard({ item, onAbrirDossie, onVerNoMapa, abrirOcorrencias, conferir }) {
   const S = window.MapaObrasCalc.SITUACOES[item.obra.situacao];
   const { linha } = item;
   const idxAtual = linha.passos.findIndex((p) => p.key === linha.atualKey);
@@ -146,6 +176,11 @@ function EvCard({ item, onAbrirDossie, onVerNoMapa, abrirOcorrencias }) {
           <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <span className="ev-serie">{item.serie || "Equipamento sem nº de série"}</span>
             <span style={{ fontSize: 11, fontWeight: 600, color: S.cor, border: `1px solid ${S.cor}`, borderRadius: 999, padding: "1px 8px" }}>{S.rotulo}</span>
+            {o.pausada_ate && String(o.pausada_ate) >= evHojeISO() && (
+              <span title={o.pausa_motivo || ""} style={{ fontSize: 11, fontWeight: 600, color: "#7a5200", background: "#fff3cd", border: "1px solid #e0b100", borderRadius: 999, padding: "1px 8px" }}>
+                ⏸ Pausada até {String(o.pausada_ate).split("-").reverse().join("/")}
+              </span>
+            )}
             {linha.atrasada && <span style={{ fontSize: 11, fontWeight: 600, color: "#dc2626", border: "1px solid #dc2626", borderRadius: 999, padding: "1px 8px" }}>Previsão vencida</span>}
           </div>
           <div className="ev-tit">{[o.client_name, o.building_name].filter(Boolean).join(" — ") || o.id}</div>
@@ -179,6 +214,7 @@ function EvCard({ item, onAbrirDossie, onVerNoMapa, abrirOcorrencias }) {
             ok={idxAtual === -1 ? true : i <= idxAtual} />
         ))}
       </div>
+      <EvConferir lista={conferir}/>
       <EvEspinha oc={item.oc} abrir={abrirOcorrencias}/>
     </div>
   );
@@ -200,7 +236,7 @@ function useEvolucaoItens(obras) {
     (async () => {
       try {
         const [eqRes, embRes, prog] = await Promise.all([
-          ids.length ? sb.from("equipamentos_obra").select("id, dossier_id, numero_serie, tipo, previsao_chegada_material, chegada_real_material, previsao_inicio, data_real_inicio, previsao_termino, data_real_termino").in("dossier_id", ids) : { data: [] },
+          ids.length ? sb.from("equipamentos_obra").select("id, dossier_id, numero_serie, tipo, atualizado_em, previsao_chegada_material, chegada_real_material, previsao_inicio, data_real_inicio, previsao_termino, data_real_termino").in("dossier_id", ids) : { data: [] },
           cotacoes.length ? sb.from("embarques_importacao").select("id, nome_embarque, numero_cotacao, etd_original, etd_atual, eta_santos, data_entrega, data_limite_entrega, arquivado, updated_at, created_at, houve_rolagem, historico_rolagens, historico_eta, canal_parametrizacao").in("numero_cotacao", cotacoes) : { data: [] },
           window.AcompanhamentoObraStore && ids.length ? window.AcompanhamentoObraStore.resumoProgressoBatch(ids).catch(() => ({})) : {},
         ]);
@@ -247,7 +283,7 @@ function useEvolucaoItens(obras) {
       const montar = (e) => {
         const emb = C.embarqueDoEquipamento(embCot, porSerie, e && e.numero_serie);
         const linha = C.montarLinha(o, e, { embarque: emb.embarque, progresso: extra.prog[o.id] });
-        return { embarque: emb.embarque, origemEmbarque: emb.origem, linha, oc: C.ocorrencias(emb.embarque, linha, {}) };
+        return { embarque: emb.embarque, origemEmbarque: emb.origem, linha, oc: C.ocorrencias(emb.embarque, linha, {}), eq: e || null, diario: extra.prog[o.id] || null };
       };
       const lista = (eqPor[o.id] || []).slice().sort((a, b) => String(a.numero_serie || "").localeCompare(String(b.numero_serie || ""), "pt-BR", { numeric: true }));
       if (!lista.length) out.push({ key: o.id, obra: o, serie: null, ...montar(null) });
@@ -265,11 +301,16 @@ function EvolucaoEquipamentos({ obras, dados, onAbrirDossie, onVerNoMapa }) {
   const [busca, setBusca] = React.useState("");
   const [ver, setVer] = React.useState({ andamento: true, aguardando: true, concluida: true });
   const [soOc, setSoOc] = React.useState(false);
+  const [soConf, setSoConf] = React.useState(false);
+  const confMap = React.useMemo(() => (window.EvolucaoConferirCalc ? window.EvolucaoConferirCalc.avaliar(itens) : new Map()), [itens]);
+  const confDe = (it) => confMap.get(it) || [];
+  const totalConf = itens.filter((it) => confDe(it).length).length;
 
   const q = busca.trim().toLowerCase();
   const filtrados = itens.filter((it) => {
     if (!ver[it.obra.situacao]) return false;
     if (soOc && !it.oc.lista.length) return false;
+    if (soConf && !confDe(it).length) return false;
     if (!q) return true;
     const o = it.obra;
     return [it.serie, it.embarque && it.embarque.nome_embarque, o.id, o.client_name, o.building_name, o.city, o.status_master, (o.instaladores || []).join(" "), o.numero_cotacao]
@@ -308,6 +349,10 @@ function EvolucaoEquipamentos({ obras, dados, onAbrirDossie, onVerNoMapa }) {
           <input type="checkbox" checked={soOc} onChange={(e) => setSoOc(e.target.checked)}/>
           Só com ocorrência ({itens.filter((it) => it.oc.lista.length).length})
         </label>
+        <label className="row" style={{ gap: 6, fontSize: 12, cursor: "pointer" }} title="Datas incoerentes, previsões vencidas, cadastro incompleto ou obra sem Diário">
+          <input type="checkbox" checked={soConf} onChange={(e) => setSoConf(e.target.checked)}/>
+          Só dado a conferir ({totalConf})
+        </label>
         <div className="ev-legenda">
           <span><i style={{ background: "#16a34a", borderColor: "#16a34a" }}/>Feito</span>
           <span><i style={{ background: "#fef3c7", borderColor: "#f59e0b" }}/>Etapa atual</span>
@@ -328,7 +373,7 @@ function EvolucaoEquipamentos({ obras, dados, onAbrirDossie, onVerNoMapa }) {
             </div>
             {lista.length === 0
               ? <div style={{ fontSize: 13, color: "var(--fg3)", padding: "8px 0 4px" }}>Nenhum equipamento{q ? " com esta busca" : ""}.</div>
-              : lista.map((it) => <EvCard key={it.key} item={it} onAbrirDossie={onAbrirDossie} onVerNoMapa={onVerNoMapa} abrirOcorrencias={soOc}/>)}
+              : lista.map((it) => <EvCard key={it.key} item={it} onAbrirDossie={onAbrirDossie} onVerNoMapa={onVerNoMapa} abrirOcorrencias={soOc} conferir={confDe(it)}/>)}
           </section>
         );
       })}

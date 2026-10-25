@@ -299,6 +299,13 @@ function RFQPage() {
   const [search, setSearch] = React.useState('');
   const [filterStatus, setFilterStatus] = React.useState('Todos');
   const [saving, setSaving] = React.useState(false);
+  /* Cotações de VAREJO (COTV-xxxx) entram sozinhas na lista; abrir leva às tratativas por fornecedor (rfq-varejo.jsx). */
+  const [loteId, setLoteId] = window.useRotaId('rfq-importacao');
+  const [lotes, setLotes] = React.useState([]);
+  React.useEffect(() => {
+    if (!window.CotacoesVarejoStore) return;
+    window.CotacoesVarejoStore.listarLotes().then(setLotes).catch(() => setLotes([]));
+  }, [loteId]);
 
   const reload = React.useCallback(() => { window.RFQStore.listarTodas().then(setRfqs).catch(() => setRfqs([])); }, []);
   React.useEffect(() => { reload(); }, [reload]);
@@ -322,6 +329,8 @@ function RFQPage() {
     catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
   };
 
+  if (loteId) return <window.RFQVarejoDetalhe key={loteId} loteId={loteId} onVoltar={() => setLoteId(null)} />;
+
   if (rfqs === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   const filtered = rfqs.filter((r) => {
@@ -329,6 +338,12 @@ function RFQPage() {
     const matchSearch = !s || (r.numero_rfq || '').toLowerCase().includes(s) || (r.itens || []).some((i) => (i.nome || '').toLowerCase().includes(s));
     const matchStatus = filterStatus === 'Todos' || r.status === filterStatus;
     return matchSearch && matchStatus;
+  });
+
+  const lotesFiltrados = lotes.filter((l) => {
+    const s = search.toLowerCase();
+    const matchStatus = filterStatus === 'Todos';
+    return matchStatus && (!s || (l.numero || '').toLowerCase().includes(s));
   });
 
   return (
@@ -359,9 +374,18 @@ function RFQPage() {
         </select>
       </div>
 
+      {lotesFiltrados.length > 0 && (
+        <div style={{ marginBottom: 18 }}>
+          <div className="small muted" style={{ marginBottom: 8 }}>{lotesFiltrados.length} cotação(ões) de varejo — tratativas com os exportadores (vêm de Cotações de Varejo)</div>
+          <div className="stack" style={{ gap: 10 }}>
+            {lotesFiltrados.map((l) => <window.RFQVarejoLinha key={l.id} lote={l} onAbrir={setLoteId} />)}
+          </div>
+        </div>
+      )}
+
       <div className="small muted" style={{ marginBottom: 8 }}>{filtered.length} RFQ(s) encontrada(s)</div>
 
-      {filtered.length === 0 && (
+      {filtered.length === 0 && lotesFiltrados.length === 0 && (
         <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13, border: '1px dashed var(--border)', borderRadius: 6 }}>Nenhuma RFQ encontrada.</div>
       )}
 

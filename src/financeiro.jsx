@@ -480,7 +480,7 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
           {!aberta && noAtual && (
             <>
               <span className="small muted">{engine?.nodeByKey(noAtual.evento_key)?.label || noAtual.trigger_name}</span>
-              <GanttBarMini nascidoEm={noAtual.nascido_em} prazoEm={engine?.prazoEfetivo(noAtual) || noAtual.prazo_em} concluidoEm={noAtual.concluido_em} encerrado={encerrada}/>
+              <GanttBarMini nascidoEm={noAtual.nascido_em} prazoEm={engine ? engine.prazoEfetivo(noAtual) : noAtual.prazo_em} concluidoEm={noAtual.concluido_em} encerrado={encerrada}/>
             </>
           )}
         </div>
@@ -539,7 +539,7 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
                   ) : cemiterio ? (
                     <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setFechandoMotivo(g); }}>Fechar com motivo</Button>
                   ) : (
-                    <GanttBarMini nascidoEm={g.nascido_em} prazoEm={engine?.prazoEfetivo(g) || g.prazo_em} concluidoEm={null} comLabel/>
+                    <GanttBarMini nascidoEm={g.nascido_em} prazoEm={engine ? engine.prazoEfetivo(g) : g.prazo_em} concluidoEm={null} comLabel/>
                   )}
                   {podeConfirmarSinal && (
                     <Button size="sm" variant="primary" icon="check"

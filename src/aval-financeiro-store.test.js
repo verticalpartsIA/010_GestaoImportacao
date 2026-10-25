@@ -90,10 +90,10 @@ test('gatilhos — COMPRA_LIBERADA só nasce com os 3 avais (Pagamento, Jurídic
   assert.equal(aj.condicaoNasce({ resposta: 'recusada' }), false);
 });
 
-test('gatilhos — SLA da Precificação é 2h; responsável não nasce mais; CEO condicionado à margem', async () => {
+test('gatilhos — SLA da Precificação é 4h comerciais; responsável não nasce mais; CEO condicionado à margem', async () => {
   const E = window.GatilhosEngine;
-  assert.equal(E.SLA_HORAS.PRECIFICACAO, 2);
-  assert.match(E.NODES.find((n) => n.key === 'PRECIFICACAO').label, /2h/);
+  assert.equal(E.SLA_HORAS.PRECIFICACAO, 4);
+  assert.match(E.NODES.find((n) => n.key === 'PRECIFICACAO').label, /4h/);
   assert.equal(E.NODES.find((n) => n.key === 'OWNER_APROVOU').nasce, null);
   const ceo = E.NODES.find((n) => n.key === 'CEO_APROVOU');
   window.DecisoesStore = { precisaAprovacaoCeo: async () => ({ precisa: false, margem: 0.2 }) };
