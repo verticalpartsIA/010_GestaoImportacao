@@ -296,6 +296,10 @@ function CVModalDescricao({ item, onClose, onSalvo }) {
   const S = window.CotacoesVarejoStore;
   const [d, setD] = React.useState({ aplicacao: '', equipamento: '', tensao: '', potencia: '', medidas: '', material: '', observacao: '', texto_pt: '', texto_en: '', texto_zh: '' });
   const [perguntas, setPerguntas] = React.useState([]);
+  const [fontes, setFontes] = React.useState([]);
+  const [bruta, setBruta] = React.useState('');
+  const [ficha, setFicha] = React.useState('');
+  const [web, setWeb] = React.useState(false);
   const [ia, setIa] = React.useState(false);
   const [gerando, setGerando] = React.useState(false);
   const [salvando, setSalvando] = React.useState(false);
@@ -303,8 +307,17 @@ function CVModalDescricao({ item, onClose, onSalvo }) {
   React.useEffect(() => { S.obterDescricao(item.codigo).then((g) => { if (g) { const n = {}; Object.keys(g).forEach((k) => { if (g[k] != null) n[k] = g[k]; }); setD((p) => ({ ...p, ...n })); } }); }, [item.id]);
   const sugerir = async () => {
     setGerando(true);
-    try { const r = await S.sugerirDescricaoIA({ ...d, codigo: item.codigo, descricao: item.descricao }); setD((p) => ({ ...p, texto_pt: r.texto_pt, texto_en: r.texto_en, texto_zh: r.texto_zh })); setPerguntas(r.perguntas); setIa(true); }
-    catch (e) { window.toast?.(String(e.message || e), 'error'); }
+    try {
+      const r = await S.sugerirDescricaoIA({ ...d, codigo: item.codigo, descricao: item.descricao, ficha, web });
+      setBruta(''); setPerguntas(r.perguntas); setFontes(r.fontes || []);
+      if (r.texto_pt || r.texto_en || r.texto_zh) {
+        // Texto novo SUBSTITUI os três (idioma que não veio fica vazio): manter a tradução antiga ao lado do texto novo deixaria idiomas incoerentes (ex.: 220 V × 380 V).
+        setD((p) => ({ ...p, texto_pt: r.texto_pt, texto_en: r.texto_en, texto_zh: r.texto_zh })); setIa(true);
+        if (!(r.texto_pt && r.texto_en && r.texto_zh)) window.toast?.('A IA não escreveu todos os idiomas. Os que faltam ficaram vazios — peça de novo ou preencha à mão antes de salvar.', 'warning');
+      }
+      else window.toast?.('A IA não escreveu o texto: precisa de mais dados (veja as perguntas). Cole a ficha técnica do fabricante e tente de novo.', 'warning');
+    }
+    catch (e) { setBruta(e.bruto || ''); window.toast?.(String(e.message || e), 'error'); }
     finally { setGerando(false); }
   };
   const salvar = async () => {
@@ -331,8 +344,12 @@ function CVModalDescricao({ item, onClose, onSalvo }) {
           {campo('material', 'Material / acabamento', 'ex.: aço 304, nylon…')}
         </div>
         {campo('observacao', 'Observação nossa', 'qualquer detalhe que ajude o fornecedor a entender')}
+        <label className="small" style={{ display: 'block' }}>Ficha técnica / texto do fabricante (cole aqui — é a melhor fonte para a IA)<textarea className="input" rows={5} style={{ width: '100%' }} placeholder="Cole o catálogo, a página do fabricante ou a descrição do fornecedor. A IA usa isto como base e não inventa além disso." value={ficha} onChange={(e) => setFicha(e.target.value)} /></label>
+        <label className="small" style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={web} onChange={(e) => setWeb(e.target.checked)} /> Tentar pesquisar na internet (só funciona se a IA da VPS tiver acesso à web; ela diz se não tiver)</label>
         <div><Button variant="outline" icon="send" onClick={sugerir} disabled={gerando}>{gerando ? 'A IA está escrevendo…' : 'Sugerir com IA'}</Button> <span className="small muted">usa o Copiloto da VPS (20 perguntas por hora por pessoa)</span></div>
-        {perguntas.length > 0 && <div className="alert warning"><div><div className="alert__title">A IA precisa saber</div><div className="alert__sub">{perguntas.map((q, i) => <div key={i}>• {q}</div>)} Preencha acima e peça a sugestão de novo.</div></div></div>}
+        {bruta && <div className="alert warning"><div><div className="alert__title">O que a IA respondeu</div><div className="alert__sub" style={{ whiteSpace: 'pre-wrap' }}>{bruta}</div></div></div>}
+        {fontes.length > 0 && <div className="small">Fontes usadas pela IA: {fontes.map((f, i) => <span key={i}>{i ? ' · ' : ''}{/^https?:\/\//.test(f) ? <a href={f} target="_blank" rel="noopener noreferrer">{f}</a> : f}</span>)}</div>}
+        {perguntas.length > 0 && <div className="alert warning"><div><div className="alert__title">A IA precisa saber</div><div className="alert__sub">{perguntas.map((q, i) => <div key={i}>• {q}</div>)} Responda nos campos acima (ou cole a ficha) e peça a sugestão de novo.</div></div></div>}
         {texto('texto_en', 'English (o fornecedor lê primeiro)')}
         {texto('texto_zh', '中文')}
         {texto('texto_pt', 'Português (nosso)')}
