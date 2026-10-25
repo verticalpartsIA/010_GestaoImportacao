@@ -168,6 +168,7 @@
     const { error } = await c.from('iv_cotacao_convites').update({ status: convite.status === 'rascunho' ? 'enviado' : convite.status, envios, enviado_em: now, updated_at: now }).eq('id', convite.id);
     if (error) throw error;
     await c.from('iv_cotacao_lotes').update({ status: 'em_cotacao', updated_at: now }).eq('id', convite.lote_id).eq('status', 'rascunho');
+    await fixarCambioCotacao(convite.lote_id);
     if (window.VPLog) window.VPLog.registrar({ modulo: 'Cotações de Varejo', acao: 'Enviou a cotação ao fornecedor', alvo: convite.fornecedor_nome, alvo_id: convite.id, detalhe: { canal, rodada: convite.rodada } });
   }
 
@@ -218,41 +219,85 @@
     }
   }
 
-  /* APROVAR (o "martelo"): uma Requisição de Compra por fornecedor vencedor, com a quantidade e o preço já decididos.
-     Cada fornecedor enviado é gravado em lote.requisicoes na hora — se um falhar, o reenvio PULA os já enviados (nunca duplica). */
+  /* APROVAR (o "martelo"): cria 1 P.I. em RASCUNHO por fornecedor vencedor (itens, quantidades e preços já decididos), registra o
+     que foi decidido em "Comprado" (a sugestão da Importação Varejo deixa de pedir de novo) e manda ao fornecedor, na tratativa,
+     o pedido de Proforma Invoice em PT/EN/中文. NADA vai ao Omie. Cada fornecedor processado é gravado em lote.requisicoes na hora
+     ({convite_id, fornecedor, pi_id, pi_numero…}): se um falhar, aprovar de novo PULA os já feitos (nunca duplica). */
+  function textoProforma(lote, conv, g, itens) {
+    const un = (cod) => { const it = itens.find((x) => x.codigo === cod); return (it && it.unidade) || 'pcs'; };
+    const linhas = g.itens.map((i) => '- ' + i.codigo + ' — ' + (i.descricao || '') + ' — ' + i.quantidade + ' ' + un(i.codigo) + ' × ' + i.preco + ' ' + conv.moeda).join('\n');
+    return 'We would like to proceed with the items below from quotation ' + lote.numero + '. Please send us the Proforma Invoice (PI) with final prices, payment terms, Incoterm, production/delivery time and bank details.\n\n'
+      + 'Gostaríamos de seguir com os itens abaixo da cotação ' + lote.numero + '. Por favor envie a Proforma Invoice (PI) com preços finais, condições de pagamento, Incoterm, prazo de produção/entrega e dados bancários.\n\n'
+      + '我们希望就询价单 ' + lote.numero + ' 中的以下产品下单。请发送形式发票（PI），注明最终价格、付款条件、贸易术语、生产/交货时间及银行信息。\n\n'
+      + 'Items / Itens / 产品:\n' + linhas;
+  }
   async function aprovarLote(dados) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const { lote, itens, convites, decisoes, respostasMap } = dados;
+    const { lote, itens, convites, decisoes, respostas, respostasMap } = dados;
     if (lote.status === 'aprovado') throw new Error('Este lote já foi aprovado.');
+    if (!window.PIStore || !window.PIStore.criarRascunhoDeLote) throw new Error('O módulo de P.I. não carregou — recarregue a página.');
     const cambio = Number(lote.cambio_usd_brl) || 0;
     const calc = window.CotacoesVarejoCalc.consolidarPorFornecedor(itens, decisoes, respostasMap, convites, cambio);
     const ids = Object.keys(calc.porConvite);
     if (!ids.length) throw new Error('Escolha ao menos um fornecedor vencedor com quantidade.');
-    const jaEnviadas = new Set((lote.requisicoes || []).map((r) => r.convite_id));
-    const requisicoes = (lote.requisicoes || []).slice();
+    const jaFeitos = new Set((lote.requisicoes || []).filter((r) => r.pi_id).map((r) => r.convite_id));
+    const registros = (lote.requisicoes || []).slice();
     const erros = [];
     for (const cid of ids) {
-      if (jaEnviadas.has(cid)) continue;
+      if (jaFeitos.has(cid)) continue;
       const conv = convites.find((x) => x.id === cid); const g = calc.porConvite[cid];
-      if (g.totalBRL == null) { erros.push(conv.fornecedor_nome + ': informe o câmbio USD/BRL do lote.'); continue; }
       if (g.itens.some((i) => i.semPreco)) { erros.push(conv.fornecedor_nome + ': há item vencedor sem preço cotado.'); continue; }
       try {
-        const res = await window.ImportacaoVarejoStore.enviarRequisicaoOmie(g.itens.map((i) => ({
-          codigo: i.codigo, descricao: i.descricao, quantidade: i.quantidade,
-          precoUnitario: window.CotacoesVarejoCalc.paraReais(i.preco, conv.moeda, cambio) || 0,
-          fornecedorNome: conv.fornecedor_nome,
-        })));
-        requisicoes.push({ convite_id: cid, fornecedor: conv.fornecedor_nome, req_omie: res.codReqCompra || null, itens: res.quantidadeItens, erros: res.itensComErro || [], em: new Date().toISOString() });
-        await c.from('iv_cotacao_lotes').update({ requisicoes, updated_at: new Date().toISOString() }).eq('id', lote.id);
+        const dolar = (respostas || []).filter((r) => r.convite_id === cid && r.cambio_resposta).sort((a, b) => String(b.cambio_resposta_em).localeCompare(String(a.cambio_resposta_em)))[0];
+        const pi = await window.PIStore.criarRascunhoDeLote({
+          lote, convite: conv, ordem: convites.findIndex((x) => x.id === cid) + 1, cambioLote: cambio, cambioResposta: dolar ? dolar.cambio_resposta : null,
+          itens: g.itens.map((i) => ({ codigo: i.codigo, descricao: i.descricao, quantidade: i.quantidade, preco: i.preco, unidade: (itens.find((x) => x.codigo === i.codigo) || {}).unidade })),
+        });
+        const reg = { convite_id: cid, fornecedor: conv.fornecedor_nome, pi_id: pi.id, pi_numero: pi.numero_pi, itens: g.itens.length, em: new Date().toISOString() };
+        // "Comprado": a sugestão abate o que foi aprovado até a previsão de chegada (editável na Importação Varejo).
+        try {
+          const u = usuario(); const previsao = window.ImportacaoVarejoStore.previsaoPadrao(new Date());
+          const { error: eC } = await c.from('importacao_varejo_comprado').insert(g.itens.map((i) => ({ codigo: String(i.codigo).toUpperCase(), quantidade: Number(i.quantidade), previsao_chegada: previsao, origem: 'manual', criado_por: u.email || null, criado_por_nome: u.name || u.email || null })));
+          if (eC) throw eC;
+        } catch (e) { reg.aviso_comprado = String((e && e.message) || e); erros.push(conv.fornecedor_nome + ': P.I. criada, mas não consegui registrar "Comprado" (' + reg.aviso_comprado + ').'); }
+        // Pedido de Proforma ao fornecedor (tratativa + e-mail). Falha não desfaz a P.I.
+        try {
+          if (!window.RFQVarejoStore) throw new Error('módulo de tratativas não carregou');
+          const r = await window.RFQVarejoStore.enviar({ lote, convite: conv, mensagem: textoProforma(lote, conv, g, itens) });
+          reg.proforma = r.__email && r.__email.ok ? 'enviada' : 'so_registrada';
+          if (reg.proforma === 'so_registrada') erros.push(conv.fornecedor_nome + ': pedido de Proforma só ficou registrado na tratativa (' + (r.__email && r.__email.motivo || 'e-mail não enviado') + ').');
+        } catch (e) { reg.proforma = 'falhou'; erros.push(conv.fornecedor_nome + ': P.I. criada, mas o pedido de Proforma não saiu (' + ((e && e.message) || e) + ').'); }
+        registros.push(reg);
+        await c.from('iv_cotacao_lotes').update({ requisicoes: registros, updated_at: new Date().toISOString() }).eq('id', lote.id);
       } catch (e) { erros.push(conv.fornecedor_nome + ': ' + (e.message || e)); }
     }
-    const completo = ids.every((cid) => requisicoes.some((r) => r.convite_id === cid));
+    const completo = ids.every((cid) => registros.some((r) => r.convite_id === cid && r.pi_id));
     if (completo) {
       const u = usuario();
-      await c.from('iv_cotacao_lotes').update({ status: 'aprovado', aprovado_por: u.email || null, aprovado_em: new Date().toISOString(), requisicoes, updated_at: new Date().toISOString() }).eq('id', lote.id);
-      if (window.VPLog) window.VPLog.registrar({ modulo: 'Cotações de Varejo', acao: 'Aprovou o lote e enviou as requisições ao Omie', alvo: lote.numero, alvo_id: lote.id, detalhe: { requisicoes: requisicoes.length } });
+      await c.from('iv_cotacao_lotes').update({ status: 'aprovado', aprovado_por: u.email || null, aprovado_em: new Date().toISOString(), requisicoes: registros, updated_at: new Date().toISOString() }).eq('id', lote.id);
+      if (window.VPLog) window.VPLog.registrar({ modulo: 'Cotações de Varejo', acao: 'Aprovou o lote e criou as P.I. em rascunho', alvo: lote.numero, alvo_id: lote.id, detalhe: { pis: registros.map((r) => r.pi_numero) } });
     }
-    return { completo, requisicoes, erros };
+    return { completo, requisicoes: registros, erros };
+  }
+
+  /* ---------- Dólar do dia ---------- */
+  function hojeISO() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  /* Guarda a PTAX do dia (1 linha por dia); a resposta do fornecedor herda o último valor gravado por trigger no banco. */
+  async function registrarCambioDia(valor, fonte) {
+    const c = sb(); if (!c || !(Number(valor) > 0)) return;
+    try { await c.from('cambio_diario').upsert({ dia: hojeISO(), usd_brl: Number(valor), fonte: fonte || 'awesomeapi', registrado_por: usuario().email || null }, { onConflict: 'dia', ignoreDuplicates: true }); }
+    catch (e) { console.warn('[CotacoesVarejo] câmbio do dia não registrado', e); }
+  }
+  /* No 1º envio do lote, fixa o dólar da cotação (o informado no lote, senão a PTAX do dia). Só preenche uma vez. */
+  async function fixarCambioCotacao(loteId) {
+    const c = sb(); if (!c) return;
+    try {
+      const { data: l } = await c.from('iv_cotacao_lotes').select('cambio_usd_brl, cambio_cotacao_em').eq('id', loteId).maybeSingle();
+      if (!l || l.cambio_cotacao_em) return;
+      let valor = Number(l.cambio_usd_brl) || 0; let fonte = 'informado';
+      if (!valor) { const { data: d } = await c.from('cambio_diario').select('usd_brl').lte('dia', hojeISO()).order('dia', { ascending: false }).limit(1); valor = d && d[0] ? Number(d[0].usd_brl) : 0; fonte = 'ptax'; }
+      if (valor > 0) await c.from('iv_cotacao_lotes').update({ cambio_usd_brl: valor, cambio_cotacao_em: new Date().toISOString(), cambio_fonte: fonte }).eq('id', loteId);
+    } catch (e) { console.warn('[CotacoesVarejo] dólar da cotação não fixado', e); }
   }
 
   /* ---------- Banco de fotos (nome = código) ---------- */
@@ -387,7 +432,7 @@
   window.CotacoesVarejoStore = {
     MAX_FOTOS_MANUAIS, adicionarFotoManual, removerFotoManual, convitesEmCotacao, registrarRespostaPorEmail,
     portalUrl, codigosEmCotacao, listarLotes, obterLote, criarLote, atualizarLote, atualizarItem, removerItem, cancelarLote,
-    fornecedoresCadastrados, convidarFornecedor, removerConvite, substituirConvite, atualizarConvite, marcarEnviado, novaRodada,
+    registrarCambioDia, fixarCambioCotacao, fornecedoresCadastrados, convidarFornecedor, removerConvite, substituirConvite, atualizarConvite, marcarEnviado, novaRodada,
     textoConvite, enviarPorEmail, whatsAppHref, salvarDecisoes, aprovarLote, fotosDoBanco, enviarFoto, resolverFotos,
   };
 }());

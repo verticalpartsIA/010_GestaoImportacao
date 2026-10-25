@@ -18,6 +18,16 @@
       .sort((a, b) => a.min - b.min);
   }
 
+  /* Preço que SOBE quando a quantidade aumenta (provável erro de digitação, ex.: 3,70 → 37). → null ou { tipo: 'sobe'|'salto', de, para }.
+     'salto' = o preço mais que quintuplicou. Só avisa; nunca bloqueia. */
+  function faixasForaDeOrdem(faixas) {
+    const l = faixasOrdenadas(faixas);
+    for (let k = 1; k < l.length; k++) {
+      if (l[k].min > l[k - 1].min && l[k].preco > l[k - 1].preco) return { tipo: l[k].preco >= l[k - 1].preco * 5 ? 'salto' : 'sobe', de: l[k - 1], para: l[k] };
+    }
+    return null;
+  }
+
   /* → { preco, min, abaixoMin } ou null (fornecedor não cotou este item) */
   function precoNaQuantidade(faixas, qtd) {
     const fx = faixasOrdenadas(faixas);
@@ -75,5 +85,5 @@
     return { porConvite, totalBRL: totalValido ? totalBRL : null };
   }
 
-  window.CotacoesVarejoCalc = { faixasOrdenadas, precoNaQuantidade, melhorConvite, paraReais, resumoItem, consolidarPorFornecedor };
+  window.CotacoesVarejoCalc = { faixasOrdenadas, faixasForaDeOrdem, precoNaQuantidade, melhorConvite, paraReais, resumoItem, consolidarPorFornecedor };
 }());

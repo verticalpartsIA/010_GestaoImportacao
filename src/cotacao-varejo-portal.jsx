@@ -21,6 +21,12 @@ function inicial(item, resp) {
   return { f, lt: resp && resp.lead_time_dias != null ? String(resp.lead_time_dias) : '', moq: resp && resp.moq != null ? String(resp.moq) : '', obs: (resp && resp.obs) || '', foto: (resp && resp.foto_fornecedor) || '', fotos: (resp && Array.isArray(resp.fotos_fornecedor)) ? resp.fotos_fornecedor : [] };
 }
 function num(v) { const n = Number(String(v).replace(',', '.')); return Number.isFinite(n) ? n : 0; }
+/* Preço que SOBE quando a quantidade sobe (provável erro de digitação, ex.: 3,70 → 37). Só avisa. */
+function faixasForaDeOrdem(f) {
+  const l = f.filter((r) => num(r.preco) > 0).map((r) => ({ min: Math.max(1, num(r.min) || 1), preco: num(r.preco) })).sort((a, b) => a.min - b.min);
+  for (let k = 1; k < l.length; k++) { if (l[k].min > l[k - 1].min && l[k].preco > l[k - 1].preco) return { de: l[k - 1], para: l[k], salto: l[k].preco >= l[k - 1].preco * 5 }; }
+  return null;
+}
 
 function Caixa({ children, tom }) {
   return <div style={{ maxWidth: 720, margin: '60px auto', padding: 24, background: '#fff', borderRadius: 12, border: '1px solid #e5e5e0', fontFamily: 'Poppins, Arial, sans-serif', color: tom || '#222' }}>{children}</div>;
@@ -85,6 +91,8 @@ function Portal() {
       return { item_id: i.id, faixas, lead_time_dias: x.lt === '' ? null : Math.round(num(x.lt)), moq: x.moq === '' ? null : num(x.moq), obs: x.obs, foto_fornecedor: x.foto, fotos_fornecedor: x.fotos };
     }).filter((r) => r.faixas.length || r.lead_time_dias != null || r.moq != null || r.obs || (r.fotos_fornecedor || []).length);
     if (!respostas.length) { setErro(T('Fill in at least one price.', 'Preencha ao menos um preço.', '请至少填写一个价格。')); setEnviando(false); return; }
+    const fora = itens.filter((i) => form[i.id] && faixasForaDeOrdem(form[i.id].f));
+    if (fora.length && !window.confirm(T('The price goes UP with quantity for: ' + fora.map((i) => i.codigo).join(', ') + '. Normally a larger quantity has a lower or equal price. Send anyway?', 'O preço SOBE com a quantidade em: ' + fora.map((i) => i.codigo).join(', ') + '. Normalmente quantidade maior tem preço menor ou igual. Enviar mesmo assim?', '以下产品的单价随数量增加而上升：' + fora.map((i) => i.codigo).join(', ') + '。通常数量越大单价越低或相同。仍要提交吗？'))) { setEnviando(false); return; }
     const semFoto = respostas.filter((r) => r.faixas.length && !(r.fotos_fornecedor || []).length).length;
     if (semFoto && !window.confirm(T(semFoto + ' priced item(s) have no photo of your product. Send anyway?', semFoto + ' item(ns) com preço estão sem foto do seu produto. Enviar mesmo assim?', semFoto + ' 个已报价产品没有您的产品照片。仍要提交吗？'))) { setEnviando(false); return; }
     const { data, error } = await sbc().rpc('public_ivc_responder', { p_token: token, p_respostas: respostas, p_moeda: moeda });
@@ -112,13 +120,13 @@ function Portal() {
       {encerrado && <div style={{ background: '#fdecec', border: '1px solid #e49a9a', padding: 14, borderRadius: 10, marginTop: 14 }}><b>{T('This quotation is closed.', 'Esta cotação foi encerrada.', '此询价已关闭。')}</b></div>}
 
       <p style={{ fontSize: 13, lineHeight: 1.5, margin: '14px 2px' }}>
-        {T('Enter the unit price for each item. If your price changes with quantity, use the quantity breaks (e.g. from 1 pc: 4.10; from 100 pcs: 3.80). Lead time in days; MOQ = minimum order quantity.',
-          'Informe o preço unitário de cada item. Se o preço muda com a quantidade, use as faixas (ex.: a partir de 1 un.: 4,10; a partir de 100 un.: 3,80). Prazo em dias; MOQ = quantidade mínima de pedido.',
-          '请填写每个产品的单价。如价格随数量变化，请使用数量阶梯（例如：1 件起 4.10；100 件起 3.80）。交货期以天计；MOQ = 最小起订量。')}
+        {T('Enter the UNIT price of each item. The "Qty" column is how many we need. Each price row reads "from N pieces, each piece costs X": row 1 is normally from 1 piece (or your MOQ); use rows 2 and 3 only if the price drops for bigger quantities (e.g. from 1 pc: 4.10; from 100 pcs: 3.80). Leave them empty if the price is the same. Lead time in days; MOQ = minimum order quantity.',
+          'Informe o preço UNITÁRIO de cada item. A coluna "Qtd." é quanto precisamos. Cada linha de preço significa "a partir de N peças, cada peça custa X": a linha 1 normalmente é a partir de 1 peça (ou do seu MOQ); use as linhas 2 e 3 só se o preço cai para quantidades maiores (ex.: a partir de 1 un.: 4,10; a partir de 100 un.: 3,80). Deixe vazias se o preço for o mesmo. Prazo em dias; MOQ = quantidade mínima de pedido.',
+          '请填写每个产品的单价。“数量”列是我们需要的数量。每一行价格表示“从 N 件起，每件 X”：第 1 行通常是 1 件起（或您的 MOQ）；仅当数量更大价格更低时才填写第 2、3 行（例如：1 件起 4.10；100 件起 3.80）；价格相同则留空。交货期以天计；MOQ = 最小起订量。')}
       </p>
 
       <div style={{ margin: '0 0 10px', fontSize: 13 }}>
-        <label>{T('Currency', 'Moeda', '币种')}: <select value={moeda} onChange={(e) => setMoeda(e.target.value)} disabled={encerrado} style={{ ...inp, width: 'auto' }}><option value="USD">USD</option><option value="BRL">BRL</option></select></label>
+        <label>{T('Currency', 'Moeda', '币种')}: <select value={moeda} onChange={(e) => setMoeda(e.target.value)} disabled={encerrado} style={{ ...inp, width: 'auto' }}><option value="USD">USD</option><option value="RMB">RMB (CNY)</option><option value="EUR">EUR</option><option value="BRL">BRL</option></select></label>
       </div>
 
       <div style={{ overflowX: 'auto', background: '#fff', borderRadius: 12, border: '1px solid #e5e5e0' }}>
@@ -143,16 +151,17 @@ function Portal() {
                   <td style={td}><div style={{ display: 'flex', gap: 6 }}>{[i.foto_url, i.foto_url2].concat(i.fotos_manuais || []).filter(Boolean).map((u, k) => <a key={k} href={u} target="_blank" rel="noopener noreferrer" title="Click to enlarge · 点击放大"><img src={u} alt={i.codigo} style={{ width: 96, height: 96, objectFit: 'contain', background: '#fff', border: '1px solid #e5e5df', borderRadius: 6 }} /></a>)}{!i.foto_url && !(i.fotos_manuais || []).length && <div style={{ width: 64, height: 64, background: '#f0f0ec', borderRadius: 6 }} />}</div></td>
                   <td style={{ ...td, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{i.codigo}</td>
                   <td style={{ ...td, maxWidth: 260 }}>{i.descricao}{i.obs_vp && <div style={{ fontSize: 12, color: '#8a6d00', marginTop: 4 }}>VerticalParts: {i.obs_vp}</div>}</td>
-                  <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}><b>{Number(i.quantidade).toLocaleString('en-US')}</b> {i.unidade || ''}</td>
+                  <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}><b>{Number(i.quantidade).toLocaleString('en-US')}</b> {i.unidade || T('pcs', 'un.', '件')}<div style={{ fontSize: 10, color: '#666' }}>{T('we need', 'precisamos', '需求量')}</div></td>
                   <td style={{ ...td, minWidth: 250 }}>
                     {x.f.map((r, idx) => (
                       <div key={idx} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
-                        <span style={{ fontSize: 11, color: '#666', width: 38 }}>{idx === 0 ? T('from', 'de', '起') : ''}</span>
+                        <span style={{ fontSize: 11, color: '#666', width: 60, lineHeight: 1.2 }}>{T('from', 'a partir de', '起')}</span>
                         <input style={{ ...inp, width: 70 }} inputMode="decimal" placeholder="qty" value={r.min} disabled={encerrado} onChange={(e) => setFaixa(i.id, idx, 'min', e.target.value)} />
                         <span>→</span>
                         <input style={{ ...inp, width: 96 }} inputMode="decimal" placeholder={moeda} value={r.preco} disabled={encerrado} onChange={(e) => setFaixa(i.id, idx, 'preco', e.target.value)} />
                       </div>
                     ))}
+                    {(() => { const fo = faixasForaDeOrdem(x.f); return fo ? <div style={{ fontSize: 11, color: '#b91c1c', marginTop: 2 }}>{T('Price goes up with quantity (' + fo.de.preco + ' → ' + fo.para.preco + ')' + (fo.salto ? ' — is there a typo?' : '') + '. Please check.', 'O preço sobe com a quantidade (' + fo.de.preco + ' → ' + fo.para.preco + ')' + (fo.salto ? ' — digitou errado?' : '') + '. Confira.', '单价随数量上升（' + fo.de.preco + ' → ' + fo.para.preco + '）' + (fo.salto ? ' — 是否输入有误？' : '') + '。请检查。')}</div> : null; })()}
                   </td>
                   <td style={td}><input style={{ ...inp, width: 80 }} inputMode="numeric" value={x.lt} disabled={encerrado} onChange={(e) => set(i.id, 'lt', e.target.value)} /></td>
                   <td style={td}><input style={{ ...inp, width: 80 }} inputMode="decimal" value={x.moq} disabled={encerrado} onChange={(e) => set(i.id, 'moq', e.target.value)} /></td>
