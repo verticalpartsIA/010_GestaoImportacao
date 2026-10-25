@@ -53,8 +53,13 @@ function Portal() {
       const f = {}; data.itens.forEach((i) => { f[i.id] = inicial(i, m[i.id]); });
       // Lote grande: o que foi digitado e ainda não enviado volta sozinho (guardado só neste navegador).
       try {
+        // Rascunho = {v:2, rodada, respondido_em, moeda, form}. Só vale se for da MESMA rodada e do mesmo estado de resposta do servidor
+        // (senão é um rascunho velho de uma versão já enviada/renegociada). Vale também para item já respondido (edição ainda não enviada).
         const salvo = JSON.parse(localStorage.getItem('ivc-rascunho:' + token) || 'null');
-        if (salvo) data.itens.forEach((i) => { if (!m[i.id] && salvo[i.id] && Array.isArray(salvo[i.id].f) && salvo[i.id].f.length === NFAIXAS) f[i.id] = salvo[i.id]; });
+        if (salvo && salvo.v === 2 && salvo.rodada === data.convite.rodada && (salvo.respondido_em || null) === (data.convite.respondido_em || null)) {
+          data.itens.forEach((i) => { const sv = salvo.form && salvo.form[i.id]; if (sv && Array.isArray(sv.f) && sv.f.length === NFAIXAS) f[i.id] = sv; });
+          if (salvo.moeda) setMoeda(salvo.moeda);
+        }
       } catch (e) { /* sem rascunho */ }
       setForm(f);
       sbc().rpc('public_ivc_visualizado', { p_token: token }).then(() => {});
@@ -63,9 +68,9 @@ function Portal() {
 
   useEffect(() => {
     if (!dados || feito || !Object.keys(form).length) return;
-    const t = setTimeout(() => { try { localStorage.setItem('ivc-rascunho:' + token, JSON.stringify(form)); } catch (e) { /* armazenamento bloqueado */ } }, 600);
+    const t = setTimeout(() => { try { localStorage.setItem('ivc-rascunho:' + token, JSON.stringify({ v: 2, rodada: dados.convite.rodada, respondido_em: dados.convite.respondido_em || null, moeda, form })); } catch (e) { /* armazenamento bloqueado */ } }, 600);
     return () => clearTimeout(t);
-  }, [form]);
+  }, [form, moeda]);
 
   if (dados === undefined) return <Caixa>{T('Loading…', 'Carregando…', '加载中…')}</Caixa>;
   if (dados === null) return <Caixa><h2>{T('Invalid or expired link', 'Link inválido ou expirado', '链接无效或已过期')}</h2><p>{T('Please ask VerticalParts for a new link.', 'Peça um novo link à VerticalParts.', '请向 VerticalParts 索取新链接。')}</p></Caixa>;

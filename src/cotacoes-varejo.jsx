@@ -613,7 +613,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
               {fornecedoresLivres.map((f) => { const n = npsMap[f.id]; return <option key={f.id} value={f.id}>{f.nome_fantasia || f.razao_social}{n ? ' ★' + Number(n.geral).toFixed(1).replace('.', ',') : ''}{f.email ? '' : ' (sem e-mail)'}</option>; })}
             </select>
             <Button variant="outline" size="sm" onClick={convidar} disabled={!novoForn}>Convidar</Button>
-            <button className="link-btn" onClick={() => setRoute && setRoute('cadastro-fornecedores')} title="Fornecedor novo precisa existir no cadastro antes de entrar no lote">+ Cadastrar novo fornecedor</button>
+            <button className="link-btn" onClick={() => { if (setRoute) { setRoute('cadastro-fornecedores'); return; } try { window.VpRouter.navigate('cadastro-fornecedores'); window.dispatchEvent(new PopStateEvent('popstate')); } catch (e) { window.location.href = '/cadastros/cadastro-fornecedores'; } }} title="Fornecedor novo precisa existir no cadastro antes de entrar no lote">+ Cadastrar novo fornecedor</button>
             <div className="spacer" style={{ flex: 1 }} />
             <label className="small">Câmbio USD/BRL do lote&nbsp;
               <input className="input text-right" style={{ width: 90 }} value={cambio} onChange={(e) => { setCambio(e.target.value); setSujo(true); }} />
