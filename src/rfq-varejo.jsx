@@ -193,10 +193,14 @@ function RFQVarejoDetalhe({ loteId, onVoltar }) {
   if (erro) return <div className="page fade-in"><div className="alert danger"><div><div className="alert__title">Não foi possível abrir o lote</div><div className="alert__sub">{erro}</div></div></div><Button variant="outline" onClick={onVoltar}>← RFQ</Button></div>;
   if (!dados) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
-  const { lote, itens, convites, respostas } = dados;
+  const { lote, convites, respostas } = dados;
+  // Fornecedores removidos/substituídos continuam consultáveis (somente leitura): respostas, preços e conversa não morrem.
+  const removidos = dados.convitesRemovidos || [];
+  const todos = convites.concat(removidos);
+  const itens = dados.itens.concat(dados.itensRemovidos || []);
   const st = RV_STATUS_LOTE[lote.status] || RV_STATUS_LOTE.rascunho;
   const aberto = lote.status === 'rascunho' || lote.status === 'em_cotacao';
-  const sel = convites.find((c) => c.id === conviteSel) || convites[0] || null;
+  const sel = todos.find((c) => c.id === conviteSel) || convites[0] || todos[0] || null;
 
   return (
     <div className="page fade-in">
@@ -211,22 +215,23 @@ function RFQVarejoDetalhe({ loteId, onVoltar }) {
           <Button variant="outline" onClick={() => rvIrPara('/logistica/cotacoes-varejo/' + lote.id)}>Mapa comparativo e aprovação</Button>
         </div>
       </div>
-      {convites.length === 0 ? (
+      {todos.length === 0 ? (
         <Card title="Fornecedores"><div className="small muted">Nenhum fornecedor foi convidado neste lote ainda. Convide e peça a cotação em <a href={'/logistica/cotacoes-varejo/' + lote.id} onClick={(e) => { e.preventDefault(); rvIrPara('/logistica/cotacoes-varejo/' + lote.id); }}>Cotações de Varejo</a>.</div></Card>
       ) : (
         <>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-            {convites.map((cv) => {
+            {todos.map((cv) => {
               const s = RV_STATUS_CONVITE[cv.status] || RV_STATUS_CONVITE.rascunho; const ativo = sel && sel.id === cv.id;
               return (
-                <button key={cv.id} onClick={() => setConviteSel(cv.id)} className={'btn btn--sm ' + (ativo ? 'btn--primary' : 'btn--outline')}>
-                  {cv.fornecedor_nome} <span style={{ opacity: 0.8 }}>· {s.label}</span>
+                <button key={cv.id} onClick={() => setConviteSel(cv.id)} className={'btn btn--sm ' + (ativo ? 'btn--primary' : 'btn--outline')} style={cv.removido_em ? { borderStyle: 'dashed', opacity: 0.85 } : undefined} title={cv.removido_em ? 'Removido do lote — histórico somente leitura' : ''}>
+                  {cv.fornecedor_nome} <span style={{ opacity: 0.8 }}>· {cv.removido_em ? 'removido' : s.label}</span>
                 </button>
               );
             })}
           </div>
+          {sel && sel.removido_em && <div className="alert warning" style={{ marginBottom: 12 }}><div><div className="alert__title">Fornecedor removido deste lote em {rvData(sel.removido_em)}</div><div className="alert__sub">{sel.removido_motivo || 'Sem motivo informado.'} Histórico somente leitura: o link dele deixou de funcionar e não é possível enviar novas mensagens.</div></div></div>}
           {sel && <Card title={sel.fornecedor_nome} sub={(sel.email || 'sem e-mail no cadastro') + ' · ' + sel.moeda + ' · rodada ' + sel.rodada + (sel.respondido_em ? ' · respondeu ' + rvData(sel.respondido_em) : '')}>
-            <RVTratativa key={sel.id} lote={lote} convite={sel} itens={itens} respostas={respostas} editavel={aberto} />
+            <RVTratativa key={sel.id} lote={lote} convite={sel} itens={itens} respostas={respostas} editavel={aberto && !sel.removido_em} />
           </Card>}
         </>
       )}
