@@ -11,3 +11,10 @@
 - T9 Lote grande: busca, cabeçalho fixo, salvar por item, Excel, paginação.
 - T10 NPS: modal, tabela, gráficos (cotação e Cadastro de Fornecedores), nota ao convidar.
 - T11 CLAUDE.md + aviso de tutoriais desatualizados (P.I., RFQ, Cotações).
+
+## Status (25/10/2026) — IMPLEMENT concluído
+- T1 migration (aplicada) · T2 quantidade a definir · T3 remover/substituir/histórico — PR #1096 (+ migration `20261025130000` aplicada).
+- T4 dólar duplo · T5 aviso de preço fora de ordem · T6 aprovar → P.I. rascunho + Proforma — PR #1097.
+- T7 RFQ Importação com abas · T8 descrição EN/中文 com IA da VPS · T9 lote grande · T10 NPS · T11 CLAUDE.md — PR #1098.
+- Ajuste da IA (ficha colada, internet, resposta sem texto) — PR #1099.
+- Pendências e decisões abertas: ver a seção "Cotações de Varejo → RFQ Importação → P.I." do CLAUDE.md. Nada disto foi testado com clique real em produção.
