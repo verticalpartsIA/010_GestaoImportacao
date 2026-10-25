@@ -99,7 +99,7 @@ function InboxModalPrecoVarejo({ email, eu, onClose, onRegistrado }) {
     finally { setSalvando(false); }
   };
 
-  const abrirLote = () => { if (convite) { window.history.pushState({}, '', '/logistica/cotacoes-varejo/' + convite.lote_id); window.dispatchEvent(new PopStateEvent('popstate')); onClose(); } };
+  const abrirLote = () => { if (convite) { window.history.pushState({}, '', '/gestao-importacao/rfq-importacao/' + convite.lote_id + '/comparar'); window.dispatchEvent(new PopStateEvent('popstate')); onClose(); } };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
