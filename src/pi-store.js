@@ -294,8 +294,40 @@
     return out;
   }
 
+  /* P.I. em RASCUNHO nascida da aprovação de um lote de Cotações de Varejo (1 por fornecedor vencedor). Sem Nº de cotação
+     (varejo não é equipamento). Idempotente por convite: aprovar de novo não duplica. O número provisório deve ser trocado pelo
+     da P.I. do fornecedor ao recebê-la. NÃO emite PI_CRIADA (só rascunho). */
+  async function criarRascunhoDeLote({ lote, convite, itens, ordem, cambioLote, cambioResposta }) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data: ja, error: e0 } = await c.from('pi_importacao').select('id, numero_pi').contains('producao', { convite_id: convite.id }).limit(1);
+    if (e0) throw e0;
+    if (ja && ja.length) return ja[0];
+    const m = convite.moeda === 'RMB' ? 'CNY' : (convite.moeda || 'USD');
+    const moeda = ['USD', 'EUR', 'BRL', 'CNY', 'GBP'].includes(m) ? m : 'USD';
+    const linhas = await Promise.all((itens || []).map(async (i) => {
+      let p = null; try { p = await buscarProdutoPorCodigo(i.codigo); } catch (e) { /* segue sem cadastro */ }
+      return {
+        descricao_produto: i.descricao || (p && p.descricao) || '', codigo_produto: i.codigo, quantidade: Number(i.quantidade) || 0,
+        unidade_medida: (p && p.unidade) || i.unidade || 'un', ncm: (p && p.ncm) || '', valor_unitario: Number(i.preco) || 0,
+      };
+    }));
+    const fmt = (v) => (Number(v) > 0 ? 'R$ ' + Number(v).toFixed(4).replace('.', ',') : '—');
+    const form = {
+      numero_pi: 'RASCUNHO-' + lote.numero + '-' + (ordem || 1), fornecedor: convite.fornecedor_nome || '', status: 'Aguardando documentos', moeda, itens: linhas,
+      observacoes: 'P.I. criada ao aprovar o lote ' + lote.numero + ' (Cotações de Varejo). Preços = o que o fornecedor cotou para a quantidade aprovada. '
+        + 'Dólar da cotação: ' + fmt(cambioLote) + ' · dólar na resposta do fornecedor: ' + fmt(cambioResposta) + '. '
+        + 'Confira os dados com a Proforma do fornecedor e troque o número provisório pelo da P.I. dele.',
+      producao: { rascunho_auto: true, origem_lote: lote.id, lote_numero: lote.numero, convite_id: convite.id },
+    };
+    const row = { ..._payload(form), created_by: (window.__VP_USER || {}).email || null };
+    const { data, error } = await c.from('pi_importacao').insert(row).select().single();
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'P.I.', acao: 'Criou P.I. em rascunho a partir do lote ' + lote.numero, alvo: data.numero_pi, alvo_id: data.id, detalhe: { fornecedor: convite.fornecedor_nome, itens: linhas.length } });
+    return data;
+  }
+
   window.PIStore = {
-    buscarProdutoPorCodigo, criarRascunhoAutomatico, sincronizarRascunhosAutomaticos, ehRascunhoAutomatico,
+    criarRascunhoDeLote, buscarProdutoPorCodigo, criarRascunhoAutomatico, sincronizarRascunhosAutomaticos, ehRascunhoAutomatico,
     listarTodas, obter, criar, atualizar, remover, vincularEmbarque,
     uploadAnexoProducao, removerAnexoProducao,
     calcItemTotal, calcTotalGeral, somaPagamentosAdicionais, fmtMoeda,

@@ -129,6 +129,7 @@ function CVCelula({ resp, qtdRef, melhor, editavel, valorQtd, onQtd, onTudo }) {
             </div>
           )}
           {aplicada && aplicada.abaixoMin && <div style={{ color: 'var(--vp-amber-700, #b45309)' }}>⚠ vende a partir de {cvFmtNum(aplicada.min)}</div>}
+          {(() => { const fo = C.faixasForaDeOrdem(resp.faixas); return fo ? <div style={{ color: '#b91c1c', fontWeight: 700 }} title={'O preço sobe de ' + fo.de.preco + ' (a partir de ' + fo.de.min + ') para ' + fo.para.preco + ' (a partir de ' + fo.para.min + '). Confirme com o fornecedor.'}>⚠ preço sobe com a quantidade{fo.tipo === 'salto' ? ' (×' + (fo.para.preco / fo.de.preco).toFixed(0) + ') — confira' : ''}</div> : null; })()}
         </div>
       )}
       {resp && Array.isArray(resp.fotos_fornecedor) && resp.fotos_fornecedor.length > 0 && (
@@ -152,17 +153,17 @@ function CVCelula({ resp, qtdRef, melhor, editavel, valorQtd, onQtd, onTudo }) {
   );
 }
 
-/* ---------- Modal: aprovar e enviar ao Omie ---------- */
+/* ---------- Modal: aprovar o vencedor e pedir a P.I. ---------- */
 function CVModalAprovar({ resumo, cambio, onClose, onConfirmar, enviando }) {
   const nomes = Object.keys(resumo.porConvite);
   return (
-    <Modal title="Aprovar o lote e enviar ao Omie" onClose={onClose} width={720}
+    <Modal title="Aprovar o vencedor e pedir a P.I." onClose={onClose} width={720}
       footer={<>
         <Button variant="ghost" onClick={onClose} disabled={enviando}>Voltar</Button>
         <Button variant="primary" icon="send" onClick={onConfirmar} disabled={enviando}>{enviando ? 'Enviando…' : 'Confirmar — é o martelo'}</Button>
       </>}>
       <div className="stack" style={{ gap: 12 }}>
-        <p className="small">Será criada <b>1 Requisição de Compra no Omie por fornecedor vencedor</b> (categoria "Compras de Mercadorias para Revenda Importada"), com a quantidade e o preço decididos abaixo. Preços em dólar são convertidos pelo câmbio do lote (R$ {cvFmtNum(cambio)}). Depois de aprovado o lote não muda mais.</p>
+        <p className="small">Será criada <b>1 P.I. em rascunho por fornecedor vencedor</b> (em Gestão Importação › P.I.), com os itens, quantidades e preços decididos abaixo, e enviaremos ao fornecedor, na tratativa, o <b>pedido de Proforma Invoice</b> em português, inglês e chinês. Os itens passam a constar como "Comprado" na Importação Varejo. <b>Nada vai ao Omie.</b> Depois de aprovado o lote não muda mais.{cambio > 0 ? ' Dólar da cotação: R$ ' + cvFmtNum(cambio) + '.' : ''}</p>
         {nomes.map((cid) => {
           const g = resumo.porConvite[cid];
           return (
@@ -269,8 +270,11 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
 
   // Câmbio sugerido (USD/BRL do dia) quando o lote ainda não tem um.
   React.useEffect(() => {
-    if (!dados || dados.lote.cambio_usd_brl || !window.CambioAPI) return;
-    window.CambioAPI.buscarUsdBrl().then((r) => setCambio((c) => c || String(Number(r.valor).toFixed(4)))).catch(() => {});
+    if (!dados || !window.CambioAPI) return;
+    window.CambioAPI.buscarUsdBrl().then((r) => {
+      S.registrarCambioDia(r.valor);   // a resposta do fornecedor herda o dólar do dia (trigger no banco)
+      if (!dados.lote.cambio_usd_brl) setCambio((c) => c || String(Number(r.valor).toFixed(4)));
+    }).catch(() => {});
   }, [dados && dados.lote.id]);
 
   // Fotos: procura no banco / traz da Ficha Técnica uma vez por abertura.
@@ -300,7 +304,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     setSalvando(true);
     try {
       await S.salvarDecisoes(lote.id, decisoesAtuais);
-      if (cambioNum > 0 && cambioNum !== Number(lote.cambio_usd_brl || 0)) await S.atualizarLote(lote.id, { cambio_usd_brl: cambioNum });
+      if (cambioNum > 0 && cambioNum !== Number(lote.cambio_usd_brl || 0)) await S.atualizarLote(lote.id, { cambio_usd_brl: cambioNum, cambio_cotacao_em: new Date().toISOString(), cambio_fonte: 'informado' });
       if (!silencioso) window.toast?.('Decisões salvas.', 'success');
       await carregar();
     } catch (e) { window.toast?.('Erro ao salvar: ' + (e.message || e), 'error'); throw e; }
@@ -400,8 +404,8 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
       await salvar(true);
       const d = await S.obterLote(lote.id);
       const res = await S.aprovarLote(d);
-      if (res.erros.length) window.toast?.('Atenção: ' + res.erros.join(' | ') + ' — corrija e aprove de novo; o que já foi enviado não se repete.', 'warning');
-      else window.toast?.('Lote aprovado. Requisições criadas no Omie: ' + res.requisicoes.map((r) => r.req_omie).join(', '), 'success');
+      if (res.erros.length) window.toast?.('Atenção: ' + res.erros.join(' | ') + (res.completo ? '' : ' — corrija e aprove de novo; o que já foi criado não se repete.'), 'warning');
+      else window.toast?.('Lote aprovado. P.I. em rascunho criada(s): ' + res.requisicoes.map((r) => r.pi_numero).join(', ') + '. Acompanhe a Proforma na RFQ Importação.', 'success');
       setModalAprovar(false); await carregar();
     } catch (e) { window.toast?.('Erro ao aprovar: ' + (e.message || e), 'error'); }
     finally { setAprovando(false); }
@@ -431,18 +435,19 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
           <Button variant="outline" onClick={onVoltar}>← Lotes</Button>
           {editavel && sujo && <Button variant="outline" icon="check" onClick={() => salvar(false)} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar decisões'}</Button>}
           {editavel && <Button variant={convites.some((c) => c.status !== 'rascunho') ? 'outline' : 'primary'} icon="send" onClick={() => { if (!travaQtd()) setModalPedir(true); }} disabled={!convites.length} title={convites.length ? '' : 'Convide ao menos um fornecedor abaixo'}>Pedir cotação ao fornecedor</Button>}
-          {editavel && <Button variant={convites.some((c) => c.status !== 'rascunho') ? 'primary' : 'outline'} icon="check" onClick={() => setModalAprovar(true)} disabled={!decisoesAtuais.length} title={decisoesAtuais.length ? '' : 'Só depois que os fornecedores responderem e você digitar as quantidades a comprar'}>Aprovar compra e enviar ao Omie</Button>}
+          {editavel && <Button variant={convites.some((c) => c.status !== 'rascunho') ? 'primary' : 'outline'} icon="check" onClick={() => setModalAprovar(true)} disabled={!decisoesAtuais.length} title={decisoesAtuais.length ? '' : 'Só depois que os fornecedores responderem e você digitar as quantidades a comprar'}>Aprovar vencedor e pedir P.I.</Button>}
           {editavel && <Button variant="ghost" onClick={cancelarLoteConfirmado}>Cancelar lote</Button>}
         </div>
       </div>
 
       {lote.status === 'aprovado' && (
         <div className="alert success" style={{ marginBottom: 16 }}><Icon.check /><div><div className="alert__title">Lote aprovado em {cvFmtData(lote.aprovado_em)}</div>
-          <div className="alert__sub">{(lote.requisicoes || []).map((r) => r.fornecedor + ' → requisição ' + r.req_omie + ' (' + r.itens + ' itens)').join(' · ') || '—'}</div></div></div>
+          <div className="alert__sub">{(lote.requisicoes || []).map((r) => r.pi_numero ? r.fornecedor + ' → P.I. em rascunho ' + r.pi_numero + ' (' + r.itens + ' itens' + (r.proforma === 'enviada' ? ', Proforma pedida' : r.proforma ? ', Proforma: ver tratativa' : '') + ')' : r.fornecedor + ' → requisição ' + r.req_omie + ' (' + r.itens + ' itens)').join(' · ') || '—'}</div></div></div>
       )}
 
       <Card title="Fornecedores convidados" sub="Só fornecedores já cadastrados em Cadastros › Fornecedores. Cada um recebe um link próprio e nunca vê os preços dos outros.">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+          {lote.cambio_usd_brl && <div className="small" style={{ flexBasis: '100%' }}><b>Dólar da cotação:</b> R$ {Number(lote.cambio_usd_brl).toFixed(4).replace('.', ',')}{lote.cambio_cotacao_em ? ' · fixado em ' + cvFmtData(lote.cambio_cotacao_em) : ' · ainda não fixado (fixa no 1º envio)'}{lote.cambio_fonte === 'ptax' ? ' · PTAX do dia' : lote.cambio_fonte === 'informado' ? ' · informado por você' : ''}</div>}
           {convites.length === 0 && <span className="small muted">Nenhum fornecedor convidado ainda.</span>}
           {convites.map((cv) => {
             const s = CV_STATUS_CONVITE[cv.status] || CV_STATUS_CONVITE.rascunho;
@@ -450,6 +455,12 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
               <div key={cv.id} style={{ border: '1px solid var(--border, #e5e7eb)', borderRadius: 8, padding: '8px 10px', minWidth: 230 }}>
                 <div style={{ fontWeight: 800 }}>{cv.fornecedor_nome} <Badge variant={s.variant}>{s.label}</Badge></div>
                 <div className="small muted">{cv.moeda} · rodada {cv.rodada}{cv.respondido_em ? ' · respondeu ' + cvFmtData(cv.respondido_em) : ''}</div>
+                {(() => {
+                  const rs = (dados.respostas || []).filter((r) => r.convite_id === cv.id && r.cambio_resposta).sort((a, b) => String(b.cambio_resposta_em).localeCompare(String(a.cambio_resposta_em)));
+                  if (!rs.length) return null;
+                  const base = Number(lote.cambio_usd_brl) || 0; const d = base > 0 ? (Number(rs[0].cambio_resposta) / base - 1) * 100 : null;
+                  return <div className="small muted" title="Dólar do dia em que o fornecedor respondeu, comparado ao dólar fixado na cotação">Dólar na resposta: R$ {Number(rs[0].cambio_resposta).toFixed(4).replace('.', ',')}{d != null ? ' (' + (d >= 0 ? '+' : '') + d.toFixed(1).replace('.', ',') + '% vs. cotação)' : ''}</div>;
+                })()}
                 {editavel && (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
                     <button className="link-btn" onClick={() => enviarEmail(cv)}>E-mail</button>

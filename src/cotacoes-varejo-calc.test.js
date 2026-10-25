@@ -62,3 +62,14 @@ test('sem câmbio o total em R$ fica indefinido (nunca inventa)', () => {
   assert.equal(r.totalBRL, null);
   assert.equal(r.porConvite.A.totalOriginal, 6);
 });
+
+test('faixas fora de ordem: preço que sobe com a quantidade é avisado (3,70 -> 37 = salto)', () => {
+  assert.equal(C.faixasForaDeOrdem([{ min: 1, preco: 4.1 }, { min: 100, preco: 3.8 }]), null);
+  assert.equal(C.faixasForaDeOrdem([{ min: 1, preco: 4 }, { min: 10, preco: 4 }]), null);
+  assert.equal(C.faixasForaDeOrdem([{ min: 1, preco: 3.7 }]), null);
+  const sobe = C.faixasForaDeOrdem([{ min: 1, preco: 4 }, { min: 10, preco: 5 }]);
+  assert.equal(sobe.tipo, 'sobe');
+  const salto = C.faixasForaDeOrdem([{ min: 12, preco: 37 }, { min: 1, preco: 3.7 }, { min: 10, preco: 37 }]);
+  assert.equal(salto.tipo, 'salto');
+  assert.equal(salto.para.min, 10);
+});
