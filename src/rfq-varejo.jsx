@@ -160,7 +160,12 @@ function RVTratativa({ lote, convite, itens, respostas, editavel }) {
       </div>
 
       {aviso && <div style={{ padding: '8px 10px', fontSize: 12, border: '1px solid ' + (aviso.ok ? '#86efac' : '#fbb039'), background: aviso.ok ? '#f0fdf4' : '#fff8e6', color: aviso.ok ? '#166534' : '#8a5a00' }}>{aviso.ok ? '✓ ' : '⚠ '}{aviso.txt}</div>}
-      {editavel && (
+      {editavel && convite.status === 'rascunho' && (
+        <div className="small muted" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+          O pedido de cotação ainda não foi enviado a este fornecedor, então o link do portal dele ainda não funciona. Envie primeiro em <a href={'/logistica/cotacoes-varejo/' + lote.id} onClick={(e) => { e.preventDefault(); rvIrPara('/logistica/cotacoes-varejo/' + lote.id); }}>Cotações de Varejo</a> (botão "Pedir cotação ao fornecedor"); depois você conversa por aqui.
+        </div>
+      )}
+      {editavel && convite.status !== 'rascunho' && (
         <div className="stack" style={{ gap: 6, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
           <textarea className="input" rows={3} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={'Escreva ao fornecedor (' + convite.fornecedor_nome + '). A mensagem vai por e-mail e a resposta dele volta para esta conversa.'} />
           {anexos.length > 0 && <div className="row gap-2" style={{ flexWrap: 'wrap' }}>{anexos.map((a, i) => <span key={i} className="badge">{a.nome} <button className="link-btn" onClick={() => setAnexos((x) => x.filter((_, j) => j !== i))}>×</button></span>)}</div>}
