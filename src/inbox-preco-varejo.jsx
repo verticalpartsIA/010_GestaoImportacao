@@ -53,7 +53,7 @@ function InboxModalPrecoVarejo({ email, eu, onClose, onRegistrado }) {
       try {
         const c = window.__VP_SB.sb;
         const [it, rs] = await Promise.all([
-          c.from('iv_cotacao_itens').select('id, codigo, descricao, unidade, quantidade_pedida, ordem').eq('lote_id', convite.lote_id).order('ordem').order('codigo'),
+          c.from('iv_cotacao_itens').select('id, codigo, descricao, unidade, quantidade_pedida, ordem').eq('lote_id', convite.lote_id).is('removido_em', null).order('ordem').order('codigo'),
           c.from('iv_cotacao_respostas').select('*').eq('convite_id', convite.id),
         ]);
         if (it.error) throw it.error;
