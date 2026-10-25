@@ -310,7 +310,11 @@ function CVModalDescricao({ item, onClose, onSalvo }) {
     try {
       const r = await S.sugerirDescricaoIA({ ...d, codigo: item.codigo, descricao: item.descricao, ficha, web });
       setBruta(''); setPerguntas(r.perguntas); setFontes(r.fontes || []);
-      if (r.texto_pt || r.texto_en || r.texto_zh) { setD((p) => ({ ...p, texto_pt: r.texto_pt || p.texto_pt, texto_en: r.texto_en || p.texto_en, texto_zh: r.texto_zh || p.texto_zh })); setIa(true); }
+      if (r.texto_pt || r.texto_en || r.texto_zh) {
+        // Texto novo SUBSTITUI os três (idioma que não veio fica vazio): manter a tradução antiga ao lado do texto novo deixaria idiomas incoerentes (ex.: 220 V × 380 V).
+        setD((p) => ({ ...p, texto_pt: r.texto_pt, texto_en: r.texto_en, texto_zh: r.texto_zh })); setIa(true);
+        if (!(r.texto_pt && r.texto_en && r.texto_zh)) window.toast?.('A IA não escreveu todos os idiomas. Os que faltam ficaram vazios — peça de novo ou preencha à mão antes de salvar.', 'warning');
+      }
       else window.toast?.('A IA não escreveu o texto: precisa de mais dados (veja as perguntas). Cole a ficha técnica do fabricante e tente de novo.', 'warning');
     }
     catch (e) { setBruta(e.bruto || ''); window.toast?.(String(e.message || e), 'error'); }
