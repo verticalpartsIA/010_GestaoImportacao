@@ -584,17 +584,23 @@
       if (cron.itens.length) it.list = cron.itens.map((x) => x.texto);
       objetoItems.push(it);
     }
+    /* Início do prazo condicionado à liberação da obra (pedido do advogado, 26/10/2026).
+       Vem depois do último item do objeto: 1.4 (ou 1.5 em remoção / com cronograma). */
+    const nLib = (isRemocao(s) ? 5 : 4) + (cron ? 1 : 0);
+    objetoItems.push({ n:`1.${nLib}`, text:'O prazo para execução dos serviços terá início somente após a liberação da obra pela CONTRATANTE, mediante confirmação das condições técnicas, estruturais, elétricas e de segurança necessárias à instalação dos equipamentos.' });
+    objetoItems.push({ n:`1.${nLib}.1`, text:'A CONTRATADA deverá verificar previamente as condições disponibilizadas para execução dos serviços, comunicando imediatamente à CONTRATANTE eventuais irregularidades ou impedimentos que comprometam a instalação, a segurança dos profissionais ou o cumprimento do cronograma contratado.' });
+    objetoItems.push({ n:`1.${nLib}.2`, text:'A ocorrência de impedimentos comprovadamente não imputáveis à CONTRATADA suspenderá a contagem do prazo exclusivamente em relação às atividades afetadas, devendo as partes registrar formalmente a ocorrência e a data de sua regularização.' });
     clauses.push({ id:'objeto', titulo:'DO OBJETO', baseNum:1, items:objetoItems });
 
     /* EQUIPAMENTO ESPECIAL (condicional) */
     if (isCargaEspecial(s)) {
       const cap = s.capacidadeCarga ? `${s.capacidadeCarga} kg` : 'superior a 1.000 kg';
       clauses.push({
-        id:'especial', titulo:'DO EQUIPAMENTO ESPECIAL', conditional:true,
+        id:'especial', titulo:'DO EQUIPAMENTO ESPECIAL', baseNum:2, conditional:true,
         items: [
-          { n:'EE.1', text:`Tendo em vista que o equipamento objeto deste contrato possui capacidade de carga ${cap}, caracterizando equipamento especial, a CONTRATADA deverá observar reforço integral às normas de segurança aplicáveis, em especial a NR-12 (Máquinas e Equipamentos) e a NR-18 (Construção), com planejamento específico de içamento e movimentação de cargas.` },
-          { n:'EE.2', text:'A CONTRATADA deverá apresentar, previamente ao início dos trabalhos, plano de rigging/içamento, com a indicação dos equipamentos de elevação (guindaste, talhas, etc.), pontos de ancoragem e Análise Preliminar de Risco (APR) específica para a operação de carga especial.' },
-          { n:'EE.3', text:'Toda a logística de içamento, isolamento de área e sinalização correrá por conta da CONTRATADA, que responderá integralmente por eventuais danos decorrentes da movimentação do equipamento.' },
+          { n:'2.1', text:`Tendo em vista que o equipamento objeto deste contrato possui capacidade de carga ${cap}, caracterizando equipamento especial, a CONTRATADA deverá observar reforço integral às normas de segurança aplicáveis, em especial a NR-12 (Máquinas e Equipamentos) e a NR-18 (Construção), com planejamento específico de içamento e movimentação de cargas.` },
+          { n:'2.2', text:'A CONTRATADA deverá apresentar, previamente ao início dos trabalhos, plano de rigging/içamento, com a indicação dos equipamentos de elevação (guindaste, talhas, etc.), pontos de ancoragem e Análise Preliminar de Risco (APR) específica para a operação de carga especial.' },
+          { n:'2.3', text:'Toda a logística de içamento, isolamento de área e sinalização correrá por conta da CONTRATADA, que responderá integralmente por eventuais danos decorrentes da movimentação do equipamento.' },
         ],
       });
     }
@@ -635,6 +641,9 @@
       items: [
         { n:'4.1', text:'A CONTRATADA responderá pelos encargos trabalhistas, fiscais, comerciais e previdenciários resultantes da execução deste contrato, não transferindo à CONTRATANTE, em caso de inadimplência da CONTRATADA com referência a esses encargos, a responsabilidade por seu pagamento, nem podendo onerar o objeto deste contrato.' },
         { n:'4.2', text:'Caberão à CONTRATADA os prejuízos causados à CONTRATANTE ou a terceiros, por atos de sua responsabilidade e decorrentes da execução dos serviços estipulados neste contrato, por culpa ou dolo, excluídos os casos em que a CONTRATANTE der causa, seja por sua ação ou omissão.' },
+        { n:'4.3', text:'A CONTRATADA responderá pelos danos materiais e demais prejuízos comprovadamente decorrentes de falhas na execução dos serviços, negligência, imprudência, imperícia ou inobservância das especificações técnicas e normas de segurança aplicáveis, inclusive quando praticados por profissionais regularmente contratados ou subcontratados sob sua responsabilidade.' },
+        { n:'4.3.1', text:'Na hipótese de a CONTRATANTE suportar prejuízos, despesas de reparação ou indenizações decorrentes de atos comprovadamente imputáveis à CONTRATADA, ficará assegurado o direito de regresso pelos valores correspondentes, observados o nexo causal e a efetiva extensão do dano.' },
+        { n:'4.3.2', text:'A responsabilidade da CONTRATADA não abrangerá defeitos de projeto, fabricação ou fornecimento dos equipamentos, tampouco irregularidades estruturais da obra que não lhe sejam imputáveis, ressalvada sua responsabilidade quando, tendo identificado condições inadequadas, prosseguir indevidamente na execução dos serviços.' },
       ],
     });
 
@@ -644,19 +653,17 @@
     /* LOGÍSTICA (condicional) */
     if (isLongaDistancia(s)) {
       const km = s.distancia;
-      const resp = s.logResponsavel === 'contratante' ? 'CONTRATANTE' : 'CONTRATADA';
       const local = vBlank(s.obraCidade, 'cidade da obra') + '/' + vBlank(s.obraEstado, 'UF');
+      /* Texto fixo definido pelo advogado (26/10/2026): logística por conta da CONTRATADA, incluída no preço. */
       const items = [
-        { n:'LG.1', text:`Considerando que o local de execução dos serviços (${local}) situa-se a aproximadamente ${km} km da sede da CONTRATANTE em Guarulhos/SP, distância igual ou superior a 100 (cem) quilômetros, aplica-se a presente cláusula de logística e deslocamento.` },
+        { n:'6.1', text:`Considerando que o local de execução dos serviços (${local}) situa-se a aproximadamente ${km} km da sede da CONTRATANTE em Guarulhos/SP, distância igual ou superior a 100 (cem) quilômetros, aplica-se a presente cláusula de logística e deslocamento.` },
+        { n:'6.2', text:'A CONTRATADA será responsável pelo planejamento e pela execução da logística necessária à prestação dos serviços contratados, compreendendo a mobilização e desmobilização de seus profissionais, ferramentas e equipamentos, bem como as despesas ordinárias de deslocamento, transporte, combustível, pedágios, estacionamento, alimentação e hospedagem, quando necessárias, considerando-se tais custos incluídos no preço ajustado, salvo disposição expressa em contrário neste instrumento.' },
+        { n:'6.3', text:'A CONTRATANTE não estará obrigada ao pagamento, reembolso ou adiantamento de despesas adicionais relacionadas à logística da CONTRATADA, salvo quando previamente acordado, mediante indicação da natureza, justificativa e valor estimado da despesa.' },
+        { n:'6.4', text:'Eventuais despesas extraordinárias decorrentes de alterações no cronograma, paralisações, impedimentos de acesso à obra ou necessidade de remobilização deverão ser comunicadas pela CONTRATADA à CONTRATANTE tão logo identificadas, acompanhadas da respectiva justificativa e documentação comprobatória, ficando sua exigibilidade condicionada à demonstração da causa, à definição da responsabilidade pelo evento e à prévia formalização do ajuste entre as partes, ressalvados os direitos legalmente assegurados.' },
+        { n:'6.5', text:'Serão de exclusiva responsabilidade da CONTRATADA as despesas decorrentes de atrasos, falhas de planejamento, ausência injustificada de profissionais, execução defeituosa dos serviços ou necessidade de correção de irregularidades que lhe sejam comprovadamente imputáveis, não sendo devido qualquer pagamento adicional pela CONTRATANTE nessas hipóteses.' },
+        { n:'6.6', text:'A eventual assunção, pela CONTRATANTE, de despesas logísticas específicas não implicará alteração das demais condições comerciais, nem constituirá obrigação de custeio de despesas futuras não expressamente avençadas.' },
       ];
-      if (s.logModo === 'prazo') {
-        const dias = vBlank(s.logDiasExtra, 'X');
-        items.push({ n:'LG.2', text:`Em razão do deslocamento, o prazo de execução dos serviços será estendido em ${dias} (${typeof dias === 'string' && /^\d+$/.test(dias) ? inteiroExtenso(parseInt(dias,10)) : '...'}) dias, sem ônus adicional para qualquer das partes a esse título.` });
-      } else {
-        items.push({ n:'LG.2', text:`As despesas de transporte, hospedagem e alimentação da equipe correrão por conta da ${resp}, sendo cobradas à parte e mediante comprovação, não estando incluídas no valor descrito na Cláusula de Pagamento.` });
-      }
-      items.push({ n:'LG.3', text:'As partes poderão, de comum acordo e por termo aditivo, ajustar a forma de rateio das despesas de deslocamento, observada a boa-fé contratual.' });
-      clauses.push({ id:'logistica', titulo:'DA LOGÍSTICA E DESLOCAMENTO', conditional:true, items });
+      clauses.push({ id:'logistica', titulo:'DA LOGÍSTICA E DESLOCAMENTO', baseNum:6, conditional:true, items });
     }
 
     /* CESSÃO */
@@ -689,6 +696,7 @@
     /* PENALIDADES */
     clauses.push({ id:'penalidades', titulo:'DAS PENALIDADES', baseNum:9, items:[
       { n:'9.1', text:'Em caso de rescisão sem justo motivo por uma das partes antes do prazo final do contrato, ou de qualquer uma das ocorrências previstas na Cláusula __RESCISAO__ deste instrumento, este Contrato será rescindido automaticamente e caberá à parte infratora multa equivalente a 20% (vinte por cento) sobre o total do contrato, a ser paga em até 5 (cinco) dias corridos da rescisão.', ref:'rescisao' },
+      { n:'9.2', text:'O atraso injustificado de etapa por fato imputável à CONTRATADA sujeitá-la-á à multa moratória de 0,5% (meio por cento) por dia corrido de atraso, calculada sobre o valor da etapa inadimplida, até o limite de 20% (vinte por cento) do valor total do contrato, após comunicação escrita da ocorrência e sem prejuízo da demonstração de causa excludente.' },
     ]});
 
     /* TOLERÂNCIA */

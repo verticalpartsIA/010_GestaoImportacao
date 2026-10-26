@@ -143,7 +143,7 @@ test('5.1 — data prevista por parcela: opcional, só aparece quando informada 
 
 test('1.4 — prazo e cronograma: opcional, marcos escolhidos um a um, nada corrigido em silêncio', () => {
   const s = CI.defaultState();
-  const it = () => CI.buildContract(s, 'X').clauses[0].items.find((i) => i.n === '1.4');
+  const it = () => CI.buildContract(s, 'X').clauses[0].items.find((i) => i.n === '1.4' && /prazo total de execução/.test(i.text));   // a 1.4 sem cronograma passa a ser a liberação da obra
   assert.equal(it(), undefined);                                                     // bloco desligado: não aparece
   s.cronograma = { ativo: true, prazoDias: '25', criterio: '', marcos: { inicio: { on: true, data: '2026-10-26' }, tracionamento: { on: false, data: '2026-11-06' }, termino: { on: true, data: '2026-11-27' } } };
   assert.match(it().text, /prazo total de execução dos serviços objeto deste contrato é de 25 \(vinte e cinco\) dias, observando o seguinte cronograma/);
@@ -183,4 +183,33 @@ test('5.1 — última parcela condicionada à vistoria e laudos: valor da últim
   assert.equal(it().some((i) => /liberação da última parcela/.test(i.text)), false);                  // desmarcado: some
   delete s.condicionarUltimaParcela;
   assert.equal(it().some((i) => /liberação da última parcela/.test(i.text)), false);                  // contrato antigo (sem a chave): inalterado
+});
+
+test('numeração — itens seguem o cabeçalho da cláusula em todos os cenários (condicionais LG/EE)', () => {
+  const base = () => CI.defaultState ? CI.defaultState() : {};
+  const cenarios = [
+    { nome:'sem condicional', over:{} },
+    { nome:'só logística', over:{ distancia:'252' } },
+    { nome:'só especial', over:{ equipamento:'elevador', cargaEspecial:true } },
+    { nome:'especial + logística', over:{ equipamento:'elevador', cargaEspecial:true, distancia:'252' } },
+    { nome:'remoção', over:{ modalidade:'remocao' } },
+  ];
+  cenarios.forEach(({ nome, over }) => {
+    const doc = CI.buildContract(Object.assign(base(), over), 'VPNI-0001');
+    doc.clauses.forEach((c, i) => {
+      c.items.forEach(it => {
+        if (!it.n) return;
+        assert.equal(String(it.n).split('.')[0], String(i + 1), `${nome}: item ${it.n} na cláusula ${i + 1} (${c.titulo})`);
+      });
+    });
+  });
+});
+
+test('cláusulas novas do advogado (1.x liberação, 4.3, 6.2–6.6, 9.2)', () => {
+  const doc = CI.buildContract(Object.assign(CI.defaultState ? CI.defaultState() : {}, { distancia:'252' }), 'VPNI-0001');
+  const ns = c => doc.clauses.find(x => x.id === c).items.map(i => i.n);
+  assert.ok(ns('objeto').some(n => /^1\.\d+\.2$/.test(n)));
+  assert.deepEqual(ns('resp_contratada'), ['4.1','4.2','4.3','4.3.1','4.3.2']);
+  assert.deepEqual(ns('logistica'), ['6.1','6.2','6.3','6.4','6.5','6.6']);
+  assert.deepEqual(ns('penalidades'), ['10.1','10.2']);   // com logística, penalidades é a 10ª cláusula
 });
