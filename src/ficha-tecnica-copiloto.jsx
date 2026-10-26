@@ -4,39 +4,68 @@
 
    Estados: minimizado (bolinha 🤖) ↔ expandido (card ~320px).
    Arrastável, lembra posição em localStorage.
-   Debounce ~800ms ao mudar campos-chave + botão "Analisar".
-   Fallback gracioso quando a Edge Function está fora.
+   Botão "Analisar" (sem análise automática: cada análise é uma pergunta da cota
+   da pessoa e leva ~1 min, porque o assistente confere a TEC na internet).
 
-   Endpoint (vivo, formato §4 do SPEC):
-     POST /functions/v1/ncm-duimp-assist
+   IA (26/10/2026): sessão do Claude na VPS — POST https://copiloto.vpsistema.com/ncm
+   com o login da pessoa (mesma cota de 20/hora da bolinha geral). Substitui a Edge
+   Function ncm-duimp-assist (API paga). Mesmo formato §4 do SPEC, mais:
+   alertas (anuência, divergência com o histórico da casa…), resposta (à pergunta
+   digitada) e restantes. A base de conhecimento de NCM fica na VPS.
    ============================================================ */
 const { useState: _cpUS, useEffect: _cpUE, useRef: _cpUR, useCallback: _cpUC } = React;
 
 const CP_LS_POS = 'ft_copiloto_pos_v1';
 const CP_LS_OPEN = 'ft_copiloto_open_v1';
 
-const CP_ENDPOINT = 'https://jxtqwzmpgofwctqajewt.supabase.co/functions/v1/ncm-duimp-assist';
-const CP_ANON_KEY = 'sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP';
+const CP_ENDPOINT = 'https://copiloto.vpsistema.com/ncm';
+
+/* Estilos das partes novas (26/10/2026) — o resto está em styles/ficha-tecnica.css */
+const CP_CSS = `
+.ft-cp-resposta { background: #f1f5f9; border-left: 3px solid #0f172a; padding: 6px 8px; margin: 8px 0; font-size: 12px; white-space: pre-wrap; }
+.ft-cp-alertas { list-style: none; margin: 8px 0; padding: 6px 8px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 6px; font-size: 11.5px; }
+.ft-cp-alertas li + li { margin-top: 4px; }
+.ft-cp-pergunta { display: flex; gap: 6px; align-items: flex-end; margin-top: 8px; }
+.ft-cp-pergunta textarea { flex: 1; resize: vertical; font: inherit; font-size: 12px; padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 6px; }
+.ft-cp-restantes { display: block; margin-top: 4px; color: #64748b; font-size: 10.5px; text-align: center; }
+`;
 
 /* ---------- API call ---------- */
 async function callNcmAssist(payload) {
+  const token = (window.VpAuth && window.VpAuth.getAccessToken) ? await window.VpAuth.getAccessToken() : null;
+  if (!token) throw new Error('não encontrei seu login. Saia e entre de novo pelo vpsistema.com e tente outra vez.');
   const res = await fetch(CP_ENDPOINT, {
     method: 'POST',
-    headers: {
-      'apikey': CP_ANON_KEY,
-      'Authorization': 'Bearer ' + CP_ANON_KEY,
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (res.status === 503 || res.status === 502) {
-    throw new Error('ASSISTENTE_INDISPONIVEL');
-  }
+  if (res.status === 502) throw new Error('ASSISTENTE_INDISPONIVEL');
   if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error('HTTP ' + res.status + (txt ? ' · ' + txt.slice(0, 200) : ''));
+    let msg = '';
+    try { msg = (await res.json()).error || ''; } catch (e) { /* resposta sem JSON */ }
+    if (!msg && res.status === 503) throw new Error('ASSISTENTE_INDISPONIVEL');
+    throw new Error(msg || ('HTTP ' + res.status));
   }
   return await res.json();
+}
+
+/* Reduz a foto/desenho (máx. 1600 px, JPEG) antes de enviar — a IA enxerga igual e o envio fica leve. */
+function cpReduzirImagem(dataURL) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const esc = Math.min(1, 1600 / Math.max(img.width, img.height));
+      if (esc === 1 && dataURL.length < 1500000) return resolve(dataURL);
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * esc); cv.height = Math.round(img.height * esc);
+      const ctx = cv.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+      resolve(cv.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => resolve(dataURL);
+    img.src = dataURL;
+  });
 }
 
 /* ---------- Helpers ---------- */
@@ -99,8 +128,8 @@ function FtCopiloto({ state, setState }) {
   const [response, setResponse] = _cpUS(null);    // última resposta da IA (em memória)
   const [showWhy, setShowWhy] = _cpUS(false);
   const [historico, setHistorico] = _cpUS([]);    // perguntas de desempate respondidas
+  const [pergunta, setPergunta] = _cpUS('');      // pergunta/observação digitada para o assistente
   const dragRef = _cpUR(null);
-  const debounceRef = _cpUR(null);
 
   /* persistência leve da posição/estado */
   _cpUE(() => writePos(pos), [pos]);
@@ -136,7 +165,7 @@ function FtCopiloto({ state, setState }) {
   };
 
   /* ---------- Chamada à IA ---------- */
-  const buildPayload = _cpUC(async () => {
+  const buildPayload = _cpUC(async (histAtual) => {
     const ident = state.identificacao || {};
     // imagens em base64 (Fase 1; quando bucket migrar pra signed URL, troca aqui)
     const imgs = [];
@@ -144,7 +173,7 @@ function FtCopiloto({ state, setState }) {
       const r = state.midia && state.midia[slot];
       if (!r) continue;
       const dataURL = await resolveImageForApi(r);
-      if (dataURL) imgs.push(dataURL);
+      if (dataURL) imgs.push(await cpReduzirImagem(dataURL));
     }
     return {
       ficha: {
@@ -166,16 +195,21 @@ function FtCopiloto({ state, setState }) {
         }, {}),
       },
       imagens: imgs,
-      historico_desempate: historico,
+      historico_desempate: histAtual || historico,
     };
   }, [state, historico]);
 
-  const analisar = _cpUC(async () => {
+  const analisar = _cpUC(async (textoPergunta, histAtual) => {
     setLoading(true); setError(null);
     try {
-      const payload = await buildPayload();
+      const payload = await buildPayload(histAtual);
+      if (typeof textoPergunta === 'string' && textoPergunta.trim()) {
+        payload.pergunta = textoPergunta.trim();
+        if (response) payload.resposta_anterior = response;
+      }
       const resp = await callNcmAssist(payload);
       setResponse(resp);
+      setPergunta('');
       // Defesa fica em memória; persiste só quando a ficha for salva
       setState((s) => ({ ...s, __defesa: { ...resp, _at: Date.now() } }));
     } catch (e) {
@@ -187,16 +221,7 @@ function FtCopiloto({ state, setState }) {
     } finally {
       setLoading(false);
     }
-  }, [buildPayload, setState]);
-
-  /* Debounce: chama 800ms depois que o usuário para de digitar nos campos-chave */
-  _cpUE(() => {
-    const hasMin = (state.insumo || '').trim() && (state.funcao_aplicacao || '').trim();
-    if (!hasMin || !open) return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => analisar(), 800);
-    return () => debounceRef.current && clearTimeout(debounceRef.current);
-  }, [state.insumo, state.funcao_aplicacao, state.eh_parte_de, state.forma_estado, state.midia && state.midia.foto, state.midia && state.midia.desenho]);
+  }, [buildPayload, setState, response]);
 
   /* ---------- Ações dos botões ---------- */
   const usarNCM = () => {
@@ -212,8 +237,10 @@ function FtCopiloto({ state, setState }) {
     setState((s) => ({ ...s, descricao_duimp: response.descricao_duimp || '' }));
   };
   const responderDesempate = (pid, resposta) => {
-    setHistorico((h) => [...h, { pergunta_id: pid, resposta }]);
-    setTimeout(() => analisar(), 0);
+    // passa o histórico novo direto: o estado só atualiza no próximo render
+    const novo = [...historico, { pergunta_id: pid, resposta }];
+    setHistorico(novo);
+    analisar(undefined, novo);
   };
 
   /* ============================================================
@@ -232,6 +259,7 @@ function FtCopiloto({ state, setState }) {
 
   return (
     <div className="ft-cp-card" style={{ left: pos.x, top: pos.y }} onMouseDown={onMouseDown} ref={dragRef}>
+      <style>{CP_CSS}</style>
       <div className="ft-cp-head">
         <div className="ft-cp-title">🤖 Copiloto NCM/DUIMP</div>
         <button className="ft-cp-no-drag ft-cp-min" onClick={() => setOpen(false)} title="Minimizar">—</button>
@@ -241,21 +269,21 @@ function FtCopiloto({ state, setState }) {
         {loading && (
           <div className="ft-cp-status">
             <div className="ft-cp-spin"/>
-            Analisando…
+            Analisando… pode levar 1 a 2 min (confiro a TEC/TIPI vigente).
           </div>
         )}
 
         {!loading && error && (
           <div className="ft-cp-err">
             <b>⚠️ {error}</b>
-            <button className="ft-cp-btn ghost" onClick={analisar}>Tentar novamente</button>
+            <button className="ft-cp-btn ghost" onClick={() => analisar()}>Tentar novamente</button>
           </div>
         )}
 
         {!loading && !error && !response && (
           <div className="ft-cp-empty">
-            <p>Preencha <b>Insumo</b> + <b>Função / aplicação</b> e clique em Analisar — eu sugiro o NCM e a descrição DUIMP.</p>
-            <button className="ft-cp-btn primary" onClick={analisar}>Analisar agora</button>
+            <p>Preencha <b>Insumo</b> + <b>Função / aplicação</b> (e a foto, se tiver) e clique em Analisar — eu sugiro o NCM e a descrição DUIMP.</p>
+            <button className="ft-cp-btn primary" onClick={() => analisar()}>Analisar agora</button>
           </div>
         )}
 
@@ -273,6 +301,14 @@ function FtCopiloto({ state, setState }) {
               </div>
               <span className="ft-cp-conf-lbl">{pctOf(response.confianca)}% confiança</span>
             </div>
+
+            {response.resposta && <div className="ft-cp-resposta">{response.resposta}</div>}
+
+            {(response.alertas || []).length > 0 && (
+              <ul className="ft-cp-alertas">
+                {response.alertas.map((a, i) => <li key={i}>⚠️ {a}</li>)}
+              </ul>
+            )}
 
             {/* Perguntas de desempate */}
             {(response.perguntas_desempate || []).length > 0 && (
@@ -323,11 +359,18 @@ function FtCopiloto({ state, setState }) {
                     </ul>
                   </div>
                 )}
-                {response._stub && <p className="ft-cp-stub-note">⚙️ Resposta vem do stub. IA real entra na Fase 2 (contrato não muda).</p>}
               </div>
             )}
 
-            <button className="ft-cp-btn ghost ft-cp-reanalisar" onClick={analisar}>↻ Reanalisar</button>
+            <div className="ft-cp-pergunta">
+              <textarea rows={2} value={pergunta} placeholder="Pergunte ou contradiga (ex.: e se a bobina for 24 Vcc?)"
+                onChange={(e) => setPergunta(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && pergunta.trim()) { e.preventDefault(); analisar(pergunta); } }}/>
+              <button className="ft-cp-btn outline" disabled={!pergunta.trim()} onClick={() => analisar(pergunta)}>Perguntar</button>
+            </div>
+
+            <button className="ft-cp-btn ghost ft-cp-reanalisar" onClick={() => analisar()}>↻ Reanalisar</button>
+            {typeof response.restantes === 'number' && <small className="ft-cp-restantes">Restam {response.restantes} de 20 perguntas nesta hora.</small>}
           </>
         )}
       </div>
