@@ -463,7 +463,7 @@
   color: var(--ft-fg1); text-align: right; white-space: nowrap;
 }
 .ft-fz-line.solo { flex-direction: column; gap: 0; }
-.ft-fz-line.solo .ft-fz-lv { text-align: left; white-space: normal; }
+.ft-fz-line.solo .ft-fz-lv { text-align: left; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
 .ft-fz-zone--media {
   /* trava a coluna de imagens na altura de 1 página — quando as
      especificações (coluna da esquerda) crescem além disso e viram
