@@ -14,6 +14,36 @@ window.SolicitacoesProdutoStore = (() => {
     { valor: 'VPMP', label: 'VPMP — Matéria-Prima (VerticalParts)' },
   ];
 
+  // Listas do formulário FO-612 (Solicitação de Cadastro de Produto) — aba "Dados de lista".
+  const TIPOS_CADASTRO = [
+    { valor: 'pecas', label: 'Peças e equipamentos', ajuda: 'Para revenda / uso em equipamentos' },
+    { valor: 'insumo', label: 'Insumo, consumo, matéria-prima ou ativo', ajuda: 'Uso interno' },
+  ];
+  const UNIDADES = ["Barra (BR)","Chapa (CH)","Cilindro (CIL)","Conjunto (CJ)","Cento (CNT)","Caixa (CX)","Fardo (FD)","Folha (FL)","Frasco (FR)","Grama (G)","Galão (GL)","Jogo (JG)","Quilograma (KG)","Kit (KIT)","Litro (L)","Lata (LTA)","Metro (M)","Peça (PC)","Pacote (PCT)","Placa (PL)","Par (PR)","Rolo (RL)","Saco (SC)","Tambor (TB)","Tubo (TUB)","Unidade (UN)"];
+  const FAMILIAS_INSUMO = ["ATIVO","USO E CONSUMO","INSUMOS","MATÉRIA PRIMA","EPI","LIMPEZA - EQP","LIMPEZA - MATERIAL","INFORMÁTICA","COPA"];
+  const FAMILIAS_PECAS = ["CENTOPÉIAS E ROLOS DE CURVA","COMPONENTES ELETROMECÂNICOS E ELETRÔNICOS","CORREIAS","CORRENTES DE DEGRAUS/PALLETS","CORRENTES MOTRIZ/CORRIMÃO","CORRIMÃOS","DEGRAUS","DISPOSITIVOS DE FRENAGEM","DISPOSITIVOS MECÂNICOS DE TRAÇÃO","EIXOS DE DEGRAU E PARTES","EIXOS MOTRIZ/CORRIMÃO E PARTES","ELEVADORES/BARREIRA","ELEVADORES/BOTOEIRAS","ELEVADORES/CABOS E CINTAS","ELEVADORES/GUIAS","ELEVADORES/MÁQUINAS","ELEVADORES/OPERADOR DE PORTAS","ELEVADORES/PEÇAS/COMPONENTES","ELEVADORES/PORTAS","ELEVADORES/QUADRO DE COMANDOS","EQP/ELEVADORES CARGA","EQP/ELEVADORES PASSAGEIROS","EQP/ESCADA","EQP/ESTEIRA","EQP/PLATAFORMA","EQUIPAMENTOS","ESCADA/QUADRO DE COMANDOS","GUIAS E PERFIS","INOVANCE/BOTOEIRAS","INOVANCE/CABOS","INOVANCE/PORTAS","INOVANCE/QUADRO DE COMANDO","INSERTOS","ITENS DE SEGURANÇA","LUBRIFICAÇÃO E PARTES","MOTORES E PARTES","PALLETS","PARAFUSOS / PORCAS / ARRUELAS / PRESILHAS","PENTES","POLIAS","ROLDANAS / ROLOS / ROLETES"];
+  const ESTOQUE_MIN = ["1","5","10","15","30","120","135"];
+  const APLICACOES = ['Escadas ou Esteiras Rolantes', 'Elevadores', 'Outra'];
+  const LOCAIS_COMPRA = ['Nacional', 'Importada'];
+  // Campos que só existem para "Peças e equipamentos" (no insumo são descartados).
+  const DC_SO_PECAS = ['referencia', 'marca', 'serie'];
+  const DC_CHAVES = ['descricao_comercial', 'referencia', 'marca', 'modelo', 'unidade', 'familia', 'funcao', 'material', 'serie',
+    'compra', 'leadtime', 'caracteristica', 'part_number', 'cor', 'aplicacao', 'estoque_min', 'estoque_min_justif', 'cliente_whatsapp'];
+
+  function _dadosCadastro(dados) {
+    const tipo = dados.tipo_cadastro || 'pecas';
+    const dc = dados.dc || {};
+    const out = {};
+    DC_CHAVES.forEach((k) => {
+      if (tipo === 'insumo' && DC_SO_PECAS.includes(k)) return;
+      if (k === 'cliente_whatsapp' && !dados.foiPedidoCliente) return;
+      const v = dc[k] == null ? '' : String(dc[k]).trim();
+      if (v) out[k] = v;
+    });
+    if (!out.estoque_min) delete out.estoque_min_justif;
+    return out;
+  }
+
   // Fluxo definido com o usuário em 20/09/2026:
   // 1) Solicitação enviada avisa a Engenharia (Maurício), que designa quem da
   //    equipe resolve.
@@ -72,6 +102,8 @@ window.SolicitacoesProdutoStore = (() => {
         status: 'novo',
         tipo_equipamento: dados.tipo_equipamento,
         categoria_sku: dados.categoria_sku,
+        tipo_cadastro: dados.tipo_cadastro || 'pecas',
+        dados_cadastro: _dadosCadastro(dados),
         solicitante_nome: dados.solicitante_nome,
         solicitante_email: dados.solicitante_email,
         // Cliente só entra se a solicitação de fato nasceu de um pedido de
@@ -273,6 +305,13 @@ window.SolicitacoesProdutoStore = (() => {
     TIPOS,
     STATUS_LIST,
     CATEGORIAS_SKU,
+    TIPOS_CADASTRO,
+    UNIDADES,
+    FAMILIAS_INSUMO,
+    FAMILIAS_PECAS,
+    ESTOQUE_MIN,
+    APLICACOES,
+    LOCAIS_COMPRA,
     criar,
     listar,
     obter,

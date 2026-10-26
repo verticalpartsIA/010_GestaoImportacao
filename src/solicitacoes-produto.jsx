@@ -383,8 +383,12 @@ function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo,
   );
 }
 
+const SP_FOTOS = ['Foto principal', 'Foto das laterais do produto', 'Foto do verso do produto'];
+
 function NovaView({ onSalvar, onCancelar, user }) {
+  const S = window.SolicitacoesProdutoStore;
   const [form, setForm] = React.useState({
+    tipo_cadastro: 'pecas',
     tipo_equipamento: 'elevador',
     categoria_sku: '',
     solicitante_nome: user.nome || 'Usuário',
@@ -397,6 +401,7 @@ function NovaView({ onSalvar, onCancelar, user }) {
     cliente_nome: '',
     cliente_industria: '',
     cliente_contato: '',
+    dc: {},
     anexos: [],
   });
 
@@ -404,7 +409,12 @@ function NovaView({ onSalvar, onCancelar, user }) {
   const [enviandoAnexo, setEnviandoAnexo] = React.useState(false);
   // Todos os anexos desta solicitação nova caem na mesma pasta temporária —
   // a solicitação ainda não tem id (só existe depois do insert).
-  const pastaTempRef = React.useRef(window.SolicitacoesProdutoStore._pastaTemp());
+  const pastaTempRef = React.useRef(S._pastaTemp());
+
+  const pecas = form.tipo_cadastro === 'pecas';
+  const dc = form.dc;
+  const setDc = (k, v) => setForm((s) => ({ ...s, dc: { ...s.dc, [k]: v } }));
+  const familias = pecas ? S.FAMILIAS_PECAS : S.FAMILIAS_INSUMO;
 
   function _validar() {
     const novosErros = {};
@@ -419,27 +429,70 @@ function NovaView({ onSalvar, onCancelar, user }) {
     await onSalvar(form);
   }
 
-  async function _onAnexoChange(e) {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
+  async function _enviarArquivos(files, slot) {
     setEnviandoAnexo(true);
     try {
       for (const file of files) {
-        const anexo = await window.SolicitacoesProdutoStore.uploadAnexo(file, pastaTempRef.current);
+        const anexo = await S.uploadAnexo(file, pastaTempRef.current);
+        if (slot) anexo.slot = slot;
         setForm((s) => ({ ...s, anexos: [...s.anexos, anexo] }));
       }
     } catch (err) {
       alert('Erro ao enviar anexo: ' + (err.message || err));
     } finally {
       setEnviandoAnexo(false);
-      e.target.value = '';
     }
+  }
+
+  async function _onAnexoChange(e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length) await _enviarArquivos(files, null);
+  }
+
+  async function _onFotoChange(slot, e) {
+    const file = (e.target.files || [])[0];
+    e.target.value = '';
+    if (!file) return;
+    const antigo = form.anexos.find((a) => a.slot === slot);
+    if (antigo) _removerAnexo(form.anexos.indexOf(antigo));
+    await _enviarArquivos([file], slot);
   }
 
   function _removerAnexo(idx) {
     const anexo = form.anexos[idx];
-    if (anexo && anexo.path) window.SolicitacoesProdutoStore.removerAnexo(anexo.path).catch(() => {});
+    if (anexo && anexo.path) S.removerAnexo(anexo.path).catch(() => {});
     setForm((s) => ({ ...s, anexos: s.anexos.filter((_, i) => i !== idx) }));
+  }
+
+  function campoTexto(chave, rotulo, extra = {}) {
+    return (
+      <div style={styles.formGroup}>
+        <label style={styles.label}>{rotulo} <span style={styles.opc}>(opcional)</span></label>
+        {extra.ajuda && <div style={styles.ajuda}>{extra.ajuda}</div>}
+        <input
+          type={extra.numero ? 'number' : 'text'}
+          min={extra.numero ? 0 : undefined}
+          value={dc[chave] || ''}
+          onChange={(e) => setDc(chave, e.target.value)}
+          style={styles.input}
+          placeholder={extra.placeholder}
+        />
+      </div>
+    );
+  }
+
+  function campoLista(chave, rotulo, opcoes, ajuda) {
+    return (
+      <div style={styles.formGroup}>
+        <label style={styles.label}>{rotulo} <span style={styles.opc}>(opcional)</span></label>
+        {ajuda && <div style={styles.ajuda}>{ajuda}</div>}
+        <select value={dc[chave] || ''} onChange={(e) => setDc(chave, e.target.value)} style={styles.input}>
+          <option value="">Selecione…</option>
+          {opcoes.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      </div>
+    );
   }
 
   return (
@@ -447,7 +500,28 @@ function NovaView({ onSalvar, onCancelar, user }) {
       <div style={styles.formContainer}>
         <div style={styles.formTitle}>NOVA SOLICITAÇÃO DE PRODUTO</div>
         <div style={{ fontSize: '12px', color: 'var(--fg2)', marginBottom: '16px' }}>
-          Só <b>Tipo</b>, <b>Categoria</b> e a <b>Descrição</b> são obrigatórios — preencha o resto que souber, o que faltar a Engenharia completa depois.
+          Aqui entram os produtos que <b>ainda não fornecemos</b>. Só <b>Tipo</b>, <b>Categoria</b> e <b>O que você precisa</b> são obrigatórios — todo o resto é opcional (inclusive site de referência e Part Number),
+          mas quanto mais você informar (site de referência, fotos, marca, modelo, contato do cliente), mais fácil é para a Engenharia e a Compra.
+          Dados fiscais, NCM e código são preenchidos depois pelo setor responsável.
+        </div>
+
+        <div style={styles.formGroup}>
+          <label style={styles.label}>Tipo de cadastro *</label>
+          <div style={styles.segRow}>
+            {S.TIPOS_CADASTRO.map((t) => (
+              <label key={t.valor} style={{ ...styles.segOpt, ...(form.tipo_cadastro === t.valor ? styles.segOptOn : {}) }}>
+                <input
+                  type="radio"
+                  name="tipo_cadastro"
+                  checked={form.tipo_cadastro === t.valor}
+                  onChange={() => setForm((s) => ({ ...s, tipo_cadastro: t.valor, dc: { ...s.dc, familia: '' } }))}
+                  style={{ marginRight: '8px' }}
+                />
+                <b>{t.label}</b>
+                <div style={styles.ajuda}>{t.ajuda}</div>
+              </label>
+            ))}
+          </div>
         </div>
 
         <div style={styles.formRow}>
@@ -472,13 +546,15 @@ function NovaView({ onSalvar, onCancelar, user }) {
               style={{ ...styles.input, borderColor: erros.categoria_sku ? 'var(--vp-danger)' : '' }}
             >
               <option value="">Selecione…</option>
-              {(window.SolicitacoesProdutoStore.CATEGORIAS_SKU || []).map((c) => (
+              {(S.CATEGORIAS_SKU || []).map((c) => (
                 <option key={c.valor} value={c.valor}>{c.label}</option>
               ))}
             </select>
             {erros.categoria_sku && <div style={styles.erro}>{erros.categoria_sku}</div>}
           </div>
         </div>
+
+        <div style={styles.secaoTitulo}>Cabeçalho do produto</div>
 
         <div style={styles.formGroup}>
           <label style={styles.label}>O que você precisa? *</label>
@@ -491,8 +567,52 @@ function NovaView({ onSalvar, onCancelar, user }) {
           {erros.descricao_inicial && <div style={styles.erro}>{erros.descricao_inicial}</div>}
         </div>
 
+        {campoTexto('descricao_comercial', 'Descrição (nome comercial)', { ajuda: 'Nome comercial conforme sairá na nota' })}
+        {pecas && campoTexto('referencia', 'Referência', { ajuda: 'Qual equipamento o produto pode ser utilizado' })}
+
+        <div style={styles.formRow}>
+          {pecas && campoTexto('marca', 'Marca do produto')}
+          {campoTexto('modelo', 'Modelo / Part Number')}
+        </div>
+        <div style={styles.formRow}>
+          {campoLista('unidade', 'Unidade de medida', S.UNIDADES)}
+          {campoLista('familia', 'Família do produto (sugerida)', familias)}
+        </div>
+
+        <div style={styles.secaoTitulo}>Aplicação do produto</div>
         <div style={styles.formGroup}>
-          <label style={styles.label}>Detalhes adicionais (opcional)</label>
+          <label style={styles.label}>Função / Finalidade <span style={styles.opc}>(opcional)</span></label>
+          <textarea value={dc.funcao || ''} onChange={(e) => setDc('funcao', e.target.value)} style={styles.textarea} />
+        </div>
+        {campoTexto('material', 'Material de composição')}
+
+        <div style={styles.secaoTitulo}>Referências e contatos</div>
+        <div style={styles.formRow}>
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Site de referência da peça (opcional)</label>
+            <div style={styles.ajuda}>Link do fabricante, catálogo, marketplace… ajuda muito a Compra a achar a peça.</div>
+            <input
+              type="text"
+              value={form.link_produto}
+              onChange={(e) => setForm({ ...form, link_produto: e.target.value })}
+              style={styles.input}
+              placeholder="https://…"
+            />
+          </div>
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Contato do fornecedor (opcional)</label>
+            <div style={styles.ajuda}>Nome, telefone, e-mail — o que você já tiver</div>
+            <input
+              type="text"
+              value={form.fornecedor_contato}
+              onChange={(e) => setForm({ ...form, fornecedor_contato: e.target.value })}
+              style={styles.input}
+            />
+          </div>
+        </div>
+
+        <div style={styles.formGroup}>
+          <label style={styles.label}>Observações / detalhes adicionais (opcional)</label>
           <textarea
             value={form.observacoes_comercial}
             onChange={(e) => setForm({ ...form, observacoes_comercial: e.target.value })}
@@ -500,37 +620,52 @@ function NovaView({ onSalvar, onCancelar, user }) {
             placeholder="Qualquer informação a mais que possa ajudar"
           />
         </div>
+        {pecas && campoTexto('serie', 'Nº de série / ID TAG do equipamento')}
 
+        <div style={styles.secaoTitulo}>Dados complementares</div>
         <div style={styles.formRow}>
-          <div style={styles.formGroup}>
-            <label style={styles.label}>Contato do fornecedor (opcional)</label>
-            <input
-              type="text"
-              value={form.fornecedor_contato}
-              onChange={(e) => setForm({ ...form, fornecedor_contato: e.target.value })}
-              style={styles.input}
-              placeholder="Nome, telefone, e-mail — o que você já tiver"
-            />
-          </div>
-          <div style={styles.formGroup}>
-            <label style={styles.label}>Link do produto (opcional)</label>
-            <input
-              type="text"
-              value={form.link_produto}
-              onChange={(e) => setForm({ ...form, link_produto: e.target.value })}
-              style={styles.input}
-              placeholder="Site do fabricante, catálogo, marketplace…"
-            />
-          </div>
+          {campoLista('compra', 'Local de compra do produto', S.LOCAIS_COMPRA)}
+          {campoTexto('leadtime', 'Lead time (dias)', { ajuda: 'Dias para o material chegar na VP', numero: true })}
+        </div>
+        <div style={styles.formGroup}>
+          <label style={styles.label}>Característica <span style={styles.opc}>(opcional)</span></label>
+          <textarea value={dc.caracteristica || ''} onChange={(e) => setDc('caracteristica', e.target.value)} style={styles.textarea} />
+        </div>
+        <div style={styles.formRow}>
+          {campoTexto('part_number', 'Part Number')}
+          {campoTexto('cor', 'Cor')}
+        </div>
+        {campoLista('aplicacao', 'Aplicação', S.APLICACOES)}
+
+        <div style={styles.secaoTitulo}>Fotos do produto</div>
+        <div style={{ fontSize: '12px', color: 'var(--fg2)', marginBottom: '10px' }}>
+          Opcional, mas a foto principal ajuda muito a identificar a peça.
+        </div>
+        <div style={styles.fotosGrid}>
+          {SP_FOTOS.map((nome, i) => {
+            const a = form.anexos.find((x) => x.slot === nome);
+            return (
+              <div key={nome}>
+                <label style={styles.label}>{i + 1}. {nome}</label>
+                <input type="file" accept="image/*" disabled={enviandoAnexo} onChange={(e) => _onFotoChange(nome, e)} />
+                {a && (
+                  <div>
+                    <img src={a.url} alt={nome} style={styles.fotoPrev} />
+                    <button type="button" onClick={() => _removerAnexo(form.anexos.indexOf(a))} style={{ border: 'none', background: 'none', color: 'var(--vp-danger)', cursor: 'pointer', fontSize: '12px' }}>remover</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
-        <div style={styles.formGroup}>
-          <label style={styles.label}>Imagem ou PDF do produto (opcional)</label>
+        <div style={{ ...styles.formGroup, marginTop: '20px' }}>
+          <label style={styles.label}>Outras imagens ou PDFs do produto (opcional)</label>
           <input type="file" accept="image/*,.pdf" multiple onChange={_onAnexoChange} disabled={enviandoAnexo}/>
           {enviandoAnexo && <div style={{ fontSize: '12px', color: 'var(--fg2)', marginTop: '6px' }}>Enviando…</div>}
-          {form.anexos.length > 0 && (
+          {form.anexos.filter((a) => !a.slot).length > 0 && (
             <div style={{ marginTop: '8px' }}>
-              {form.anexos.map((a, idx) => (
+              {form.anexos.map((a, idx) => a.slot ? null : (
                 <div key={a.path} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', padding: '4px 0' }}>
                   <span>{a.tipo === 'imagem' ? '🖼️' : '📄'}</span>
                   <a href={a.url} target="_blank" style={{ color: 'var(--vp-info)' }}>{a.nome}</a>
@@ -574,19 +709,33 @@ function NovaView({ onSalvar, onCancelar, user }) {
                 />
               </div>
             </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Contato do cliente (opcional)</label>
-              <input
-                type="text"
-                value={form.cliente_contato}
-                onChange={(e) => setForm({ ...form, cliente_contato: e.target.value })}
-                style={styles.input}
-                placeholder="Telefone, e-mail…"
-              />
+            <div style={styles.formRow}>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>WhatsApp do cliente (opcional)</label>
+                <div style={styles.ajuda}>A Engenharia pode chamar o cliente para entender melhor a aplicação.</div>
+                <input
+                  type="text"
+                  value={dc.cliente_whatsapp || ''}
+                  onChange={(e) => setDc('cliente_whatsapp', e.target.value)}
+                  style={styles.input}
+                  placeholder="(DDD) 9 0000-0000"
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Outro contato do cliente (opcional)</label>
+                <div style={styles.ajuda}>E-mail, telefone fixo…</div>
+                <input
+                  type="text"
+                  value={form.cliente_contato}
+                  onChange={(e) => setForm({ ...form, cliente_contato: e.target.value })}
+                  style={styles.input}
+                />
+              </div>
             </div>
           </div>
         )}
 
+        <div style={styles.secaoTitulo}>Validação comercial — responsável pela solicitação</div>
         <div style={styles.formRow}>
           <div style={styles.formGroup}>
             <label style={styles.label}>Solicitante *</label>
@@ -607,12 +756,19 @@ function NovaView({ onSalvar, onCancelar, user }) {
             />
           </div>
         </div>
+        {campoLista('estoque_min', 'Sugestão de estoque mínimo', S.ESTOQUE_MIN)}
+        {dc.estoque_min && (
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Justifique a sugestão de estoque mínimo <span style={styles.opc}>(opcional)</span></label>
+            <textarea value={dc.estoque_min_justif || ''} onChange={(e) => setDc('estoque_min_justif', e.target.value)} style={styles.textarea} />
+          </div>
+        )}
 
         <div style={styles.formActions}>
           <button onClick={onCancelar} style={styles.btnSecondary}>
             CANCELAR
           </button>
-          <button onClick={_salvar} style={styles.btnPrimary}>
+          <button onClick={_salvar} style={styles.btnPrimary} disabled={enviandoAnexo}>
             ENVIAR PARA ENGENHARIA
           </button>
         </div>
@@ -759,12 +915,46 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
           )}
           {solicitacao.link_produto && (
             <div style={styles.detalheRow}>
-              <div style={styles.detalheLabel}>Link do produto:</div>
+              <div style={styles.detalheLabel}>Site de referência:</div>
               <div style={styles.detalheValue}>
                 <a href={solicitacao.link_produto} target="_blank" style={styles.btnLink}>{solicitacao.link_produto}</a>
               </div>
             </div>
           )}
+          {(() => {
+            const d = solicitacao.dados_cadastro || {};
+            const ROT = [['descricao_comercial', 'Descrição comercial'], ['referencia', 'Referência'], ['marca', 'Marca'], ['modelo', 'Modelo / Part Number'],
+              ['part_number', 'Part Number'], ['unidade', 'Unidade'], ['familia', 'Família sugerida'], ['funcao', 'Função / Finalidade'], ['material', 'Material'],
+              ['serie', 'Nº de série / ID TAG'], ['compra', 'Local de compra'], ['leadtime', 'Lead time (dias)'], ['caracteristica', 'Característica'],
+              ['cor', 'Cor'], ['aplicacao', 'Aplicação'], ['estoque_min', 'Estoque mínimo sugerido'], ['estoque_min_justif', 'Justificativa do estoque']];
+            const wa = String(d.cliente_whatsapp || '').replace(/\D/g, '');
+            return (
+              <>
+                {solicitacao.tipo_cadastro && (
+                  <div style={styles.detalheRow}>
+                    <div style={styles.detalheLabel}>Tipo de cadastro:</div>
+                    <div style={styles.detalheValue}>{solicitacao.tipo_cadastro === 'insumo' ? 'Insumo, consumo, matéria-prima ou ativo' : 'Peças e equipamentos'}</div>
+                  </div>
+                )}
+                {d.cliente_whatsapp && (
+                  <div style={styles.detalheRow}>
+                    <div style={styles.detalheLabel}>WhatsApp do cliente:</div>
+                    <div style={styles.detalheValue}>
+                      {wa.length >= 10
+                        ? <a href={'https://wa.me/' + (wa.length <= 11 ? '55' + wa : wa)} target="_blank" style={styles.btnLink}>{d.cliente_whatsapp}</a>
+                        : d.cliente_whatsapp}
+                    </div>
+                  </div>
+                )}
+                {ROT.filter(([k]) => d[k]).map(([k, r]) => (
+                  <div key={k} style={styles.detalheRow}>
+                    <div style={styles.detalheLabel}>{r}:</div>
+                    <div style={styles.detalheValue}>{d[k]}</div>
+                  </div>
+                ))}
+              </>
+            );
+          })()}
           <div style={styles.detalheRow}>
             <div style={styles.detalheLabel}>Solicitante:</div>
             <div style={styles.detalheValue}>{solicitacao.solicitante_nome} ({solicitacao.solicitante_email})</div>
@@ -973,6 +1163,14 @@ const styles = {
   label: { display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--fg1)', marginBottom: '6px' },
   input: { width: '100%', padding: '8px 12px', border: '1px solid var(--border-strong)', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace' },
   textarea: { width: '100%', padding: '8px 12px', border: '1px solid var(--border-strong)', borderRadius: '4px', fontSize: '13px', minHeight: '80px', fontFamily: 'monospace', resize: 'vertical' },
+  opc: { fontWeight: 400, color: 'var(--fg2)' },
+  ajuda: { fontSize: '11px', color: 'var(--fg2)', fontWeight: 400, marginBottom: '4px' },
+  secaoTitulo: { fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--fg1)', borderBottom: '1px solid var(--border)', paddingBottom: '6px', margin: '8px 0 14px' },
+  segRow: { display: 'flex', gap: '10px', flexWrap: 'wrap' },
+  segOpt: { flex: '1 1 240px', border: '1px solid var(--border-strong)', borderRadius: '6px', padding: '10px 12px', cursor: 'pointer', fontSize: '13px' },
+  segOptOn: { borderColor: 'var(--vp-yellow)', background: 'var(--vp-warning-tint)' },
+  fotosGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' },
+  fotoPrev: { width: '100%', height: '110px', objectFit: 'cover', borderRadius: '6px', marginTop: '6px', border: '1px solid var(--border)' },
   erro: { fontSize: '11px', color: 'var(--vp-danger)', marginTop: '4px' },
   formActions: { display: 'flex', gap: '12px', marginTop: '20px', justifyContent: 'flex-end' },
 
