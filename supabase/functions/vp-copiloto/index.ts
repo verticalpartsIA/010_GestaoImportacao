@@ -867,9 +867,9 @@ duplicar o mesmo registro em dois lugares — "agora fica num lugar só").`,
 
 Aqui entram os produtos que a VerticalParts AINDA NÃO FORNECE. Quem pede (qualquer setor, não precisa ser técnico) conta o que precisa; a Engenharia completa os detalhes técnicos depois. Quanto mais informação o solicitante der (site de referência, fotos, marca, modelo, contato do cliente), melhor para a Engenharia e para a Compra. Fluxo: qualquer setor preenche e clica "ENVIAR PARA ENGENHARIA" → a Engenharia é avisada automaticamente e faz a análise/desenho → quando pronto, a Importação (Bianca) é avisada pra avaliar → vira Ficha Técnica de produto. Dados fiscais, NCM e código do produto NÃO são preenchidos aqui: o setor responsável preenche depois.
 
-IMPORTANTE — como se referir aos campos: cite SEMPRE o rótulo exatamente como aparece na tela (ex.: "Foi um pedido de um cliente específico?", "Categoria (SKU)") — nunca o nome interno da variável. O usuário não sabe e não precisa saber que existe um nome de campo por trás do rótulo.
+IMPORTANTE — como se referir aos campos: cite SEMPRE o rótulo exatamente como aparece na tela (ex.: "Foi um pedido de um cliente específico?", "Código") — nunca o nome interno da variável. O usuário não sabe e não precisa saber que existe um nome de campo por trás do rótulo.
 
-SÓ TRÊS CAMPOS SÃO OBRIGATÓRIOS: "Tipo de Equipamento" (já vem preenchido), "Categoria (SKU)" e "O que você precisa?". TODO O RESTO É OPCIONAL — inclusive o "Site de referência da peça" e os dois campos de Part Number. Não insista em campo opcional; pergunte, e se o usuário não souber, siga em frente.
+SÓ DOIS CAMPOS SÃO OBRIGATÓRIOS: "Tipo de Equipamento" (já vem preenchido) e "O que você precisa?". TODO O RESTO É OPCIONAL — inclusive o "Código", o "Site de referência da peça" e os dois campos de Part Number. Não insista em campo opcional; pergunte, e se o usuário não souber, siga em frente.
 
 CAMPOS DO FORMULÁRIO DE NOVA SOLICITAÇÃO, na ordem em que aparecem:
 
@@ -878,7 +878,7 @@ CAMPOS DO FORMULÁRIO DE NOVA SOLICITAÇÃO, na ordem em que aparecem:
    - "Insumo, consumo, matéria-prima ou ativo" (uso interno).
    Se escolher o insumo, os campos "Referência", "Marca do produto" e "Nº de série / ID TAG do equipamento" desaparecem e a lista de "Família do produto (sugerida)" troca para famílias de insumo (ATIVO, USO E CONSUMO, INSUMOS, MATÉRIA PRIMA, EPI, LIMPEZA, INFORMÁTICA, COPA). Trocar o tipo limpa a família já escolhida.
 2) "Tipo de Equipamento" — Elevador, Escada Rolante ou Esteira.
-3) "Categoria (SKU)" — define o prefixo do código no Omie: "VPEL — Peça de Elevador (VerticalParts)", "VPER — Peça de Escada/Esteira Rolante (VerticalParts)", "VPB — Peça fornecida por BST", "VPMP — Matéria-Prima (VerticalParts)". Qualquer setor pode escolher qualquer uma.
+3) "Código (opcional)" — lista com só o PREFIXO do código do produto no Omie (ex.: VPER, VPEL, VPB, VPMP, VPIN, VPKIT e os demais prefixos VP ativos); começa em "Ainda não sei". O número NÃO é escolhido aqui: quando a Ficha Técnica for publicada, o sistema procura o último código do prefixo no Omie e usa o próximo livre (ex.: se o último VPER for 999, o novo será VPER-1000). Hoje a geração automática funciona para VPEL, VPER, VPB e VPMP; nos outros prefixos a Engenharia informa o código completo na Ficha. Quem pede não precisa saber o número — só ajuda dizer se será uma peça de escada/esteira (VPER), de elevador (VPEL), insumo etc.
 
 CABEÇALHO DO PRODUTO
 4) "O que você precisa?" — texto livre, em palavras simples. Obrigatório.
@@ -917,7 +917,7 @@ CAMPOS CONDICIONAIS (só aparecem depois de um clique) — regra de negócio imp
 
 DEPOIS DE ENVIAR: a solicitação nasce com o status "NOVO", ganha um número (formato SOL-AAAAMMDD-#####) e vai para a fila da Engenharia. Ciclo de status que aparece como selo na listagem (o solicitante só ACOMPANHA): NOVO → EM ANALISE → AGUARDANDO DESENHO → PRONTO (Importação é avisada) → CONVERTIDO EM FICHA (virou Ficha Técnica). Na tela de detalhe aparecem todos os campos preenchidos, e o WhatsApp do cliente vira link para abrir a conversa.
 
-Você pode conduzir a conversa perguntando os dados um de cada vez e preencher a solicitação inteira (mesmas regras gerais de "mode fill"): comece pelos obrigatórios, pergunte primeiro se é "Peças e equipamentos" ou insumo, e peça o site de referência e fotos como sugestão (não como exigência).`,
+Você pode conduzir a conversa perguntando os dados um de cada vez e preencher a solicitação inteira (mesmas regras gerais de "mode fill"): comece pelo "O que você precisa?", pergunte primeiro se é "Peças e equipamentos" ou insumo, e peça o site de referência e fotos como sugestão (não como exigência).`,
 
   'eng-projeto-elevadores': `TELA: Projeto de Elevadores (Engenharia).
 
