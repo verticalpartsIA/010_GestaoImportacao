@@ -142,10 +142,12 @@ function SepDetalhe({ codigo, caps, voltar, onMudou, embutido }) {
   const [ocupado, setOcupado] = React.useState(false);
   const [campos, setCampos] = React.useState({});   // por código do item: { qtd, endereco }
   const [pend, setPend] = React.useState(null);     // { codigo, situacao, obs } — formulário de pendência aberto
+  const [destinos, setDestinos] = React.useState(null);   // { enviados, ops } — "onde está" cada item (separacao_destinos_listar)
 
   const carregar = React.useCallback(async () => {
     try { setD(await sepChamar('itens', { codigo_pedido: codigo })); setErro(null); }
     catch (e) { setErro(e.message); }
+    try { setDestinos(await window.FabricacaoOficinaStore.listarDestinos(codigo)); } catch (e) { /* o "onde está" é complemento: se falhar, a tela segue */ }
   }, [codigo]);
   React.useEffect(() => { setD(null); carregar(); const t = setInterval(carregar, 30000); return () => clearInterval(t); }, [carregar]);
 
@@ -176,6 +178,20 @@ function SepDetalhe({ codigo, caps, voltar, onMudou, embutido }) {
       window.VPLog?.registrar?.({ modulo: 'Separação', acao: 'Enviou item para Fabricação ' + nome, alvo: `Pedido ${d.pedido.numero_pedido} — ${item.codigo} (${nums})` });
       await carregar(); onMudou();
     } catch (e) { sepToast((e.message || '').replace(/^fabricação: /, '')); }
+    setOcupado(false);
+  }
+  // Quadro de Comando / Expedição: não cria OP; registra o destino (e, se o item é um quadro, cria o pedido de quadro) — separacao_enviar_destino.
+  async function enviarDest(item, destino) {
+    const nome = destino === 'quadro' ? 'Quadro de Comando' : 'Expedição';
+    if (!window.confirm(`Enviar ${item.codigo} para ${nome}?`)) return;
+    setOcupado(true);
+    try {
+      const r = await window.FabricacaoOficinaStore.enviarDestino(codigo, item.codigo, destino, null);
+      const nq = (r.quadros || []).map((q) => q.numero_pedido).join(', ');
+      sepToast(`Enviado para ${nome}.` + (nq ? ` Pedido(s) de quadro: ${nq}.` : ''));
+      window.VPLog?.registrar?.({ modulo: 'Separação', acao: 'Enviou item para ' + nome, alvo: `Pedido ${d.pedido.numero_pedido} — ${item.codigo}` });
+      await carregar(); onMudou();
+    } catch (e) { sepToast((e.message || '').replace(/^destino: /, '')); }
     setOcupado(false);
   }
   async function salvarPend() {
@@ -243,10 +259,13 @@ function SepDetalhe({ codigo, caps, voltar, onMudou, embutido }) {
                       {pd && <div style={{ fontSize: 12 }}><Badge variant="warning">{SEP_SIT[pd.situacao]}</Badge> <i>{pd.obs}</i> <span style={{ color: 'var(--fg3)' }}>— {sepNome(pd.por)}, {sepData(pd.em)}</span></div>}
                       {pd && pd.situacao === 'na_operacao' && caps.enviarFab && (
                         <div style={{ marginTop: 4 }}>
-                          <button className="btn btn--sm" disabled={ocupado} title="Cria a OP e leva o item para a tela de Fabricação Corte" onClick={() => enviarFab(i, 'corte')}>Enviar para Corte</button>{' '}
-                          <button className="btn btn--sm" disabled={ocupado} title="Cria a OP e leva o item para a tela de Fabricação Corrimão" onClick={() => enviarFab(i, 'corrimao')}>Enviar para Corrimão</button>
+                          <button className="btn btn--sm" disabled={ocupado} title="Registra o item no Quadro de Comando (se for um quadro, cria o pedido de quadro)" onClick={() => enviarDest(i, 'quadro')}>Quadro de Comando</button>{' '}
+                          <button className="btn btn--sm" disabled={ocupado} title="Cria a OP e leva o item para a tela de Fabricação Corrimão" onClick={() => enviarFab(i, 'corrimao')}>Corrimão</button>{' '}
+                          <button className="btn btn--sm" disabled={ocupado} title="Cria a OP e leva o item para a tela de Fabricação Corte" onClick={() => enviarFab(i, 'corte')}>Corte</button>{' '}
+                          <button className="btn btn--sm" disabled={ocupado} title="Registra o item como pronto para a Expedição" onClick={() => enviarDest(i, 'expedicao')}>Expedição</button>
                         </div>
                       )}
+                      {(() => { const onde = window.FabOficinaCalc.localizacaoDoItem(i.codigo, destinos); return onde.length ? <div style={{ fontSize: 12, marginTop: 4 }}><Badge variant="info">Onde está</Badge> {onde.join(' · ')}</div> : null; })()}
                       {!(i.separacoes || []).length && !pd && <span style={{ color: 'var(--fg3)', fontSize: 12 }}>{(i.enderecos || []).length ? 'endereço conhecido: ' + i.enderecos.join(', ') : 'sem endereço cadastrado'}</span>}
                     </td>
                     {editavel && (

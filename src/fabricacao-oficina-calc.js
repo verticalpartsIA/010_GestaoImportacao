@@ -36,5 +36,23 @@
     return m ? { n: Number(m[1]), de: Number(m[2]) } : null;
   }
 
-  window.FabOficinaCalc = { progresso, etapaAtualId, pausado, unidadeDoTitulo };
+  // "Onde está" o item de um pedido (Separação): OPs de Corrimão/Corte (ignora canceladas) + envios a Quadro/Expedição.
+  // d = { ops: [{ item_codigo, frente, status }], enviados: [{ codigo, destino }] } (vem de separacao_destinos_listar).
+  function localizacaoDoItem(codigo, d) {
+    const cod = String(codigo || '').toUpperCase();
+    const partes = [];
+    const rotulo = { corrimao: 'Corrimão', corte: 'Corte' };
+    ['corrimao', 'corte'].forEach((f) => {
+      const ops = ((d && d.ops) || []).filter((o) => String(o.item_codigo || '').toUpperCase() === cod && o.frente === f && o.status !== 'cancelada');
+      if (!ops.length) return;
+      const prontas = ops.filter((o) => o.status === 'concluida').length;
+      partes.push(prontas === ops.length ? `${rotulo[f]}: pronto` : `${rotulo[f]}: ${prontas} de ${ops.length} prontas`);
+    });
+    const env = ((d && d.enviados) || []).filter((e) => String(e.codigo || '').toUpperCase() === cod);
+    if (env.some((e) => e.destino === 'quadro')) partes.push('No Quadro de Comando');
+    if (env.some((e) => e.destino === 'expedicao')) partes.push('Na Expedição');
+    return partes;
+  }
+
+  window.FabOficinaCalc = { progresso, etapaAtualId, pausado, unidadeDoTitulo, localizacaoDoItem };
 })();

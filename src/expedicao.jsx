@@ -59,6 +59,8 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
 
   const carregar = React.useCallback(async () => {
     if (!sb) { setErro('Supabase indisponível.'); return; }
+    // Itens que a Separação/Corte já marcaram como "prontos para expedir" (separacao_destinos). Complemento: se falhar, a tela segue sem eles.
+    const destP = window.FabricacaoOficinaStore ? window.FabricacaoOficinaStore.listarDestinos(null).catch(() => null) : Promise.resolve(null);
     const [p, o, e, h] = await Promise.all([
       sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, cliente_nome, cliente_endereco, cliente_telefone, data_pedido, data_previsao, faturado, data_faturamento, nf_autorizada, numero_nf, transportadora_nome, modalidade_frete, cancelado, volumes, peso_bruto, valor_total').eq('cancelado', false).eq('so_separacao', false).order('data_previsao', { ascending: true }).limit(500),
       sb.from('pcp_ordens').select('id, numero, pedido_codigo, status').eq('frente', 'pedido').not('pedido_codigo', 'is', null),
@@ -69,7 +71,10 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
     if (err) { setErro(err.message); return; }
     const maes = {}; (o.data || []).forEach(x => { maes[x.pedido_codigo] = x; });
     const exps = {}; (e.data || []).forEach(x => { exps[x.pedido_codigo] = x; });
-    setErro(null); setDados({ pedidos: p.data || [], maes, exps, hist: new Set((h.data || []).map(x => x.numero_pedido)) });
+    const dest = await destP;
+    const destExp = {};
+    ((dest && dest.enviados) || []).filter(x => x.destino === 'expedicao').forEach(x => { (destExp[x.codigo_pedido] = destExp[x.codigo_pedido] || new Set()).add(String(x.codigo).toUpperCase()); });
+    setErro(null); setDados({ pedidos: p.data || [], maes, exps, destExp, hist: new Set((h.data || []).map(x => x.numero_pedido)) });
   }, [sb]);
   React.useEffect(() => { carregar(); }, [carregar]);
   // Atualiza sozinha (a cada minuto e ao voltar para a aba), sem mexer no pedido que está aberto.
@@ -298,6 +303,7 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
                     <td>{p.faturado ? <>{p.numero_nf ? <b style={{ fontWeight: 500 }}>NF {p.numero_nf}</b> : 'NF emitida'} <span style={{ color: 'var(--fg3)' }}>{expData(p.data_faturamento)}</span>{s === 'pronto' && p.data_faturamento ? <div style={{ fontSize: 10, color: atr ? 'var(--vp-danger)' : 'var(--fg3)' }}>emitida {expQuando(expDias(p.data_faturamento, hoje))}{lim ? ` · prazo ${expData(lim)}` : ''}</div> : null}</> : <span style={{ color: 'var(--fg3)' }}>não emitida</span>}</td>
                     <td>{expData(p.data_previsao)}</td>
                     <td><span className="pcp-tag" style={cor[s] ? { background: cor[s] } : undefined}>{rotulo[s]}</span>{atr ? <> <span className="pcp-tag" style={{ background: 'color-mix(in srgb, var(--vp-danger, #c0392b) 25%, transparent)' }}>Despacho atrasado</span></> : null}
+                      {dados.destExp[p.codigo_pedido] && s !== 'entregue' && s !== 'despachado' ? <div style={{ fontSize: 10, color: 'var(--fg3)' }} title="Itens que a Separação ou o Corte já encaminharam para a Expedição">{dados.destExp[p.codigo_pedido].size} item(ns) pronto(s) p/ expedir</div> : null}
                       {x && x.status !== 'aguardando' && <div style={{ fontSize: 10, color: 'var(--fg3)' }}>{x.retirada ? 'retirada pelo cliente' : x.transportadora}{x.data_saida ? ' · saiu ' + expData(x.data_saida) : ''}{x.data_entrega ? ' · entregue ' + expData(x.data_entrega) : ''}</div>}
                       {x && x.rastreio ? <div style={{ fontSize: 10 }}>rastreio: <b style={{ fontWeight: 500 }}>{x.rastreio}</b>{link ? <> · <a href={link} target="_blank" rel="noopener noreferrer">rastrear</a></> : null}</div> : null}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
@@ -314,7 +320,7 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
                         <div>
                           <div style={{ fontSize: 11, color: 'var(--fg3)', marginBottom: 4 }}>Itens a enviar ({itens.length})</div>
                           <div style={{ maxHeight: 220, overflowY: 'auto', fontSize: 12 }}>
-                            {itens.map(i => <div key={i.seq} style={{ padding: '3px 0', borderBottom: '1px solid var(--vp-gray-100)' }}>{i.item_pcp ? <b style={{ fontWeight: 500 }}>{i.codigo}</b> : i.codigo} · {i.descricao} <span style={{ color: 'var(--fg3)' }}>× {expFmt(i.quantidade)} {i.unidade || ''}</span></div>)}
+                            {itens.map(i => <div key={i.seq} style={{ padding: '3px 0', borderBottom: '1px solid var(--vp-gray-100)' }}>{i.item_pcp ? <b style={{ fontWeight: 500 }}>{i.codigo}</b> : i.codigo} · {i.descricao} <span style={{ color: 'var(--fg3)' }}>× {expFmt(i.quantidade)} {i.unidade || ''}</span>{dados.destExp[p.codigo_pedido] && dados.destExp[p.codigo_pedido].has(String(i.codigo).toUpperCase()) ? <span className="pcp-tag" style={{ marginLeft: 6 }}>pronto p/ expedir</span> : null}</div>)}
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>{p.cliente_endereco || ''}{p.cliente_telefone ? ' · ' + p.cliente_telefone : ''}</div>
                           <div style={{ fontSize: 11, color: 'var(--fg3)' }}>{p.numero_nf ? `NF ${p.numero_nf}` : ''}{p.peso_bruto ? ` · ${expFmt(p.peso_bruto, 2)} kg` : ''}{EXP_FRETE[p.modalidade_frete] ? ` · frete ${EXP_FRETE[p.modalidade_frete]}` : ''}{p.transportadora_nome ? ` · Omie: ${p.transportadora_nome}` : ''}</div>
