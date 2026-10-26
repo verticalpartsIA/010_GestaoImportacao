@@ -120,7 +120,7 @@ window.SolicitacoesProdutoStore = (() => {
     const conta = {};
     try {
       const c = window.__VP_SB.sb;
-      const listas = await Promise.all([_codigosAtivos(c, 'importacao_varejo_produtos', true), _codigosAtivos(c, 'pcp_produtos', false)]);
+      const listas = await Promise.all([_codigosAtivos(c, 'importacao_varejo_produtos', true), _codigosAtivos(c, 'pcp_produtos', true)]);
       const vistos = new Set();
       listas.flat().forEach((cod) => {
         const code = String(cod || '').toUpperCase().trim();
