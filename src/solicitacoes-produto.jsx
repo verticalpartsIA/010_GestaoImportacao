@@ -331,7 +331,7 @@ function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo,
               <tr style={styles.theadTr}>
                 <th style={styles.th}>SOLICITAÇÃO</th>
                 <th style={styles.th}>TIPO</th>
-                <th style={styles.th}>CATEGORIA</th>
+                <th style={styles.th}>CÓDIGO</th>
                 <th style={styles.th}>CLIENTE</th>
                 <th style={styles.th}>SOLICITANTE</th>
                 <th style={styles.th}>STATUS</th>
@@ -411,6 +411,13 @@ function NovaView({ onSalvar, onCancelar, user }) {
   // a solicitação ainda não tem id (só existe depois do insert).
   const pastaTempRef = React.useRef(S._pastaTemp());
 
+  const [prefixos, setPrefixos] = React.useState((S.CATEGORIAS_SKU || []).map((c) => ({ prefixo: c.valor, qtd: 0, geracao: true, descricao: c.label.split('—')[1] ? c.label.split('—')[1].trim() : '' })));
+  React.useEffect(() => {
+    let vivo = true;
+    S.listarPrefixosCodigo().then((l) => { if (vivo && l.length) setPrefixos(l); }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+  const prefixoEscolhido = prefixos.find((p) => p.prefixo === form.categoria_sku);
   const pecas = form.tipo_cadastro === 'pecas';
   const dc = form.dc;
   const setDc = (k, v) => setForm((s) => ({ ...s, dc: { ...s.dc, [k]: v } }));
@@ -418,7 +425,6 @@ function NovaView({ onSalvar, onCancelar, user }) {
 
   function _validar() {
     const novosErros = {};
-    if (!form.categoria_sku) novosErros.categoria_sku = 'Categoria é obrigatória';
     if (!form.descricao_inicial) novosErros.descricao_inicial = 'Explique o que você precisa';
     setErros(novosErros);
     return Object.keys(novosErros).length === 0;
@@ -500,7 +506,7 @@ function NovaView({ onSalvar, onCancelar, user }) {
       <div style={styles.formContainer}>
         <div style={styles.formTitle}>NOVA SOLICITAÇÃO DE PRODUTO</div>
         <div style={{ fontSize: '12px', color: 'var(--fg2)', marginBottom: '16px' }}>
-          Aqui entram os produtos que <b>ainda não fornecemos</b>. Só <b>Tipo</b>, <b>Categoria</b> e <b>O que você precisa</b> são obrigatórios — todo o resto é opcional (inclusive site de referência e Part Number),
+          Aqui entram os produtos que <b>ainda não fornecemos</b>. Só <b>Tipo</b> e <b>O que você precisa</b> são obrigatórios — todo o resto é opcional (inclusive o código, o site de referência e o Part Number),
           mas quanto mais você informar (site de referência, fotos, marca, modelo, contato do cliente), mais fácil é para a Engenharia e a Compra.
           Dados fiscais, NCM e código são preenchidos depois pelo setor responsável.
         </div>
@@ -539,18 +545,23 @@ function NovaView({ onSalvar, onCancelar, user }) {
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.label}>Categoria (SKU) *</label>
+            <label style={styles.label}>Código <span style={styles.opc}>(opcional)</span></label>
+            <div style={styles.ajuda}>Só o prefixo (ex.: VPER). O número é gerado na publicação: o próximo livre no Omie.</div>
             <select
               value={form.categoria_sku}
               onChange={(e) => setForm({ ...form, categoria_sku: e.target.value })}
-              style={{ ...styles.input, borderColor: erros.categoria_sku ? 'var(--vp-danger)' : '' }}
+              style={styles.input}
             >
-              <option value="">Selecione…</option>
-              {(S.CATEGORIAS_SKU || []).map((c) => (
-                <option key={c.valor} value={c.valor}>{c.label}</option>
+              <option value="">Ainda não sei</option>
+              {prefixos.map((p) => (
+                <option key={p.prefixo} value={p.prefixo}>
+                  {p.prefixo}{p.descricao ? ' — ' + p.descricao : ''}{p.qtd ? ' (' + p.qtd + ' ativos)' : ''}
+                </option>
               ))}
             </select>
-            {erros.categoria_sku && <div style={styles.erro}>{erros.categoria_sku}</div>}
+            {prefixoEscolhido && !prefixoEscolhido.geracao && (
+              <div style={styles.ajuda}>Este prefixo ainda não tem geração automática: a Engenharia informa o código completo na Ficha Técnica.</div>
+            )}
           </div>
         </div>
 
@@ -861,7 +872,7 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
       const rec = await window.FTStore.createDraft(state);
       await window.SolicitacoesProdutoStore.converterEmFicha(solicitacao.id, rec.id);
       onAtualizar({});
-      const familia = solicitacao.categoria_sku ? ` Família do código: ${solicitacao.categoria_sku} — informe o Código do Produto completo (ex.: ${solicitacao.categoria_sku}-258).` : '';
+      const familia = solicitacao.categoria_sku ? ` Prefixo do código: ${solicitacao.categoria_sku} — na publicação o sistema usa o próximo número livre no Omie (ou informe o Código do Produto completo).` : '';
       alert('Ficha técnica criada!' + familia + (semImagem ? '\nA imagem anexada não pôde ser copiada — anexe a foto na ficha.' : '') + '\nAbrindo editor…');
       if (window.VpRouter) {
         window.VpRouter.navigate('ficha-tecnica', rec.id);
@@ -964,7 +975,7 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
             <div style={styles.detalheValue}>{solicitacao.tipo_equipamento}</div>
           </div>
           <div style={styles.detalheRow}>
-            <div style={styles.detalheLabel}>Categoria (SKU):</div>
+            <div style={styles.detalheLabel}>Código (prefixo):</div>
             <div style={styles.detalheValue}>{solicitacao.categoria_sku || '—'}</div>
           </div>
           <div style={styles.detalheRow}>

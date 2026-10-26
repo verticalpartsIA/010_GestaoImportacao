@@ -58,7 +58,7 @@ window.SolicitacoesProdutoStore = (() => {
         id: `sol-${solicitacao.numero_solicitacao}`,
         level: 'info',
         title: `Nova Solicitação de Produto — ${solicitacao.numero_solicitacao}`,
-        sub: `${solicitacao.cliente_nome} · ${solicitacao.categoria_sku} · ${solicitacao.solicitante_nome}`,
+        sub: [solicitacao.cliente_nome, solicitacao.categoria_sku, solicitacao.solicitante_nome].filter(Boolean).join(' · '),
         module: 'Engenharia',
         resolved: false,
         destinatario_email: EMAIL_ENGENHARIA_RESPONSAVEL,
@@ -75,7 +75,7 @@ window.SolicitacoesProdutoStore = (() => {
         id: `sol-pronto-${solicitacao.numero_solicitacao}`,
         level: 'info',
         title: `Solicitação pronta para avaliação — ${solicitacao.numero_solicitacao}`,
-        sub: `${solicitacao.cliente_nome} · ${solicitacao.categoria_sku} · Engenharia: ${solicitacao.engenheiro_responsavel || '—'}`,
+        sub: [solicitacao.cliente_nome, solicitacao.categoria_sku, 'Engenharia: ' + (solicitacao.engenheiro_responsavel || '—')].filter(Boolean).join(' · '),
         module: 'Engenharia',
         resolved: false,
         destinatario_email: EMAIL_IMPORTACAO_RESPONSAVEL,
@@ -95,13 +95,56 @@ window.SolicitacoesProdutoStore = (() => {
     return `SOL-${ano}${mes}${dia}-${random}`;
   }
 
+  /* Prefixos de código (VPER, VPEL, VPIN…) que existem ativos no catálogo — alimenta a lista "Código".
+     Fonte: catálogo de importação + produtos do PCP já espelhados do Omie. Prefixos com "geracao: true"
+     têm geração automática do próximo número na publicação (function proximo-codigo-produto);
+     os demais a Engenharia informa o código completo na Ficha. */
+  const PREFIXOS_COM_GERACAO = ['VPEL', 'VPER', 'VPB', 'VPMP'];
+  const _DESC_PREFIXO = {
+    VPEL: 'Peça de Elevador', VPER: 'Peça de Escada/Esteira Rolante', VPB: 'Peça fornecida por BST', VPMP: 'Matéria-Prima',
+    VPIN: 'Insumo', VPKIT: 'Kit', VPCON: 'Consumo', VPAT: 'Ativo',
+  };
+  async function _codigosAtivos(c, tabela, filtroAtivo) {
+    const out = [];
+    for (let de = 0; de < 20000; de += 1000) {
+      let q = c.from(tabela).select('codigo').range(de, de + 999);
+      if (filtroAtivo) q = q.eq('ativo', true);
+      const { data, error } = await q;
+      if (error) throw error;
+      (data || []).forEach((r) => out.push(r.codigo));
+      if (!data || data.length < 1000) break;
+    }
+    return out;
+  }
+  async function listarPrefixosCodigo() {
+    const conta = {};
+    try {
+      const c = window.__VP_SB.sb;
+      const listas = await Promise.all([_codigosAtivos(c, 'importacao_varejo_produtos', true), _codigosAtivos(c, 'pcp_produtos', true)]);
+      const vistos = new Set();
+      listas.flat().forEach((cod) => {
+        const code = String(cod || '').toUpperCase().trim();
+        if (!code || vistos.has(code)) return;
+        vistos.add(code);
+        const m = code.match(/^(VP[A-Z]*)-?\d/);
+        if (m) conta[m[1]] = (conta[m[1]] || 0) + 1;
+      });
+    } catch (e) { console.warn('[SolicitacoesProdutoStore] prefixos do catálogo indisponíveis:', e); }
+    PREFIXOS_COM_GERACAO.forEach((p) => { if (!conta[p]) conta[p] = 0; });
+    const lista = Object.keys(conta)
+      .filter((p) => PREFIXOS_COM_GERACAO.includes(p) || conta[p] >= 2)
+      .map((p) => ({ prefixo: p, qtd: conta[p], geracao: PREFIXOS_COM_GERACAO.includes(p), descricao: _DESC_PREFIXO[p] || '' }));
+    lista.sort((a, b) => (b.geracao - a.geracao) || (b.qtd - a.qtd) || a.prefixo.localeCompare(b.prefixo));
+    return lista;
+  }
+
   async function criar(dados) {
     try {
       const payload = {
         numero_solicitacao: _gerarNumero(),
         status: 'novo',
         tipo_equipamento: dados.tipo_equipamento,
-        categoria_sku: dados.categoria_sku,
+        categoria_sku: dados.categoria_sku || null, // opcional: só o prefixo do código (VPER, VPEL…)
         tipo_cadastro: dados.tipo_cadastro || 'pecas',
         dados_cadastro: _dadosCadastro(dados),
         solicitante_nome: dados.solicitante_nome,
@@ -305,6 +348,7 @@ window.SolicitacoesProdutoStore = (() => {
     TIPOS,
     STATUS_LIST,
     CATEGORIAS_SKU,
+    listarPrefixosCodigo,
     TIPOS_CADASTRO,
     UNIDADES,
     FAMILIAS_INSUMO,
