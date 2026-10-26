@@ -46,6 +46,15 @@
     return rpc('separacao_enviar_fabricacao', { p_codigo_pedido: Number(codigoPedido), p_codigo: codigo, p_destino: destino });
   }
 
+  /* Envia o item a "quadro" ou "expedicao" (separacao_destinos). Da Corte, passar a OP em ordemId. */
+  async function enviarDestino(codigoPedido, codigo, destino, ordemId) {
+    return rpc('separacao_enviar_destino', { p_codigo_pedido: Number(codigoPedido), p_codigo: codigo, p_destino: destino, p_ordem_id: ordemId || null });
+  }
+  /* "Onde está": { enviados, ops } de um pedido (ou de todos, sem argumento). */
+  async function listarDestinos(codigoPedido) {
+    return rpc('separacao_destinos_listar', { p_codigo_pedido: codigoPedido == null ? null : Number(codigoPedido) });
+  }
+
   async function garantirLink(ordemId, destino, criadoPor) {
     const c = sb();
     const { data: ex } = await c.from('fab_links').select('token').eq('ordem_id', ordemId).maybeSingle();
@@ -102,5 +111,5 @@
     };
   }
 
-  window.FabricacaoOficinaStore = { obterPorToken, flegar, abrirOcorrencia, resolverOcorrencia, registrarSobra, enviarDaSeparacao, garantirLink, listar, urlPublica };
+  window.FabricacaoOficinaStore = { obterPorToken, flegar, abrirOcorrencia, resolverOcorrencia, registrarSobra, enviarDaSeparacao, enviarDestino, listarDestinos, garantirLink, listar, urlPublica };
 })();

@@ -31,6 +31,26 @@ test('pausado: só ocorrência aberta sem frente de trabalho', () => {
   assert.equal(C.pausado([{ status: 'resolvida', tem_frente_trabalho: false }]), false);
 });
 
+test('localizacaoDoItem: junta OPs de Corrimão/Corte e envios a Quadro/Expedição', () => {
+  const d = {
+    ops: [
+      { item_codigo: 'VP-1699', frente: 'corrimao', status: 'concluida' },
+      { item_codigo: 'VP-1699', frente: 'corrimao', status: 'em_producao' },
+      { item_codigo: 'VPEL-692', frente: 'corte', status: 'concluida' },
+      { item_codigo: 'VPEL-692', frente: 'corte', status: 'cancelada' },
+    ],
+    enviados: [
+      { codigo: 'VPEL-692', destino: 'expedicao' }, { codigo: 'VPEL-692', destino: 'expedicao' },
+      { codigo: 'VPB-086', destino: 'quadro' },
+    ],
+  };
+  assert.deepEqual(C.localizacaoDoItem('VP-1699', d), ['Corrimão: 1 de 2 prontas']);
+  assert.deepEqual(C.localizacaoDoItem('VPEL-692', d), ['Corte: pronto', 'Na Expedição']);
+  assert.deepEqual(C.localizacaoDoItem('VPB-086', d), ['No Quadro de Comando']);
+  assert.deepEqual(C.localizacaoDoItem('VPX-1', d), []);
+  assert.deepEqual(C.localizacaoDoItem('VPX-1', null), []);
+});
+
 test('unidadeDoTitulo', () => {
   assert.deepEqual(C.unidadeDoTitulo('Corrimão X — unidade 2/3'), { n: 2, de: 3 });
   assert.equal(C.unidadeDoTitulo('Corrimão X'), null);
