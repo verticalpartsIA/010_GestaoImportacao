@@ -9,6 +9,6 @@ select cron.schedule('omie-sync-pagamentos-instaladores-diario', '0 9 * * *', $c
       'Authorization', 'Bearer sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP'
     ),
     body := '{}'::jsonb,
-    timeout_milliseconds := 150000
+    timeout_milliseconds := 300000
   );
 $cmd$);
