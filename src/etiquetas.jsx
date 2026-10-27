@@ -283,7 +283,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   // Modelo escolhido à mão; senão o que tem exatamente o tamanho da etiqueta carregada (aproveita a etiqueta toda); senão o padrão do tipo.
   const modeloManual = C.modeloPorId(modeloEscolhido[tipo]);
   const modeloPr = tipo === 'PRATELEIRA' ? C.modeloPorId(prModo === 'rua' ? 'RUA_50x30' : 'PRATELEIRA_50x30') : null;
-  const modelo = modeloPr || modeloManual && modeloManual.tipo === tipo && modeloManual.ativo !== false ? modeloManual
+  const modelo = modeloPr ? modeloPr : modeloManual && modeloManual.tipo === tipo && modeloManual.ativo !== false ? modeloManual
     : (opcoesModelo.find((m) => Number(m.largura_mm) === geo.largura && Number(m.altura_mm) === geo.altura) || C.modeloPorId(tipoInfo.modelo));
   const avisoRolo = geo.erro;
   const ajuste = modelo ? C.adaptarModelo(modelo, geo.largura, geo.altura) : null;
