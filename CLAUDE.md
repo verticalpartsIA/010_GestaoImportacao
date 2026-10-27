@@ -473,6 +473,16 @@ Pedido do usuário (decisões fechadas por pergunta): o contrato do instalador �
 - Reflexo no e-mail: assunto do envio traz `VPNI-0955` (mesmo número de cotação que o regex de vínculo do `read-inbox` já reconhece) — não mexido em nada da área blindada.
 - `index.html`: engine v7→8, store v11→12, `contrato-instalador.jsx` v13→14, `master-id-engine.js` v4→5; `assinar.html`: engine v5→6, store v9→10. Testes: suíte 176/176. Não testado com clique real no navegador.
 
+## Contrato do Instalador — cláusulas do advogado e numeração da logística (27/10/2026, PR #1108, squash `8c7ccbf`)
+
+Pedido do usuário a partir de um advogado (5 imagens, uma a uma). Motor `contrato-instalador-engine.js` v17 (index/recibo) / v15 (assinar), `contrato-instalador.jsx` v44.
+- **Cláusulas novas**: 1.x liberação da obra (prazo só começa após liberação; 1.x.1 verificar condições; 1.x.2 impedimento não imputável suspende o prazo da atividade afetada), 4.3/4.3.1/4.3.2 (responsabilidade e regresso da CONTRATADA), 9.2 multa moratória de 0,5% ao dia, teto de 20% (a cláusula de penalidades fica `10.x` quando há logística: a numeração acompanha a posição real), logística 6.1 a 6.6.
+- **A liberação é o último item de "DO OBJETO" e o nº varia**: `1.4` no caso simples, `1.5` com cronograma de etapas ou em remoção (`nLib`). Não fixe `1.5`.
+- **Logística única para todos**: a escolha "responsável/modo" saiu da tela (Passo 3); o texto padrão do Jurídico vale sempre (a logística fica por conta da CONTRATADA, já no preço). `logModo`, `logResponsavel` e `logDiasExtra` seguem no estado inicial mas **não afetam mais o texto** (limpeza futura). Não reintroduza o ramo condicional sem pedido do Jurídico.
+- **Numeração**: `renumClauseItems` reescreve o primeiro segmento de `n` pela posição real da cláusula (`baseNum`); cláusulas condicionais (Equipamento Especial, Logística) usam `baseNum` em vez de prefixos `EE.`/`LG.`. Teste "numeração — itens seguem o cabeçalho da cláusula" cobre 5 cenários.
+- **Contratos já gerados não mudam**: `/assinar` usa o `doc` gravado; só contratos novos trazem o texto novo. Confirmado em produção que 0 de 6 contratos estavam sem `doc`.
+- **Não verificado**: clique real no Passo 3 e o contrato gerado; o advogado ainda não viu o resultado.
+
 ## Compras Nacional — tela limpa para reserva de novo processo (29/09/2026, PR #496 / issue #497)
 
 Usuário pediu pra investigar `/logistica/compras` ("Compras Nacional", rota `compras`). Achado: a tela (`ComprasPage` em `src/logistica.jsx`) nunca teve tabela/fluxo próprios — reaproveitava a tabela `embarques` (a mesma do módulo de **Importação**) e só relabelava os status ("Liberação aduaneira" → "Aguardando coleta", "Em trânsito" → "Saiu CD" etc.), com vários elementos stub: botão "Abrir" sem `onClick`, filtro "Transportadora" `disabled` ("em desenvolvimento"), colunas Motorista/Valor sempre `—`/`null`, KPI "Custo médio frete" fixo em "—", "Ocorrências" só um booleano derivado do status.
