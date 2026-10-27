@@ -1897,3 +1897,12 @@ Caso real: pedido 30614 (OP-0021, só itens do PCP, sem quadro de comando) mostr
 - `etiquetas.jsx` v29: `chiLista = C.CHICOTES + extras` sempre que há pedido escolhido; a seleção inicial também não depende de `sem_quadro`. A caixa só decide a impressão; casa de máquinas/porta oposta só pré-marcam. Os avisos/caixas "casa de máquinas", "porta oposta" e o "Marcar todos/Limpar" aparecem em pedido sem quadro também.
 - **Não reintroduza `sem_quadro` como filtro da lista de chicotes** (ele ainda existe em `etiquetas-store.js` só como marca do pedido; os cabos do pedido continuam listados abaixo).
 - Validado por Babel e `npm test` (722); sem clique real no navegador.
+
+## Etiquetas › Prateleira / Rua — posições D/E e placa da rua (27/10/2026, PR #1117, squash `fba5006`)
+
+Pedido do Gelson: etiquetas para prateleiras parecidas com as de porta-paletes (13 ruas; rua 1 só com lado Direito, as demais com Direito e Esquerdo; cada lado com 3 colunas A–C × 5 níveis), impressas em **50 × 30, 2 etiquetas por linha**. Novo tipo `PRATELEIRA` em `/logistica/etiquetas/gerar/prateleira` (`etiquetas-calc.js` v26, `etiquetas.jsx` v30; sem migration, sem banco novo).
+- **Posições da prateleira** (modelo `PRATELEIRA_50x30`): marca-se Direita (D), Esquerda (E) ou os dois; colunas (padrão 3) e níveis (padrão 5) são campos editáveis. Gera `D A 5 … D C 1` (15 por lado, de cima para baixo); "Cópias" imprime quantos conjuntos quiser. **A etiqueta NÃO leva a rua** (o mesmo conjunto serve para qualquer rua).
+- **Placa da rua** (modelo `RUA_50x30`): uma por rua, de R<de> a R<até> (padrão R1–R13; aumentar o "até" acrescenta R14, R15…, máx. 200).
+- **QR/Code 128 = formato NOVO, ainda NÃO registrado na issue #862:** `POS:DA5` (posição; Code 128 `DA5`) e `RUA:R1`. **Registrar na #862 (ou trocar o formato) antes de o app de estoque ler ou de imprimir em quantidade.** Funções: `dadosPosicaoPrateleira`, `dadosPlacaRua`, `posicoesPrateleira`.
+- **Não mexido de propósito:** o endereço `R<rua><vão><nível>` (236 posições + EXP), `validarEnderecoNovo` e a aba Endereço continuam iguais. O usuário não decidiu se as prateleiras novas substituem o formato `R2A4`; isso é mudança à parte e mexe no app de estoque. "12 prateleiras" (como o usuário disse) não está ligado à rua: o sistema só imprime os conjuntos marcados.
+- Testes: +1 em `etiquetas-calc.test.js`; suíte 817/817. **Não testado no navegador nem na impressora.**
