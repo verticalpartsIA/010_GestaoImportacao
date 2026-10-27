@@ -329,14 +329,20 @@ Deno.serve(async (req) => {
     // 1.1) Código vazio → SKU novo. Gera o próximo código livre (categoria da
     // Solicitação de Produto que originou esta ficha) e cadastra o produto de
     // verdade no Omie antes de seguir pro anexo do PDF.
-    if (!codigo_produto) {
+    // Código só com o prefixo (ex.: "VPEL", sem número) também conta como vazio:
+    // o prefixo digitado vira a categoria e o sistema gera o próximo número livre
+    // (VPEL-999 → VPEL-1000). Código com número é tratado como produto existente.
+    const soPrefixo = !!codigo_produto && /^[A-Za-z]+-?$/.test(String(codigo_produto).trim());
+    if (!codigo_produto || soPrefixo) {
       const { data: solicitacao } = await sb
         .from("solicitacoes_produto")
         .select("categoria_sku")
         .eq("ficha_tecnica_id", ficha_id)
         .maybeSingle();
 
-      const categoria = solicitacao?.categoria_sku;
+      const categoria = soPrefixo
+        ? String(codigo_produto).trim().replace(/-+$/, "").toUpperCase()
+        : solicitacao?.categoria_sku;
       if (!categoria) {
         return json({
           error: 'Preencha o "Código do Produto (Omie)" na ficha antes de publicar (não foi possível determinar a categoria automaticamente — esta ficha não veio de uma Solicitação de Produto com categoria definida).',
