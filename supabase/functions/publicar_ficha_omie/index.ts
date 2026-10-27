@@ -254,7 +254,7 @@ async function urlPublicaDaFoto(fotoPath: string | null | undefined, codigo: str
     const destino = `produtos-fotos/${String(codigo).replace(/[^A-Za-z0-9-]/g, "")}.${ext}`;
     const up = await sb.storage.from("engenharia").upload(destino, dl.data, { upsert: true, contentType: dl.data.type || `image/${ext === "jpg" ? "jpeg" : ext}` });
     if (up.error) { console.warn("[publicar_ficha_omie] foto não copiada:", up.error.message); return null; }
-    return sb.storage.from("engenharia").getPublicUrl(destino).data.publicUrl + `?v=${Date.now()}`;
+    return sb.storage.from("engenharia").getPublicUrl(destino).data.publicUrl;
   } catch (e) {
     console.warn("[publicar_ficha_omie] foto falhou:", (e as Error).message);
     return null;
@@ -454,9 +454,11 @@ Deno.serve(async (req) => {
     });
     // Imagem em chamada à parte: se o Omie recusar a URL, o sync dos demais campos não é perdido.
     let imagemOk: boolean | null = null;
+    let imagemErro = "";
     if (fotoUrl) {
       const img = await omieCall("geral/produtos", "AlterarProduto", { codigo: codigo_produto, imagens: [{ url_imagem: fotoUrl }] });
       imagemOk = img.ok;
+      imagemErro = String(img.data?.faultstring || "").slice(0, 140);
       if (!img.ok) console.warn("[publicar_ficha_omie] imagem do produto falhou:", img.data?.faultstring || img.data);
     }
     if (!alteracao.ok) {
@@ -548,7 +550,7 @@ Deno.serve(async (req) => {
       detalhe: {
         codigo_produto, arquivo: nomeArquivo, omie_nid: nIdProduto, omie_anexo_id: nIdAnexo,
         substituido: foiSubstituido, produto_recem_criado: produtoRecemCriado,
-        sync_campos_ok: alteracao.ok, imagem_ok: imagemOk, caracteristicas: caracteristicasResultado,
+        sync_campos_ok: alteracao.ok, imagem_ok: imagemOk, imagem_erro: imagemErro || null, caracteristicas: caracteristicasResultado,
       },
     });
     if (logError) console.warn("vp_logs falhou:", logError.message);
@@ -556,7 +558,7 @@ Deno.serve(async (req) => {
     const caractSufixo = caracteristicas.length
       ? ` · ${caracteristicasResultado.ok}/${caracteristicas.length} características sincronizadas`
       : "";
-    const imagemSufixo = imagemOk === true ? " · imagem enviada" : (imagemOk === false ? " · ⚠️ imagem não aceita pelo Omie" : "");
+    const imagemSufixo = imagemOk === true ? " · imagem enviada" : (imagemOk === false ? (" · ⚠️ imagem não aceita pelo Omie" + (imagemErro ? ` (${imagemErro})` : "")) : "");
 
     return json({
       sucesso: true,
