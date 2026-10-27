@@ -829,19 +829,7 @@ function CIStepLogistica({ s, set, errors }) {
       {longa && (
         <div className="ci-field-group ci-field-group--cond">
           <h3 className="ci-group-title">Cláusula de logística e deslocamento</h3>
-          <label className="ci-mini-label">Forma de tratamento</label>
-          <CISegmented value={s.logModo} onChange={(v) => set('logModo', v)} options={[{ value: 'despesas', label: 'Despesas à parte' }, { value: 'prazo', label: 'Extensão de prazo' }]} />
-          {s.logModo === 'despesas' && (
-            <div style={{ marginTop: 16 }}>
-              <label className="ci-mini-label">Despesas por conta de</label>
-              <CISegmented value={s.logResponsavel} onChange={(v) => set('logResponsavel', v)} options={[{ value: 'contratada', label: 'Contratada' }, { value: 'contratante', label: 'Contratante' }]} />
-            </div>
-          )}
-          {s.logModo === 'prazo' && (
-            <div className="ci-grid" style={{ marginTop: 16 }}>
-              <CIField label="Dias adicionais de prazo" required width="narrow" mono value={s.logDiasExtra} onChange={(v) => set('logDiasExtra', v.replace(/\D/g, ''))} placeholder="10" error={errors.logDiasExtra} />
-            </div>
-          )}
+          <p className="ci-hint" style={{ margin: 0 }}>Texto padrão definido pelo Jurídico: a logística e o deslocamento ficam por conta da CONTRATADA e já estão incluídos no preço ajustado. Não há nada a escolher aqui.</p>
         </div>
       )}
     </div>
@@ -1451,7 +1439,6 @@ function ciValidateStep(idx, s) {
   if (idx === 3 && window.CI.isLongaDistancia(s)) {
     obrig('obraCidade', 'Informe a cidade da obra.');
     if (!/^[A-Za-z]{2}$/.test((s.obraEstado || '').trim())) e.obraEstado = 'UF com 2 letras.';
-    if (s.logModo === 'prazo') obrig('logDiasExtra', 'Informe os dias adicionais.');
   }
   if (idx === 4) {
     const total = Math.round(window.CI.moedaParaNumero(s.valorTotal) * 100);
