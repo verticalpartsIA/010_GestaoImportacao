@@ -162,6 +162,32 @@
     };
   }
 
+  // Prateleira (porta-palete em prateleira com lado D/E, coluna A.. e nível 1..): a etiqueta da POSIÇÃO não leva a rua, vale para qualquer rua.
+  // QR = "POS:DA5" (formato NOVO, ainda NÃO registrado na issue #862: registrar antes de o app de estoque ler). Placa da rua: QR = "RUA:R1".
+  function dadosPosicaoPrateleira(r) {
+    const lado = String(r.lado || '').trim().toUpperCase().charAt(0) === 'E' ? 'E' : 'D';
+    const coluna = String(r.coluna || 'A').trim().toUpperCase().charAt(0) || 'A';
+    const nivel = Math.max(1, Math.floor(Number(r.nivel) || 1));
+    return {
+      lado_txt: lado === 'D' ? 'LADO DIREITO' : 'LADO ESQUERDO',
+      posicao_txt: `${lado} ${coluna} ${nivel}`,
+      qr: `POS:${lado}${coluna}${nivel}`,
+      barras: `${lado}${coluna}${nivel}`,
+    };
+  }
+  function dadosPlacaRua(r) {
+    const n = Math.max(1, Math.floor(Number(r.rua) || 1));
+    return { titulo_txt: 'RUA', rua_txt: `R${n}`, qr: `RUA:R${n}`, barras: `R${n}` };
+  }
+  // Todas as posições de uma prateleira: lados ['D','E'], colunas (letras A..) e níveis, de cima para baixo como na prateleira.
+  function posicoesPrateleira(lados, colunas, niveis) {
+    const out = [];
+    const nc = Math.max(1, Math.min(26, Math.floor(Number(colunas) || 1)));
+    const nn = Math.max(1, Math.min(20, Math.floor(Number(niveis) || 1)));
+    for (const lado of lados) for (let n = nn; n >= 1; n--) for (let c = 0; c < nc; c++) out.push({ lado, coluna: String.fromCharCode(65 + c), nivel: n });
+    return out;
+  }
+
   // Palete: QR = "PAL:<código do palete>" (formato NOVO, registrado na issue #862). itens = [{codigo, quantidade, unidade}].
   function dadosPalete(r) {
     const t = (v) => String(v == null ? '' : v).trim();
@@ -474,6 +500,30 @@
         { tipo: 'texto', campo: '{item_txt}', x: 2, y: 10, w: 46, h: 4.2, linhas: 2 },
         { tipo: 'texto', campo: '{desc_txt}', x: 2, y: 19.8, w: 46, h: 2.6, linhas: 2, peso: 'normal' },
         { tipo: 'texto', campo: '{rodape_txt}', x: 2, y: 26.5, w: 46, h: 2.2 },
+      ],
+    },
+    {
+      id: 'PRATELEIRA_50x30', tipo: 'PRATELEIRA', nome: 'Prateleira — posição (50 × 30, 2 colunas)', largura_mm: 50, altura_mm: 30,
+      proposito: 'Etiqueta da posição na prateleira: lado (D/E), coluna e nível, ex.: "D A 5". Não leva a rua, serve para qualquer rua. Rolo de 2 etiquetas de 50 × 30 mm.',
+      campos: ['lado_txt', 'posicao_txt', 'qr', 'barras'],
+      elementos: [
+        { tipo: 'imagem', src: 'icone', x: 2, y: 2, w: 6.5, h: 6.5 },
+        { tipo: 'texto', campo: '{lado_txt}', x: 10, y: 3, w: 38, h: 4 },
+        { tipo: 'texto', campo: '{posicao_txt}', x: 2, y: 10, w: 31, h: 11 },
+        { tipo: 'qr', campo: '{qr}', x: 35, y: 9.5, w: 12.5 },
+        { tipo: 'code128', campo: '{barras}', x: 1, y: 23.2, w: 48, h: 5.5 },
+      ],
+    },
+    {
+      id: 'RUA_50x30', tipo: 'PRATELEIRA', nome: 'Placa da rua (50 × 30, 2 colunas)', largura_mm: 50, altura_mm: 30,
+      proposito: 'Placa de identificação de uma rua do galpão (R1, R2, R3…). Uma etiqueta por rua.',
+      campos: ['titulo_txt', 'rua_txt', 'qr', 'barras'],
+      elementos: [
+        { tipo: 'imagem', src: 'icone', x: 2, y: 2, w: 6.5, h: 6.5 },
+        { tipo: 'texto', campo: '{titulo_txt}', x: 10, y: 3, w: 38, h: 4 },
+        { tipo: 'texto', campo: '{rua_txt}', x: 2, y: 10, w: 31, h: 11 },
+        { tipo: 'qr', campo: '{qr}', x: 35, y: 9.5, w: 12.5 },
+        { tipo: 'code128', campo: '{barras}', x: 1, y: 23.2, w: 48, h: 5.5 },
       ],
     },
     {
@@ -1052,7 +1102,7 @@
     DV_PESOS, validarEnderecoNovo, MODELOS, DADOS_TESTE, modeloPorId, modelosDoTipo, registrarModelos, modelosDaEmpresa, validarModelo,
     normalizarEndereco, parseEndereco, dvEndereco, textoEndereco, todosEnderecos,
     tipoEndereco, listaEnderecos, normalizarPrateleira, rotuloEndereco,
-    dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, dadosExpedicaoVolume, dadosFabricacao, textoQtdFabricacao, dadosCaboPedido, CHICOTES, chicoteDisponivel, chicoteTipoObra, dadosChicote, LOGO_PRETO, ICONE_PRETO, REMETENTE, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderZPLLinhas, zplImagem, renderZPLImagem, renderSVG, renderSVGLinha, htmlImpressao,
+    dadosEndereco, dadosPosicaoPrateleira, dadosPlacaRua, posicoesPrateleira, dadosItem, dadosRecebimento, dadosSeparacao, dadosExpedicaoVolume, dadosFabricacao, textoQtdFabricacao, dadosCaboPedido, CHICOTES, chicoteDisponivel, chicoteTipoObra, dadosChicote, LOGO_PRETO, ICONE_PRETO, REMETENTE, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderZPLLinhas, zplImagem, renderZPLImagem, renderSVG, renderSVGLinha, htmlImpressao,
     ROLO_LIM, geometriaRolo, adaptarModelo,
   };
 }());

@@ -90,6 +90,7 @@ function useEtqBwip() {
 
 const ETQ_TIPOS = [
   { id: 'ENDERECO', nome: 'Endereço', modelo: 'ENDERECO_VIGA_100x50', desc: 'Posição do porta-palete (QR END:R2A4)' },
+  { id: 'PRATELEIRA', nome: 'Prateleira / Rua', modelo: 'PRATELEIRA_50x30', desc: 'Posições da prateleira (D A 5…) e placa da rua (R1…R13), 50 × 30' },
   { id: 'ITEM', nome: 'Item', modelo: 'ITEM_100x50', desc: 'Produto: QR e Code 128 com o código' },
   { id: 'RECEBIMENTO', nome: 'Recebimento', modelo: 'RECEBIMENTO_100x50', desc: 'Carga que chegou: P.I., fornecedor, item e quantidade' },
   { id: 'SEPARACAO', nome: 'Separação', modelo: 'SEPARACAO_100x100', desc: 'Volume n/N de um pedido de venda (100 × 50, 100 × 100 ou 100 × 150)' },
@@ -102,7 +103,7 @@ const ETQ_TIPOS = [
   { id: 'CHICOTE_QUADRO', nome: 'Chicote do quadro', modelo: 'CHICOTE_50x30', desc: 'Fiação que acompanha o quadro: "FAN | 1212 Modernização" (50 × 30, só texto)' },
 ];
 // Endereço de cada tipo na URL: /logistica/etiquetas/gerar/<slug>
-const ETQ_SLUG_TIPO = { ENDERECO: 'endereco', ITEM: 'item', RECEBIMENTO: 'recebimento', SEPARACAO: 'separacao', EXPEDICAO: 'expedicao-nf', PALETE: 'palete', IDTAG_EQUIPAMENTO: 'id-tag', OP_QUADRO: 'op-serie-quadro', AVARIA: 'avaria', CHICOTE_QUADRO: 'chicote-quadro', FABRICACAO_OP: 'fabricacao-op' };
+const ETQ_SLUG_TIPO = { ENDERECO: 'endereco', PRATELEIRA: 'prateleira', ITEM: 'item', RECEBIMENTO: 'recebimento', SEPARACAO: 'separacao', EXPEDICAO: 'expedicao-nf', PALETE: 'palete', IDTAG_EQUIPAMENTO: 'id-tag', OP_QUADRO: 'op-serie-quadro', AVARIA: 'avaria', CHICOTE_QUADRO: 'chicote-quadro', FABRICACAO_OP: 'fabricacao-op' };
 const ETQ_TIPO_SLUG = Object.fromEntries(Object.entries(ETQ_SLUG_TIPO).map(([k, v]) => [v, k]));
 const etqHoje = () => new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 // Valores crus dos campos do rolo (podem estar vazios enquanto a pessoa digita); sem eles, vale o formato antigo "100x50".
@@ -257,6 +258,21 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   const setTipo = (id, opts) => setSegTipo(ETQ_SLUG_TIPO[id] || 'endereco', opts);
   React.useEffect(() => { if (!ETQ_TIPO_SLUG[segTipo]) setSegTipo('endereco', { replace: true }); }, [segTipo]);
   const [copias, setCopias] = React.useState(1);
+  /* Prateleira / Rua: posições (lado D/E × coluna × nível) e placa da rua (R<de> a R<até>) */
+  const [prModo, setPrModo] = React.useState('posicao');
+  const [prLados, setPrLados] = React.useState({ D: true, E: false });
+  const [prCols, setPrCols] = React.useState('3');
+  const [prNiveis, setPrNiveis] = React.useState('5');
+  const [prRuaDe, setPrRuaDe] = React.useState('1');
+  const [prRuaAte, setPrRuaAte] = React.useState('13');
+  const prLinhas = () => {
+    if (prModo === 'rua') {
+      const de = Math.max(1, Math.floor(Number(prRuaDe) || 1)), ate = Math.min(200, Math.max(de, Math.floor(Number(prRuaAte) || de)));
+      return Array.from({ length: ate - de + 1 }, (_, k) => de + k).map((n) => ({ ref: `R${n}`, dados: C.dadosPlacaRua({ rua: n }), copias }));
+    }
+    const lados = ['D', 'E'].filter((l) => prLados[l]);
+    return C.posicoesPrateleira(lados, prCols, prNiveis).map((x) => { const d = C.dadosPosicaoPrateleira(x); return { ref: d.posicao_txt, dados: d, copias }; });
+  };
   const [usarDv, setUsarDv] = React.useState(etqLerDv());
   const tipoInfo = ETQ_TIPOS.find((t) => t.id === tipo);
   const opcoesModelo = C.modelosDoTipo(tipo);
@@ -266,7 +282,8 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   const geo = C.geometriaRolo(cfg, perfil);
   // Modelo escolhido à mão; senão o que tem exatamente o tamanho da etiqueta carregada (aproveita a etiqueta toda); senão o padrão do tipo.
   const modeloManual = C.modeloPorId(modeloEscolhido[tipo]);
-  const modelo = modeloManual && modeloManual.tipo === tipo && modeloManual.ativo !== false ? modeloManual
+  const modeloPr = tipo === 'PRATELEIRA' ? C.modeloPorId(prModo === 'rua' ? 'RUA_50x30' : 'PRATELEIRA_50x30') : null;
+  const modelo = modeloPr || modeloManual && modeloManual.tipo === tipo && modeloManual.ativo !== false ? modeloManual
     : (opcoesModelo.find((m) => Number(m.largura_mm) === geo.largura && Number(m.altura_mm) === geo.altura) || C.modeloPorId(tipoInfo.modelo));
   const avisoRolo = geo.erro;
   const ajuste = modelo ? C.adaptarModelo(modelo, geo.largura, geo.altura) : null;
@@ -461,6 +478,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   const expDados = (v) => C.dadosExpedicaoVolume({ nf: nfSel.numero_nf, pedido: nfSel.numero_pedido, volume: v, total_volumes: expN, destinatario: nfSel.cliente_nome, transportadora: nfSel.transportadora_nome, endereco: nfSel.cliente_endereco });
 
   const linhasParaImprimir = () => {
+    if (tipo === 'PRATELEIRA') return prLinhas();
     if (tipo === 'EXPEDICAO') return Array.from({ length: expN - expIni + 1 }, (_, k) => expIni + k).map((v) => ({ ref: `NF ${nfSel.numero_nf} vol ${v}/${expN}`, dados: expDados(v), copias }));
     if (tipo === 'PALETE') return [{ ref: palCodigo, dados: palDados(), copias }];
     if (tipo === 'IDTAG_EQUIPAMENTO') return obraTag.obra.equipamentos.filter((c) => tagSel.has(c)).map((c) => ({ ref: c, dados: tagDados(c), copias }));
@@ -479,12 +497,13 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
     }
     return Array.from(selItem.values()).map((p) => ({ ref: p.codigo, dados: C.dadosItem(p), copias }));
   };
-  const nSel = tipo === 'PALETE' ? (piSel && recSel.size && palCodigo ? 1 : 0) : tipo === 'IDTAG_EQUIPAMENTO' ? tagSel.size : tipo === 'OP_QUADRO' ? (opSel ? 1 : 0) : tipo === 'CHICOTE_QUADRO' ? (chiPronto ? chiLista.filter((c) => chiSel.has(c.codigo)).length + caboLinhas().length : 0) : tipo === 'FABRICACAO_OP' ? (fabOp && fabMat ? fabN : 0) : tipo === 'AVARIA' ? (avItem && Number(avQtd) > 0 && avMotivo.trim().length >= 3 ? 1 : 0) : tipo === 'RECEBIMENTO' ? recSel.size : tipo === 'SEPARACAO' ? (pedSel ? sepN - Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1))) + 1 : 0) : tipo === 'EXPEDICAO' ? (nfSel ? expN - expIni + 1 : 0) : tipo === 'ENDERECO' ? selEnd.size : selItem.size;
+  const nSel = tipo === 'PRATELEIRA' ? prLinhas().length : tipo === 'PALETE' ? (piSel && recSel.size && palCodigo ? 1 : 0) : tipo === 'IDTAG_EQUIPAMENTO' ? tagSel.size : tipo === 'OP_QUADRO' ? (opSel ? 1 : 0) : tipo === 'CHICOTE_QUADRO' ? (chiPronto ? chiLista.filter((c) => chiSel.has(c.codigo)).length + caboLinhas().length : 0) : tipo === 'FABRICACAO_OP' ? (fabOp && fabMat ? fabN : 0) : tipo === 'AVARIA' ? (avItem && Number(avQtd) > 0 && avMotivo.trim().length >= 3 ? 1 : 0) : tipo === 'RECEBIMENTO' ? recSel.size : tipo === 'SEPARACAO' ? (pedSel ? sepN - Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1))) + 1 : 0) : tipo === 'EXPEDICAO' ? (nfSel ? expN - expIni + 1 : 0) : tipo === 'ENDERECO' ? selEnd.size : selItem.size;
   const primeiraRef = tipo === 'ENDERECO'
     ? (Array.from(selEnd)[0] || (filtrados[0] && filtrados[0].codigo))
     : (Array.from(selItem.keys())[0] || (achados.itens[0] && achados.itens[0].codigo));
   const dadosPrevia = React.useMemo(() => {
     try {
+      if (tipo === 'PRATELEIRA') { const l = prLinhas(); return l[0] ? l[0].dados : null; }
       if (tipo === 'PALETE') return piSel && recSel.size && palCodigo ? palDados() : null;
       if (tipo === 'IDTAG_EQUIPAMENTO') { const c = obraTag.obra && (obraTag.obra.equipamentos.find((x) => tagSel.has(x)) || obraTag.obra.equipamentos[0]); return c ? tagDados(c) : null; }
       if (tipo === 'OP_QUADRO') return opSel ? opDados() : null;
@@ -499,7 +518,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
       const p = selItem.get(primeiraRef) || achados.itens.find((x) => x.codigo === primeiraRef);
       return p ? C.dadosItem(p) : null;
     } catch (e) { return null; }
-  }, [tipo, primeiraRef, usarDv, selItem, achados, piSel, recSel, recQtd, recNf, pedSel, sepN, sepDe, sepPor, sepAguarda, nfSel, expN, expIni, palCod, obraTag, tagSel, opSel, opSerie, chiPed, chiSel, avQtd, avMotivo]);
+  }, [tipo, prModo, prLados, prCols, prNiveis, prRuaDe, prRuaAte, primeiraRef, usarDv, selItem, achados, piSel, recSel, recQtd, recNf, pedSel, sepN, sepDe, sepPor, sepAguarda, nfSel, expN, expIni, palCod, obraTag, tagSel, opSel, opSerie, chiPed, chiSel, avQtd, avMotivo]);
 
   const copiasValidas = Math.max(1, Math.min(50, Math.floor(Number(copias) || 1)));
   // Prévia com várias colunas: cada coluna mostra a PRÓXIMA etiqueta da fila (a impressão também preenche as colunas em sequência),
@@ -526,7 +545,36 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(300px, 1fr)', gap: 16, alignItems: 'start' }}>
         <div>
-          {tipo === 'IDTAG_EQUIPAMENTO' ? (
+          {tipo === 'PRATELEIRA' ? (
+            <>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                <button className={'btn btn--sm' + (prModo === 'posicao' ? ' btn--primary' : '')} onClick={() => setPrModo('posicao')}>Posições da prateleira</button>
+                <button className={'btn btn--sm' + (prModo === 'rua' ? ' btn--primary' : '')} onClick={() => setPrModo('rua')}>Placa da rua</button>
+              </div>
+              {prModo === 'posicao' ? (
+                <div className="card" style={{ padding: 12 }}>
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+                    <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={prLados.D} onChange={(e) => setPrLados((l) => ({ ...l, D: e.target.checked }))}/> Direita (D)</label>
+                    <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={prLados.E} onChange={(e) => setPrLados((l) => ({ ...l, E: e.target.checked }))}/> Esquerda (E)</label>
+                    <label style={{ fontSize: 12 }}>Colunas (A, B, C…) <input className="input" type="number" min="1" max="26" value={prCols} onChange={(e) => setPrCols(e.target.value)} style={{ width: 64 }}/></label>
+                    <label style={{ fontSize: 12 }}>Níveis <input className="input" type="number" min="1" max="20" value={prNiveis} onChange={(e) => setPrNiveis(e.target.value)} style={{ width: 64 }}/></label>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 8 }}>Marque Direita, Esquerda ou os dois e use "Cópias" para imprimir quantos conjuntos quiser. A etiqueta não leva a rua: serve para qualquer rua.</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, Math.min(26, Math.floor(Number(prCols) || 1)))}, minmax(0, 1fr))`, gap: 4, maxWidth: 360 }}>
+                    {prLinhas().slice(0, Math.max(1, Math.min(26, Math.floor(Number(prCols) || 1))) * Math.max(1, Math.min(20, Math.floor(Number(prNiveis) || 1)))).map((l, i) => <div key={i} style={{ border: '1px solid var(--border, #ddd)', borderRadius: 4, padding: '2px 6px', fontSize: 12, textAlign: 'center' }}>{l.ref}</div>)}
+                  </div>
+                </div>
+              ) : (
+                <div className="card" style={{ padding: 12 }}>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <label style={{ fontSize: 12 }}>Da rua R <input className="input" type="number" min="1" value={prRuaDe} onChange={(e) => setPrRuaDe(e.target.value)} style={{ width: 72 }}/></label>
+                    <label style={{ fontSize: 12 }}>até a rua R <input className="input" type="number" min="1" max="200" value={prRuaAte} onChange={(e) => setPrRuaAte(e.target.value)} style={{ width: 72 }}/></label>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--fg3)', marginTop: 8 }}>Uma etiqueta por rua. Para acrescentar a R14, R15… basta aumentar o "até".</div>
+                </div>
+              )}
+            </>
+          ) : tipo === 'IDTAG_EQUIPAMENTO' ? (
             <>
               <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
                 <input className="input" placeholder="Nº da cotação (ex.: 985)" value={qCot} onChange={(e) => setQCot(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') buscarTag(); }} style={{ width: 200 }}/>
@@ -876,7 +924,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
         </div>
 
         <div style={{ position: 'sticky', top: 12 }}>
-          {opcoesModelo.length > 1 ? (
+          {opcoesModelo.length > 1 && tipo !== 'PRATELEIRA' ? (
             <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>Modelo
               <select className="input" aria-label="Modelo" style={{ width: 'auto' }} value={modelo.id} onChange={(e) => setModeloEscolhido((m) => ({ ...m, [tipo]: e.target.value }))}>
                 {opcoesModelo.map((m) => <option key={m.id} value={m.id}>{m.nome}{m.empresa ? ' (da empresa)' : ' (padrão)'} — {m.largura_mm} × {m.altura_mm}</option>)}
@@ -916,6 +964,7 @@ const etqExemploDe = (m) => {
   const C = ETQ_CALC();
   const t = m.tipo;
   return t === 'ENDERECO' ? C.dadosEndereco('R2A4', { dv: true })
+    : t === 'PRATELEIRA' ? (m.id === 'RUA_50x30' ? C.dadosPlacaRua({ rua: 2 }) : C.dadosPosicaoPrateleira({ lado: 'D', coluna: 'A', nivel: 5 }))
     : t === 'RECEBIMENTO' ? C.dadosRecebimento({ data: '17/10/2026', embarque: '146', pi: 'SCVP260522-2', fornecedor: 'Ningbo Senchen', codigo: 'VPEL-156', descricao: 'Rolete para correia Poly-V 6PK', quantidade: 40, unidade: 'UN', nf: '11082199' })
     : t === 'SEPARACAO' ? C.dadosSeparacao({ pedido: '30570', volume: 2, total_volumes: 5, cliente: 'AKAI KB MAGAZINE', separador: 'Tiago', data: '17/10/2026 14:32' })
     : t === 'EXPEDICAO' ? C.dadosExpedicaoVolume({ nf: '22019', pedido: '28988', volume: 13, total_volumes: 19, destinatario: 'BAR DO CUSCUZ E RESTAURANTE LTDA', transportadora: 'CLIENTE RETIRA', endereco: 'RUA DOUTOR SEVERINO RIBEIRO CRUZ, 771, CENTRO, CAMPINA GRANDE (PB)/PB, 58400258' })
