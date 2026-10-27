@@ -241,6 +241,26 @@ async function sincronizarCaracteristicas(nIdProduto: number, itens: { nome: str
   return { ok, falhas };
 }
 
+/* Foto da Ficha Técnica → imagem do produto no Omie (campo imagens[].url_imagem).
+   A foto mora no bucket privado fichas-imagens; o Omie precisa de uma URL pública,
+   então copiamos para o bucket público "engenharia" (produtos-fotos/<código>.<ext>)
+   e mandamos essa URL. Best-effort: sem foto ou com falha, a publicação segue. */
+async function urlPublicaDaFoto(fotoPath: string | null | undefined, codigo: string): Promise<string | null> {
+  if (!fotoPath) return null;
+  try {
+    const dl = await sb.storage.from("fichas-imagens").download(fotoPath);
+    if (dl.error || !dl.data) { console.warn("[publicar_ficha_omie] foto não baixada:", dl.error?.message); return null; }
+    const ext = (fotoPath.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    const destino = `produtos-fotos/${String(codigo).replace(/[^A-Za-z0-9-]/g, "")}.${ext}`;
+    const up = await sb.storage.from("engenharia").upload(destino, dl.data, { upsert: true, contentType: dl.data.type || `image/${ext === "jpg" ? "jpeg" : ext}` });
+    if (up.error) { console.warn("[publicar_ficha_omie] foto não copiada:", up.error.message); return null; }
+    return sb.storage.from("engenharia").getPublicUrl(destino).data.publicUrl + `?v=${Date.now()}`;
+  } catch (e) {
+    console.warn("[publicar_ficha_omie] foto falhou:", (e as Error).message);
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "Método não permitido" }, 405);
@@ -283,7 +303,7 @@ Deno.serve(async (req) => {
     // preciso cadastrar produto novo, categoria da Solicitação de Produto)
     const { data: ficha, error: fichaError } = await sb
       .from("fichas_tecnicas")
-      .select("id, nome_produto, codigo_produto, numero_documento, ncm_recomendado, descricao_comercial, descricao_tecnica, descricao_duimp, identificacao, cats")
+      .select("id, nome_produto, codigo_produto, numero_documento, ncm_recomendado, descricao_comercial, descricao_tecnica, descricao_duimp, identificacao, cats, midia")
       .eq("id", ficha_id)
       .single();
     if (fichaError || !ficha) return json({ error: "Ficha não encontrada" }, 404);
@@ -426,11 +446,19 @@ Deno.serve(async (req) => {
     // criação) — sem isso, editar a Ficha depois de o produto já existir
     // no Omie nunca chegava lá. Best-effort: falha aqui não derruba a
     // publicação (o anexo do PDF, mais abaixo, é a ação principal).
+    const fotoUrl = await urlPublicaDaFoto(((ficha.midia || {}) as Record<string, string>).foto, String(codigo_produto));
     const alteracao = await omieCall("geral/produtos", "AlterarProduto", {
       codigo: codigo_produto,
       ncm: ficha.ncm_recomendado || undefined,
       ...camposMapeados,
     });
+    // Imagem em chamada à parte: se o Omie recusar a URL, o sync dos demais campos não é perdido.
+    let imagemOk: boolean | null = null;
+    if (fotoUrl) {
+      const img = await omieCall("geral/produtos", "AlterarProduto", { codigo: codigo_produto, imagens: [{ url_imagem: fotoUrl }] });
+      imagemOk = img.ok;
+      if (!img.ok) console.warn("[publicar_ficha_omie] imagem do produto falhou:", img.data?.faultstring || img.data);
+    }
     if (!alteracao.ok) {
       console.warn("[publicar_ficha_omie] AlterarProduto (sync de campos) falhou:", alteracao.data?.faultstring || alteracao.data);
     }
@@ -520,7 +548,7 @@ Deno.serve(async (req) => {
       detalhe: {
         codigo_produto, arquivo: nomeArquivo, omie_nid: nIdProduto, omie_anexo_id: nIdAnexo,
         substituido: foiSubstituido, produto_recem_criado: produtoRecemCriado,
-        sync_campos_ok: alteracao.ok, caracteristicas: caracteristicasResultado,
+        sync_campos_ok: alteracao.ok, imagem_ok: imagemOk, caracteristicas: caracteristicasResultado,
       },
     });
     if (logError) console.warn("vp_logs falhou:", logError.message);
@@ -528,6 +556,7 @@ Deno.serve(async (req) => {
     const caractSufixo = caracteristicas.length
       ? ` · ${caracteristicasResultado.ok}/${caracteristicas.length} características sincronizadas`
       : "";
+    const imagemSufixo = imagemOk === true ? " · imagem enviada" : (imagemOk === false ? " · ⚠️ imagem não aceita pelo Omie" : "");
 
     return json({
       sucesso: true,
@@ -535,7 +564,7 @@ Deno.serve(async (req) => {
         ? `🆕 Produto ${codigo_produto} cadastrado no Omie e ficha anexada (${nomeArquivo})`
         : (foiSubstituido
           ? `🔄 Ficha republicada — PDF substituído no produto ${codigo_produto} no Omie (${nomeArquivo})`
-          : `✅ Ficha anexada ao produto ${codigo_produto} no Omie (${nomeArquivo})`)) + caractSufixo,
+          : `✅ Ficha anexada ao produto ${codigo_produto} no Omie (${nomeArquivo})`)) + caractSufixo + imagemSufixo,
       codigo_produto,
       substituido: foiSubstituido,
       produto_recem_criado: produtoRecemCriado,
