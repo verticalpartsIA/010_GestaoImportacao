@@ -447,22 +447,18 @@ Deno.serve(async (req) => {
     // no Omie nunca chegava lá. Best-effort: falha aqui não derruba a
     // publicação (o anexo do PDF, mais abaixo, é a ação principal).
     const fotoUrl = await urlPublicaDaFoto(((ficha.midia || {}) as Record<string, string>).foto, String(codigo_produto));
+    // Imagem vai na MESMA chamada dos demais campos: uma 2ª AlterarProduto seguida ao mesmo
+    // produto é barrada pelo Omie ("requisição já processada… tente novamente às HH:MM").
     const alteracao = await omieCall("geral/produtos", "AlterarProduto", {
       codigo: codigo_produto,
       ncm: ficha.ncm_recomendado || undefined,
       ...camposMapeados,
+      ...(fotoUrl ? { imagens: [{ url_imagem: fotoUrl }] } : {}),
     });
-    // Imagem em chamada à parte: se o Omie recusar a URL, o sync dos demais campos não é perdido.
-    let imagemOk: boolean | null = null;
-    let imagemErro = "";
-    if (fotoUrl) {
-      const img = await omieCall("geral/produtos", "AlterarProduto", { codigo: codigo_produto, imagens: [{ url_imagem: fotoUrl }] });
-      imagemOk = img.ok;
-      imagemErro = String(img.data?.faultstring || "").slice(0, 140);
-      if (!img.ok) console.warn("[publicar_ficha_omie] imagem do produto falhou:", img.data?.faultstring || img.data);
-    }
+    const imagemOk: boolean | null = fotoUrl ? alteracao.ok : null;
+    const imagemErro = alteracao.ok ? "" : String(alteracao.data?.faultstring || `resposta sem faultstring: ${JSON.stringify(alteracao.data).slice(0, 120)}`).slice(0, 160);
     if (!alteracao.ok) {
-      console.warn("[publicar_ficha_omie] AlterarProduto (sync de campos) falhou:", alteracao.data?.faultstring || alteracao.data);
+      console.warn("[publicar_ficha_omie] AlterarProduto (sync de campos/imagem) falhou:", alteracao.data?.faultstring || alteracao.data);
     }
 
     // 2.2) Sincroniza as características dinâmicas (Elétricas, Velocidade,
@@ -558,7 +554,7 @@ Deno.serve(async (req) => {
     const caractSufixo = caracteristicas.length
       ? ` · ${caracteristicasResultado.ok}/${caracteristicas.length} características sincronizadas`
       : "";
-    const imagemSufixo = imagemOk === true ? " · imagem enviada" : (imagemOk === false ? (" · ⚠️ imagem não aceita pelo Omie" + (imagemErro ? ` (${imagemErro})` : "")) : "");
+    const imagemSufixo = imagemOk === true ? " · imagem enviada" : (imagemOk === false ? (" · ⚠️ sincronização de campos/imagem falhou no Omie (" + imagemErro + ")") : "");
 
     return json({
       sucesso: true,
