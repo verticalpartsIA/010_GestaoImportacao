@@ -730,7 +730,12 @@ function FtGenerator({ initial, onSaved, onCancel }) {
                 user.nome,
                 user.setor
               );
-              if (res) setState((s) => ({ ...s, omie_publicado_em: new Date().toISOString() }));
+              if (res) setState((s) => ({
+                ...s,
+                omie_publicado_em: new Date().toISOString(),
+                // produto novo: herda o código gerado no Omie (ex.: VPEL-1000)
+                identificacao: res.codigo_produto ? { ...s.identificacao, codigoProduto: res.codigo_produto } : s.identificacao,
+              }));
             } catch (e) { console.error('[Omie publish]', e); }
           }}
           title={(() => {
