@@ -603,7 +603,7 @@ function QcResultadoSecao({ quadroId, podeGerar, salvarAntes }) {
       if (salvarAntes && !(await salvarAntes())) return;
       const r = await window.QuadroComandoStore.gerarBomECortes(quadroId);
       if (r.erroVariante) window.toast?.(r.erroVariante, 'warning');
-      else window.toast?.('BOM e lista de corte gerados.', 'success');
+      else window.toast?.('BOM e lista de corte gerados' + (r.fonteBom ? ' — lista de materiais: ' + r.fonteBom : '') + '.', 'success');
       reload();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setGerando(false); }
