@@ -530,6 +530,15 @@
     },
   };
 
+  /* Modelos de LOP: os padrões BST (vidro) ou, se o vendedor escolheu outro código no hub, a família dele
+     (`familia` = { sobe, desce, dois } com os SKUs; a descrição vem do catálogo). */
+  function modelosLop(comDisplay, familia, catalogoPorSku) {
+    if (!familia) return LOP_MODELOS[comDisplay ? 'com' : 'sem'];
+    const cat = catalogoPorSku || {};
+    const m = (sku) => [sku, (cat[sku] && cat[sku].descricao) || ('Botoeira de Pavimento ' + sku)];
+    return { sobe: m(familia.sobe), desce: m(familia.desce), dois: m(familia.dois) };
+  }
+
   function calcularLop(numParadas, botoesIntermediarios) {
     const n = parseInt(numParadas, 10);
     if (!Number.isFinite(n) || n < 2) return null;
@@ -543,11 +552,11 @@
     };
   }
 
-  function montarItensLop(numParadas, botoesIntermediarios, catalogoPorSku, comDisplay) {
+  function montarItensLop(numParadas, botoesIntermediarios, catalogoPorSku, comDisplay, familia) {
     const r = calcularLop(numParadas, botoesIntermediarios);
     if (!r) return [];
     const cat = catalogoPorSku || {};
-    const m = LOP_MODELOS[comDisplay ? 'com' : 'sem'];
+    const m = modelosLop(comDisplay, familia, catalogoPorSku);
     const regra = `${r.paradas} paradas: térreo ▲ (Seta Subida), último ▼ (Seta Descida), ${r.doisBotoes ? 'intermediários com 2 botões (1 Sobe e 1 Desce)' : 'intermediários com 1 botão'}.`;
     const linha = (modelo, quantidade, confianca, extra) => ({
       sku: modelo[0], descricao: (cat[modelo[0]] && cat[modelo[0]].descricao) || modelo[1], unidade: 'un',
@@ -573,16 +582,18 @@
 
   function montarItensInspecao(escopo, catalogoPorSku) {
     const cat = catalogoPorSku || {};
-    return INSPECAO_MODELOS.filter(([chave]) => ((escopo || {})[chave] || {}).decisao === 'fornecer').map(([, sku, desc]) => ({
-      sku, descricao: (cat[sku] && cat[sku].descricao) || desc, unidade: 'un', grupo_separacao: 'componentes', quantidade: 1,
-      origem: 'calculado_geometria', confianca: 'confirmado', memoria_calculo: 'Escopo: fornecer. 1 botoeira por elevador.',
-    }));
+    return INSPECAO_MODELOS.filter(([chave]) => ((escopo || {})[chave] || {}).decisao === 'fornecer').map(([chave, skuPadrao, desc]) => {
+      const escolhido = String(((escopo || {})[chave] || {}).codigo || '').trim();
+      const sku = escolhido || skuPadrao;
+      return { sku, descricao: (cat[sku] && cat[sku].descricao) || (escolhido ? escolhido : desc), unidade: 'un', grupo_separacao: 'componentes', quantidade: 1,
+        origem: 'calculado_geometria', confianca: 'confirmado', memoria_calculo: 'Escopo: fornecer. 1 botoeira por elevador.' + (escolhido ? ' Código escolhido no hub.' : '') };
+    });
   }
 
   /* LOP lendo a quantidade de cada parada (frontal e traseira). Cada face é uma
      sequência: 1ª parada com LOP = térreo (Seta Subida), última = Seta Descida,
      as do meio = 2 botões (ou 1 botão). A quantidade manual da parada multiplica. */
-  function montarItensLopParadas(paradas, botoesIntermediarios, catalogoPorSku, comDisplay) {
+  function montarItensLopParadas(paradas, botoesIntermediarios, catalogoPorSku, comDisplay, familia) {
     const qtdDe = (v, padrao) => { const t = String(v == null ? '' : v).trim(); if (t === '') return padrao; const n = Number(t.replace(',', '.')); return Number.isFinite(n) && n >= 0 ? n : padrao; };
     const faces = [
       (paradas || []).filter((p) => p.abertura_frontal !== false).map((p) => qtdDe(p.qtd_lop_frontal, 1)),
@@ -599,7 +610,7 @@
     });
     if (!nFaces) return [];
     const cat = catalogoPorSku || {};
-    const m = LOP_MODELOS[comDisplay ? 'com' : 'sem'];
+    const m = modelosLop(comDisplay, familia, catalogoPorSku);
     const regra = `${nFaces === 2 ? 'Frontal e traseira' : 'Uma face'}: primeira parada ▲ (Seta Subida), última ▼ (Seta Descida), ${dois ? 'intermediárias com 2 botões (1 Sobe e 1 Desce)' : 'intermediárias com 1 botão'}; usa as quantidades de LOP de cada parada.`;
     const linha = (modelo, quantidade, confianca, extra) => ({
       sku: modelo[0], descricao: (cat[modelo[0]] && cat[modelo[0]].descricao) || modelo[1], unidade: 'un',

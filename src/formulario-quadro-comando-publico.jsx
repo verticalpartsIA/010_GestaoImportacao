@@ -61,7 +61,13 @@
     ['barreira_luz', 'Barreira de Luz (Cortina) da Porta'],
     ['pesador', 'Pesador de Carga'],
     ['camera', 'Câmera na Cabina'],
+    ['maquina_tracao', 'Máquina de Tração'],
+    ['portas', 'Portas de Cabina e Pavimento'],
   ];
+
+  // Tensão nominal de cada modelo — usada só pro aviso quando a rede do prédio é outra.
+  const TENSAO_DO_MODELO = { '7.5_220': 220, '7.5_380': 380, '15_220': 220, '15_380': 380, '30_380': 380 };
+  const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 
   const LABELS = {
     modernizacao: 'Modernização', elevador_novo: 'Elevador Novo',
@@ -79,11 +85,12 @@
   const DEFAULT_FORM = {
     tipo_servico: '', cnpj: '', empresa: '', solicitante: '', telefone: '', email: '',
     identificacao: '', num_paradas: '',
-    variante_quadro: '', tensao_rede: '', tensao_rede_outro: '', potencia_motor: '', tensao_motor: '',
-    corrente_nominal: '', aplicacao: '', atendimento: '', num_botoeiras: '',
+    variante_quadro: '', tensao_rede: '', tensao_rede_outro: '',
     tipo_porta: '', operador_porta: '', tipo_freio: '', tensao_freio: '',
     acionamento: '', encoder: '', engrenagem: '', casa_maquinas: '',
-    acessorios: {}, lop_botoes: '', ind_cor: '', observacoes: '',
+    acessorios: {}, ind_cor: '', observacoes: '',
+    cop_display: '', lop_material: '', lop_botoes: '', lop_display: '', logo_arquivo: null,
+    porta_oposta: '', porta_oposta_paradas: [], porta_cabina_codigo: '', porta_pavimento_codigo: '', maquina_codigo: '',
     fiacao_omitida: false, dist: [], f_l1: '', f_ua: '', f_tr: '', f_bp: '', f_lim: '', f_fp: '',
     obs_fiacao: '',
   };
@@ -291,6 +298,46 @@
       return d;
     }
 
+    const [catalogo, setCatalogo] = React.useState({ maquinas: [], portas_cabina: [], portas_pavimento: [], carregando: false, erro: '' });
+    const [erroLogo, setErroLogo] = React.useState('');
+
+    // Catálogo (máquinas de tração e portas do Omie): só busca quando o cliente marca um dos dois itens.
+    const precisaCatalogo = !!(f.acessorios.maquina_tracao || f.acessorios.portas);
+    React.useEffect(() => {
+      if (!precisaCatalogo || catalogo.carregado || catalogo.carregando) return;
+      setCatalogo((c) => ({ ...c, carregando: true, erro: '' }));
+      fetch(EDGE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'catalogo' }) })
+        .then((r) => r.json().catch(() => ({})))
+        .then((d) => {
+          if (!d || !d.success) throw new Error('catalogo');
+          setCatalogo({ maquinas: d.maquinas || [], portas_cabina: d.portas_cabina || [], portas_pavimento: d.portas_pavimento || [], carregando: false, carregado: true, erro: '' });
+        })
+        .catch(() => setCatalogo((c) => ({ ...c, carregando: false, erro: 'Não foi possível carregar a lista agora. Tente de novo em instantes ou remova a seleção.' })));
+      // eslint-disable-next-line
+    }, [precisaCatalogo]);
+
+    const tensaoRedeNum = f.tensao_rede === 'outro' ? parseInt(f.tensao_rede_outro, 10) : parseInt(f.tensao_rede, 10);
+    const tensaoModelo = TENSAO_DO_MODELO[f.variante_quadro];
+    const avisoTensao = tensaoModelo && tensaoRedeNum && tensaoRedeNum !== tensaoModelo
+      ? `o modelo escolhido é de ${tensaoModelo} V e a rede do prédio é de ${tensaoRedeNum} V. Confira — se a rede for diferente da do quadro, pode ser necessário um transformador (nossa equipe confirma na proposta).`
+      : null;
+    const qtdParadas = parseInt(f.num_paradas, 10) || 0;
+    const totalLop = qtdParadas + (f.porta_oposta === 'sim' ? (f.porta_oposta_paradas || []).length : 0);
+
+    function escolherLogo(file) {
+      setErroLogo('');
+      if (!file) return;
+      if (file.size > LOGO_MAX_BYTES) { setErroLogo('Arquivo maior que 2 MB — envie uma imagem menor.'); return; }
+      if (!/^image\/(png|jpeg|webp)$/.test(file.type)) { setErroLogo('Formato não aceito — use PNG, JPG ou WebP.'); return; }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dados = String(reader.result || '').split(',')[1] || '';
+        set({ logo_arquivo: { nome: file.name, tipo: file.type, dados } });
+      };
+      reader.onerror = () => setErroLogo('Não foi possível ler o arquivo.');
+      reader.readAsDataURL(file);
+    }
+
     function validar(p) {
       const e = [];
       if (p === 0) { if (!f.tipo_servico) e.push('Tipo de Serviço'); }
@@ -306,11 +353,6 @@
       if (p === 2) {
         if (!f.variante_quadro) e.push('Modelo do Quadro (potência/tensão)');
         if (!f.tensao_rede) e.push('Tensão da Rede');
-        if (!f.potencia_motor) e.push('Potência do Motor');
-        if (!f.tensao_motor) e.push('Tensão do Motor');
-        if (!f.aplicacao) e.push('Aplicação');
-        if (!f.atendimento) e.push('Atendimento');
-        if (['duplex', 'triplex', 'quadriplex'].includes(f.atendimento) && !f.num_botoeiras) e.push('Nº de Botoeiras');
       }
       if (p === 3) {
         if (!f.tipo_porta) e.push('Tipo de Porta');
@@ -320,7 +362,18 @@
         if (!f.acionamento) e.push('Tipo de Acionamento');
         if (f.acionamento === 'vf' && !f.casa_maquinas) e.push('Casa de Máquinas');
       }
-      if (p === 4 && f.acessorios.lop && !f.lop_botoes) e.push('LOP: 1 ou 2 botões nos andares intermediários');
+      if (p === 4) {
+        if (f.acessorios.cop && !f.cop_display) e.push('COP: com ou sem display');
+        if (f.acessorios.lop) {
+          if (!f.lop_material) e.push('LOP: material (vidro ou aço escovado)');
+          if (!f.lop_botoes) e.push('LOP: 1 ou 2 botões nos andares intermediários');
+          if (!f.lop_display) e.push('LOP: com ou sem display');
+        }
+        if (!f.porta_oposta) e.push('Porta oposta: informe se existe');
+        if (f.porta_oposta === 'sim' && !(f.porta_oposta_paradas || []).length) e.push('Porta oposta: marque os andares que ela atende');
+        if (f.acessorios.maquina_tracao && !f.maquina_codigo) e.push('Máquina de Tração: escolha um modelo da lista ou remova a seleção "Máquina de Tração"');
+        if (f.acessorios.portas && !(f.porta_cabina_codigo || f.porta_pavimento_codigo)) e.push('Portas: escolha um modelo da lista ou remova a seleção "Portas de Cabina e Pavimento"');
+      }
       if (p === 5 && !f.fiacao_omitida) {
         if (!f.f_l1) e.push('Fiação: L1');
         if (!f.f_ua) e.push('Fiação: UA');
@@ -348,6 +401,10 @@
         const acessoriosLista = ACESSORIOS.filter(([k]) => f.acessorios[k]).map(([, l]) => l);
         const corpo = {
           ...f,
+          logo_arquivo: undefined,
+          logo_upload: f.logo_arquivo || null,
+          logo_cliente: f.logo_arquivo ? f.logo_arquivo.nome : '',
+          total_lop: f.acessorios.lop ? totalLop : 0,
           acessorios: acessoriosLista.join(', '),
           acessorios_chaves: ACESSORIOS.filter(([k]) => f.acessorios[k]).map(([k]) => k),
           distancias: (f.dist || []).map((d, i) => `${i + 1}# - De: ${d.de} - Até: ${d.ate} - Metros: ${d.m}`).filter((_, i) => f.dist[i] && f.dist[i].m).join('\n'),
@@ -437,27 +494,12 @@
                 <TSelect value={f.tensao_rede} onChange={(v) => set({ tensao_rede: v })} options={[{ value: '220', label: '220 V' }, { value: '380', label: '380 V' }, { value: '440', label: '440 V' }, { value: 'outro', label: 'Outra' }]}/>
               </Field>
               {f.tensao_rede === 'outro' && <Field label="Tensão da Rede — Outro (V)"><TInput type="number" value={f.tensao_rede_outro} onChange={(v) => set({ tensao_rede_outro: v })}/></Field>}
-              <Field label="Potência do Motor (HP)" req><TInput type="number" step="0.5" value={f.potencia_motor} placeholder="Ex: 15" onChange={(v) => set({ potencia_motor: v })}/></Field>
-              <Field label="Tensão do Motor (V)" req><TInput type="number" value={f.tensao_motor} placeholder="Ex: 220" onChange={(v) => set({ tensao_motor: v })}/></Field>
-              <Field label="Corrente Nominal do Motor (A)" hint={f.corrente_nominal ? `▶ Inversor recomendado: ${(parseFloat(f.corrente_nominal) * 2 / 1.5).toFixed(1)}A nominais` : null}>
-                <TInput type="number" step="0.1" value={f.corrente_nominal} placeholder="Ex: 45" onChange={(v) => set({ corrente_nominal: v })}/>
-              </Field>
             </Grid>
-            <Grid cols={2}>
-              <Field label="Aplicação" req>
-                <RadioGroup name="aplicacao" value={f.aplicacao} onChange={(v) => set({ aplicacao: v })}
-                  options={[['residencial', 'Residencial'], ['comercial', 'Comercial'], ['hospitalar', 'Hospitalar'], ['industrial', 'Industrial']].map(([value, label]) => ({ value, label }))}/>
-              </Field>
-              <Field label="Atendimento" req>
-                <RadioGroup name="atendimento" value={f.atendimento} onChange={(v) => set({ atendimento: v })}
-                  options={[['simplex', 'Simplex'], ['duplex', 'Duplex'], ['triplex', 'Triplex'], ['quadriplex', 'Quadriplex']].map(([value, label]) => ({ value, label }))}/>
-                {['duplex', 'triplex', 'quadriplex'].includes(f.atendimento) && (
-                  <div style={{ marginTop: 10, maxWidth: 200 }}>
-                    <Field label="Nº de Botoeiras" req><TInput type="number" min="1" max="4" value={f.num_botoeiras} onChange={(v) => set({ num_botoeiras: v })}/></Field>
-                  </div>
-                )}
-              </Field>
-            </Grid>
+            {avisoTensao && (
+              <div style={{ background: '#fff8e1', borderLeft: '4px solid #ffc107', borderRadius: '0 6px 6px 0', padding: '12px 16px', fontSize: 13, color: '#5d4037' }}>
+                <strong>⚠️ Atenção:</strong> {avisoTensao}
+              </div>
+            )}
           </Section>
         )}
 
@@ -511,22 +553,109 @@
         {passo === 4 && (
           <React.Fragment>
             <Section icon="💡" passo="acessorios" title="Acessórios" tag="Passo 4 de 5">
-              <Field label="Cor dos Indicadores">
-                <RadioGroup name="ind_cor" value={f.ind_cor} onChange={(v) => set({ ind_cor: v })}
-                  options={[['vermelho', 'Vermelho'], ['azul', 'Azul'], ['branco', 'Branco']].map(([value, label]) => ({ value, label }))}/>
-              </Field>
+              <p style={{ fontSize: 13, color: 'var(--gray-700)', margin: 0 }}>Marque o que você precisa. Cada item marcado abre perguntas curtas logo abaixo.</p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
                 {ACESSORIOS.map(([key, label]) => (
                   <CheckOption key={key} label={label} checked={!!f.acessorios[key]} onChange={(v) => setAcessorio(key, v)}/>
                 ))}
               </div>
-              {f.acessorios.lop && (
-                <Field label="LOP — nos andares intermediários, a botoeira terá:" req hint="Térreo leva só ▲ e o último andar só ▼. Nos intermediários: 2 botões (▲ e ▼) ou 1 botão só.">
+            </Section>
+
+            {f.acessorios.cop && (
+              <Section icon="🔘" passo="acessorios" title="COP — Botoeira de Cabina">
+                <Field label="A botoeira de cabina terá display?" req>
+                  <RadioGroup name="cop_display" value={f.cop_display} onChange={(v) => set({ cop_display: v })}
+                    options={[{ value: 'com', label: 'Com display' }, { value: 'sem', label: 'Sem display' }]}/>
+                </Field>
+              </Section>
+            )}
+
+            {f.acessorios.lop && (
+              <Section icon="🏢" passo="acessorios" title="LOP — Botoeira de Pavimento">
+                <Grid cols={2}>
+                  <Field label="Material do espelho" req>
+                    <RadioGroup name="lop_material" value={f.lop_material} onChange={(v) => set({ lop_material: v })}
+                      options={[{ value: 'vidro', label: 'Espelho em vidro' }, { value: 'aco_escovado', label: 'Aço escovado' }]}/>
+                  </Field>
+                  <Field label="Botoeira com display?" req>
+                    <RadioGroup name="lop_display" value={f.lop_display} onChange={(v) => set({ lop_display: v })}
+                      options={[{ value: 'com', label: 'Com display' }, { value: 'sem', label: 'Sem display' }]}/>
+                  </Field>
+                </Grid>
+                <Field label="Nos andares intermediários, a botoeira terá:" req hint="Térreo leva só ▲ e o último andar só ▼. Nos intermediários: 2 botões (▲ e ▼) ou 1 botão só.">
                   <RadioGroup name="lop_botoes" value={f.lop_botoes} onChange={(v) => set({ lop_botoes: v })}
                     options={[{ value: '2', label: '2 botões (▲ subir e ▼ descer)' }, { value: '1', label: '1 botão' }]}/>
                 </Field>
+                <Field label="Logo da empresa (opcional)" hint="Se quiser a logo gravada na botoeira, envie a imagem (PNG, JPG ou WebP, até 2 MB).">
+                  <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => escolherLogo(e.target.files && e.target.files[0])}/>
+                  {f.logo_arquivo && (
+                    <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>✓ {f.logo_arquivo.nome} <a href="#" onClick={(ev) => { ev.preventDefault(); set({ logo_arquivo: null }); }} style={{ color: 'var(--danger)', marginLeft: 8 }}>remover</a></span>
+                  )}
+                  {erroLogo && <span style={{ fontSize: 12, color: 'var(--danger)' }}>{erroLogo}</span>}
+                </Field>
+              </Section>
+            )}
+
+            <Section icon="🚪" passo="acessorios" title="Porta oposta">
+              <Field label="O elevador tem porta oposta (entrada e saída em lados diferentes)?" req>
+                <RadioGroup name="porta_oposta" value={f.porta_oposta} onChange={(v) => set({ porta_oposta: v, porta_oposta_paradas: v === 'sim' ? f.porta_oposta_paradas : [] })}
+                  options={[{ value: 'nao', label: 'Não' }, { value: 'sim', label: 'Sim' }]}/>
+              </Field>
+              {f.porta_oposta === 'sim' && (
+                <Field label="Quais andares a porta oposta atende?" req>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {Array.from({ length: Math.min(parseInt(f.num_paradas, 10) || 0, 64) }, (_, i) => i + 1).map((n) => (
+                      <CheckOption key={n} label={`${n}º`} checked={(f.porta_oposta_paradas || []).includes(n)}
+                        onChange={(v) => set({ porta_oposta_paradas: v ? [...f.porta_oposta_paradas, n].sort((a, b) => a - b) : f.porta_oposta_paradas.filter((x) => x !== n) })}/>
+                    ))}
+                  </div>
+                </Field>
+              )}
+              {f.acessorios.lop && (
+                <div style={{ background: 'var(--vp-yellow-tint)', border: '1.5px solid var(--vp-yellow-press)', borderRadius: 8, padding: '10px 14px', fontSize: 13 }}>
+                  <strong>Botoeiras de pavimento (LOP):</strong> {totalLop} no total
+                  {f.porta_oposta === 'sim' ? ` (${parseInt(f.num_paradas, 10) || 0} na frente + ${(f.porta_oposta_paradas || []).length} na porta oposta)` : ' (todas na frente)'}.
+                </div>
               )}
             </Section>
+
+            {(f.acessorios.lip || f.cop_display === 'com' || f.lop_display === 'com') && (
+              <Section icon="🎨" passo="acessorios" title="Cor dos indicadores / display">
+                <Field label="Cor do display">
+                  <RadioGroup name="ind_cor" value={f.ind_cor} onChange={(v) => set({ ind_cor: v })}
+                    options={[['vermelho', 'Vermelho'], ['azul', 'Azul'], ['branco', 'Branco']].map(([value, label]) => ({ value, label }))}/>
+                </Field>
+              </Section>
+            )}
+
+            {f.acessorios.maquina_tracao && (
+              <Section icon="⚙️" passo="acessorios" title="Máquina de Tração — escolha o modelo">
+                <Field label="Modelos disponíveis" req hint="Se nenhum atende, remova a seleção “Máquina de Tração” acima — nossa equipe indica o modelo certo na proposta.">
+                  <TSelect value={f.maquina_codigo} onChange={(v) => set({ maquina_codigo: v })}
+                    placeholder={catalogo.carregando ? 'Carregando modelos…' : '-- Escolha um modelo --'}
+                    options={(catalogo.maquinas || []).map((m) => ({ value: m.codigo, label: m.descricao }))}/>
+                </Field>
+                {catalogo.erro && <span style={{ fontSize: 12, color: 'var(--danger)' }}>{catalogo.erro}</span>}
+              </Section>
+            )}
+
+            {f.acessorios.portas && (
+              <Section icon="🚪" passo="acessorios" title="Portas de Cabina e Pavimento — escolha o modelo">
+                <Grid cols={2}>
+                  <Field label="Porta de Cabina" hint="Se nenhum atende, remova a seleção “Portas” acima.">
+                    <TSelect value={f.porta_cabina_codigo} onChange={(v) => set({ porta_cabina_codigo: v })}
+                      placeholder={catalogo.carregando ? 'Carregando modelos…' : '-- Escolha um modelo --'}
+                      options={(catalogo.portas_cabina || []).map((m) => ({ value: m.codigo, label: m.descricao }))}/>
+                  </Field>
+                  <Field label="Porta de Pavimento">
+                    <TSelect value={f.porta_pavimento_codigo} onChange={(v) => set({ porta_pavimento_codigo: v })}
+                      placeholder={catalogo.carregando ? 'Carregando modelos…' : '-- Escolha um modelo --'}
+                      options={(catalogo.portas_pavimento || []).map((m) => ({ value: m.codigo, label: m.descricao }))}/>
+                  </Field>
+                </Grid>
+                {catalogo.erro && <span style={{ fontSize: 12, color: 'var(--danger)' }}>{catalogo.erro}</span>}
+              </Section>
+            )}
             <Section icon="📝" passo="acessorios" title="Observações">
               <Field label="Observações gerais" hint="Qualquer detalhe adicional relevante pro orçamento">
                 <textarea value={f.observacoes} onChange={(e) => set({ observacoes: e.target.value })} rows={4}
@@ -596,13 +725,22 @@
                 ['Obra / Referência', f.identificacao], ['Nº de Paradas', f.num_paradas], ['Tipo de Serviço', lbl(f.tipo_servico)],
                 ['Modelo do Quadro', (VARIANTES_QUADRO.find((v) => v.value === f.variante_quadro) || {}).label || '—'],
                 ['Tensão da Rede', f.tensao_rede === 'outro' ? `${f.tensao_rede_outro} V (outro)` : `${f.tensao_rede} V`],
-                ['Potência do Motor', `${f.potencia_motor} HP`], ['Tensão do Motor', `${f.tensao_motor} V`],
-                ['Aplicação', lbl(f.aplicacao)], ['Atendimento', lbl(f.atendimento) + (f.num_botoeiras ? ` (${f.num_botoeiras} botoeiras)` : '')],
                 ['Tipo de Porta', lbl(f.tipo_porta)], ['Operador de Porta', lbl(f.operador_porta)],
                 ['Tipo de Freio', lbl(f.tipo_freio) + (f.tensao_freio ? ` — ${f.tensao_freio} V` : '')],
                 ['Acionamento', lbl(f.acionamento)], ['Casa de Máquinas', lbl(f.casa_maquinas)],
                 ['Acessórios', ACESSORIOS.filter(([k]) => f.acessorios[k]).map(([, l]) => l).join(' · ') || 'Nenhum'],
-                ...(f.acessorios.lop ? [['LOP nos intermediários', f.lop_botoes === '1' ? '1 botão' : '2 botões (▲ e ▼)']] : []),
+                ...(f.acessorios.cop ? [['COP', f.cop_display === 'com' ? 'Com display' : 'Sem display']] : []),
+                ...(f.acessorios.lop ? [
+                  ['LOP — material', f.lop_material === 'vidro' ? 'Espelho em vidro' : 'Aço escovado'],
+                  ['LOP — intermediários', (f.lop_botoes === '1' ? '1 botão' : '2 botões (▲ e ▼)') + (f.lop_display === 'com' ? ' · com display' : ' · sem display')],
+                  ['LOP — total de botoeiras', String(totalLop)],
+                  ['LOP — logo', f.logo_arquivo ? f.logo_arquivo.nome : '—'],
+                ] : []),
+                ['Porta oposta', f.porta_oposta === 'sim' ? `Sim — andares ${(f.porta_oposta_paradas || []).join(', ')}` : 'Não'],
+                ...(f.ind_cor ? [['Cor do display', ({ vermelho: 'Vermelho', azul: 'Azul', branco: 'Branco' })[f.ind_cor]]] : []),
+                ...(f.maquina_codigo ? [['Máquina de Tração', ((catalogo.maquinas || []).find((m) => m.codigo === f.maquina_codigo) || {}).descricao || f.maquina_codigo]] : []),
+                ...(f.porta_cabina_codigo ? [['Porta de Cabina', ((catalogo.portas_cabina || []).find((m) => m.codigo === f.porta_cabina_codigo) || {}).descricao || f.porta_cabina_codigo]] : []),
+                ...(f.porta_pavimento_codigo ? [['Porta de Pavimento', ((catalogo.portas_pavimento || []).find((m) => m.codigo === f.porta_pavimento_codigo) || {}).descricao || f.porta_pavimento_codigo]] : []),
                 ['Observações', f.observacoes || '—'],
                 ['Fiação de Poço', f.fiacao_omitida ? 'Omitida — valores padrão' : `L1:${f.f_l1}m UA:${f.f_ua}m TR:${f.f_tr}m BP:${f.f_bp}m LIM:${f.f_lim}m FP:${f.f_fp}m`],
               ].filter(([, v]) => v).map(([k, v]) => (
