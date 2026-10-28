@@ -175,14 +175,19 @@
     const quadro = await obter(quadroId);
     if (!quadro) throw new Error('Quadro de comando não encontrado.');
 
-    const varianteKey = engine.chaveVariante(quadro.maquina.potencia_kw, quadro.maquina.tensao_v);
+    // O modelo escolhido no Escopo manda (a tensão da aba Máquina é a da REDE do prédio e pode diferir da do quadro);
+    // sem modelo no Escopo, vale potência/tensão da máquina como antes.
+    const modeloEscopo = String((((quadro.escopo_fornecimento || {}).quadro_comando) || {}).detalhe || '').match(/^(7\.5|15|30)_(220|380)$/);
+    const potVariante = modeloEscopo ? Number(modeloEscopo[1]) : quadro.maquina.potencia_kw;
+    const tensVariante = modeloEscopo ? Number(modeloEscopo[2]) : quadro.maquina.tensao_v;
+    const varianteKey = engine.chaveVariante(potVariante, tensVariante);
     const catalogo = await catalogoPorSku();
 
     let bomItens = [];
     let erroVariante = null;
     let fonteBom = null;
     // 1º a estrutura do produto no Omie (pcp_estrutura); só cai na lista fixa do código se a variante não tiver produto/estrutura.
-    const chaveQuadro = engine.chaveVarianteQuadro(quadro.maquina.potencia_kw, quadro.maquina.tensao_v);
+    const chaveQuadro = engine.chaveVarianteQuadro(potVariante, tensVariante);
     const doOmie = chaveQuadro ? await bomDaEstruturaOmie(chaveQuadro, catalogo) : null;
     if (doOmie && doOmie.itens.length) {
       bomItens = doOmie.itens; fonteBom = `Omie ${doOmie.produto}`;
@@ -199,15 +204,29 @@
       const pub = quadro.respostas_publico || {};
       const nParadas = (quadro.paradas || []).length || parseInt(pub.num_paradas, 10) || 0;
       const botoes = lopEsc.botoes_intermediarios || pub.lop_botoes || '2';
-      const comDisplay = lopEsc.com_display === true || lopEsc.com_display === 'sim';
+      const comDisplay = lopEsc.com_display === true || lopEsc.com_display === 'sim' || pub.lop_display === 'com';
+      // Se o vendedor escolheu um código de LOP no hub, vale a família dele (vidro/aço, com/sem display).
+      const famCod = window.QuadroComandoCodigos && window.QuadroComandoCodigos.familiaDoCodigo(lopEsc.codigo);
+      const familia = famCod ? { sobe: famCod.sobe, desce: famCod.desce, dois: famCod.dois } : null;
       // Com paradas cadastradas, usa a qtd de LOP frontal/traseira de cada uma; senão (só o nº de paradas do formulário público) assume 1 frontal por parada.
       const itensLop = (quadro.paradas || []).length
-        ? engine.montarItensLopParadas(quadro.paradas, botoes, catalogo, comDisplay)
-        : engine.montarItensLop(nParadas, botoes, catalogo, comDisplay);
+        ? engine.montarItensLopParadas(quadro.paradas, botoes, catalogo, comDisplay, familia)
+        : engine.montarItensLop(nParadas, botoes, catalogo, comDisplay, familia);
       bomItens = [...bomItens, ...itensLop];
     }
 
     bomItens = [...bomItens, ...engine.montarItensInspecao(quadro.escopo_fornecimento, catalogo)];
+
+    // Itens do Escopo com código do Omie escolhido no hub (COP, LIP, portas, máquina…). Fornecer sem código = pendência.
+    let pendentesCodigo = [];
+    const K = window.QuadroComandoCodigos;
+    if (K) {
+      let catOmie = [];
+      try { catOmie = await K.carregarCatalogo(c); } catch (e) { console.warn('[quadro-comando] catálogo do Omie indisponível:', e); }
+      const extra = K.itensDoEscopo(quadro.escopo_fornecimento, quadro.paradas, catOmie, bomItens.map((i) => i.sku));
+      bomItens = [...bomItens, ...extra.itens];
+      pendentesCodigo = extra.pendentes;
+    }
 
     const trechosFixa = engine.montarTrechosFiacaoFixa(quadro.geometria);
     const trechoManobra = engine.montarTrechoCaboManobra(quadro.geometria, quadro.intervalos);
@@ -230,9 +249,9 @@
     await salvar(quadroId, { status: 'cotado' });
     if (window.VPLog) window.VPLog.registrar({
       modulo: 'Quadro de Comando', acao: 'Gerou BOM e lista de corte', alvo_id: quadroId,
-      detalhe: { totalItens: bomItens.length, erroVariante, fonteBom },
+      detalhe: { totalItens: bomItens.length, erroVariante, fonteBom, pendentesCodigo },
     });
-    return { bomItens, trechos, erroVariante, fonteBom };
+    return { bomItens, trechos, erroVariante, fonteBom, pendentesCodigo };
   }
 
   async function obterBomECortes(quadroId) {
