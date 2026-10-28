@@ -217,6 +217,7 @@
     { grupo: 'Engenharia', itens: [
       { modulo: 'engenharia', label: 'Engenharia' },
       { modulo: 'eng-projeto-elevadores', label: 'Projeto de Elevadores' },
+      { modulo: 'repositorio-documentos', label: 'Repositório Documentos' },
       { modulo: 'eng-configurador', label: 'Projeto de Equipamento' },
       { modulo: 'desenho-tecnico', label: 'Projetos ER/Es' },
       { modulo: 'solicitacoes-produto', label: 'Solicitações de Produto' },
@@ -323,7 +324,7 @@
     'Suprimentos & Importação': ['importacao', 'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos', 'compras', 'cotacoes-varejo', 'pedidos-acompanhamento'],
     'Engenharia & Produto': ['engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'desenho-tecnico', 'solicitacoes-produto', 'ficha-tecnica', 'ncm-catalogo', 'linha-do-tempo'],
     'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'mapa-obras', 'cronograma', 'art'],
-    'Entrega & Documentação': ['databook', 'handover'],
+    'Entrega & Documentação': ['databook', 'handover', 'repositorio-documentos'],
     'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador'],
     'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'pcp', 'mes', 'mes-cadastros', 'relatorios-pcp', 'expedicao', 'separacao', 'etiquetas', 'fabricacao-corrimao', 'fabricacao-corte'],
     /* Fabricação saiu de Logística Interna (17/10/2026). Logística Interna mantém a lista completa de propósito: quem já tinha o grupo alocado não perde nada. */
