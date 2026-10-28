@@ -37,7 +37,7 @@
     'solicitacoes-produto',
     'ncm-kanban', 'ncm-detail',
     'status-obras', 'linha-do-tempo', 'central-documentos', 'dossier-obra', 'vistorias-envio', 'vistorias', 'instalacao', 'mapa-obras',
-    'art', 'cronograma', 'databook', 'handover',
+    'art', 'cronograma', 'databook', 'handover', 'repositorio-documentos',
     'rh-homologacao',
     'almoxarifado', 'carga-maquina', 'montagem-produto', 'evolucao-fabricacao', 'fabricacao-corrimao', 'fabricacao-corte', 'simulacao-producao', 'pcp', 'mes', 'mes-cadastros', 'relatorios-pcp', 'expedicao', 'separacao', 'etiquetas', 'emissao-nf',
     'logs', 'configuracoes', 'comissoes', 'pagamentos-instalador',

@@ -67,11 +67,12 @@ const ROUTE_TITLE = {
   vistorias: "Resultado Vistorias de Obras",
   instalacao: "Instalação em Campo",
   "mapa-obras": "Mapa de Obras",
-  "central-documentos": "Repositório Documentos",
+  "central-documentos": "Central de Documentos",
   art: "ART de Instalação",
   cronograma: "Cronograma de Instalação",
   databook: "Data Book & Termo",
   handover: "Entrega Final",
+  "repositorio-documentos": "Repositório Documentos",
   "rh-homologacao": "Homologação de Instaladores",
   "cadastro-instaladores": "Empresas Instaladoras",
   "cadastro-custos": "Atualização de Custos",
@@ -393,17 +394,12 @@ function App() {
       case "vistorias": return <VistoriasObras obraId={subsel} setRoute={setRoute}/>;
       case "instalacao": return <InstalacaoPage/>;
       case "mapa-obras": return <window.MapaObrasPage setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "central-documentos": return <window.RepositorioDocumentosShell route={route} setRoute={setRoute}>
-          <window.CentralDocumentosPage setRoute={setRoute} setSubsel={setSubsel} subsel={subsel}/>
-        </window.RepositorioDocumentosShell>;
+      case "central-documentos": return <window.CentralDocumentosPage setRoute={setRoute} setSubsel={setSubsel} subsel={subsel}/>;
       case "art": return <ArtPage setRoute={setRoute}/>;
       case "cronograma": return <CronogramaPage/>;
-      case "databook": return <window.RepositorioDocumentosShell route={route} setRoute={setRoute}>
-          <DataBookPage setRoute={setRoute}/>
-        </window.RepositorioDocumentosShell>;
-      case "handover": return <window.RepositorioDocumentosShell route={route} setRoute={setRoute}>
-          <window.HandoverManutencaoPage/>
-        </window.RepositorioDocumentosShell>;
+      case "databook": return <DataBookPage setRoute={setRoute}/>;
+      case "handover": return <window.HandoverManutencaoPage/>;
+      case "repositorio-documentos": return <window.RepositorioDocumentosPage/>;
       case "importacao": return <ImportacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "importacao-detail": return <ImportacaoDetail embarque={subsel} setRoute={setRoute}/>;
       case "importacao-rastreamento": return <ImportacaoRastreamento setRoute={setRoute} setSubsel={setSubsel}/>;
@@ -520,10 +516,11 @@ function App() {
               { value: "contrato-venda-equipamentos", label: "📄 Contrato Venda de Equipamentos" },
               { value: "contrato-instalador", label: "👷 Contrato Instalador" },
               { value: "instalacao", label: "Instalação + Checklist" },
-              { value: "central-documentos", label: "📁 Repositório Documentos" },
+              { value: "central-documentos", label: "📁 Central de Documentos" },
               { value: "art", label: "ART de Instalação" },
               { value: "cronograma", label: "Cronograma de Instalação" },
               { value: "databook", label: "Data Book & Termo" },
+              { value: "repositorio-documentos", label: "📁 Repositório Documentos" },
               { value: "handover", label: "📦 Handover & Pós-venda" },
               { value: "importacao", label: "Importação (lista)" },
               { value: "importacao-detail", label: "Detalhe de Embarque" },

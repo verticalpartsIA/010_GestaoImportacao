@@ -105,14 +105,18 @@ const NAV_GROUPS = [
     { id: "art", label: "ART", icon: "scale" },
   ]},
   /* Novo grupo — fechamento documental/entrega, separado de execução de obra.
-     Casa única: "Repositório Documentos" é a mesma rota central-documentos de
-     sempre; Central de Documentos/Data Book & Termo/Entrega Final viraram
-     abas DENTRO dela (ver repositorio-documentos.jsx) — item visível deve
-     significar "um lugar pra entrar", não 3 entradas pro mesmo assunto. As
-     rotas 'databook'/'handover' continuam existindo (deep links de
-     notificação/Central de Decisões apontam pra elas), só saíram do menu. */
+     Os 3 itens históricos (Central de Documentos/Data Book & Termo/Entrega
+     Final) são telas DIFERENTES, cada uma com sua própria função — nunca
+     consolidar num item só sem pedido explícito (já aconteceu, revertido:
+     ver "Repositório Documentos" abaixo). "Repositório Documentos" é um 4º
+     item NOVO, independente dos outros 3: um upload genérico de qualquer
+     documento que a Engenharia ache necessário guardar (ver
+     repositorio-documentos.jsx/-store.js), rota própria `repositorio-documentos`. */
   { label: "Entrega & Documentação", items: [
-    { id: "central-documentos", label: "Repositório Documentos", icon: "fileSearch" },
+    { id: "central-documentos", label: "Central de Documentos", icon: "fileSearch" },
+    { id: "databook", label: "Data Book & Termo", icon: "fileSearch" },
+    { id: "handover", label: "Entrega Final", icon: "package" },
+    { id: "repositorio-documentos", label: "Repositório Documentos", icon: "upload" },
   ]},
   /* Novo grupo — o ciclo inteiro do parceiro instalador (cadastro → homologação
      → contrato → pagamento) num só lugar. Permissão de edição continua
@@ -365,7 +369,8 @@ const BREADCRUMB_MAP = {
   "dossier-obra":  { module: "Engenharia", page: "Dossiê da Obra", icon: "briefcase" },
   "status-obras":  { module: "Engenharia", page: "Status de Obras", icon: "building" },
   "linha-do-tempo": { module: "Engenharia", page: "Linha do Tempo da Cotação", icon: "clock" },
-  "central-documentos": { module: "Engenharia", page: "Repositório Documentos", icon: "fileSearch" },
+  "central-documentos": { module: "Engenharia", page: "Central de Documentos", icon: "fileSearch" },
+  "repositorio-documentos": { module: "Engenharia", page: "Repositório Documentos", icon: "upload" },
   juridico:      { module: "Jurídico", page: "Contratos & Minutas", icon: "scale" },
   "aval-juridico": { module: "Jurídico", page: "Aval Jurídico", icon: "scale" },
   "contrato-editor": { module: "Jurídico", page: "Editor de Contrato", icon: "fileText" },
