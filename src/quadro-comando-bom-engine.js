@@ -592,8 +592,8 @@
 
   /* ---------- Chicotes que acompanham cada peça (28/10/2026, regra da Engenharia) ----------
      Aparecem sempre que a peça entra no pedido, sem ninguém escolher: caixa do poço (VPB-209), caixa de topo de
-     cabine Monarch (VPB-193) e o próprio quadro de comando (saem de dentro dele para poço/caixa de corrida/última altura).
-     O mesmo chicote (ex. PT2) nunca entra duas vezes. */
+     cabine Monarch (VPB-193) e o próprio quadro de comando (HW, MT e OS saem direto dele para a última altura).
+     O mesmo chicote nunca entra duas vezes. */
   const CHICOTES_VPEL = {
     PT1: ['VPEL-732a', 'Chicote PT1 (Botão Stop de Acesso ao Poço) - Ref.: VerticalParts (A)'],
     PT2: ['VPEL-733a', 'Chicote PT2 (Polia Tensora e Buffer) - Ref.: VerticalParts (A)'],
@@ -610,7 +610,7 @@
     { sku: 'VPB-209', nome: 'Botoeira de Inspeção do Poço (VPB-209)', chicotes: ['PT1', 'PT2'] },
     { sku: 'VPB-193', nome: 'Caixa de Inspeção de Topo de Cabine Monarch (VPB-193)', chicotes: ['EDP1', 'FAN', 'GS1', 'SOS', 'SL'] },
   ];
-  const CHICOTES_DO_QUADRO = ['PT2', 'HW', 'MT', 'OS'];
+  const CHICOTES_DO_QUADRO = ['HW', 'MT', 'OS'];
 
   function montarItensChicotes(bomItens, catalogoPorSku) {
     const cat = catalogoPorSku || {};
@@ -625,7 +625,7 @@
         origem: 'calculado_geometria', confianca: 'confirmado', memoria_calculo: `Chicote automático: ${motivo}. 1 por elevador.` });
     };
     CHICOTES_POR_PECA.forEach((peca) => { if (skusBom.has(peca.sku)) peca.chicotes.forEach((c) => add(c, `acompanha ${peca.nome}`)); });
-    CHICOTES_DO_QUADRO.forEach((c) => add(c, 'saem de dentro do quadro de comando para o poço, a caixa de corrida e a última altura'));
+    CHICOTES_DO_QUADRO.forEach((c) => add(c, 'saem direto do quadro de comando para a última altura (UA)'));
     return itens;
   }
 
