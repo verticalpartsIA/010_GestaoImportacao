@@ -57,3 +57,8 @@ supateste/
 
 # Capturas coladas / anexos soltos
 uploads/pasted-*
+
+# Impeccable (hook de design) — config.json (ignores) é compartilhado e
+# commitado de propósito; o cache de dedup por sessão, não.
+.impeccable/hook.cache.json
+.impeccable/config.local.json

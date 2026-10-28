@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "pulsing-dot",
+        "value": "*",
+        "files": [
+          "styles/vp-copiloto.css"
+        ],
+        "createdAt": "2026-10-28T15:24:45.384Z",
+        "reason": "Agent: .vpc-typing i (vpc-blink) is the Copiloto chat's typing/thinking indicator, rendered only while loading===true (src/vp-copiloto.jsx:620) -- tied to genuinely live, changing state, not decorative fake liveness"
+      }
+    ]
+  }
+}
