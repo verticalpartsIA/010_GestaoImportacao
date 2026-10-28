@@ -463,7 +463,7 @@ function QcMaquinaSecao({ maquina, onChange, disabled, varianteLabel, errosVisiv
             options={[{ value: '220', label: '220V' }, { value: '380', label: '380V' }]}
             style={{borderColor: errosVisiveis?.tensao_v ? '#d32f2f' : undefined}}
             onChange={(v) => set({ tensao_v: v ? Number(v) : null })}/></QcField>
-          <QcField label="Número de fases"><QcSelect value={maquina.fases} disabled={disabled} data-field="fases"
+          <QcField label="Número de fases"><QcSelect value={maquina.fases || '3'} disabled={disabled} data-field="fases"
             options={[{ value: '1', label: 'Monofásico (1Ø)' }, { value: '3', label: 'Trifásico (3Ø)' }]}
             style={{borderColor: errosVisiveis?.fases ? '#d32f2f' : undefined}}
             onChange={(v) => set({ fases: v })}/></QcField>
@@ -1058,7 +1058,6 @@ function QuadroComandoDetail({ quadroId, onClose }) {
     const errosMap = {};
     if (!quadro.maquina?.potencia_kw) errosMap.potencia_kw = 'Obrigatório';
     if (!quadro.maquina?.tensao_v) errosMap.tensao_v = 'Obrigatório';
-    if (!quadro.maquina?.fases) errosMap.fases = 'Obrigatório';
     if (!quadro.maquina?.frequencia_hz) errosMap.frequencia_hz = 'Obrigatório';
     if (!quadro.maquina?.freio_tipo) errosMap.freio_tipo = 'Obrigatório';
     return errosMap;
