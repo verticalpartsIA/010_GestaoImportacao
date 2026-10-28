@@ -205,6 +205,45 @@
     return VARIANTES[key] ? key : null;
   }
 
+  /* Chave de variante para a ESTRUTURA DO OMIE (pcp_quadro_variante): aceita também 30 kW,
+     que não tem lista fixa neste arquivo. Sem correspondência exata -> null. */
+  function chaveVarianteQuadro(potenciaKw, tensaoV) {
+    const kw = Number(potenciaKw), v = Number(tensaoV);
+    if (!kw || !v) return null;
+    const kwKey = Math.abs(kw - 7.5) < 0.6 ? '7.5' : Math.abs(kw - 15) < 0.6 ? '15' : Math.abs(kw - 30) < 1 ? '30' : null;
+    const vKey = Math.abs(v - 220) < 15 ? '220' : Math.abs(v - 380) < 15 ? '380' : null;
+    return kwKey && vKey ? `${kwKey}_${vKey}` : null;
+  }
+
+  /* ---------- BOM a partir da estrutura do produto no Omie (fonte da verdade) ----------
+     linhas: [{ codigo_filho, quantidade }] de pcp_estrutura do produto do quadro.
+     produtosPorCodigo: { [codigo]: { descricao, unidade } } (pcp_produtos).
+     Soma códigos repetidos; "Caixa para QC…" vai para o grupo caixa. */
+  function montarBomDaEstrutura(linhas, produtosPorCodigo, catalogoPorSku, rotulo) {
+    const prod = produtosPorCodigo || {}, cat = catalogoPorSku || {};
+    const soma = new Map();
+    (linhas || []).forEach((l) => {
+      const q = Number(l.quantidade);
+      if (!l.codigo_filho || !(q > 0)) return;
+      soma.set(l.codigo_filho, (soma.get(l.codigo_filho) || 0) + q);
+    });
+    const itens = [];
+    soma.forEach((quantidade, sku) => {
+      const p = prod[sku] || {}, c = cat[sku] || {};
+      const descricao = p.descricao || c.descricao || `(SKU ${sku} sem descrição no cadastro)`;
+      const caixa = c.categoria === 'caixa' || /^caixa para qc/i.test(descricao);
+      itens.push({
+        sku, descricao,
+        unidade: String(p.unidade || c.unidade || 'un').toLowerCase(),
+        grupo_separacao: caixa ? 'caixa' : 'componentes',
+        quantidade: Math.round(quantidade * 1e6) / 1e6,
+        origem: 'fixo_variante', confianca: 'confirmado',
+        memoria_calculo: `Estrutura do produto ${rotulo} no Omie (sincronizada no PCP).`,
+      });
+    });
+    return itens.sort((a, b) => a.sku.localeCompare(b.sku));
+  }
+
   function listarVariantes() {
     return Object.keys(VARIANTES).map((k) => ({ key: k, label: VARIANTES[k].label }));
   }
@@ -577,7 +616,7 @@
 
   window.QuadroComandoBomEngine = {
     calcularLop, montarItensLop, montarItensLopParadas, LOP_MODELOS, montarItensInspecao, INSPECAO_MODELOS,
-    listarVariantes, chaveVariante, montarBomFixo,
+    listarVariantes, chaveVariante, chaveVarianteQuadro, montarBomDaEstrutura, montarBomFixo,
     somaIntervalos, alturaTotalMm, perimetroCaixaMm,
     montarTrechosFiacaoFixa, montarTrechoCaboManobra, montarChecklist,
     cabinaDentroDoPadrao, montarTrechosFiacaoCarro,

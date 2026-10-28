@@ -147,6 +147,22 @@
     return mapa;
   }
 
+  /* Estrutura do produto do quadro no Omie: variante -> produto (pcp_quadro_variante) -> filhos (pcp_estrutura).
+     null = variante sem produto ou sem estrutura (aí vale a lista fixa do motor). */
+  async function bomDaEstruturaOmie(varianteKey, catalogo) {
+    const c = sb(); if (!c) return null;
+    const { data: v, error: e1 } = await c.from('pcp_quadro_variante').select('codigo_produto').eq('variante', varianteKey).maybeSingle();
+    if (e1 || !v || !v.codigo_produto) return null;
+    const { data: linhas, error: e2 } = await c.from('pcp_estrutura').select('codigo_filho, quantidade').eq('codigo_pai', v.codigo_produto).limit(1000);
+    if (e2 || !linhas || !linhas.length) return null;
+    const codigos = [...new Set(linhas.map((l) => l.codigo_filho))];
+    const { data: prods, error: e3 } = await c.from('pcp_produtos').select('codigo, descricao, unidade').in('codigo', codigos);
+    if (e3) return null;
+    const porCodigo = {};
+    (prods || []).forEach((p) => { porCodigo[p.codigo] = p; });
+    return { produto: v.codigo_produto, itens: window.QuadroComandoBomEngine.montarBomDaEstrutura(linhas, porCodigo, catalogo, v.codigo_produto) };
+  }
+
   /* ---------- Cálculo: BOM + trechos de corte (Ramo A — fabricar interno) ----------
      Idempotente por regeneração: apaga o cálculo anterior deste quadro e
      grava o novo (o quadro em si e suas respostas de formulário não são
@@ -164,11 +180,17 @@
 
     let bomItens = [];
     let erroVariante = null;
-    if (varianteKey) {
+    let fonteBom = null;
+    // 1º a estrutura do produto no Omie (pcp_estrutura); só cai na lista fixa do código se a variante não tiver produto/estrutura.
+    const chaveQuadro = engine.chaveVarianteQuadro(quadro.maquina.potencia_kw, quadro.maquina.tensao_v);
+    const doOmie = chaveQuadro ? await bomDaEstruturaOmie(chaveQuadro, catalogo) : null;
+    if (doOmie && doOmie.itens.length) {
+      bomItens = doOmie.itens; fonteBom = `Omie ${doOmie.produto}`;
+    } else if (varianteKey) {
       const r = engine.montarBomFixo(varianteKey, catalogo);
-      bomItens = r.itens; erroVariante = r.erro;
+      bomItens = r.itens; erroVariante = r.erro; fonteBom = 'lista fixa do sistema (variante sem estrutura no Omie)';
     } else {
-      erroVariante = 'Potência/tensão da máquina não preenchida ou fora das 4 variantes conhecidas (7,5/15 kW × 220/380 V) — BOM fixo não gerado. Preencha Máquina/Freio/Encoder e gere novamente.';
+      erroVariante = 'Potência/tensão da máquina não preenchida ou sem estrutura cadastrada no Omie para essa variante (7,5/15/30 kW × 220/380 V) — BOM fixo não gerado. Preencha Máquina/Freio/Encoder e gere novamente.';
     }
 
     // LOP — botoeiras de pavimento prontas (Sobe / Desce / 2 botões) pela posição de cada parada; só se vamos fornecer.
@@ -208,9 +230,9 @@
     await salvar(quadroId, { status: 'cotado' });
     if (window.VPLog) window.VPLog.registrar({
       modulo: 'Quadro de Comando', acao: 'Gerou BOM e lista de corte', alvo_id: quadroId,
-      detalhe: { totalItens: bomItens.length, erroVariante },
+      detalhe: { totalItens: bomItens.length, erroVariante, fonteBom },
     });
-    return { bomItens, trechos, erroVariante };
+    return { bomItens, trechos, erroVariante, fonteBom };
   }
 
   async function obterBomECortes(quadroId) {
