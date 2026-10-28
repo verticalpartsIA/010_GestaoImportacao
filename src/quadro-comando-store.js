@@ -126,7 +126,7 @@
   async function salvarMaquina(quadroId, maquina) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('quadros_comando_maquina')
-      .upsert({ ...maquina, quadro_comando_id: quadroId, updated_at: new Date().toISOString() }, { onConflict: 'quadro_comando_id' });
+      .upsert({ ...maquina, fases: maquina.fases || '3', quadro_comando_id: quadroId, updated_at: new Date().toISOString() }, { onConflict: 'quadro_comando_id' });
     if (error) throw error;
   }
 
