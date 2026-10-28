@@ -2,6 +2,18 @@
 
 Notas operacionais para uma sessão futura do Claude Code neste repo. O README.md tem a visão de produto/telas; este arquivo é sobre "como trabalhar aqui".
 
+## Entrega & Documentação — "Repositório Documentos" + 4 achados de design (28/10/2026, PR #1124, squash `47d92e3`, issue fechada #1125)
+
+Pedido do usuário: consolidar os 3 itens de menu de Entrega & Documentação (Central de Documentos / Data Book & Termo / Entrega Final) num único ponto de entrada **"Repositório Documentos"**, com as 3 telas acessíveis como abas internas.
+
+- **Novo `src/repositorio-documentos.jsx`** (`window.RepositorioDocumentosShell`) — faixa de abas comum que envolve as 3 telas já existentes, navegando entre elas por `setRoute(...)` (nunca `VpRouter.navigate()` sozinho — mesmo cuidado documentado na área blindada de "Ver documento" da Central de Decisões, mais abaixo).
+- **As 3 rotas (`central-documentos`, `databook`, `handover`) continuam existindo** e resolvendo para os mesmos componentes de sempre, só envoltas pelo shell de abas — `gatilhos-engine.js` e outras telas (Central de Decisões, Dashboard, Prazos & Pendências) navegam direto pra `databook`/`handover` via deep link; quebrar essas rotas quebraria esses links. A consolidação é só de menu/visual.
+- `src/shell.jsx`: o grupo "Entrega & Documentação" passou a ter **1 item só** ("Repositório Documentos", rota `central-documentos`). `src/app.jsx`: título da aba em `central-documentos` virou "Repositório Documentos".
+- `docs/MAPA_DE_ROTAS.md` regenerado (0 inconsistências) — `databook`/`handover` migraram pra seção "páginas sem item de menu".
+- **4 achados do hook de design (Impeccable) corrigidos**, a pedido explícito do usuário ("Pode investigar e corrigir essas 4 ocorrências"): 2× "side-tab" — `styles/ncm.css` (`.ncm-sect__head::before`, faixa amarela de 3px, removida) e `styles/proposta-editor.css` (`.pe-hl`, classe morta confirmada por grep, removida); 2× "pulsing-dot" — animação `pulse-dot` (2.5s infinite) do ponto de autosave em `styles/proposta-editor.css` (removida, com o `@keyframes` órfão) e o indicador "digitando…" do Copiloto (`.vpc-typing i`/`vpc-blink`, `src/vp-copiloto.jsx:620`) **tratado como exceção sancionada, não bug** — é indicador real de `loading===true`, não decoração de falsa atividade; documentado em `.impeccable/config.json` (committed, compartilhado entre sessões).
+- Testes: `npm test` 825/825 (inclui 6 novos vindos do merge de `origin/main`/PR #1123, feito durante o desenvolvimento sem conflito real). `check-cache-bust`/`gerar-mapa-rotas` ok. Validação de sintaxe via Babel. **Não testado com clique real no navegador** — sem Playwright nesta sessão.
+- `index.html`/`assinar.html`/`index-print.html`: `shell.jsx` v124, `app.jsx` v106, `proposta-editor.css` v22 (index) / v20 (assinar) / v11 (index-print); novo `repositorio-documentos.jsx?v=1`.
+
 ## 🔒 ÁREA BLINDADA — Sistema de E-mail / Inbox (23/09/2026)
 
 Este sistema foi construído, testado ao vivo e está **funcionando em produção**. Se você (Claude Code, em qualquer sessão futura, mesmo uma concorrente rodando na mesma pasta) foi chamado pra "mexer", "melhorar", "simplificar", "remover" ou "refazer" qualquer parte disto — **PARE antes de editar**. Primeiro informe ao usuário o status atual (o que já existe e já funciona, resumido abaixo) e pergunte explicitamente se ele tem certeza do que está pedindo, incluindo o risco de quebrar algo que já foi validado ao vivo. Só prossiga depois de confirmação explícita.
