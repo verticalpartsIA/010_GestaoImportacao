@@ -23,7 +23,7 @@
     lip: { re: /^(Display Indicador|Indicador de Posi)/i },
     resgate_automatico: { re: /^Resgate/i },
     interfone: { re: /^Interfone/i },
-    botoeira_inspecao_cabina: { re: /^Botoeira de Inspe[cç][aã]o.*cabina/i },
+    botoeira_inspecao_cabina: { re: /^(Botoeira de Inspe[cç][aã]o.*cabina|Caixa de Inspe[cç][aã]o de Topo de Cabine)/i },
     botoeira_inspecao_poco: { re: /^Botoeira de Inspe[cç][aã]o.*po[cç]o/i },
     botao_stop_poco: { re: /^Bot[aã]o Stop/i },
     gongo: { re: /gongo/i },
@@ -160,7 +160,7 @@
   async function carregarCatalogo(sb) {
     if (cacheCatalogo) return cacheCatalogo;
     if (!sb) return [];
-    const padroes = ['Botoeira de %', 'Display Indicador%', 'Indicador de Posi%', 'Resgate%', 'Interfone%', 'Bot_o Stop%', '%gongo%',
+    const padroes = ['Botoeira de %', 'Caixa de Inspe%', 'Display Indicador%', 'Indicador de Posi%', 'Resgate%', 'Interfone%', 'Bot_o Stop%', '%gongo%',
       '%voz%', 'Sensor Fotoel%', 'Barreira de Prote%', '%pesador%', '%c_mera%', 'Porta%'];
     const filtro = [...padroes.map((p) => `descricao.ilike.${p}`), 'codigo.ilike.VPMAC%'].join(',');
     const { data, error } = await sb.from('importacao_varejo_produtos').select('codigo, descricao').eq('ativo', true).or(filtro).order('codigo').limit(1000);
