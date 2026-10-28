@@ -86,3 +86,13 @@ test('inspeção de cabina usa o código escolhido no hub', () => {
   const padrao = E.montarItensInspecao({ botoeira_inspecao_cabina: { decisao: 'fornecer' } }, {});
   assert.strictEqual(padrao[0].sku, 'VPB-208');
 });
+
+test('chicotes automáticos: poço (VPB-209), topo de cabine (VPB-193) e quadro, sem repetir PT2', () => {
+  const skus = (l) => l.map((i) => i.sku).sort();
+  assert.deepStrictEqual(skus(E.montarItensChicotes([{ sku: 'VPB-209' }], {})),
+    ['VPEL-729a', 'VPEL-730a', 'VPEL-731a', 'VPEL-732a', 'VPEL-733a']);
+  assert.deepStrictEqual(skus(E.montarItensChicotes([{ sku: 'VPB-193' }], {})),
+    ['VPEL-721a', 'VPEL-723a', 'VPEL-725a', 'VPEL-727a', 'VPEL-728a', 'VPEL-729a', 'VPEL-730a', 'VPEL-731a', 'VPEL-733a']);
+  assert.deepStrictEqual(skus(E.montarItensChicotes([], {})), ['VPEL-729a', 'VPEL-730a', 'VPEL-731a', 'VPEL-733a']);
+  assert.deepStrictEqual(skus(E.montarItensChicotes([{ sku: 'VPEL-733a' }], {})), ['VPEL-729a', 'VPEL-730a', 'VPEL-731a']);
+});

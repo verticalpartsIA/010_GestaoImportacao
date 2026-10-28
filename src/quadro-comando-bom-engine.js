@@ -590,6 +590,45 @@
     });
   }
 
+  /* ---------- Chicotes que acompanham cada peça (28/10/2026, regra da Engenharia) ----------
+     Aparecem sempre que a peça entra no pedido, sem ninguém escolher: caixa do poço (VPB-209), caixa de topo de
+     cabine Monarch (VPB-193) e o próprio quadro de comando (saem de dentro dele para poço/caixa de corrida/última altura).
+     O mesmo chicote (ex. PT2) nunca entra duas vezes. */
+  const CHICOTES_VPEL = {
+    PT1: ['VPEL-732a', 'Chicote PT1 (Botão Stop de Acesso ao Poço) - Ref.: VerticalParts (A)'],
+    PT2: ['VPEL-733a', 'Chicote PT2 (Polia Tensora e Buffer) - Ref.: VerticalParts (A)'],
+    EDP1: ['VPEL-727a', 'Chicote EDP1 (Alimentação e Sinal de Barreira Eletrônica) - Ref.: VerticalParts (A)'],
+    FAN: ['VPEL-723a', 'Chicote FAN (Iluminação e Ventilação de Cabina) - Ref.: VerticalParts (A)'],
+    GS1: ['VPEL-721a', 'Chicote GS1 (Contato de Trinco da Porta de Cabina) - Ref.: VerticalParts (A)'],
+    SOS: ['VPEL-725a', 'Chicote SOS (Contato do Freio da Cunha da Cabina) - Ref.: VerticalParts (A)'],
+    SL: ['VPEL-728a', 'Chicote SL (LED e Sirene 24V) - Ref.: VerticalParts (A)'],
+    HW: ['VPEL-730a', 'Chicote HW (PAP do Motor / Contato Volante de Inércia) - Ref.: VerticalParts (A)'],
+    MT: ['VPEL-731a', 'Chicote MT (Alimentação e Monitoramento do Freio da Máquina) - Ref.: VerticalParts (A)'],
+    OS: ['VPEL-729a', 'Chicote OS (Contato Elétrico Limitador de Velocidade) - Ref.: VerticalParts (A)'],
+  };
+  const CHICOTES_POR_PECA = [
+    { sku: 'VPB-209', nome: 'Botoeira de Inspeção do Poço (VPB-209)', chicotes: ['PT1', 'PT2'] },
+    { sku: 'VPB-193', nome: 'Caixa de Inspeção de Topo de Cabine Monarch (VPB-193)', chicotes: ['EDP1', 'FAN', 'GS1', 'SOS', 'SL'] },
+  ];
+  const CHICOTES_DO_QUADRO = ['PT2', 'HW', 'MT', 'OS'];
+
+  function montarItensChicotes(bomItens, catalogoPorSku) {
+    const cat = catalogoPorSku || {};
+    const skusBom = new Set((bomItens || []).map((i) => i.sku));
+    const vistos = new Set(skusBom);
+    const itens = [];
+    const add = (chave, motivo) => {
+      const [sku, desc] = CHICOTES_VPEL[chave];
+      if (vistos.has(sku)) return;
+      vistos.add(sku);
+      itens.push({ sku, descricao: (cat[sku] && cat[sku].descricao) || desc, unidade: 'un', grupo_separacao: 'componentes', quantidade: 1,
+        origem: 'calculado_geometria', confianca: 'confirmado', memoria_calculo: `Chicote automático: ${motivo}. 1 por elevador.` });
+    };
+    CHICOTES_POR_PECA.forEach((peca) => { if (skusBom.has(peca.sku)) peca.chicotes.forEach((c) => add(c, `acompanha ${peca.nome}`)); });
+    CHICOTES_DO_QUADRO.forEach((c) => add(c, 'saem de dentro do quadro de comando para o poço, a caixa de corrida e a última altura'));
+    return itens;
+  }
+
   /* LOP lendo a quantidade de cada parada (frontal e traseira). Cada face é uma
      sequência: 1ª parada com LOP = térreo (Seta Subida), última = Seta Descida,
      as do meio = 2 botões (ou 1 botão). A quantidade manual da parada multiplica. */
@@ -626,7 +665,7 @@
   }
 
   window.QuadroComandoBomEngine = {
-    calcularLop, montarItensLop, montarItensLopParadas, LOP_MODELOS, montarItensInspecao, INSPECAO_MODELOS,
+    calcularLop, montarItensLop, montarItensLopParadas, LOP_MODELOS, montarItensInspecao, INSPECAO_MODELOS, montarItensChicotes, CHICOTES_VPEL,
     listarVariantes, chaveVariante, chaveVarianteQuadro, montarBomDaEstrutura, montarBomFixo,
     somaIntervalos, alturaTotalMm, perimetroCaixaMm,
     montarTrechosFiacaoFixa, montarTrechoCaboManobra, montarChecklist,
