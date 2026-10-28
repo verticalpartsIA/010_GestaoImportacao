@@ -90,7 +90,7 @@
   color: var(--fg2);
 }
 
-/* ========== SECTION HEADER (com risca amarela) =================== */
+/* ========== SECTION HEADER =================== */
 .ncm-sect {
   background: #fff;
   border: 1px solid var(--border);
@@ -105,13 +105,6 @@
   align-items: center;
   gap: 10px;
   position: relative;
-}
-.ncm-sect__head::before {
-  content: "";
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 3px;
-  background: var(--vp-yellow);
 }
 .ncm-sect__lbl {
   font-size: 11px;
