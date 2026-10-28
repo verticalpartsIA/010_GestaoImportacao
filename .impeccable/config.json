@@ -11,6 +11,15 @@
         ],
         "createdAt": "2026-10-28T15:24:45.384Z",
         "reason": "Agent: .vpc-typing i (vpc-blink) is the Copiloto chat's typing/thinking indicator, rendered only while loading===true (src/vp-copiloto.jsx:620) -- tied to genuinely live, changing state, not decorative fake liveness"
+      },
+      {
+        "rule": "pulsing-dot",
+        "value": "*",
+        "files": [
+          "index.html"
+        ],
+        "createdAt": "2026-10-28T15:28:22.370Z",
+        "reason": "Agent: same .vpc-typing i / vpc-blink typing indicator (styles/vp-copiloto.css), flagged again under index.html because the detector scans the assembled page; only renders while loading===true (src/vp-copiloto.jsx:620) -- genuinely live state, not decorative"
       }
     ]
   }
