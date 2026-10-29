@@ -84,7 +84,7 @@ test('inspeção de cabina usa o código escolhido no hub', () => {
   const r = E.montarItensInspecao({ botoeira_inspecao_cabina: { decisao: 'fornecer', codigo: 'VPB-378' } }, {});
   assert.strictEqual(r[0].sku, 'VPB-378');
   const padrao = E.montarItensInspecao({ botoeira_inspecao_cabina: { decisao: 'fornecer' } }, {});
-  assert.strictEqual(padrao[0].sku, 'VPB-208');
+  assert.strictEqual(padrao[0].sku, 'VPB-193');
 });
 
 test('chicotes automáticos: poço (VPB-209) e topo de cabine (VPB-193) trazem os seus; todo quadro leva HW, MT e OS', () => {

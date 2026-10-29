@@ -249,7 +249,7 @@ function QcEscopoSecao({ escopo, onChange, disabled, paradasCount, lopPublico, r
                         : it.especial === 'cabos_aco'
                           ? <span className="small muted">{v.decisao === 'fornecer' ? 'preencha o card abaixo' : '—'}</span>
                           : <QcInput value={v.detalhe} disabled={disabled || v.decisao === 'nao_aplica' || !v.decisao}
-                              placeholder={it.key === 'botoeira_inspecao_cabina' ? 'BST VPB-208 (B3)' : it.key === 'botoeira_inspecao_poco' ? 'BST VPB-380 (P5Y)' : 'qtd/modelo'} onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, detalhe: val } })}/>}
+                              placeholder={it.key === 'botoeira_inspecao_cabina' ? 'BST VPB-193 (Monarch)' : it.key === 'botoeira_inspecao_poco' ? 'BST VPB-209' : 'qtd/modelo'} onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, detalhe: val } })}/>}
                     </td>
                   </tr>
                 );

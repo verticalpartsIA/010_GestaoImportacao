@@ -597,8 +597,8 @@
 
   /* ---------- Botoeiras de inspeção (cabina e poço) — 1 de cada, quando fornecemos ---------- */
   const INSPECAO_MODELOS = [
-    ['botoeira_inspecao_cabina', 'VPB-208', 'Botoeira de Inspeção sobre a Cabina de Elevador B3 - Ref.: BST | VPB-208'],
-    ['botoeira_inspecao_poco', 'VPB-380', 'Botoeira de Inspeção P5Y do Poço de Elevador - Ref.: BST | VPB-380'],
+    ['botoeira_inspecao_cabina', 'VPB-193', 'Caixa de Inspeção de Topo de Cabine de Elevador do Comando Monarch Ref.: BST | VPB-193'],
+    ['botoeira_inspecao_poco', 'VPB-209', 'Botoeira de Inspeção do Poço de Elevador - Ref.: BST | VPB-209'],
   ];
 
   function montarItensInspecao(escopo, catalogoPorSku) {
