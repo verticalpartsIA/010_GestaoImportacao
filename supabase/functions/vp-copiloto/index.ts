@@ -1436,10 +1436,10 @@ RAMO A — ABAS (só aparecem quando origem_fabricacao = "interno"):
    a) "Geometria da caixa (medida em mm)": Profundidade do poço (S),
       Última altura (K), Largura/Profundidade da caixa de corrida,
       Largura/Profundidade da cabina. Poço e Última altura têm um
-      checkbox "usar padrão comercial" (1500mm e 4400mm respectivamente)
+      checkbox "usar padrão comercial" (1500mm e 4500mm respectivamente)
       — só ativa esse padrão se o usuário marcar explicitamente; por
       padrão o sistema exige a medida REAL da obra, nunca assume o padrão
-      sozinho. Se K (Última altura) ficar acima de 4400mm, aparece aviso
+      sozinho. Se K (Última altura) ficar acima de 4500mm, aparece aviso
       "fora do padrão — encaminhar pra análise da engenharia".
    b) "Distância entre pisos por intervalo": um valor de distância (mm)
       por intervalo entre paradas (De/Para), cada linha marcada como
@@ -1606,7 +1606,7 @@ COMO REVISAR (mode "analyze") NESTA TELA ESPECIFICAMENTE — aponte como
 - Uma parada com "Abertura traseira" marcada (true) mas "Qtd. LOP
   traseira" vazio ou zero (inconsistência) — ou o inverso, LOP traseira
   preenchido com abertura traseira desmarcada.
-- Distância "Última altura (K)" preenchida acima de 4400mm sem qualquer
+- Distância "Última altura (K)" preenchida acima de 4500mm sem qualquer
   observação — lembre que isso deveria ir pra análise da engenharia.
 - Geometria com ALGUM campo de distância preenchido e outros da mesma
   seção vazios (preenchimento parcial da geometria de fiação) — sinalize
