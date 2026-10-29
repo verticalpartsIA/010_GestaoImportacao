@@ -70,7 +70,13 @@
     const nfes = (form.nfes || []).map((n) => ({ ...n, valor: n.valor !== '' && n.valor != null ? Number(n.valor) : null })).filter((n) => n.numero);
     const resumo = resumoPIs(pis || []);
     const num = (v) => (v === '' || v == null ? null : Number(v));
+    // Cotações de frete (aba Frete): a vencedora preenche os campos únicos que o resto do sistema já lê.
+    const EF = window.EmbFreteCalc;
+    const cotacoesFrete = EF ? EF.normalizar(form.cotacoes_frete) : [];
+    const vencida = EF ? EF.resumoVencedor(cotacoesFrete) : null;
+    const f = vencida ? { ...form, ...vencida } : form;
     return {
+      cotacoes_frete: cotacoesFrete,
       numero_cotacao: resumo.numeroCotacao ?? (form.numero_cotacao ?? null),
       nome_embarque: form.nome_embarque || null, status_etapa: form.status_etapa || 'Pagamento',
       valor_total: resumo.valorTotal || null, moeda_valor_total: resumo.moeda || form.moeda_valor_total || 'USD',
@@ -79,9 +85,9 @@
       data_pedido_redestinacao: form.data_pedido_redestinacao || null,
       etd_original: form.etd_original || null, etd_atual: form.etd_atual || null, houve_rolagem: !!form.houve_rolagem,
       historico_rolagens: form.historico_rolagens || [], containers,
-      tipo_frete: form.tipo_frete || null, modalidade_frete: form.modalidade_frete || null, agente_carga: form.agente_carga || null,
-      cotacao_frete: num(form.cotacao_frete), moeda_frete: form.moeda_frete || 'USD', aprovacao_frete: form.aprovacao_frete || 'Pendente',
-      pedido_booking: form.pedido_booking || null, transit_time: num(form.transit_time), free_time: num(form.free_time),
+      tipo_frete: form.tipo_frete || null, modalidade_frete: form.modalidade_frete || null, agente_carga: f.agente_carga || null,
+      cotacao_frete: num(f.cotacao_frete), moeda_frete: f.moeda_frete || 'USD', aprovacao_frete: form.aprovacao_frete || 'Pendente',
+      pedido_booking: form.pedido_booking || null, transit_time: num(f.transit_time), free_time: num(f.free_time),
       referencia_despachante: form.referencia_despachante || null, custos_estimativa: num(form.custos_estimativa),
       documentos_marimex: form.documentos_marimex || null, transit_time_total: num(form.transit_time_total),
       di: form.di || null, data_registro_di: form.data_registro_di || null, canal_parametrizacao: form.canal_parametrizacao || null,
@@ -280,5 +286,96 @@
     await _sincronizarRastreio(data.id, data);
   }
 
-  window.EmbarquesImportacaoStore = { aoGanharCotacao, listarTodas, obter, listarPIsVinculadas, resumoPIs, criar, atualizar, remover, arquivar, containersDaCotacao, expandirContainers };
+
+  /* ---------- Cotações de frete marítimo (aba Frete) ----------
+     Cada cotação tem id "<embarque>:F<n>" (vira referencia_id do e-mail em
+     emails_projeto, referencia_tipo 'cotacao_frete'). Anexos no bucket
+     `engenharia`. O envio usa o helper único de e-mail (send-email): nada
+     da Edge Function/Inbox foi alterado. */
+  const FRETE_ANEXO_MAX = 25 * 1024 * 1024;
+  const FRETE_EMAIL_MAX = 2.5 * 1024 * 1024; // limite real do send-email (MAX_ANEXO_TOTAL)
+
+  // Grava só a coluna das cotações. Quem é vencedora NÃO muda aqui (isso só vale no "Salvar" do embarque,
+  // que também atualiza agente/frete/prazos e dispara os eventos): a marca de vencedora vem do banco.
+  async function salvarCotacoesFrete(id, cotacoes) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data: atual, error: e0 } = await c.from('embarques_importacao').select('cotacoes_frete').eq('id', id).single();
+    if (e0) throw e0;
+    const gravadas = {};
+    ((atual && atual.cotacoes_frete) || []).forEach((g) => { gravadas[g.id] = !!g.vencedor; });
+    const lista = window.EmbFreteCalc.normalizar(cotacoes).map((g) => ({ ...g, vencedor: !!gravadas[g.id] }));
+    const { error } = await c.from('embarques_importacao').update({ cotacoes_frete: lista, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw error;
+    return lista;
+  }
+
+  async function uploadAnexoFrete(embarqueId, cotacaoId, file) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    if (!file) throw new Error('Arquivo não informado.');
+    if (file.size > FRETE_ANEXO_MAX) throw new Error('Arquivo acima de 25 MB.');
+    const ok = /^(image\/|application\/pdf)/.test(file.type || '') || /\.(pdf|png|jpe?g|webp|gif|xlsx?|docx?|csv)$/i.test(file.name || '');
+    if (!ok) throw new Error('Envie PDF, imagem ou planilha/documento.');
+    const seguro = String(file.name).replace(/[^\w.\-]/g, '_');
+    const path = `embarques-frete/${String(embarqueId)}/${String(cotacaoId).replace(/[^\w\-]/g, '_')}/${Date.now()}_${seguro}`;
+    const { error } = await c.storage.from('engenharia').upload(path, file, { upsert: false });
+    if (error) throw new Error(error.message);
+    const { data: pub } = c.storage.from('engenharia').getPublicUrl(path);
+    const user = window.__VP_USER || {};
+    return { nome: file.name, url: pub.publicUrl, path, tipo: file.type || '', tamanho: file.size, por: user.email || null, em: new Date().toISOString() };
+  }
+
+  // Anexos que cabem no e-mail (≤ 2,5 MB somados) vão como arquivo; o resto vai como link no texto.
+  async function anexosParaEmail(anexos) {
+    const attachments = []; const links = [];
+    let total = 0;
+    for (const a of (anexos || [])) {
+      if (total + (a.tamanho || 0) > FRETE_EMAIL_MAX) { links.push(a); continue; }
+      try {
+        const resp = await fetch(a.url);
+        if (!resp.ok) { links.push(a); continue; }
+        const buf = new Uint8Array(await resp.arrayBuffer());
+        let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+        attachments.push({ filename: a.nome, contentType: a.tipo || 'application/octet-stream', base64: btoa(bin) });
+        total += buf.length;
+      } catch (e) { links.push(a); }
+    }
+    return { attachments, links };
+  }
+
+  // Envia o pedido de cotação ao agente pelo send-email (aparece em Enviados no Inbox) e registra o envio.
+  async function enviarPedidoCotacaoFrete(emb, cotacao, { to, subject, text }) {
+    if (!emb || !emb.id) throw new Error('Salve o embarque antes de enviar a cotação.');
+    if (!to) throw new Error('Informe o e-mail do agente.');
+    const { attachments, links } = await anexosParaEmail(cotacao.anexos);
+    const corpo = links.length
+      ? text + '\n\n' + links.map((a) => `• ${a.nome}: ${a.url}`).join('\n')
+      : text;
+    const r = await window.EmailEnvioHelper.tentarEnviarDireto({
+      to, subject, text: corpo,
+      numeroCotacao: emb.numero_cotacao ?? undefined,
+      referenciaTipo: 'cotacao_frete', referenciaId: cotacao.id,
+      attachments: attachments.length ? attachments : undefined,
+    });
+    if (!r.enviouDireto) return { ok: false, links, erro: r.emailData || r.emailError };
+    const user = window.__VP_USER || {};
+    const envio = { em: new Date().toISOString(), por: user.email || null, para: to, assunto: subject, anexos: attachments.length, links: links.length };
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Embarques de Importação', acao: 'Enviou pedido de cotação de frete ao agente',
+      alvo: emb.nome_embarque || emb.id, alvo_id: emb.id, detalhe: { agente: cotacao.agente, para: to },
+    });
+    return { ok: true, envio };
+  }
+
+  // E-mails de ENTRADA vinculados a esta cotação (Message-ID da resposta ao e-mail enviado pelo site).
+  async function respostasFrete(cotacaoId) {
+    const c = sb(); if (!c || !cotacaoId) return [];
+    const { data, error } = await c.from('emails_projeto')
+      .select('id, assunto, de_email, de_nome, data_mensagem')
+      .eq('direcao', 'entrada').is('excluido_em', null).eq('referencia_id', String(cotacaoId))
+      .order('data_mensagem', { ascending: false }).limit(20);
+    if (error) return [];
+    return data || [];
+  }
+
+  window.EmbarquesImportacaoStore = { salvarCotacoesFrete, uploadAnexoFrete, enviarPedidoCotacaoFrete, respostasFrete, aoGanharCotacao, listarTodas, obter, listarPIsVinculadas, resumoPIs, criar, atualizar, remover, arquivar, containersDaCotacao, expandirContainers };
 }());
