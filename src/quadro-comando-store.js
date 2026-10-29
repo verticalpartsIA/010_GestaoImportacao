@@ -231,7 +231,7 @@
     // Chicotes VPEL que acompanham a caixa do poço, a caixa de topo de cabine e o quadro (depois de todos os itens, para ver os códigos escolhidos).
     bomItens = [...bomItens, ...engine.montarItensChicotes(bomItens, catalogo)];
 
-    const trechosFixa = engine.montarTrechosFiacaoFixa(quadro.geometria);
+    const trechosFixa = engine.montarTrechosFiacaoFixa(quadro.geometria, quadro.tipo_aplicacao);
     const trechoManobra = engine.montarTrechoCaboManobra(quadro.geometria, quadro.intervalos);
     const trechosCarro = engine.montarTrechosFiacaoCarro(quadro.geometria, quadro.configuracao);
     const trechos = [...trechosFixa, trechoManobra, ...trechosCarro];
