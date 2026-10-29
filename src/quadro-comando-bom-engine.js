@@ -389,45 +389,53 @@
     return trechos;
   }
 
-  function montarTrechoCaboManobra(geometria, intervalos) {
-    const { percurso_mm } = alturaTotalMm(geometria, intervalos);
-    const seioMm = Number(geometria.seio_cabo_mm) || null;
-    const seioConfirmado = !!geometria.seio_definicao_confirmada;
-    const folgaMm = Number(geometria.folga_mm) || 0;
-    const folgaConfirmada = !!geometria.folga_regra_confirmada;
+  /* Cabo de manobra (regra do Gelson, 29/10/2026, calibrada num cabo real: 10 paradas de 3 m, sem casa de máquinas = 47 m; 8 paradas = 41 m).
+     O quadro fica na última parada; o cabo desce fixo até a fixação do meio da caixa, continua pendurado até a fixação embaixo do carro
+     (a volta/seio fica no extremo inferior) e sobe pelo costado até a caixa de inspeção no teto. Fixo + pendurado = o curso inteiro,
+     então a parada escolhida como meio não muda o corte. Comprimento = soma dos pisos reais + reserva fixa
+     (seio 3 m + subida 3 m + pontas 2+2 m + 10 m calibrados no caso real, ainda sem nome) + distância do quadro até a descida da laje
+     (só com casa de máquinas; é o campo "Distância quadro → entrada da caixa"). Piso fora do padrão entra pelo valor real. */
+  const CABO_MANOBRA_SEIO_MM = 3000;
+  const CABO_MANOBRA_SUBIDA_MM = 3000;
+  const CABO_MANOBRA_PONTAS_MM = 4000;
+  const CABO_MANOBRA_RESERVA_CALIBRADA_MM = 10000;
 
-    if (!percurso_mm) {
-      return trechoBase({
-        tipo_cabo: 'Cabo de manobra (28 vias — 1 peça)',
-        origem_fisica: 'Fundo do quadro de comando',
-        destino_fisico: 'Caixa de inspeção no teto da cabina',
-        formula: 'Percurso (soma dos intervalos entre pisos) não informado — sem base pra calcular o comprimento do cabo de manobra.',
-      });
-    }
-
-    if (!seioConfirmado) {
-      return trechoBase({
-        tipo_cabo: 'Cabo de manobra (28 vias — 1 peça)',
-        origem_fisica: 'Fundo do quadro de comando',
-        destino_fisico: 'Caixa de inspeção no teto da cabina',
-        comprimento_base_mm: percurso_mm,
-        formula: `Percurso = ${percurso_mm}mm. Definição física do seio (comprimento adicional da curva) ainda não confirmada pela engenharia — comprimento final não liberado. Verificar com a cabina nos dois extremos de curso antes de cortar.`,
-      });
-    }
-
-    const folgaAplicada = folgaConfirmada ? folgaMm : 0;
-    const comprimentoFinal = percurso_mm + seioMm + folgaAplicada;
-    return trechoBase({
+  function montarTrechoCaboManobra(geometria, intervalos, tipoAplicacao) {
+    const geo = geometria || {};
+    const { percurso_mm } = alturaTotalMm(geo, intervalos);
+    const tipo = String(tipoAplicacao || '').trim().toUpperCase();
+    const comCasaMaquinas = tipo !== '' && tipo !== 'MRL';
+    const base = {
       tipo_cabo: 'Cabo de manobra (28 vias — 1 peça)',
       origem_fisica: 'Fundo do quadro de comando',
       destino_fisico: 'Caixa de inspeção no teto da cabina',
+    };
+
+    if (!percurso_mm) {
+      return trechoBase({ ...base, formula: 'Percurso (soma dos intervalos entre pisos) não informado — sem base pra calcular o comprimento do cabo de manobra.' });
+    }
+
+    const distLaje = Number(geo.distancia_quadro_entrada_caixa_mm) || 0;
+    if (comCasaMaquinas && !distLaje) {
+      return trechoBase({ ...base, comprimento_base_mm: percurso_mm,
+        formula: `Percurso = ${percurso_mm}mm. Com casa de máquinas o cliente informa a distância do quadro até a descida da laje (campo "Distância quadro → entrada da caixa") — sem ela o comprimento não é liberado.` });
+    }
+
+    const seio = Number(geo.seio_cabo_mm) > 0 ? Number(geo.seio_cabo_mm) : CABO_MANOBRA_SEIO_MM;
+    const pontas = Number(geo.folga_mm) > 0 ? Number(geo.folga_mm) : CABO_MANOBRA_PONTAS_MM;
+    const subida = CABO_MANOBRA_SUBIDA_MM;
+    const reserva = CABO_MANOBRA_RESERVA_CALIBRADA_MM;
+    const lajeMm = comCasaMaquinas ? distLaje : 0;
+    const folga = subida + pontas + reserva + lajeMm;
+    return trechoBase({
+      ...base,
       comprimento_base_mm: percurso_mm,
-      contornos_mm: seioMm,
-      folga_mm: folgaAplicada,
-      comprimento_final_mm: comprimentoFinal,
-      confianca: folgaConfirmada ? 'confirmado' : 'estimado',
-      formula: `comprimento_final = percurso (${percurso_mm}mm) + seio (${seioMm}mm)`
-        + (folgaConfirmada ? ` + folga (${folgaAplicada}mm)` : ' — folga NÃO aplicada (regra ainda não confirmada pela engenharia)')
+      contornos_mm: seio,
+      folga_mm: folga,
+      comprimento_final_mm: percurso_mm + seio + folga,
+      confianca: 'estimado',
+      formula: `comprimento_final = pisos (${percurso_mm}mm) + seio (${seio}mm) + subida até a caixa de inspeção (${subida}mm) + pontas (${pontas}mm)`
+        + ` + reserva calibrada no cabo real (${reserva}mm)` + (comCasaMaquinas ? ` + distância quadro → descida da laje (${lajeMm}mm)` : '')
         + '. 28 vias = 1 peça só; não multiplicar o comprimento por 28.',
     });
   }
@@ -753,7 +761,7 @@
     calcularLop, montarItensLop, montarItensLopParadas, LOP_MODELOS, montarItensInspecao, INSPECAO_MODELOS, montarItensChicotes, CHICOTES_VPEL, CHICOTES_CAIXA_TOPO_NOVOS, MRL_FIO_UA_MM,
     listarVariantes, chaveVariante, chaveVarianteQuadro, montarBomDaEstrutura, montarBomFixo,
     somaIntervalos, alturaTotalMm, perimetroCaixaMm,
-    montarTrechosFiacaoFixa, montarTrechoCaboManobra, montarChecklist,
+    montarTrechosFiacaoFixa, montarTrechoCaboManobra, CABO_MANOBRA_SEIO_MM, CABO_MANOBRA_SUBIDA_MM, CABO_MANOBRA_PONTAS_MM, CABO_MANOBRA_RESERVA_CALIBRADA_MM, montarChecklist,
     cabinaDentroDoPadrao, montarTrechosFiacaoCarro,
     grupoSeparacaoPorCategoria, classificarCruzamentoErp,
   };

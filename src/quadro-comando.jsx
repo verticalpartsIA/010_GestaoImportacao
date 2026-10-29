@@ -629,18 +629,10 @@ function QcGeometriaSecao({ geometria, intervalos, config, onGeom, onIntervalos,
         </div>
       </Card>
 
-      <Card title="Cabo de manobra — seio e folga" sub="Definições ainda pendentes de confirmação da engenharia (ver instrução original) — sem confirmar, o corte fica travado como pendente.">
+      <Card title="Cabo de manobra — comprimento" sub="Comprimento = soma dos pisos + seio + subida até a caixa de inspeção (3 m) + pontas + reserva calibrada no cabo real (10 m), mais a distância do quadro até a descida da laje quando há casa de máquinas (campo acima). Deixe em branco para usar o padrão.">
         <div className="grid-3" style={{ gap: 12 }}>
-          <QcField label="Seio do cabo (mm)"><QcInput type="number" value={geometria.seio_cabo_mm} disabled={disabled} onChange={(v) => set({ seio_cabo_mm: v })}/></QcField>
-          <QcField label="Definição do seio confirmada pela engenharia?">
-            <label className="small"><input type="checkbox" checked={!!geometria.seio_definicao_confirmada} disabled={disabled}
-              onChange={(e) => set({ seio_definicao_confirmada: e.target.checked })}/> Confirmado</label>
-          </QcField>
-          <QcField label="Folga (mm)"><QcInput type="number" value={geometria.folga_mm} disabled={disabled} onChange={(v) => set({ folga_mm: v })}/></QcField>
-          <QcField label="Regra de folga confirmada pela engenharia?">
-            <label className="small"><input type="checkbox" checked={!!geometria.folga_regra_confirmada} disabled={disabled}
-              onChange={(e) => set({ folga_regra_confirmada: e.target.checked })}/> Confirmado</label>
-          </QcField>
+          <QcField label="Seio / volta do cabo (mm) — padrão 3000"><QcInput type="number" value={geometria.seio_cabo_mm} disabled={disabled} onChange={(v) => set({ seio_cabo_mm: v })}/></QcField>
+          <QcField label="Pontas — soma das duas (mm) — padrão 4000"><QcInput type="number" value={geometria.folga_mm} disabled={disabled} onChange={(v) => set({ folga_mm: v })}/></QcField>
         </div>
       </Card>
     </>
