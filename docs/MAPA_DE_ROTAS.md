@@ -14,7 +14,7 @@
 - O 1º segmento (**módulo**) vem do `BREADCRUMB_MAP` do `shell.jsx` via `MODULE_SLUG` do `router.js`; só o 2º segmento (a rota) decide o que abre.
 - A **aba padrão** deixa a URL limpa (sem o último segmento). Aba inválida na URL cai na padrão.
 - Abas entram na URL com `window.useRouteTab(rota, padrão, [válidas], comId?)` (em `router.js`).
-- Rotas no roteador: **88** · itens de menu: **77** · telas com abas na URL: **17**.
+- Rotas no roteador: **90** · itens de menu: **77** · telas com abas na URL: **17**.
 
 ## Verificações automáticas
 
@@ -170,6 +170,8 @@
 |---|---|---|---|---|
 | `lead-detail` | `/crm/lead-detail/<id>` | — | id na URL (busca no banco) | volta para `leads` |
 | `formulario-elevador` | `/comercial/formulario-elevador/<id>` | — | id na URL (passthrough) | — |
+| `formulario-escada` | `/comercial/formulario-escada/<id>` | — | id na URL (passthrough) | — |
+| `formulario-esteira` | `/comercial/formulario-esteira/<id>` | — | id na URL (passthrough) | — |
 | `formulario-quadro-comando` | `/comercial/formulario-quadro-comando/<id>[/<aba>]` | **escopo**, configuracao, cabina, paradas, maquina, componentes, geometria, resultado | id na URL (passthrough) | — |
 | `cotacao-fornecedor-detail` | `/comercial/cotacao-fornecedor-detail/<id>[/<aba>]` | **detalhes**, tratativas, imagens, documentos | id na URL (busca no banco) | volta para `cotacoes-fornecedor` |
 | `proposta-editor` | `/comercial/proposta-editor/<id>` | — | id na URL (envelope) | — |
@@ -188,7 +190,7 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 |---|---|---|---|---|
 | (? em central-documentos.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `central-documentos.jsx:79` |
 | (? em central-documentos.jsx) | (acionado por um handler — ver o código) | `rh-homologacao` | `/rh/rh-homologacao` | `central-documentos.jsx:81` |
-| (App em app.jsx) | (acionado por um handler — ver o código) | `dashboard` | `/geral/dashboard` | `app.jsx:347` |
+| (App em app.jsx) | (acionado por um handler — ver o código) | `dashboard` | `/geral/dashboard` | `app.jsx:349` |
 | (CardContratoInstalador em dossier-obra.jsx) | Abrir no Jurídico → | `contrato-instalador` | `/juridico/contrato-instalador` | `dossier-obra.jsx:592` |
 | (CVDetalhe em cotacoes-varejo.jsx) | (acionado por um handler — ver o código) | `cadastro-fornecedores` | `/cadastros/cadastro-fornecedores` | `cotacoes-varejo.jsx:633` |
 | (CVLista em cotacoes-varejo.jsx) | Ir para Importação Varejo | `compras` | `/logistica/compras` | `cotacoes-varejo.jsx:51` |
@@ -223,8 +225,8 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | engenharia | Abrir obras | `status-obras` | `/engenharia/status-obras` | `operacoes.jsx:273` |
 | engenharia | Abrir obras | `status-obras` | `/engenharia/status-obras` | `operacoes.jsx:322` |
 | expedicao | (acionado por um handler — ver o código) | `pcp` | `/logistica/pcp` | `expedicao.jsx:301` |
-| formulario-elevador | (acionado por um handler — ver o código) | `controle-cotacoes` | `/comercial/controle-cotacoes` | `formulario-elevador.jsx:2001` |
-| formulario-elevador | (acionado por um handler — ver o código) | `formularios` | `/comercial/formularios` | `formulario-elevador.jsx:1999` |
+| formulario-elevador, formulario-escada, formulario-esteira | (acionado por um handler — ver o código) | `controle-cotacoes` | `/comercial/controle-cotacoes` | `formulario-elevador.jsx:2130` |
+| formulario-elevador, formulario-escada, formulario-esteira | (acionado por um handler — ver o código) | `formularios` | `/comercial/formularios` | `formulario-elevador.jsx:2128` |
 | formulario-quadro-comando | (acionado por um handler — ver o código) | `formularios` | `/comercial/formularios` | `quadro-comando.jsx:1208` |
 | importacao | (acionado por um handler — ver o código) | `importacao-detail` | `/gestao-importacao/importacao-detail` | `logistica.jsx:496` |
 | importacao | (acionado por um handler — ver o código) | `importacao-detail` | `/gestao-importacao/importacao-detail` | `logistica.jsx:547` |
