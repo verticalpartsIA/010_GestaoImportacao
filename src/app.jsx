@@ -392,7 +392,7 @@ function App() {
       case "contrato-instalador": return <ContratoInstaladorPage/>;
       case "vistorias-envio": return <VistoriasEnvio setRoute={setRoute}/>;
       case "vistorias": return <VistoriasObras obraId={subsel} setRoute={setRoute}/>;
-      case "instalacao": return <InstalacaoPage/>;
+      case "instalacao": return <InstalacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "mapa-obras": return <window.MapaObrasPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "central-documentos": return <window.CentralDocumentosPage setRoute={setRoute} setSubsel={setSubsel} subsel={subsel}/>;
       case "art": return <ArtPage setRoute={setRoute}/>;

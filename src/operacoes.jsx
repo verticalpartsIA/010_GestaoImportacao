@@ -735,284 +735,169 @@ function romanize(num) {
    (ver EngenhariaDetail: laudo aponta pra Dossiê da Obra, BOM aponta pro
    Projeto de Equipamento/Ficha Técnica). Nunca eram chamados de lugar
    nenhum — código morto. */
-function ModalAgendarInstalacao({ onClose }) {
-  const [f, setF] = React.useState({ obra:'', equipe:'', data:'', horario:'08:00', obs:'' });
-  const [saving, setSaving] = React.useState(false);
-  const set = (k, v) => setF(p => ({ ...p, [k]: v }));
 
-  const save = async () => {
-    if (!f.obra.trim()) return window.toast('Nome da obra é obrigatório.', 'warning');
-    if (!f.data) return window.toast('Data é obrigatória.', 'warning');
-    setSaving(true);
-    const { error } = await window.__VP_SB.sb.from('tarefas').insert({
-      title: `Instalação: ${f.obra}`, module: 'Instalação', priority: 'alta',
-      due_time: `${f.data} ${f.horario}`, role: 'admin',
-    });
-    setSaving(false);
-    if (error) return window.toast('Erro: ' + error.message, 'error');
-    window.toast(`Instalação de "${f.obra}" agendada para ${f.data}!`, 'success');
-    onClose();
-  };
+/* ---------- Instalação em Campo (29/10/2026) ----------
+   Antes lia de 'equipes'/'projetos' — tabelas sem NENHUM registro real
+   (a tela sempre apareceu vazia, mesmo com 47 obras ativas de verdade).
+   Agora lê a fonte real, a mesma do Mapa de Obras: dossier_obra +
+   equipamentos_obra, agrupada por CLIENTE (InstalacaoCampoStore/-Calc).
+   Cada cliente vira um card retrátil; dentro, 1 linha por equipamento
+   com descrição + 🔧 código/série. Badge do "código Pai": o mesmo VPNI
+   que Contrato do Instalador/Contrato de Venda usam quando a obra nasceu
+   de uma cotação do site; um VPNI-OB#### só de exibição (nada é gravado)
+   quando a obra é legada, sem cotação de origem. Só leitura — mesma
+   regra de navegação do resto do sistema (setSubsel+setRoute, nunca
+   VpRouter.navigate sozinho) pra abrir o Dossiê da Obra.
+   `ModalAgendarInstalacao`/`EquipeChecklist` (que existiam aqui antes)
+   foram removidos: só eram alcançados a partir de 'equipes'/'projetos',
+   que nunca tiveram um registro — código morto, mesma classe do achado
+   logo acima nesta seção. */
+const IC_GRUPOS = [
+  { key: 'andamento', titulo: 'Montando', sub: 'Obras com instalação em andamento' },
+  { key: 'aguardando', titulo: 'Prestes a iniciar', sub: 'Contrato assinado, importação ou homologação do instalador' },
+];
 
+function ICSituacaoTag({ situacao }) {
+  const S = (window.MapaObrasCalc || {}).SITUACOES || {};
+  const s = S[situacao] || { rotulo: situacao || '—', cor: 'var(--fg3)' };
   return (
-    <Modal title="Agendar Instalação" onClose={onClose} width={480}
-      footer={<>
-        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button variant="primary" onClick={save} disabled={saving}>{saving ? 'Salvando…' : 'Agendar'}</Button>
-      </>}>
-      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-        <div className="stack" style={{ gap:4 }}>
-          <label className="up-eyebrow muted">Obra / Prédio *</label>
-          <input className="input" value={f.obra} onChange={e => set('obra', e.target.value)} placeholder="Ed. Itacolomi, Shopping Vila Olímpia…"/>
-        </div>
-        <div className="grid-2" style={{ gap:12 }}>
-          <div className="stack" style={{ gap:4 }}>
-            <label className="up-eyebrow muted">Data *</label>
-            <input className="input" type="date" value={f.data} onChange={e => set('data', e.target.value)}/>
-          </div>
-          <div className="stack" style={{ gap:4 }}>
-            <label className="up-eyebrow muted">Horário</label>
-            <input className="input" type="time" value={f.horario} onChange={e => set('horario', e.target.value)}/>
-          </div>
-        </div>
-        <div className="stack" style={{ gap:4 }}>
-          <label className="up-eyebrow muted">Equipe responsável</label>
-          <input className="input" value={f.equipe} onChange={e => set('equipe', e.target.value)} placeholder="Nome da equipe ou técnico líder"/>
-        </div>
-        <div className="stack" style={{ gap:4 }}>
-          <label className="up-eyebrow muted">Observações</label>
-          <textarea className="input" rows={2} value={f.obs} onChange={e => set('obs', e.target.value)} placeholder="Informações adicionais…" style={{ resize:'vertical', fontFamily:'inherit' }}/>
-        </div>
-      </div>
-    </Modal>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: s.cor, whiteSpace: 'nowrap' }}>
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.cor, display: 'inline-block' }}/>
+      {s.rotulo}
+    </span>
   );
 }
 
-/* Checklist real e persistido por equipe (tabela equipe_checklist). */
-function EquipeChecklist({ equipe }) {
-  const sb = window.__VP_SB.sb;
-  const [itens, setItens] = React.useState(null); // null = carregando
-  const [novo, setNovo] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
-
-  const load = React.useCallback(async () => {
-    const { data, error } = await sb.from('equipe_checklist').select('*').eq('equipe_id', equipe.id).order('ordem').order('created_at');
-    if (error) { window.toast('Erro ao carregar checklist: ' + error.message, 'error'); setItens([]); return; }
-    setItens(data || []);
-  }, [equipe.id]);
-  React.useEffect(() => { setItens(null); load(); }, [load]);
-
-  const add = async () => {
-    const desc = novo.trim(); if (!desc) return;
-    setBusy(true);
-    try {
-      const ordem = (itens && itens.length) ? Math.max(...itens.map(i => i.ordem || 0)) + 1 : 0;
-      const { error } = await sb.from('equipe_checklist').insert({ equipe_id: equipe.id, descricao: desc, ordem });
-      if (error) throw error;
-      setNovo(""); await load();
-    } catch (e) { window.toast('Erro: ' + (e.message || e), 'error'); }
-    finally { setBusy(false); }
-  };
-
-  const toggle = async (it) => {
-    setItens(prev => prev.map(x => x.id === it.id ? { ...x, feito: !x.feito } : x)); // otimista
-    const { error } = await sb.from('equipe_checklist').update({ feito: !it.feito, updated_at: new Date().toISOString() }).eq('id', it.id);
-    if (error) { window.toast('Erro ao salvar: ' + error.message, 'error'); load(); }
-  };
-
-  const remover = async (it) => {
-    setItens(prev => prev.filter(x => x.id !== it.id));
-    const { error } = await sb.from('equipe_checklist').delete().eq('id', it.id);
-    if (error) { window.toast('Erro ao remover: ' + error.message, 'error'); load(); }
-  };
-
-  if (itens === null) return <div style={{ padding:'24px 0', textAlign:'center', color:'var(--fg3)', fontSize:13 }}>Carregando checklist…</div>;
-  const feitos = itens.filter(i => i.feito).length;
-
+function ICEquipamentoRow({ item, onAbrirObra }) {
   return (
-    <div>
-      <div style={{ display:'flex', gap:8, marginBottom:14 }}>
-        <input className="pe-input" placeholder="Nova tarefa do checklist…" value={novo}
-          onChange={e => setNovo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} style={{ flex:1 }}/>
-        <Button variant="primary" size="sm" icon="plus" onClick={add} disabled={busy || !novo.trim()}>Adicionar</Button>
-      </div>
-      {itens.length === 0 ? (
-        <div style={{ padding:'24px 0', textAlign:'center', color:'var(--fg3)', fontSize:13 }}>Nenhuma tarefa no checklist. Adicione a primeira acima.</div>
-      ) : (
-        <>
-          <div style={{ fontSize:12, color:'var(--fg2)', marginBottom:8, fontWeight:600 }}>{feitos}/{itens.length} concluídas</div>
-          <div className="stack" style={{ gap:6 }}>
-            {itens.map(it => (
-              <div key={it.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', border:'1px solid var(--border)', background:'var(--bg)' }}>
-                <input type="checkbox" checked={!!it.feito} onChange={() => toggle(it)} style={{ width:16, height:16, cursor:'pointer' }}/>
-                <span style={{ flex:1, fontSize:13, textDecoration: it.feito ? 'line-through' : 'none', color: it.feito ? 'var(--fg3)' : 'var(--fg1)' }}>{it.descricao}</span>
-                <button onClick={() => remover(it)} title="Remover tarefa" style={{ border:0, background:'transparent', cursor:'pointer', color:'var(--fg3)', display:'flex' }}><Icon.trash size={14}/></button>
-              </div>
-            ))}
-          </div>
-        </>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', borderTop: '1px solid var(--border)', fontSize: 12.5 }}>
+      <span style={{ flex: 1, minWidth: 0, color: 'var(--fg1)' }}>{item.descricao}</span>
+      {item.codigo && (
+        <span style={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontWeight: 700, color: 'var(--fg2)', whiteSpace: 'nowrap' }}>
+          🔧 {item.codigo}
+        </span>
+      )}
+      <StatusBadge status={item.status}/>
+      {onAbrirObra && (
+        <button type="button" onClick={() => onAbrirObra(item.dossierId)} title="Abrir Dossiê da Obra"
+          style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--fg3)', display: 'flex', padding: 2 }}>
+          <Icon.arrowRight size={14}/>
+        </button>
       )}
     </div>
   );
 }
 
-function InstalacaoPage() {
-  const [equipes, setEquipes] = React.useState([]);
-  const [projetos, setProjetos] = React.useState([]);
-  const [parceiros, setParceiros] = React.useState([]);
-  const [alocacoes, setAlocacoes] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-  const [selectedEquipe, setSelectedEquipe] = React.useState(null);
-  const [showAgendar, setShowAgendar] = React.useState(false);
+function ICClienteCard({ grupo, aberto, onToggle, onAbrirObra }) {
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 8, marginBottom: 12, overflow: 'hidden', background: 'var(--bg)' }}>
+      <button type="button" onClick={onToggle}
+        style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', background: 'transparent', border: 0, cursor: 'pointer' }}>
+        <span style={{ fontSize: 13, color: 'var(--fg3)', width: 14, flexShrink: 0 }}>{aberto ? '▾' : '▸'}</span>
+        <div style={{ width: 40, height: 40, background: 'var(--vp-gray-100)', color: 'var(--fg2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Icon.hardhat size={20}/>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>{grupo.cliente}</div>
+          <div style={{ fontSize: 12, color: 'var(--fg3)', marginTop: 2 }}>
+            {grupo.cidades.join(' · ') || 'Cidade não informada'}
+            {grupo.instaladores.length ? ` · Instalando: ${grupo.instaladores.join(', ')}` : ''}
+          </div>
+        </div>
+        <span style={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 12, fontWeight: 700, color: 'var(--fg3)', whiteSpace: 'nowrap' }}
+          title={grupo.nativo ? 'Nasceu de uma cotação do site' : 'Obra legada (sem cotação de origem no site) — código só desta tela, nada gravado'}>
+          {grupo.codigoPai}
+        </span>
+        <span style={{ fontSize: 12, color: 'var(--fg3)', whiteSpace: 'nowrap' }}>{grupo.equipamentos.length} equip.</span>
+        <ICSituacaoTag situacao={grupo.situacao}/>
+      </button>
+      {aberto && (
+        <div>
+          {grupo.equipamentos.map((item, i) => <ICEquipamentoRow key={item.dossierId + ':' + i} item={item} onAbrirObra={onAbrirObra}/>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InstalacaoPage({ setRoute, setSubsel }) {
+  const [dados, setDados] = React.useState(null); // { dossies, equipamentos, instaladores, elenco }
+  const [erro, setErro] = React.useState(null);
+  const [busca, setBusca] = React.useState('');
+  const [abertos, setAbertos] = React.useState({});
 
   React.useEffect(() => {
-    Promise.all([
-      window.__VP_SB.sb.from('equipes').select('*'),
-      window.__VP_SB.sb.from('projetos').select('*'),
-      window.__VP_SB.sb.from('parceiros_instaladores').select('*'),
-    ]).then(([eq, proj, parc]) => {
-      setEquipes(eq.data || []);
-      setProjetos(proj.data || []);
-      setParceiros(parc.data || []);
-      // Simula alocações (projeto.id = montador vinculado)
-      const alocs = (proj.data || []).filter(p => p.status === "Em vistoria" || p.status === "Laudo emitido").map(p => ({
-        projeto: p,
-        parceiro: (parc.data || []).find(pc => pc.nome && p.responsavel?.includes(pc.nome)),
-        iniciado: p.visita,
-        previsao: new Date(new Date(p.visita).getTime() + 45*24*60*60*1000).toISOString(),
-      })).filter(a => a.parceiro);
-      setAlocacoes(alocs);
-      setLoading(false);
-    });
+    let vivo = true;
+    window.InstalacaoCampoStore.carregar()
+      .then((d) => { if (vivo) { setDados(d); setErro(null); } })
+      .catch((e) => { if (vivo) { setErro('Não foi possível carregar os clientes ativos: ' + (e.message || e)); setDados({ dossies: [], equipamentos: [], instaladores: [], elenco: [] }); } });
+    return () => { vivo = false; };
   }, []);
 
-  if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
+  const grupos = React.useMemo(() => {
+    if (!dados || !window.InstalacaoCampoCalc) return [];
+    return window.InstalacaoCampoCalc.agruparPorCliente(dados.dossies, dados.equipamentos, dados.instaladores, dados.elenco);
+  }, [dados]);
+
+  const q = busca.trim().toLowerCase();
+  const filtrados = grupos.filter((g) => {
+    if (!q) return true;
+    const campos = [g.cliente, g.codigoPai, ...g.cidades, ...g.instaladores, ...g.equipamentos.flatMap((e) => [e.descricao, e.codigo, e.status])];
+    return campos.filter(Boolean).join(' ').toLowerCase().includes(q);
+  });
+
+  const toggle = (id) => setAbertos((v) => ({ ...v, [id]: !v[id] }));
+  const abrirObra = (dossierId) => { if (setSubsel && setRoute) { setSubsel(dossierId); setRoute('dossier-obra'); } };
+
+  const carregando = !dados;
 
   return (
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Instalação & Entrega · Instalação</div>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Obras & Instalação · Instalação</div>
           <h1 className="page-head__title">Instalação em Campo</h1>
-          <p className="page-head__sub">Equipes ativas, checklist de obra, laudo final e termo de aceite</p>
-        </div>
-        <div className="page-head__r">
-          <Button variant="outline" icon="calendar" onClick={() => window.open('https://calendar.google.com/calendar/r/week', '_blank')}>Calendário</Button>
-          <Button variant="primary" icon="plus" onClick={() => setShowAgendar(true)}>Agendar instalação</Button>
+          <p className="page-head__sub">Clientes com obra sendo montada agora ou prestes a iniciar — cada equipamento, com seu código de série</p>
         </div>
       </div>
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
-        <KPI label="Equipes em campo" value={equipes.filter(e => e.status === "Em campo").length} sub="ativas" icon="hardhat"/>
-        <KPI label="Obras ativas" value={String(alocacoes.length)} sub="com parceiro alocado" icon="briefcase"/>
-        <KPI label="Parceiros homologados" value={String(parceiros.length)} sub="disponíveis" icon="users"/>
-        <KPI label="Termos de aceite" value="—" sub="sem dados suficientes" icon="check"/>
+        <KPI label="Clientes ativos" value={carregando ? '…' : String(grupos.length)} sub="montando ou prestes a iniciar" icon="users"/>
+        <KPI label="Montando" value={carregando ? '…' : String(grupos.filter((g) => g.situacao === 'andamento').length)} sub="em instalação agora" icon="hardhat"/>
+        <KPI label="Prestes a iniciar" value={carregando ? '…' : String(grupos.filter((g) => g.situacao === 'aguardando').length)} sub="contrato/importação/homologação" icon="briefcase"/>
+        <KPI label="Equipamentos" value={carregando ? '…' : String(grupos.reduce((s, g) => s + g.equipamentos.length, 0))} sub="nas obras ativas" icon="check"/>
       </div>
 
-      {alocacoes.length > 0 && (
-        <Card title="Parceiros em Obras" sub={`${alocacoes.length} alocações ativas`} style={{ marginBottom: 20 }}>
-          <div className="stack" style={{ gap: 14 }}>
-            {alocacoes.map((aloc, i) => {
-              const diasRestantes = Math.ceil((new Date(aloc.previsao) - new Date()) / (1000*60*60*24));
-              const progresso = Math.max(0, Math.min(100, 100 - (diasRestantes / 45 * 100)));
-              const statusColor = diasRestantes < 7 ? 'var(--vp-danger)' : diasRestantes < 14 ? 'var(--vp-warning-ink)' : 'var(--vp-success)';
+      <input className="input" style={{ maxWidth: 480, marginBottom: 14 }}
+        placeholder="Buscar por cliente, cidade, instalador, equipamento ou código…"
+        value={busca} onChange={(e) => setBusca(e.target.value)}/>
 
-              return (
-                <div key={i} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: 14 }}>
-                  <div className="row sb" style={{ marginBottom: 12, alignItems: 'flex-start' }}>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 700 }}>🏢 {aloc.parceiro?.nome || 'Parceiro não alocado'}</div>
-                      <div style={{ fontSize: 12, color: 'var(--fg3)', marginTop: 2 }}>
-                        Obra: <b>{aloc.projeto.building}</b> ({aloc.projeto.id})
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div className="up-eyebrow muted">Status</div>
-                      <StatusBadge status={aloc.projeto.status}/>
-                    </div>
-                  </div>
+      {erro && <div style={{ padding: 12, margin: '0 0 14px', border: '1px solid var(--vp-danger)', color: 'var(--vp-danger)', borderRadius: 6, fontSize: 13 }}>{erro}</div>}
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12, fontSize: 12 }}>
-                    <div>
-                      <div className="up-eyebrow muted">Iniciado</div>
-                      <div style={{ fontWeight: 600, marginTop: 2 }}>{new Date(aloc.iniciado).toLocaleDateString('pt-BR')}</div>
-                    </div>
-                    <div>
-                      <div className="up-eyebrow muted">Previsão de Entrega</div>
-                      <div style={{ fontWeight: 600, marginTop: 2, color: statusColor }}>
-                        {new Date(aloc.previsao).toLocaleDateString('pt-BR')}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="up-eyebrow muted">Dias Restantes</div>
-                      <div style={{ fontWeight: 600, marginTop: 2, color: statusColor }}>{diasRestantes} dias</div>
-                    </div>
-                  </div>
-
-                  <div style={{ marginBottom: 10 }}>
-                    <div className="up-eyebrow muted" style={{ marginBottom: 4 }}>Progresso</div>
-                    <div className="progress"><span style={{ width: progresso + '%' }}/></div>
-                    <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 4 }}>{Math.round(progresso)}% concluído</div>
-                  </div>
-
-                  {aloc.parceiro && (
-                    <div style={{ fontSize: 11, color: 'var(--fg3)', padding: '8px 10px', background: 'var(--vp-gray-50)', borderRadius: 4 }}>
-                      ✓ Certificações ativas: {
-                        Object.entries(aloc.parceiro.certificacoes || {})
-                          .filter(([_, cert]) => cert?.data_validade && new Date(cert.data_validade) > new Date())
-                          .map(([key]) => key.toUpperCase())
-                          .join(', ') || 'Nenhuma'
-                      }
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </Card>
+      {carregando ? (
+        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>
+      ) : grupos.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhum cliente com obra em andamento ou prestes a iniciar no momento.</div>
+      ) : (
+        IC_GRUPOS.map((grp) => {
+          const lista = filtrados.filter((g) => g.situacao === grp.key);
+          if (!lista.length) return null;
+          return (
+            <section key={grp.key} style={{ marginBottom: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+                <h2 style={{ fontSize: 16, margin: 0 }}>{grp.titulo} <span style={{ fontSize: 13, color: 'var(--fg3)', fontWeight: 500 }}>({lista.length})</span></h2>
+                <span style={{ fontSize: 12, color: 'var(--fg3)' }}>{grp.sub}</span>
+              </div>
+              {lista.map((g) => (
+                <ICClienteCard key={g.clienteId} grupo={g} aberto={!!abertos[g.clienteId]} onToggle={() => toggle(g.clienteId)} onAbrirObra={abrirObra}/>
+              ))}
+            </section>
+          );
+        })
       )}
-
-      <div className="grid-2" style={{ gap: 20 }}>
-        <Card title="Equipes" sub={`${equipes.length} equipes`} sharp>
-          <div className="stack" style={{ gap: 10 }}>
-            {equipes.length === 0 && (
-              <div style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
-                Nenhum registro cadastrado.
-              </div>
-            )}
-            {equipes.map((e) => (
-              <div key={e.id}
-                style={{ padding: 14, background: selectedEquipe?.id === e.id ? "var(--vp-gray-50)" : "var(--bg)", border: "1px solid " + (selectedEquipe?.id === e.id ? "var(--vp-black)" : "var(--border)"), display: "flex", alignItems: "center", gap: 14, cursor: "pointer" }}
-                onClick={() => setSelectedEquipe(e)}>
-                <div style={{ width: 44, height: 44, background: e.status === "Em campo" ? "var(--vp-yellow)" : "var(--vp-gray-100)", color: e.status === "Em campo" ? "var(--vp-black)" : "var(--fg2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Icon.hardhat size={22}/>
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>{e.nome}</div>
-                  <div className="cell-sub">{e.lider} · {e.membros || "—"} membros · {e.ativo || "—"}</div>
-                </div>
-                <StatusBadge status={e.status === "Em campo" ? "Em rota" : "Aprovado"}/>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        {selectedEquipe ? (
-          <Card title={`Checklist · ${selectedEquipe.nome}`}
-            sub={selectedEquipe.lider || ""}
-            action={<>
-              <Button variant="outline" size="sm" icon="upload" onClick={() => { const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.onchange = e => { const f = e.target.files?.[0]; if (f) window.toast(`"${f.name}" selecionada (${Math.round(f.size/1024)}kb). Upload via Supabase Storage — configurar bucket.`, 'info'); }; inp.click(); }}>Foto</Button>
-              <Button variant="primary" size="sm" icon="signature" onClick={() => { window.toast("Gerando laudo final — abrindo impressão.", "info"); setTimeout(() => window.print(), 200); }}>Laudo final</Button>
-            </>}>
-            <EquipeChecklist equipe={selectedEquipe}/>
-          </Card>
-        ) : (
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'center', border:'1px dashed var(--border)', color:'var(--fg3)', fontSize:13, padding:'60px 20px', textAlign:'center' }}>
-            Selecione uma equipe à esquerda para ver o checklist de obra.
-          </div>
-        )}
-      </div>
-      {showAgendar && <ModalAgendarInstalacao onClose={() => setShowAgendar(false)}/>}
+      {!carregando && grupos.length > 0 && filtrados.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhum cliente encontrado para esta busca.</div>
+      )}
     </div>
   );
 }
