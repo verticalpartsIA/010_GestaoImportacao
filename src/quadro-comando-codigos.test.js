@@ -92,7 +92,8 @@ test('chicotes automáticos: poço (VPB-209) e topo de cabine (VPB-193) trazem o
   assert.deepStrictEqual(skus(E.montarItensChicotes([{ sku: 'VPB-209' }], {})),
     ['VPEL-729a', 'VPEL-730a', 'VPEL-731a', 'VPEL-732a', 'VPEL-733a']);
   assert.deepStrictEqual(skus(E.montarItensChicotes([{ sku: 'VPB-193' }], {})),
-    ['VPEL-721a', 'VPEL-723a', 'VPEL-725a', 'VPEL-727a', 'VPEL-728a', 'VPEL-729a', 'VPEL-730a', 'VPEL-731a']);
+    ['A-DEFINIR-CA/CC'.replace('/', ''), 'A-DEFINIR-COB1', 'A-DEFINIR-DC1', 'A-DEFINIR-DEN1', 'A-DEFINIR-DP', 'A-DEFINIR-DZ', 'A-DEFINIR-RDZ', 'A-DEFINIR-WT1', 'A-DEFINIR-Y1Y2S3', 'A-DEFINIR-Y4', 'A-DEFINIR-CBTEL1',
+      'VPEL-721a', 'VPEL-723a', 'VPEL-725a', 'VPEL-727a', 'VPEL-728a', 'VPEL-729a', 'VPEL-730a', 'VPEL-731a'].sort());
   assert.deepStrictEqual(skus(E.montarItensChicotes([{ sku: 'VPB-380' }], {})), ['VPEL-729a', 'VPEL-730a', 'VPEL-731a']);
   assert.deepStrictEqual(skus(E.montarItensChicotes([{ sku: 'VPEL-729a' }], {})), ['VPEL-730a', 'VPEL-731a']);
 });
@@ -128,4 +129,22 @@ test('chicotes HW, MT e OS levam o comprimento do trecho de fiação fixa; sem m
   assert.strictEqual(mr['VPEL-730a'].confianca, 'pendente_engenharia');
   const semTrechos = por(E.montarItensChicotes([], {}));
   assert.strictEqual(semTrechos['VPEL-731a'].confianca, 'pendente_engenharia');
+});
+
+test('chicotes da caixa de topo: um por conector, 2,40 m (3,50 m SOS e WT2), código a definir até cadastrar; condições', () => {
+  const por = (l) => Object.fromEntries(l.map((i) => [i.sku, i]));
+  const base = por(E.montarItensChicotes([{ sku: 'VPB-193' }], {}));
+  assert.match(base['A-DEFINIR-DP'].descricao, /2,40 m — código VPEL a definir$/);
+  assert.strictEqual(base['A-DEFINIR-DP'].confianca, 'pendente_engenharia');
+  assert.match(base['VPEL-725a'].descricao, /3,50 m$/);
+  assert.match(base['VPEL-721a'].descricao, /2,40 m$/);
+  ['EDP2', 'DC2', 'DEN2', 'WT2', 'COB2'].forEach((k) => assert.ok(!base['A-DEFINIR-' + k], k + ' só com a condição'));
+  const comTudo = por(E.montarItensChicotes([{ sku: 'VPB-193' }], {}, null, { portaOposta: true, celulaCarga: true, cob2: true }));
+  ['EDP2', 'DC2', 'DEN2', 'WT2', 'COB2'].forEach((k) => assert.ok(comTudo['A-DEFINIR-' + k], k));
+  assert.match(comTudo['A-DEFINIR-WT2'].descricao, /3,50 m/);
+  const cad = por(E.montarItensChicotes([{ sku: 'VPB-193' }], {}, null, { codigos: { DP: 'VPEL-740a', SOS: 'VPEL-799a' } }));
+  assert.ok(cad['VPEL-740a'] && !cad['A-DEFINIR-DP']);
+  assert.strictEqual(cad['VPEL-740a'].confianca, 'confirmado');
+  assert.ok(cad['VPEL-799a'] && !cad['VPEL-725a']);
+  assert.deepStrictEqual(Object.keys(por(E.montarItensChicotes([{ sku: 'VPB-209' }], {}))).filter((k) => k.startsWith('A-DEFINIR')), []);
 });
