@@ -14,7 +14,7 @@
 - O 1º segmento (**módulo**) vem do `BREADCRUMB_MAP` do `shell.jsx` via `MODULE_SLUG` do `router.js`; só o 2º segmento (a rota) decide o que abre.
 - A **aba padrão** deixa a URL limpa (sem o último segmento). Aba inválida na URL cai na padrão.
 - Abas entram na URL com `window.useRouteTab(rota, padrão, [válidas], comId?)` (em `router.js`).
-- Rotas no roteador: **88** · itens de menu: **77** · telas com abas na URL: **16**.
+- Rotas no roteador: **88** · itens de menu: **77** · telas com abas na URL: **17**.
 
 ## Verificações automáticas
 
@@ -81,7 +81,7 @@
 | P.I. | `pi-importacao` | `/gestao-importacao/pi-importacao` | — | — |
 | RFQ | `rfq-importacao` | `/gestao-importacao/rfq-importacao` | — | — |
 | IMS | `ims-importacao` | `/gestao-importacao/ims-importacao` | — | — |
-| Embarques | `embarques-importacao` | `/gestao-importacao/embarques-importacao` | — | — |
+| Embarques | `embarques-importacao` | `/gestao-importacao/embarques-importacao[/<aba>]` | **identificacao**, pagamentos, embarque, frete, aduaneiro, faturamento, entrega | — |
 | Rastreio Marítimo | `importacao` | `/gestao-importacao/importacao[/<aba>]` | **embarques**, documentos, aduana | — |
 | Análise de Preços | `gi-analise-precos` | `/gestao-importacao/gi-analise-precos` | — | — |
 | Importação Varejo | `compras` | `/logistica/compras` | — | — |
@@ -225,7 +225,7 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | expedicao | (acionado por um handler — ver o código) | `pcp` | `/logistica/pcp` | `expedicao.jsx:301` |
 | formulario-elevador | (acionado por um handler — ver o código) | `controle-cotacoes` | `/comercial/controle-cotacoes` | `formulario-elevador.jsx:2001` |
 | formulario-elevador | (acionado por um handler — ver o código) | `formularios` | `/comercial/formularios` | `formulario-elevador.jsx:1999` |
-| formulario-quadro-comando | (acionado por um handler — ver o código) | `formularios` | `/comercial/formularios` | `quadro-comando.jsx:1216` |
+| formulario-quadro-comando | (acionado por um handler — ver o código) | `formularios` | `/comercial/formularios` | `quadro-comando.jsx:1208` |
 | importacao | (acionado por um handler — ver o código) | `importacao-detail` | `/gestao-importacao/importacao-detail` | `logistica.jsx:496` |
 | importacao | (acionado por um handler — ver o código) | `importacao-detail` | `/gestao-importacao/importacao-detail` | `logistica.jsx:547` |
 | importacao | (acionado por um handler — ver o código) | `importacao-detail` | `/gestao-importacao/importacao-detail` | `logistica.jsx:572` |
@@ -238,6 +238,7 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | importacao-rastreamento | Abrir embarque | `importacao-detail` | `/gestao-importacao/importacao-detail` | `logistica.jsx:1176` |
 | inbox | Voltar | `dashboard` | `/geral/dashboard` | `logistica.jsx:2269` |
 | inbox | (acionado por um handler — ver o código) | `linha-do-tempo` | `/engenharia/linha-do-tempo` | `logistica.jsx:1991` |
+| instalacao | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `operacoes.jsx:850` |
 | juridico | (acionado por um handler — ver o código) | `contrato-editor` | `/juridico/contrato-editor` | `operacoes.jsx:361` |
 | juridico | (acionado por um handler — ver o código) | `contrato-venda-equipamentos` | `/juridico/contrato-venda-equipamentos` | `operacoes.jsx:359` |
 | lead-detail | (acionado por um handler — ver o código) | `leads` | `/crm/leads` | `comercial.jsx:1037` |
@@ -271,7 +272,6 @@ São abas de formulário/modal, filtros, modos de visualização e passos de ass
 | `decisoes.jsx:301` | DecisoesPage | `modoAdmin` | `false` | `decisoes` |
 | `dossier-obra.jsx:901` | TermoEntregaPanel | `modo` | `'self_service'` | `dossier-obra`, `status-obras` |
 | `dossier-obra.jsx:1584` | FormAdicionarItemTemplate | `etapa` | `''` | `dossier-obra`, `status-obras` |
-| `embarques-importacao.jsx:375` | EmbarqueImportacaoForm | `tab` | `'identificacao'` | `embarques-importacao` |
 | `formulario-quadro-comando-publico.jsx:253` | ? | `passo` | `0` | (modal/componente interno) |
 | `ims.jsx:75` | IMSForm | `tab` | `'identificacao'` | `ims-importacao` |
 | `ims.jsx:342` | IMSPage | `activeTab` | `'todos'` | `ims-importacao` |
