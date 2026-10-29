@@ -94,8 +94,8 @@
       return tem(String(resp.lop_botoes) === '1' ? fam.sobe : fam.dois);
     }
     if (chave === 'lip') return resp.ind_cor === 'azul' ? tem('VPB-107') : tem('VPEL-686');
-    if (chave === 'botoeira_inspecao_cabina') return tem('VPB-208');
-    if (chave === 'botoeira_inspecao_poco') return tem('VPB-380');
+    if (chave === 'botoeira_inspecao_cabina') return tem('VPB-193');
+    if (chave === 'botoeira_inspecao_poco') return tem('VPB-209');
     if (chave === 'botao_stop_poco') return tem('VPEL-378');
     if (chave === 'portas' || chave === 'portas_pavimento' || chave === 'maquina_tracao') return null; // o cliente já escolheu na página; vem de lá
     return ops.length === 1 ? ops[0].codigo : null; // só um produto possível no Omie

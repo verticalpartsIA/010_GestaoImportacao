@@ -54,10 +54,10 @@ test('LOP: resumo de contagem e origem aceita pelo banco', () => {
   assert.ok(E.montarItensLop(4, 2).every((i) => i.origem === 'calculado_geometria'));
 });
 
-test('Inspeção: cabina (VPB-208) e poço (VPB-380) entram na BOM só quando "fornecer"', () => {
+test('Inspeção: cabina (VPB-193) e poço (VPB-209) entram na BOM só quando "fornecer"', () => {
   const it = E.montarItensInspecao({ botoeira_inspecao_cabina: { decisao: 'fornecer' }, botoeira_inspecao_poco: { decisao: 'fornecer' } });
-  assert.equal(qtd(it, 'VPB-208'), 1);
-  assert.equal(qtd(it, 'VPB-380'), 1);
+  assert.equal(qtd(it, 'VPB-193'), 1);
+  assert.equal(qtd(it, 'VPB-209'), 1);
   const so = E.montarItensInspecao({ botoeira_inspecao_cabina: { decisao: 'fornecer' }, botoeira_inspecao_poco: { decisao: 'terceiro' } });
   assert.equal(so.length, 1);
   assert.deepEqual(E.montarItensInspecao({}), []);
