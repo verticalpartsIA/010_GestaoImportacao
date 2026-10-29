@@ -96,3 +96,17 @@ test('chicotes automáticos: poço (VPB-209) e topo de cabine (VPB-193) trazem o
   assert.deepStrictEqual(skus(E.montarItensChicotes([{ sku: 'VPB-380' }], {})), ['VPEL-729a', 'VPEL-730a', 'VPEL-731a']);
   assert.deepStrictEqual(skus(E.montarItensChicotes([{ sku: 'VPEL-729a' }], {})), ['VPEL-730a', 'VPEL-731a']);
 });
+
+test('MRL: máquina (MT), limitador (OS) e PAP (HW) saem com 6000mm quando não medidos; medida vence; com casa de máquinas não presume', () => {
+  const mm = (t) => Object.fromEntries(t.map((x) => [x.endereco_referencia, x.comprimento_final_mm]));
+  const mrl = mm(E.montarTrechosFiacaoFixa({}, 'MRL'));
+  assert.strictEqual(mrl['U/V/W, MT (freio)'], 6000);
+  assert.strictEqual(mrl.OS, 6000);
+  assert.strictEqual(mrl.HW, 6000);
+  const medido = mm(E.montarTrechosFiacaoFixa({ distancia_quadro_maquina_mm: 5200, distancia_quadro_limitador_mm: 4800 }, 'MRL'));
+  assert.strictEqual(medido['U/V/W, MT (freio)'], 5200);
+  assert.strictEqual(medido.OS, 4800);
+  const mr = E.montarTrechosFiacaoFixa({}, 'MR');
+  assert.ok(mr.every((t) => !t.comprimento_final_mm));
+  assert.ok(!mr.some((t) => t.endereco_referencia === 'HW'));
+});

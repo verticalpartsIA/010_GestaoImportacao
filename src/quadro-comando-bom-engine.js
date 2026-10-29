@@ -320,10 +320,18 @@
     };
   }
 
-  function montarTrechosFiacaoFixa(geometria) {
-    const trechos = [];
+  /* Sem casa de máquinas (MRL) o quadro fica no pavimento da última parada e a máquina/limitador na UA (≈4.500mm acima do piso;
+     o fio sai da base do quadro, ~440mm acima do piso): ≈5.000mm de percurso, 6.000mm com folga (regra da Engenharia, 28/10/2026).
+     Só vale quando a distância não foi medida; medida informada sempre vence. */
+  const MRL_FIO_UA_MM = 6000;
+  const ehMRL = (tipoAplicacao) => String(tipoAplicacao || '').toUpperCase() === 'MRL';
 
-    const distMaquina = Number(geometria.distancia_quadro_maquina_mm) || null;
+  function montarTrechosFiacaoFixa(geometria, tipoAplicacao) {
+    const trechos = [];
+    const mrl = ehMRL(tipoAplicacao);
+    const padraoMRL = `Padrão sem casa de máquinas (MRL): quadro no pavimento até a última altura (UA ≈4.500mm + ~440mm do piso à base do quadro ≈ 5.000mm) com folga = ${MRL_FIO_UA_MM}mm.`;
+
+    const distMaquina = Number(geometria.distancia_quadro_maquina_mm) || (mrl ? MRL_FIO_UA_MM : null);
     trechos.push(trechoBase({
       tipo_cabo: 'Fiação fixa — força/comando da máquina',
       endereco_referencia: 'U/V/W, MT (freio)',
@@ -331,13 +339,13 @@
       destino_fisico: 'Máquina de tração',
       comprimento_base_mm: distMaquina,
       comprimento_final_mm: distMaquina,
-      confianca: distMaquina ? 'confirmado' : 'pendente_engenharia',
+      confianca: distMaquina ? (Number(geometria.distancia_quadro_maquina_mm) ? 'confirmado' : 'estimado') : 'pendente_engenharia',
       formula: distMaquina
-        ? `comprimento_final = distancia_quadro_maquina_mm (medido) = ${distMaquina}mm`
+        ? (Number(geometria.distancia_quadro_maquina_mm) ? `comprimento_final = distancia_quadro_maquina_mm (medido) = ${distMaquina}mm` : padraoMRL)
         : 'distancia_quadro_maquina_mm não informada — não presumir os 10m de referência comercial sem confirmação explícita.',
     }));
 
-    const distLimitador = Number(geometria.distancia_quadro_limitador_mm) || null;
+    const distLimitador = Number(geometria.distancia_quadro_limitador_mm) || (mrl ? MRL_FIO_UA_MM : null);
     trechos.push(trechoBase({
       tipo_cabo: 'Fiação fixa — limitador de velocidade (OS)',
       endereco_referencia: 'OS',
@@ -345,11 +353,24 @@
       destino_fisico: 'Limitador de velocidade (guia solitária)',
       comprimento_base_mm: distLimitador,
       comprimento_final_mm: distLimitador,
-      confianca: distLimitador ? 'confirmado' : 'pendente_engenharia',
+      confianca: distLimitador ? (Number(geometria.distancia_quadro_limitador_mm) ? 'confirmado' : 'estimado') : 'pendente_engenharia',
       formula: distLimitador
-        ? `comprimento_final = distancia_quadro_limitador_mm (medido) = ${distLimitador}mm`
+        ? (Number(geometria.distancia_quadro_limitador_mm) ? `comprimento_final = distancia_quadro_limitador_mm (medido) = ${distLimitador}mm` : padraoMRL)
         : 'distancia_quadro_limitador_mm não informada — não presumir os 7,6m/10m de referência comercial sem confirmação explícita.',
     }));
+
+    if (mrl) {
+      trechos.push(trechoBase({
+        tipo_cabo: 'Fiação fixa — PAP do motor / volante de inércia (HW)',
+        endereco_referencia: 'HW',
+        origem_fisica: 'Quadro de comando',
+        destino_fisico: 'Máquina de tração (última altura)',
+        comprimento_base_mm: MRL_FIO_UA_MM,
+        comprimento_final_mm: MRL_FIO_UA_MM,
+        confianca: 'estimado',
+        formula: padraoMRL,
+      }));
+    }
 
     const distCaixa = Number(geometria.distancia_quadro_entrada_caixa_mm) || null;
     trechos.push(trechoBase({
@@ -665,7 +686,7 @@
   }
 
   window.QuadroComandoBomEngine = {
-    calcularLop, montarItensLop, montarItensLopParadas, LOP_MODELOS, montarItensInspecao, INSPECAO_MODELOS, montarItensChicotes, CHICOTES_VPEL,
+    calcularLop, montarItensLop, montarItensLopParadas, LOP_MODELOS, montarItensInspecao, INSPECAO_MODELOS, montarItensChicotes, CHICOTES_VPEL, MRL_FIO_UA_MM,
     listarVariantes, chaveVariante, chaveVarianteQuadro, montarBomDaEstrutura, montarBomFixo,
     somaIntervalos, alturaTotalMm, perimetroCaixaMm,
     montarTrechosFiacaoFixa, montarTrechoCaboManobra, montarChecklist,
