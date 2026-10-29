@@ -407,6 +407,7 @@ Deno.serve(async (req) => {
         // O modelo escolhido já define a potência; a tensão gravada é a da REDE do prédio (campo "Tensão da rede" do hub).
         potencia_kw: num(variante.split("_")[0]),
         tensao_v: num(d.tensao_rede === "outro" ? d.tensao_rede_outro : d.tensao_rede),
+        fases: "3", // elevador é sempre trifásico (regra da Engenharia)
         freio_tipo: str(d.tipo_freio, 40) || null,
         freio_tensao_acionamento: num(d.tensao_freio),
       });
