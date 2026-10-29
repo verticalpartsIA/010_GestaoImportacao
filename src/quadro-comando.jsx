@@ -558,7 +558,7 @@ function QcGeometriaSecao({ geometria, intervalos, config, onGeom, onIntervalos,
 
   return (
     <>
-      <Card title="Geometria da caixa (medida em mm)" sub="Sempre a medida real da obra — os padrões comerciais de estimativa (poço 1500mm, intervalo 3000mm, K 4400mm) só entram se você marcar explicitamente 'estimado'.">
+      <Card title="Geometria da caixa (medida em mm)" sub="Sempre a medida real da obra — os padrões comerciais de estimativa (poço 1500mm, intervalo 3000mm, K 4500mm) só entram se você marcar explicitamente 'estimado'.">
         <div className="grid-3" style={{ gap: 12 }}>
           <QcField label="Profundidade do poço (S)">
             <QcInput type="number" value={geometria.poco_mm} disabled={disabled} onChange={(v) => set({ poco_mm: v })}/>
@@ -568,7 +568,7 @@ function QcGeometriaSecao({ geometria, intervalos, config, onGeom, onIntervalos,
           <QcField label="Última altura (K)">
             <QcInput type="number" value={geometria.ultima_altura_mm} disabled={disabled} onChange={(v) => set({ ultima_altura_mm: v })}/>
             <label className="small muted"><input type="checkbox" checked={geometria.ultima_altura_origem === 'estimado'} disabled={disabled}
-              onChange={(e) => set({ ultima_altura_origem: e.target.checked ? 'estimado' : 'medido' })}/> usar padrão comercial (4400mm)</label>
+              onChange={(e) => set({ ultima_altura_origem: e.target.checked ? 'estimado' : 'medido' })}/> usar padrão comercial (4500mm)</label>
           </QcField>
           <QcField label="Largura da caixa de corrida"><QcInput type="number" value={geometria.caixa_largura_mm} disabled={disabled} onChange={(v) => set({ caixa_largura_mm: v })}/></QcField>
           <QcField label="Profundidade da caixa de corrida"><QcInput type="number" value={geometria.caixa_profundidade_mm} disabled={disabled} onChange={(v) => set({ caixa_profundidade_mm: v })}/></QcField>
@@ -576,7 +576,7 @@ function QcGeometriaSecao({ geometria, intervalos, config, onGeom, onIntervalos,
         <div className="small muted" style={{ marginTop: 4 }}>Largura/profundidade/altura da cabina agora ficam na aba "Cabina".</div>
         <div className="small muted" style={{ marginTop: 6 }}>
           Percurso (soma dos intervalos): <b>{calc.percurso_mm} mm</b> · Altura total: <b>{calc.altura_total_mm} mm</b>
-          {calc.ultima_altura_fora_do_padrao && <span style={{ color: '#a11d1d', fontWeight: 600 }}> · fora do padrão (K &gt; 4400mm) — encaminhar pra análise da engenharia.</span>}
+          {calc.ultima_altura_fora_do_padrao && <span style={{ color: '#a11d1d', fontWeight: 600 }}> · fora do padrão (K &gt; 4500mm) — encaminhar pra análise da engenharia.</span>}
           {perimetro != null && <> · Perímetro da caixa: <b>{perimetro} mm</b> (referência de contorno, não lançar automaticamente num ramal específico)</>}
         </div>
       </Card>
