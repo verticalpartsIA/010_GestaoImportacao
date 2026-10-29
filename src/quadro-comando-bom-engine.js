@@ -633,7 +633,12 @@
   ];
   const CHICOTES_DO_QUADRO = ['HW', 'MT', 'OS'];
 
-  function montarItensChicotes(bomItens, catalogoPorSku) {
+  /* HW, MT e OS saem do quadro até a última altura: o comprimento é o do trecho de fiação fixa correspondente (medido, ou 6.000mm estimado em MRL).
+     Sem trecho/comprimento (ex.: casa de máquinas sem medida) o item fica "pendente de engenharia" — nunca se presume metragem. */
+  const CHICOTE_TRECHO = { MT: 'U/V/W, MT (freio)', OS: 'OS', HW: 'HW' };
+  const fmtMetros = (mm) => (mm / 1000).toFixed(2).replace('.', ',') + ' m';
+
+  function montarItensChicotes(bomItens, catalogoPorSku, trechosFixa) {
     const cat = catalogoPorSku || {};
     const skusBom = new Set((bomItens || []).map((i) => i.sku));
     const vistos = new Set(skusBom);
@@ -642,8 +647,18 @@
       const [sku, desc] = CHICOTES_VPEL[chave];
       if (vistos.has(sku)) return;
       vistos.add(sku);
-      itens.push({ sku, descricao: (cat[sku] && cat[sku].descricao) || desc, unidade: 'un', grupo_separacao: 'componentes', quantidade: 1,
-        origem: 'calculado_geometria', confianca: 'confirmado', memoria_calculo: `Chicote automático: ${motivo}. 1 por elevador.` });
+      const base = (cat[sku] && cat[sku].descricao) || desc;
+      const refTrecho = CHICOTE_TRECHO[chave];
+      if (!refTrecho) {
+        itens.push({ sku, descricao: base, unidade: 'un', grupo_separacao: 'componentes', quantidade: 1,
+          origem: 'calculado_geometria', confianca: 'confirmado', memoria_calculo: `Chicote automático: ${motivo}. 1 por elevador.` });
+        return;
+      }
+      const t = (trechosFixa || []).find((x) => x.endereco_referencia === refTrecho);
+      const mm = t && Number(t.comprimento_final_mm) > 0 ? Number(t.comprimento_final_mm) : null;
+      itens.push({ sku, descricao: mm ? `${base} — ${fmtMetros(mm)}` : `${base} — comprimento a definir`, unidade: 'un', grupo_separacao: 'componentes', quantidade: 1,
+        origem: 'calculado_geometria', confianca: mm ? (t.confianca === 'confirmado' ? 'confirmado' : 'estimado') : 'pendente_engenharia',
+        memoria_calculo: `Chicote automático: ${motivo}. 1 por elevador. ` + (mm ? `Comprimento ${fmtMetros(mm)} = trecho de fiação fixa (${t.confianca === 'confirmado' ? 'medido' : 'estimado'}).` : 'Comprimento não informado — preencher a distância na aba Geometria; nunca presumir metragem.') });
     };
     CHICOTES_POR_PECA.forEach((peca) => { if (skusBom.has(peca.sku)) peca.chicotes.forEach((c) => add(c, `acompanha ${peca.nome}`)); });
     CHICOTES_DO_QUADRO.forEach((c) => add(c, 'saem direto do quadro de comando para a última altura (UA)'));
