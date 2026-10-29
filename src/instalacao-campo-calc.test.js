@@ -71,6 +71,27 @@ test('agruparPorCliente: um cliente com 2 obras/dossiês vira 1 grupo com os equ
   assert.deepEqual(g.instaladores, ['DHS ELEVADORES LTDA']);
 });
 
+test('agruparPorCliente: junta o instalador legado (parceiro_instalador_id) com os do elenco (dossier_obra_instaladores) — achado real do Codex, DOS-M022', () => {
+  const dossies = [
+    { id: 'DOS-M022', client_name: 'Hospital X', building_name: 'Elevador', status_master: 'Homologação instalador', parceiro_instalador_id: 'LEGADO' },
+  ];
+  const instaladores = [
+    { id: 'LEGADO', nome: 'DHS ELEVADORES LTDA' },
+    { id: 'EXTRA1', nome: '60.555.952 GABRIEL SCHURT' },
+    { id: 'EXTRA2', nome: '60.536.286 SILVIO SCHURT' },
+  ];
+  const elenco = [
+    { dossier_id: 'DOS-M022', parceiro_instalador_id: 'EXTRA1' },
+    { dossier_id: 'DOS-M022', parceiro_instalador_id: 'EXTRA2' },
+  ];
+  const grupos = C.agruparPorCliente(dossies, [], instaladores, elenco);
+  assert.deepEqual(grupos[0].instaladores.slice().sort(), [
+    '60.536.286 SILVIO SCHURT',
+    '60.555.952 GABRIEL SCHURT',
+    'DHS ELEVADORES LTDA',
+  ]);
+});
+
 test('agruparPorCliente: dossiê com cotação usa o VPNI nativo, mesmo misturado com legados de outro cliente', () => {
   const dossies = [
     { id: 'DOS-721977', client_name: 'AKAI', building_name: 'Praia Grande', status_master: 'Contrato assinado', numero_cotacao: 955 },

@@ -821,7 +821,7 @@ function ICClienteCard({ grupo, aberto, onToggle, onAbrirObra }) {
 }
 
 function InstalacaoPage({ setRoute, setSubsel }) {
-  const [dados, setDados] = React.useState(null); // { dossies, equipamentos, instaladores }
+  const [dados, setDados] = React.useState(null); // { dossies, equipamentos, instaladores, elenco }
   const [erro, setErro] = React.useState(null);
   const [busca, setBusca] = React.useState('');
   const [abertos, setAbertos] = React.useState({});
@@ -830,13 +830,13 @@ function InstalacaoPage({ setRoute, setSubsel }) {
     let vivo = true;
     window.InstalacaoCampoStore.carregar()
       .then((d) => { if (vivo) { setDados(d); setErro(null); } })
-      .catch((e) => { if (vivo) { setErro('Não foi possível carregar os clientes ativos: ' + (e.message || e)); setDados({ dossies: [], equipamentos: [], instaladores: [] }); } });
+      .catch((e) => { if (vivo) { setErro('Não foi possível carregar os clientes ativos: ' + (e.message || e)); setDados({ dossies: [], equipamentos: [], instaladores: [], elenco: [] }); } });
     return () => { vivo = false; };
   }, []);
 
   const grupos = React.useMemo(() => {
     if (!dados || !window.InstalacaoCampoCalc) return [];
-    return window.InstalacaoCampoCalc.agruparPorCliente(dados.dossies, dados.equipamentos, dados.instaladores);
+    return window.InstalacaoCampoCalc.agruparPorCliente(dados.dossies, dados.equipamentos, dados.instaladores, dados.elenco);
   }, [dados]);
 
   const q = busca.trim().toLowerCase();

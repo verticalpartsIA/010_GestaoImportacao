@@ -67,10 +67,13 @@
    * @param dossies       linhas de dossier_obra
    * @param equipamentos  linhas de equipamentos_obra (dossier_id, numero_serie, descricao)
    * @param instaladores  linhas de parceiros_instaladores (id, nome)
+   * @param elenco        linhas de dossier_obra_instaladores (dossier_id, parceiro_instalador_id) —
+   *                      instalador(es) extra por obra, além do `parceiro_instalador_id` legado
+   *                      (mesmo elenco que o Mapa de Obras já junta ao legado)
    * @returns [{ clienteId, cliente, situacao, codigoPai, nativo, numeroCotacao,
    *             cidades, instaladores, nDossies, equipamentos:[{dossierId,descricao,codigo,status,entregue}] }]
    */
-  function agruparPorCliente(dossies, equipamentos, instaladores) {
+  function agruparPorCliente(dossies, equipamentos, instaladores, elenco) {
     const MO = window.MapaObrasCalc;
     if (!MO) return [];
 
@@ -81,6 +84,11 @@
     });
     const instPorId = {};
     (instaladores || []).forEach((p) => { if (p && p.id) instPorId[p.id] = p.nome; });
+    const elencoPorDossie = {};
+    (elenco || []).forEach((v) => {
+      if (!v || !v.dossier_id || !v.parceiro_instalador_id) return;
+      (elencoPorDossie[v.dossier_id] = elencoPorDossie[v.dossier_id] || []).push(v.parceiro_instalador_id);
+    });
 
     const porCliente = {};
     (dossies || []).forEach((d) => {
@@ -101,7 +109,9 @@
         .map((d) => [limpo(d.city), limpo(d.state)].filter(Boolean).join('/'))
         .filter(Boolean)));
       const instaladoresGrupo = Array.from(new Set(dossiesCliente
-        .map((d) => d.parceiro_instalador_id && instPorId[d.parceiro_instalador_id])
+        .flatMap((d) => [d.parceiro_instalador_id, ...(elencoPorDossie[d.id] || [])])
+        .filter(Boolean)
+        .map((id) => instPorId[id])
         .filter(Boolean)));
 
       const equipamentos2 = [];
