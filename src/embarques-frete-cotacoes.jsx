@@ -264,6 +264,112 @@ function EFCotacaoCard({ idx, cot, emb, isEdit, onChange, onRemove, onVencedor, 
   );
 }
 
+// Envio único: marca de 1 a 4 agentes do cadastro e um clique manda um e-mail para cada um
+// (mesma mensagem, saudação com o 1º nome do contato de cada agente). Cria o cartão de quem ainda não tem.
+function EFEnvioMultiplo({ lista, emb, isEdit, onChange, onClose }) {
+  const EF = window.EmbFreteCalc;
+  const [agentes, setAgentes] = React.useState([]);
+  const [todos, setTodos] = React.useState(false);
+  const [sel, setSel] = React.useState(() => lista.filter((c) => c.fornecedor_id).map((c) => String(c.fornecedor_id)));
+  const base = React.useMemo(() => efMontarMensagem(emb, { contato: '' }), []);
+  const [assunto, setAssunto] = React.useState(base.assunto);
+  const [texto, setTexto] = React.useState(base.texto);
+  const [enviando, setEnviando] = React.useState(false);
+  const [resultado, setResultado] = React.useState([]);
+  React.useEffect(() => {
+    const S = window.CadastrosFornecedoresStore;
+    if (!S) return;
+    S.listarAtivos(todos ? undefined : 'Agente de Carga').then(setAgentes).catch(() => setAgentes([]));
+  }, [todos]);
+  const nome = (f) => f.nome_fantasia || f.razao_social;
+  const jaTem = (id) => lista.find((c) => String(c.fornecedor_id) === String(id));
+  const novos = sel.filter((id) => !jaTem(id)).length;
+  const cheio = lista.length + novos > EF.MAX_COTACOES;
+  const alternar = (id) => setSel((a) => (a.includes(id) ? a.filter((x) => x !== id) : [...a, id]));
+
+  const enviar = async () => {
+    if (enviando || !sel.length) return;
+    if (!isEdit) { window.toast?.('Salve o embarque antes de enviar.', 'error'); return; }
+    if (cheio) { window.toast?.(`No máximo ${EF.MAX_COTACOES} cotações por embarque.`, 'error'); return; }
+    const jaEnviados = sel.map(jaTem).filter((c) => c && (c.envios || []).length);
+    if (jaEnviados.length && !window.confirm('Já foi enviado pedido para ' + jaEnviados.map((c) => c.agente).join(', ') + '. Enviar de novo para todos os marcados?')) return;
+    setEnviando(true);
+    try {
+      // 1) garante o cartão de cada agente marcado e grava (precisa existir antes do envio: o vínculo da resposta usa o id da cotação)
+      let atual = lista.slice();
+      const alvo = [];
+      sel.forEach((id) => {
+        let c = atual.find((x) => String(x.fornecedor_id) === String(id));
+        if (!c) {
+          const f = agentes.find((x) => String(x.id) === String(id));
+          if (!f) return;
+          c = { ...EF.novaCotacao(EF.proximoId(atual)), fornecedor_id: f.id, agente: nome(f), email: f.email || '', contato: f.contato || '' };
+          atual = [...atual, c];
+        }
+        alvo.push(c.id);
+      });
+      onChange(atual);
+      await window.EmbarquesImportacaoStore.salvarCotacoesFrete(emb.id, atual);
+      // 2) um e-mail por agente (em sequência, para não estourar o limite de envios)
+      const res = [];
+      for (const cid of alvo) {
+        const c = atual.find((x) => x.id === cid);
+        if (!c.email || !c.email.trim()) { res.push({ nome: c.agente, ok: false, motivo: 'sem e-mail no cadastro' }); continue; }
+        const primeiro = String(c.contato || '').trim().split(/\s+/)[0];
+        const corpo = texto.replace(/^Bom dia,?/, 'Bom dia' + (primeiro ? ', ' + primeiro : '') + ',');
+        try {
+          const r = await window.EmbarquesImportacaoStore.enviarPedidoCotacaoFrete(emb, c, { to: c.email.trim(), subject: assunto, text: corpo });
+          if (r.ok) { atual = atual.map((x) => (x.id === cid ? { ...x, envios: [...(x.envios || []), r.envio] } : x)); res.push({ nome: c.agente, ok: true, para: c.email.trim() }); }
+          else res.push({ nome: c.agente, ok: false, motivo: 'o sistema não conseguiu enviar' });
+        } catch (e) { res.push({ nome: c.agente, ok: false, motivo: e.message }); }
+      }
+      onChange(atual);
+      await window.EmbarquesImportacaoStore.salvarCotacoesFrete(emb.id, atual).catch((e) => window.toast?.('Enviado, mas não consegui gravar o histórico: ' + e.message, 'error'));
+      setResultado(res);
+      const ok = res.filter((x) => x.ok).length;
+      window.toast?.(`${ok} de ${res.length} pedido(s) enviado(s) (ficam em Enviados no Inbox).`, ok === res.length ? 'success' : 'error');
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    finally { setEnviando(false); }
+  };
+
+  return (
+    <div className="stack" style={{ gap: 8, padding: 12, border: '1px solid var(--vp-yellow, #f5c400)', borderRadius: 8, background: 'var(--vp-gray-50)' }}>
+      <strong style={{ fontSize: 13 }}>Pedir cotação a vários agentes (um e-mail para cada)</strong>
+      <div className="small muted">Marque de 1 a {EF.MAX_COTACOES} agentes. O e-mail e o contato vêm do cadastro; quem ainda não tem cartão ganha um.</div>
+      <div style={{ display: 'grid', gap: 4, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+        {agentes.map((f) => {
+          const id = String(f.id);
+          return (
+            <label key={id} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+              <input type="checkbox" checked={sel.includes(id)} onChange={() => alternar(id)}/>
+              <span>{nome(f)}</span>
+              <span className="small muted">{f.email || 'sem e-mail'}</span>
+            </label>
+          );
+        })}
+      </div>
+      <label className="small muted" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <input type="checkbox" checked={todos} onChange={(e) => setTodos(e.target.checked)}/> mostrar todos os fornecedores (não só "Agente de Carga")
+      </label>
+      {cheio && <div className="small" style={{ color: '#b00020' }}>Marcados demais: com os cartões que já existem passa de {EF.MAX_COTACOES}.</div>}
+      <PIField label="Assunto (igual para todos)"><PIInput value={assunto} onChange={setAssunto}/></PIField>
+      <PIField label="Mensagem (a saudação ganha o nome do contato de cada agente)">
+        <textarea className="input" rows={12} value={texto} onChange={(e) => setTexto(e.target.value)}/>
+      </PIField>
+      {resultado.length > 0 && (
+        <div className="stack" style={{ gap: 2 }}>
+          {resultado.map((r, i) => <div key={i} className="small" style={{ color: r.ok ? '#00701f' : '#b00020' }}>{r.ok ? '✓' : '✕'} {r.nome}{r.ok ? ' — enviado para ' + r.para : ' — ' + r.motivo}</div>)}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Button variant="primary" onClick={enviar} disabled={enviando || !sel.length || cheio || !isEdit}>{enviando ? 'Enviando…' : `✉ Enviar a ${sel.length || ''} agente(s)`}</Button>
+        <Button variant="ghost" onClick={onClose}>Fechar</Button>
+      </div>
+      {!isEdit && <span className="small muted">Salve o embarque para poder enviar.</span>}
+    </div>
+  );
+}
+
 function EIFreteCotacoes({ cotacoes, onChange, emb, isEdit }) {
   const EF = window.EmbFreteCalc;
   const lista = EF.normalizar(cotacoes);
@@ -274,6 +380,7 @@ function EIFreteCotacoes({ cotacoes, onChange, emb, isEdit }) {
     await window.EmbarquesImportacaoStore.salvarCotacoesFrete(emb.id, outras);
   };
   const troca = (id, nova) => onChange(lista.map((c) => (c.id === id ? nova : c)));
+  const [multi, setMulti] = React.useState(false);
 
   return (
     <div className="stack" style={{ gap: 12 }}>
@@ -281,9 +388,12 @@ function EIFreteCotacoes({ cotacoes, onChange, emb, isEdit }) {
         <strong style={{ fontSize: 14 }}>Cotações de frete marítimo</strong>
         <span className="small muted">{lista.length} de {EF.MAX_COTACOES}</span>
         <span style={{ flex: 1 }}/>
+        <Button variant="ghost" onClick={() => setMulti((v) => !v)}>✉ Pedir a vários agentes</Button>
         <Button variant="primary" icon="plus" disabled={lista.length >= EF.MAX_COTACOES}
           onClick={() => onChange([...lista, EF.novaCotacao(EF.proximoId(lista))])}>Nova cotação</Button>
       </div>
+
+      {multi && <EFEnvioMultiplo lista={lista} emb={emb} isEdit={isEdit} onChange={onChange} onClose={() => setMulti(false)}/>}
 
       {lista.length === 0 && <p className="small muted">Nenhuma cotação ainda. Clique em "Nova cotação" para comparar até {EF.MAX_COTACOES} agentes. A vencedora preenche o agente, o frete e os prazos do embarque.</p>}
 
