@@ -10,41 +10,53 @@
 const EF_BRL = (n) => 'R$ ' + (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const EF_USD = (n) => '$ ' + (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// Pedido de cotação em PT / EN / 中文 (chinês gerado por IA — revisar antes de uso amplo).
+// Pedido de cotação ao agente brasileiro (só PT-BR), no modelo dos e-mails reais da equipe de Importação.
+// Dados vêm do embarque e das P.I. vinculadas; o que faltar sai "a confirmar" e o texto é editável antes de enviar.
+function efDataCurta(iso, ano) {
+  if (!iso) return '';
+  const [a, m, d] = String(iso).slice(0, 10).split('-');
+  return ano ? `${d}/${m}/${a.slice(2)}` : `${d}/${m}`;
+}
 function efMontarMensagem(emb, cot) {
-  const origem = emb.porto_origem || '—';
-  const destino = emb.porto_destino || '—';
-  const conts = (emb.containers || []).filter((c) => c.tipo_tamanho).map((c) => c.tipo_tamanho);
-  const cont = conts.length ? conts.join(', ') : 'a confirmar';
-  const etd = emb.etd_atual ? String(emb.etd_atual).split('-').reverse().join('/') : 'a confirmar';
+  const r = emb.resumoPI || {};
+  const conf = 'a confirmar';
+  const origem = emb.porto_origem || conf;
+  const destino = emb.porto_destino || conf;
+  const incoterm = (r.incoterms || []).join(' / ') || conf;
+  const conts = {};
+  (emb.containers || []).filter((c) => c.tipo_tamanho).forEach((c) => { const t = String(c.tipo_tamanho).replace(/'/g, ''); conts[t] = (conts[t] || 0) + 1; });
+  const cont = Object.keys(conts).length ? Object.keys(conts).map((t) => `${conts[t]}*${t}`).join(' + ') : conf;
+  const etd = efDataCurta(emb.etd_atual);
+  const pronta = emb.data_carregamento ? 'Prontidão em ' + efDataCurta(emb.data_carregamento, true) : conf;
+  const ncm = (r.ncms || []).join(';') || conf;
+  const carga = (r.categorias || []).join(', ') || conf;
+  const valor = r.valorTotal ? `${r.moeda || 'USD'} ${Number(r.valorTotal).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : conf;
   const ref = emb.nome_embarque || emb.referencia_embarque || '';
-  const assunto = `Cotação de frete marítimo${ref ? ' — ' + ref : ''} / Ocean freight quotation / 海运报价`;
+  const assunto = [ref, 'COTAÇÃO DE FRETE MARÍTIMO', `${(emb.porto_origem || '').toUpperCase()} x ${(emb.porto_destino || '').toUpperCase()}`, (r.incoterms || []).join('/'), etd ? 'ETD: ' + etd : '']
+    .filter((x) => x && x.trim() && x.trim() !== 'x').join(' - ');
+  const primeiro = String(cot.contato || '').trim().split(/\s+/)[0];
   const texto = [
-    `Prezados ${cot.agente || ''},`,
+    `Bom dia${primeiro ? ', ' + primeiro : ''},`,
+    'Por favor, poderia nos enviar uma cotação de frete marítimo. Seguem abaixo os detalhes:',
     '',
-    'Solicitamos cotação de frete marítimo:',
-    `• Origem: ${origem}  •  Destino: ${destino}`,
-    `• Container(s): ${cont}  •  ETD previsto: ${etd}`,
-    '• Informar: todas as taxas (moeda e valor), transit time e free time.',
+    `Favor confirmar se haverá disponibilidade de bookings – ETD: ${etd || conf}`,
     '',
-    '---',
-    `Dear ${cot.agente || 'Sir/Madam'},`,
+    `Container(s): ${cont}`,
+    `Origem: ${origem}`,
+    `Destino: ${destino}`,
+    `Incoterms: ${incoterm}`,
+    `Situação da carga: ${pronta}`,
+    `NCM: ${ncm}`,
+    `Carga: ${carga}`,
+    `Valor: ${valor}`,
     '',
-    'Please quote the ocean freight below:',
-    `• Origin: ${origem}  •  Destination: ${destino}`,
-    `• Container(s): ${cont}  •  Expected ETD: ${etd}`,
-    '• Please include: all charges (currency and amount), transit time and free time.',
+    'Somente via DIRETA',
+    'Free time: 21 dias',
+    'Precisaremos de seguro.',
+    'Favor informar na cotação qual o armador, e observar que só trabalhamos com cobrança PTAX/BC + spread 1,5%.',
     '',
-    '---',
-    `尊敬的 ${cot.agente || ''}：`,
-    '',
-    '请提供以下海运报价：',
-    `• 起运港：${origem}  •  目的港：${destino}`,
-    `• 集装箱：${cont}  •  预计开船日：${etd}`,
-    '• 请注明：所有费用（币种和金额）、航程时间（transit time）和免费期（free time）。',
-    '',
-    'Atenciosamente / Best regards / 此致',
-    'VerticalParts',
+    'No aguardo.',
+    'Atenciosamente,',
   ].join('\n');
   return { assunto, texto };
 }
@@ -101,7 +113,7 @@ function EFEnvioPanel({ emb, cot, onClose, onEnviado }) {
       <strong style={{ fontSize: 13 }}>Enviar pedido de cotação</strong>
       <PIField label="Para"><PIInput value={para} onChange={setPara} placeholder="e-mail do agente"/></PIField>
       <PIField label="Assunto"><PIInput value={assunto} onChange={setAssunto}/></PIField>
-      <PIField label="Mensagem (PT · EN · 中文)">
+      <PIField label="Mensagem">
         <textarea className="input" rows={12} value={texto} onChange={(e) => setTexto(e.target.value)}/>
       </PIField>
       <p className="small muted">
