@@ -37,6 +37,27 @@ test('codigoPaiGrupo: sem cotação usa o menor Nº legado do grupo (não renume
   assert.equal(g.numeroCotacao, null);
 });
 
+test('codigoPaiGrupo: quando o dossiê já tem codigo_obra GRAVADO (dossier_obra.codigo_obra, migration de 29/10/2026), usa ele — nunca recalcula ao vivo', () => {
+  const comCotacao = C.codigoPaiGrupo([{ id: 'DOS-721977', numero_cotacao: 955, codigo_obra: 'VPNI-0955' }]);
+  assert.equal(comCotacao.codigo, 'VPNI-0955');
+  assert.equal(comCotacao.nativo, true);
+
+  const legada = C.codigoPaiGrupo([
+    { id: 'DOS-M024', numero_cotacao: null, codigo_obra: 'VPNI-OB0015' },
+    { id: 'DOS-M017', numero_cotacao: null, codigo_obra: 'VPNI-OB0015' },
+  ]);
+  assert.equal(legada.codigo, 'VPNI-OB0015');
+  assert.equal(legada.nativo, false);
+});
+
+test('codigoPaiGrupo: codigo_obra gravado vence mesmo quando diverge do que o cálculo ao vivo daria (ex.: correção administrativa, caso real AZEKA DOS-M046/047)', () => {
+  const g = C.codigoPaiGrupo([{ id: 'DOS-M047', numero_cotacao: null, codigo_obra: 'VPNI-OB0025' }]);
+  // sem codigo_obra gravado, o cálculo ao vivo daria 'VPNI-OB0047' (sufixo do próprio id) —
+  // o valor persistido (ajustado à mão pra unir com DOS-M046) tem que vencer.
+  assert.notEqual(g.codigo, C.codigoObraLegada('DOS-M047'));
+  assert.equal(g.codigo, 'VPNI-OB0025');
+});
+
 test('agruparPorCliente: só Montando/Prestes a iniciar entram; concluída e análise técnica ficam fora', () => {
   const dossies = [
     { id: 'DOS-M001', client_name: 'Cliente A', building_name: 'Obra A', status_master: 'Instalação', city: 'São Paulo', state: 'SP' },

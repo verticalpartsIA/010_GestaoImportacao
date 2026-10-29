@@ -17,7 +17,7 @@
     const sb = (window.__VP_SB || {}).sb;
     if (!sb) throw new Error('Banco de dados indisponível.');
     const [dRes, eRes, pRes, rRes] = await Promise.all([
-      sb.from('dossier_obra').select('id, client_name, building_name, city, state, status_master, equipamento_entregue, equipamento_entregue_em, numero_cotacao, parceiro_instalador_id'),
+      sb.from('dossier_obra').select('id, client_name, building_name, city, state, status_master, equipamento_entregue, equipamento_entregue_em, numero_cotacao, parceiro_instalador_id, codigo_obra'),
       sb.from('equipamentos_obra').select('id, dossier_id, numero_serie, tipo, descricao'),
       sb.from('parceiros_instaladores').select('id, nome'),
       sb.from('dossier_obra_instaladores').select('dossier_id, parceiro_instalador_id'),
