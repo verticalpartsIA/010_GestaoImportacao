@@ -81,7 +81,7 @@
 | P.I. | `pi-importacao` | `/gestao-importacao/pi-importacao` | — | — |
 | RFQ | `rfq-importacao` | `/gestao-importacao/rfq-importacao` | — | — |
 | IMS | `ims-importacao` | `/gestao-importacao/ims-importacao` | — | — |
-| Embarques | `embarques-importacao` | `/gestao-importacao/embarques-importacao[/<aba>]` | **identificacao**, pagamentos, embarque, frete, aduaneiro, faturamento, entrega | — |
+| Embarques | `embarques-importacao` | `/gestao-importacao/embarques-importacao[/<aba>]` | **identificacao**, pagamentos, frete, embarque, aduaneiro, faturamento, entrega | — |
 | Rastreio Marítimo | `importacao` | `/gestao-importacao/importacao[/<aba>]` | **embarques**, documentos, aduana | — |
 | Análise de Preços | `gi-analise-precos` | `/gestao-importacao/gi-analise-precos` | — | — |
 | Importação Varejo | `compras` | `/logistica/compras` | — | — |
