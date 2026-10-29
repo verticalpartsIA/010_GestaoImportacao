@@ -101,7 +101,6 @@ const NAV_GROUPS = [
     { id: "vistorias", label: "Resultado Vistorias de Obras", icon: "history" },
     { id: "instalacao", label: "Instalação em Campo", icon: "hardhat" },
     { id: "mapa-obras", label: "Mapa de Obras", icon: "pin" },
-    { id: "cronograma", label: "Cronograma", icon: "clock" },
     { id: "art", label: "ART", icon: "scale" },
   ]},
   /* Novo grupo — fechamento documental/entrega, separado de execução de obra.
@@ -128,6 +127,13 @@ const NAV_GROUPS = [
     { id: "rh-homologacao", label: "Homologação de Instaladores", icon: "hardhat" },
     { id: "contrato-instalador", label: "Contrato Instalador", icon: "hardhat" },
     { id: "pagamentos-instalador", label: "Pagamentos a Instaladores", icon: "dollar", restrict: ["financeiro", "engenharia", "admin"] },
+    /* Cronograma de Pagamento da Instalação (29/10/2026) — só reagrupa no
+       menu (pedido do usuário: mora melhor perto de Pagamentos a
+       Instaladores, que já paga a mão de obra por marco físico). Rota,
+       URL (/engenharia/cronograma) e `id` de alçada NÃO mudaram, mesmo
+       padrão já usado em PCP/MES→Fabricação (17/10) e Matérias-Primas/
+       Produtos (18/10) — mudar a URL seria decisão à parte. */
+    { id: "cronograma", label: "Cronograma de Pagamento da Instalação", icon: "clock" },
   ]},
   /* Placeholders sem rota própria (Expedição/Logística) ocultados — item
      visível deve significar "posso entrar e fazer algo" (Achado 12). */

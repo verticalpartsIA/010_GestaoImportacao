@@ -110,7 +110,6 @@
 | Resultado Vistorias de Obras | `vistorias` | `/engenharia/vistorias` | — | id na URL (passthrough) |
 | Instalação em Campo | `instalacao` | `/engenharia/instalacao` | — | — |
 | Mapa de Obras | `mapa-obras` | `/engenharia/mapa-obras` | — | — |
-| Cronograma | `cronograma` | `/engenharia/cronograma` | — | — |
 | ART | `art` | `/engenharia/art` | — | — |
 
 ### Entrega & Documentação
@@ -130,6 +129,7 @@
 | Homologação de Instaladores | `rh-homologacao` | `/rh/rh-homologacao` | — | — |
 | Contrato Instalador | `contrato-instalador` | `/juridico/contrato-instalador[/<aba>]` | **painel**, novo | — |
 | Pagamentos a Instaladores | `pagamentos-instalador` | `/adm-financeiro/pagamentos-instalador[/<aba>]` | **parcelas**, acordos, recibos | — |
+| Cronograma de Pagamento da Instalação | `cronograma` | `/engenharia/cronograma` | — | — |
 
 ### Logística Interna
 
