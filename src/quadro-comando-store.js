@@ -239,7 +239,7 @@
     const portaOposta = (quadro.paradas || []).some((p) => p.abertura_traseira);
     bomItens = [...bomItens, ...engine.montarItensChicotes(bomItens, catalogo, trechosFixa, { codigos: codigosChicote, portaOposta, celulaCarga: false, cob2: false })];
 
-    const trechoManobra = engine.montarTrechoCaboManobra(quadro.geometria, quadro.intervalos);
+    const trechoManobra = engine.montarTrechoCaboManobra(quadro.geometria, quadro.intervalos, quadro.tipo_aplicacao);
     const trechosCarro = engine.montarTrechosFiacaoCarro(quadro.geometria, quadro.configuracao);
     const trechos = [...trechosFixa, trechoManobra, ...trechosCarro];
 

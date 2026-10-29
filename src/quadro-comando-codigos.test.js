@@ -148,3 +148,27 @@ test('chicotes da caixa de topo: um por conector, 2,40 m (3,50 m SOS e WT2), có
   assert.ok(cad['VPEL-799a'] && !cad['VPEL-725a']);
   assert.deepStrictEqual(Object.keys(por(E.montarItensChicotes([{ sku: 'VPB-209' }], {}))).filter((k) => k.startsWith('A-DEFINIR')), []);
 });
+
+test('cabo de manobra: soma dos pisos + reserva (10 paradas de 3 m = 47 m, 8 paradas = 41 m); piso maior soma o excedente', () => {
+  const pisos = (n, mm = 3000) => Array.from({ length: n - 1 }, () => ({ distancia_mm: mm }));
+  const mm = (n, extra = {}, tipo = 'MRL', geo = {}) => E.montarTrechoCaboManobra(geo, pisos(n), tipo, extra).comprimento_final_mm;
+  assert.strictEqual(mm(10), 47000);
+  assert.strictEqual(mm(8), 41000);
+  const um4m = [...pisos(10)]; um4m[3] = { distancia_mm: 4000 };
+  assert.strictEqual(E.montarTrechoCaboManobra({}, um4m, 'MRL').comprimento_final_mm, 48000);
+  const t = E.montarTrechoCaboManobra({}, pisos(10), 'MRL');
+  assert.strictEqual(t.confianca, 'estimado');
+  assert.strictEqual(t.comprimento_base_mm, 27000);
+  assert.strictEqual(t.contornos_mm, 3000);
+});
+
+test('cabo de manobra: seio/pontas editáveis; com casa de máquinas exige e soma a distância do quadro até a laje; sem percurso fica pendente', () => {
+  const pisos = Array.from({ length: 9 }, () => ({ distancia_mm: 3000 }));
+  assert.strictEqual(E.montarTrechoCaboManobra({ seio_cabo_mm: 4000, folga_mm: 5000 }, pisos, 'MRL').comprimento_final_mm, 27000 + 4000 + 3000 + 5000 + 10000);
+  const semDist = E.montarTrechoCaboManobra({}, pisos, 'MR');
+  assert.strictEqual(semDist.comprimento_final_mm, null);
+  assert.strictEqual(semDist.confianca, 'pendente_engenharia');
+  const mr = E.montarTrechoCaboManobra({ distancia_quadro_entrada_caixa_mm: 8000 }, pisos, 'MR');
+  assert.strictEqual(mr.comprimento_final_mm, 47000 + 8000);
+  assert.strictEqual(E.montarTrechoCaboManobra({}, [], 'MRL').comprimento_final_mm, null);
+});
