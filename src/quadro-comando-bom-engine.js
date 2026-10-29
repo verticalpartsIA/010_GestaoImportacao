@@ -435,7 +435,7 @@
       comprimento_final_mm: percurso_mm + seio + folga,
       confianca: 'estimado',
       formula: `comprimento_final = pisos (${percurso_mm}mm) + seio (${seio}mm) + subida até a caixa de inspeção (${subida}mm) + pontas (${pontas}mm)`
-        + ` + reserva calibrada no cabo real (${reserva}mm)` + (comCasaMaquinas ? ` + distância quadro → descida da laje (${lajeMm}mm)` : '')
+        + ` + saída do quadro até a caixa (${reserva}mm)` + (comCasaMaquinas ? ` + distância quadro → descida da laje (${lajeMm}mm)` : '')
         + '. 28 vias = 1 peça só; não multiplicar o comprimento por 28.',
     });
   }
