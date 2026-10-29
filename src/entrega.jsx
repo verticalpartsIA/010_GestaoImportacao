@@ -85,6 +85,7 @@ function CronogramaPage() {
   const [loading, setLoading] = React.useState(true);
   const [showNovo, setShowNovo] = React.useState(false);
   const [sel, setSel] = React.useState(null);
+  const [excluindo, setExcluindo] = React.useState(null);
 
   const reload = () => {
     setLoading(true);
@@ -161,7 +162,13 @@ function CronogramaPage() {
                     <div className="progress" style={{ marginBottom: 4 }}><span style={{ width: pct + '%' }}/></div>
                     <div className="mono small" style={{ color: 'var(--fg3)' }}>{pagas}/4 fases · {pct}%</div>
                   </td>
-                  <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
+                  <td>
+                    <div className="row gap-2" style={{ justifyContent: 'flex-end' }}>
+                      <Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button>
+                      <Button variant="ghost" size="sm" icon="trash" title="Excluir" aria-label="Excluir"
+                        onClick={(e) => { e.stopPropagation(); setExcluindo(r); }}/>
+                    </div>
+                  </td>
                 </tr>
               );
             })}
@@ -171,7 +178,8 @@ function CronogramaPage() {
 
       {sel ? (
         <Card title={`Fases de pagamento · ${sel.endereco}`}
-          sub={`${sel.montador || 'Montador não informado'} · ${sel.paradas ?? '—'} paradas · ${sel.carga_kg ? sel.carga_kg + 'kg' : '—'} · total ${fmtBRL(sel.valor_total)}`}>
+          sub={`${sel.montador || 'Montador não informado'} · ${sel.paradas ?? '—'} paradas · ${sel.carga_kg ? sel.carga_kg + 'kg' : '—'} · total ${fmtBRL(sel.valor_total)}`}
+          action={<Button variant="ghost" size="sm" icon="trash" onClick={() => setExcluindo(sel)}>Excluir</Button>}>
           <div className="stack" style={{ gap: 10 }}>
             {CRON_FASES.map((f) => {
               const status = sel[f.key + '_status'];
@@ -201,7 +209,76 @@ function CronogramaPage() {
       ) : null}
 
       {showNovo && <ModalNovoCronograma onClose={() => setShowNovo(false)} onSaved={reload}/>}
+      {excluindo && (
+        <ModalExcluirCronograma row={excluindo} onClose={() => setExcluindo(null)}
+          onDeleted={() => { setExcluindo(null); setSel(s => s?.id === excluindo.id ? null : s); reload(); }}/>
+      )}
     </div>
+  );
+}
+
+function ModalExcluirCronograma({ row, onClose, onDeleted }) {
+  const [motivo, setMotivo] = React.useState('');
+  const [excluindo, setExcluindo] = React.useState(false);
+  const motivoOk = motivo.trim().length >= 10;
+
+  const confirmar = async () => {
+    if (!motivoOk || excluindo) return;
+    setExcluindo(true);
+    const { error, data } = await window.__VP_SB.sb.from('instalacao_cronograma')
+      .delete().eq('id', row.id).select('id');
+    setExcluindo(false);
+    if (error) return window.toast('Erro ao excluir: ' + error.message, 'error');
+    if (!data || data.length === 0) return window.toast('Não foi possível excluir — sem permissão ou registro já removido.', 'error');
+    window.VPLog?.registrar({
+      modulo: 'Cronograma de Pagamento da Instalação',
+      acao: 'Excluiu o cronograma de pagamento',
+      alvo: row.endereco,
+      alvo_id: row.id,
+      detalhe: { motivo: motivo.trim(), endereco: row.endereco, montador: row.montador, valor_total: row.valor_total },
+    });
+    window.toast('Cronograma excluído.', 'success');
+    onDeleted?.();
+  };
+
+  return (
+    <Modal title="Excluir cronograma de pagamento" onClose={onClose} width={460}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="danger" onClick={confirmar} disabled={!motivoOk || excluindo}>
+          {excluindo ? 'Excluindo…' : 'Excluir'}
+        </Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <div className="alert danger">
+          <Icon.warning/>
+          <div>
+            <div className="alert__title">Esta ação não pode ser desfeita</div>
+            <div className="alert__sub">O registro ({row.endereco || row.id}) e as 4 fases de pagamento serão apagados.</div>
+          </div>
+        </div>
+        <div className="row sb" style={{ fontSize: 13 }}>
+          <span className="muted">Endereço</span>
+          <span style={{ fontWeight: 600 }}>{row.endereco || '—'}</span>
+        </div>
+        <div className="row sb" style={{ fontSize: 13 }}>
+          <span className="muted">Montador</span>
+          <span style={{ fontWeight: 600 }}>{row.montador || '—'}</span>
+        </div>
+        <div className="row sb" style={{ fontSize: 13 }}>
+          <span className="muted">Valor total</span>
+          <span style={{ fontWeight: 600 }}>{fmtBRL(row.valor_total)}</span>
+        </div>
+        <label className="stack" style={{ gap: 4 }}>
+          <span className="up-eyebrow muted">Motivo da exclusão * (fica no log de auditoria)</span>
+          <textarea className="input" rows={3} value={motivo} onChange={(e) => setMotivo(e.target.value)}
+            placeholder="Por que este cronograma está sendo excluído? (mín. 10 caracteres)" autoFocus/>
+          {!motivoOk && motivo.length > 0 && (
+            <span style={{ fontSize: 11, color: 'var(--vp-danger)' }}>Faltam {10 - motivo.trim().length} caracteres.</span>
+          )}
+        </label>
+      </div>
+    </Modal>
   );
 }
 
