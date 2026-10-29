@@ -2,6 +2,15 @@
 
 Notas operacionais para uma sessão futura do Claude Code neste repo. O README.md tem a visão de produto/telas; este arquivo é sobre "como trabalhar aqui".
 
+## Cronograma de Pagamento da Instalação — reposicionado no menu (29/10/2026, PR #1135, squash `0258872`)
+
+Pedido do usuário: mover o item "Cronograma" do grupo "Obras & Instalação" para o fim de "Parceiros & Instaladores" (logo abaixo de "Pagamentos a Instaladores"). Investigação prévia mostrou que o item já existia (`id: "cronograma"`, componente `CronogramaPage` em `src/entrega.jsx`) — não era preciso criar rota nova.
+- **Só reagrupa no menu**, mesmo padrão já usado em PCP/MES→Fabricação (17/10) e Matérias-Primas/Produtos (18/10): `src/shell.jsx` (`NAV_GROUPS`) moveu o item de grupo; `BREADCRUMB_MAP`, `router.js` (`KNOWN_ROUTES`) e `app.jsx` **não mudaram** — a URL continua `/engenharia/cronograma` (`docs/MAPA_DE_ROTAS.md` regenerado confirma: 0 inconsistências, só a posição no mapa mudou). Mudar a URL seria decisão à parte, com mais risco (quebraria link salvo) e sem ganho funcional.
+- Rótulo do menu mudou de "Cronograma" para **"Cronograma de Pagamento da Instalação"** (mais descritivo; pedido do usuário).
+- `src/colaboradores-admin-store.js`: `MODULOS_POR_GRUPO_SIDEBAR['Parceiros & Instaladores']` ganhou `cronograma`; mantido também em `'Obras & Instalação'` de propósito, pra quem já tinha esse grupo alocado não perder a alçada (mesmo padrão de Matérias-Primas/Produtos). `CATALOGO_MODULOS` **não mudou** — o item continua no grupo de alçada "Engenharia" (esse catálogo é por domínio funcional, não acompanha a posição no menu — confirmado comparando com o que aconteceu em PCP/MES e Matérias-Primas/Produtos).
+- `index.html`: `shell.jsx` v125→126, `colaboradores-admin-store.js` v48→49.
+- Validado: `npm test` 827/827, `check-cache-bust` ok, array do menu conferido via parse em Node (ordem certa: `cronograma` é o último item de "Parceiros & Instaladores", sumiu de "Obras & Instalação"). **Não testado com clique real no navegador** — confirmado pelo usuário em produção depois do deploy.
+
 ## Entrega & Documentação — "Repositório Documentos" é tela NOVA, independente das outras 3 (28/10/2026)
 
 **⚠️ Histórico do erro, pra não repetir**: o PR #1124 (squash `47d92e3`) tinha **consolidado por engano** os 3 itens de menu de Entrega & Documentação (Central de Documentos / Data Book & Termo / Entrega Final) num único ponto de entrada "Repositório Documentos" com as 3 telas como abas internas — **sem perguntar o propósito** e removendo, na prática, 3 telas que já existiam e funcionavam. O usuário corrigiu: as 3 telas são **diferentes entre si** e deviam continuar exatamente como estavam; o pedido original era só **acrescentar** uma 4ª tela nova de upload genérico. **Revertido no PR #1130 (squash `2ac81c2`, issue fechada #1131)** — o texto abaixo descreve o estado correto e definitivo.
