@@ -445,7 +445,7 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
         return (
         <div className="stack" style={{ gap: 14, marginTop: 14 }}>
           <window.EIFreteCotacoes cotacoes={form.cotacoes_frete} onChange={set('cotacoes_frete')}
-            emb={{ ...form, id: initialData ? initialData.id : null, numero_cotacao: numeroCotacaoEmbarque }} isEdit={!!(isEdit && initialData && initialData.id)}/>
+            emb={{ ...form, id: initialData ? initialData.id : null, numero_cotacao: numeroCotacaoEmbarque, resumoPI: { ...window.EmbarquesImportacaoStore.resumoPIs(pis || []), ncms: [...new Set((pis || []).flatMap((p) => (p.itens || []).map((i) => (i.ncm || '').trim())).filter(Boolean))] } }} isEdit={!!(isEdit && initialData && initialData.id)}/>
           <hr style={{ border: 0, borderTop: '1px solid var(--border)' }}/>
           {temVencedor && <p className="small muted">🏆 Agente, cotação, transit time e free time abaixo vêm da cotação vencedora (editar lá em cima).</p>}
           <div className="grid-3" style={{ gap: 10 }}>
