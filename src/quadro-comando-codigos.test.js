@@ -110,3 +110,22 @@ test('MRL: máquina (MT), limitador (OS) e PAP (HW) saem com 6000mm quando não 
   assert.ok(mr.every((t) => !t.comprimento_final_mm));
   assert.ok(!mr.some((t) => t.endereco_referencia === 'HW'));
 });
+
+test('chicotes HW, MT e OS levam o comprimento do trecho de fiação fixa; sem medida ficam pendentes', () => {
+  const por = (l) => Object.fromEntries(l.map((i) => [i.sku, i]));
+  const mrl = por(E.montarItensChicotes([], {}, E.montarTrechosFiacaoFixa({}, 'MRL')));
+  ['VPEL-729a', 'VPEL-730a', 'VPEL-731a'].forEach((k) => {
+    assert.match(mrl[k].descricao, /6,00 m$/);
+    assert.strictEqual(mrl[k].confianca, 'estimado');
+    assert.strictEqual(mrl[k].quantidade, 1);
+  });
+  const medido = por(E.montarItensChicotes([], {}, E.montarTrechosFiacaoFixa({ distancia_quadro_maquina_mm: 5200, distancia_quadro_limitador_mm: 4800 }, 'MRL')));
+  assert.match(medido['VPEL-731a'].descricao, /5,20 m$/);
+  assert.strictEqual(medido['VPEL-731a'].confianca, 'confirmado');
+  assert.match(medido['VPEL-729a'].descricao, /4,80 m$/);
+  const mr = por(E.montarItensChicotes([], {}, E.montarTrechosFiacaoFixa({}, 'MR')));
+  assert.match(mr['VPEL-730a'].descricao, /comprimento a definir/);
+  assert.strictEqual(mr['VPEL-730a'].confianca, 'pendente_engenharia');
+  const semTrechos = por(E.montarItensChicotes([], {}));
+  assert.strictEqual(semTrechos['VPEL-731a'].confianca, 'pendente_engenharia');
+});
