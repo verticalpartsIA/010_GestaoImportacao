@@ -11,6 +11,16 @@ Pedido do usuário: mover o item "Cronograma" do grupo "Obras & Instalação" pa
 - `index.html`: `shell.jsx` v125→126, `colaboradores-admin-store.js` v48→49.
 - Validado: `npm test` 827/827, `check-cache-bust` ok, array do menu conferido via parse em Node (ordem certa: `cronograma` é o último item de "Parceiros & Instaladores", sumiu de "Obras & Instalação"). **Não testado com clique real no navegador** — confirmado pelo usuário em produção depois do deploy.
 
+## Embarques de Importação — aba do formulário na URL (29/10/2026, PR #1156, squash `d4ee98d`)
+
+Pedido do usuário: o botão/aba ativo em `/gestao-importacao/embarques-importacao` (Identificação, Pagamentos, Embarque, Frete, Aduaneiro, Faturamento, Entrega) deve refletir a URL (deep-link, F5, Voltar/Avançar).
+- `EmbarqueImportacaoForm` (`src/embarques-importacao.jsx`) trocou `useState('identificacao')` por `window.useRouteTab('embarques-importacao', 'identificacao', [abas válidas])`. URL: `/gestao-importacao/embarques-importacao/<aba>`; Identificação é a padrão e deixa a URL limpa. `router.js` não mudou.
+- A chave interna da aba Aduaneiro era `desembaraco` e virou **`aduaneiro`** (só 2 usos no arquivo, rótulo e render). **Ao criar aba nova, incluir na lista de válidas**, senão o link cai na padrão.
+- Ao cancelar ou salvar, `VpRouter.navigate('embarques-importacao')` limpa o sufixo da URL (senão a lista ficaria com `/frete` na barra).
+- **Limite:** o formulário abre por clique (`showForm`/`editing` em `useState`), não pela URL. F5 ou link direto em `/frete` mostra a **lista**, não o formulário. Abrir um embarque específico pela URL exigiria o id na rota (`/<id>/<aba>`, `useRotaId`); não feito, fora do pedido.
+- `docs/MAPA_DE_ROTAS.md` regenerado (0 inconsistências). `index.html`: `embarques-importacao.jsx` v8→v9.
+- Validado só por `check-cache-bust` e o gerador do mapa; **não testado com clique real no navegador**.
+
 ## Entrega & Documentação — "Repositório Documentos" é tela NOVA, independente das outras 3 (28/10/2026)
 
 **⚠️ Histórico do erro, pra não repetir**: o PR #1124 (squash `47d92e3`) tinha **consolidado por engano** os 3 itens de menu de Entrega & Documentação (Central de Documentos / Data Book & Termo / Entrega Final) num único ponto de entrada "Repositório Documentos" com as 3 telas como abas internas — **sem perguntar o propósito** e removendo, na prática, 3 telas que já existiam e funcionavam. O usuário corrigiu: as 3 telas são **diferentes entre si** e deviam continuar exatamente como estavam; o pedido original era só **acrescentar** uma 4ª tela nova de upload genérico. **Revertido no PR #1130 (squash `2ac81c2`, issue fechada #1131)** — o texto abaixo descreve o estado correto e definitivo.
