@@ -6,14 +6,19 @@
    contrato ficam fora — por CLIENTE, listando os equipamentos
    (equipamentos_obra) de cada obra do cliente.
 
-   Cada grupo ganha um "código Pai" (só exibição, nada é gravado):
+   Cada grupo ganha um "código Pai", lido de dossier_obra.codigo_obra
+   (coluna PERSISTIDA desde 29/10/2026 — migration dossier_obra_codigo_obra
+   — pra poder ser citada numa ART futura, ex. "ART-VPNI-OB0017"; nasce uma
+   vez e nunca muda):
      - obra NATIVA do site (numero_cotacao preenchido) → o mesmo VPNI
        que Contrato do Instalador/Contrato de Venda já usam
        (MasterIdEngine.etapaId('contrato_instalador', numeroCotacao));
      - obra LEGADA (sem cotação, id tipo "DOS-M0NN") → VPNI-OB<NNNN>,
-       extraído do menor sufixo numérico entre os dossiês do cliente —
-       estável (um dossiê novo nunca renumera os já existentes) e nunca
-       persistido (não é um Master ID real, é só um rótulo desta tela).
+       gerado pelo banco pro menor sufixo numérico entre os dossiês do
+       mesmo cliente+cidade/UF(+endereço, quando os dois têm) — estável.
+   O cálculo ao vivo aqui (numeroLegado/codigoObraLegada/etapaId) é só
+   CONTINGÊNCIA, pra quando o dossiê não trouxer codigo_obra — nunca deve
+   divergir do valor gravado (se divergir, confie no banco).
 
    Só leitura — nada aqui grava no banco.
    window.InstalacaoCampoCalc
@@ -43,18 +48,25 @@
      algum dossiê do cliente já tem um (nunca houve, na prática, 2
      cotações distintas para o mesmo client_name — se acontecer um dia,
      a primeira encontrada vence); senão, o menor Nº legado entre os
-     dossiês do cliente. */
+     dossiês do cliente.
+
+     Desde 29/10/2026 (migration dossier_obra_codigo_obra) o código vive
+     GRAVADO em dossier_obra.codigo_obra — gerado uma vez, nunca muda
+     depois, e é o que uma futura ART vai citar. Por isso SEMPRE prefere
+     o valor persistido (d.codigo_obra) quando ele existe; o cálculo ao
+     vivo abaixo fica só como contingência (dossiê sem o campo, teste sem
+     mockar a coluna) — nunca deve divergir do que está no banco. */
   function codigoPaiGrupo(dossiesCliente) {
     const comCotacao = (dossiesCliente || []).find((d) => d && d.numero_cotacao != null);
-    if (comCotacao && window.MasterIdEngine) {
-      return {
-        codigo: window.MasterIdEngine.etapaId('contrato_instalador', comCotacao.numero_cotacao),
-        nativo: true,
-        numeroCotacao: comCotacao.numero_cotacao,
-      };
+    if (comCotacao) {
+      const codigo = limpo(comCotacao.codigo_obra)
+        || (window.MasterIdEngine ? window.MasterIdEngine.etapaId('contrato_instalador', comCotacao.numero_cotacao) : null);
+      return { codigo, nativo: true, numeroCotacao: comCotacao.numero_cotacao };
     }
     const menor = (dossiesCliente || []).slice().sort((a, b) => numeroLegado(a.id) - numeroLegado(b.id))[0];
-    return { codigo: menor ? codigoObraLegada(menor.id) : null, nativo: false, numeroCotacao: null };
+    if (!menor) return { codigo: null, nativo: false, numeroCotacao: null };
+    const codigo = limpo(menor.codigo_obra) || codigoObraLegada(menor.id);
+    return { codigo, nativo: false, numeroCotacao: null };
   }
 
   function slug(s) {
