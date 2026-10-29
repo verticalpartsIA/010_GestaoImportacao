@@ -295,7 +295,7 @@
     const poco = Number(geometria.poco_mm) || 0;
     const ultimaAltura = Number(geometria.ultima_altura_mm) || 0;
     const total = poco + percurso + ultimaAltura;
-    const foraDoPadrao = ultimaAltura > 4400;
+    const foraDoPadrao = ultimaAltura > 4500;
     return { percurso_mm: percurso, altura_total_mm: total, ultima_altura_fora_do_padrao: foraDoPadrao };
   }
 
