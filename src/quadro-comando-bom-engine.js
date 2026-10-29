@@ -627,9 +627,33 @@
     MT: ['VPEL-731a', 'Chicote MT (Alimentação e Monitoramento do Freio da Máquina) - Ref.: VerticalParts (A)'],
     OS: ['VPEL-729a', 'Chicote OS (Contato Elétrico Limitador de Velocidade) - Ref.: VerticalParts (A)'],
   };
+  /* Chicotes dos demais conectores da caixa de topo (VPB-193, placa MCTC-CTB-H5). Regra do Gelson (29/10/2026): todo cabo é feito na VerticalParts,
+     um chicote por conector. O código VPEL-7xx ainda não existe: a lista "Chicotes da caixa de topo" (tabela chicotes_caixa_topo) o recebe depois.
+     Sem código, o item entra no BOM como "código a definir". Comprimento padrão 2.400 mm; 3.500 mm para o que desce até a baixo da cabine (WT2, SOS). */
+  const CHICOTE_MM_PADRAO = 2400;
+  const CHICOTE_MM_BAIXO_CABINE = 3500;
+  const CHICOTES_CAIXA_TOPO_NOVOS = [
+    { chave: 'DC1', desc: 'Chicote DC1 (Alimentação do Operador de Porta)' },
+    { chave: 'DC2', desc: 'Chicote DC2 (Alimentação do Operador de Porta Oposta)', cond: 'portaOposta' },
+    { chave: 'DEN1', desc: 'Chicote DEN1 (Limites e Comandos do Operador de Porta)' },
+    { chave: 'DEN2', desc: 'Chicote DEN2 (Limites e Comandos do Operador de Porta Oposta)', cond: 'portaOposta' },
+    { chave: 'EDP2', desc: 'Chicote EDP2 (Barreira Eletrônica da Porta Oposta)', cond: 'portaOposta' },
+    { chave: 'DP', desc: 'Chicote DP (Térmica do Motor da Porta)' },
+    { chave: 'WT1', desc: 'Chicote WT1 (Sobrecarga / Carga Cheia)' },
+    { chave: 'WT2', desc: 'Chicote WT2 (Célula de Carga Analógica)', cond: 'celulaCarga', mm: CHICOTE_MM_BAIXO_CABINE },
+    { chave: 'RDZ', desc: 'Chicote RDZ (Zona de Porta)' },
+    { chave: 'DZ', desc: 'Chicote DZ (Nivelamento)' },
+    { chave: 'Y4', desc: 'Chicote Y4 (Botoeira de Inspeção / Pendant)' },
+    { chave: 'CB/TEL1', desc: 'Chicote CB/TEL1 (Interfone)' },
+    { chave: 'COB1', desc: 'Chicote COB1 (Botoeira de Cabine)' },
+    { chave: 'COB2', desc: 'Chicote COB2 (2ª Botoeira / Auxiliar de Cabine)', cond: 'cob2' },
+    { chave: 'Y1/Y2/S3', desc: 'Chicote Y1/Y2/S3 (Fonte Combinada e Luz de Topo de Cabine)' },
+    { chave: 'CA/CC', desc: 'Chicote CA/CC (Alimentação 220V e 24V/CAN)' },
+  ];
+  const MM_CHICOTE_EXISTENTE = { SOS: CHICOTE_MM_BAIXO_CABINE };
   const CHICOTES_POR_PECA = [
     { sku: 'VPB-209', nome: 'Botoeira de Inspeção do Poço (VPB-209)', chicotes: ['PT1', 'PT2'] },
-    { sku: 'VPB-193', nome: 'Caixa de Inspeção de Topo de Cabine Monarch (VPB-193)', chicotes: ['EDP1', 'FAN', 'GS1', 'SOS', 'SL'] },
+    { sku: 'VPB-193', nome: 'Caixa de Inspeção de Topo de Cabine Monarch (VPB-193)', chicotes: ['EDP1', 'FAN', 'GS1', 'SOS', 'SL', ...CHICOTES_CAIXA_TOPO_NOVOS.map((c) => c.chave)] },
   ];
   const CHICOTES_DO_QUADRO = ['HW', 'MT', 'OS'];
 
@@ -638,20 +662,25 @@
   const CHICOTE_TRECHO = { MT: 'U/V/W, MT (freio)', OS: 'OS', HW: 'HW' };
   const fmtMetros = (mm) => (mm / 1000).toFixed(2).replace('.', ',') + ' m';
 
-  function montarItensChicotes(bomItens, catalogoPorSku, trechosFixa) {
+  function montarItensChicotes(bomItens, catalogoPorSku, trechosFixa, opcoes) {
     const cat = catalogoPorSku || {};
+    const op = opcoes || {};
+    const codigos = op.codigos || {};
     const skusBom = new Set((bomItens || []).map((i) => i.sku));
     const vistos = new Set(skusBom);
     const itens = [];
+    const caixaTopo = new Set(['EDP1', 'FAN', 'GS1', 'SOS', 'SL']);
     const add = (chave, motivo) => {
-      const [sku, desc] = CHICOTES_VPEL[chave];
+      const [skuPadrao, desc] = CHICOTES_VPEL[chave];
+      const sku = String(codigos[chave] || '').trim() || skuPadrao;
       if (vistos.has(sku)) return;
       vistos.add(sku);
       const base = (cat[sku] && cat[sku].descricao) || desc;
       const refTrecho = CHICOTE_TRECHO[chave];
       if (!refTrecho) {
-        itens.push({ sku, descricao: base, unidade: 'un', grupo_separacao: 'componentes', quantidade: 1,
-          origem: 'calculado_geometria', confianca: 'confirmado', memoria_calculo: `Chicote automático: ${motivo}. 1 por elevador.` });
+        const mm = caixaTopo.has(chave) ? (MM_CHICOTE_EXISTENTE[chave] || CHICOTE_MM_PADRAO) : null;
+        itens.push({ sku, descricao: mm ? `${base} — ${fmtMetros(mm)}` : base, unidade: 'un', grupo_separacao: 'componentes', quantidade: 1,
+          origem: 'calculado_geometria', confianca: 'confirmado', memoria_calculo: `Chicote automático: ${motivo}. 1 por elevador.` + (mm ? ` Comprimento ${fmtMetros(mm)} (definido pela Engenharia).` : '') });
         return;
       }
       const t = (trechosFixa || []).find((x) => x.endereco_referencia === refTrecho);
@@ -660,7 +689,27 @@
         origem: 'calculado_geometria', confianca: mm ? (t.confianca === 'confirmado' ? 'confirmado' : 'estimado') : 'pendente_engenharia',
         memoria_calculo: `Chicote automático: ${motivo}. 1 por elevador. ` + (mm ? `Comprimento ${fmtMetros(mm)} = trecho de fiação fixa (${t.confianca === 'confirmado' ? 'medido' : 'estimado'}).` : 'Comprimento não informado — preencher a distância na aba Geometria; nunca presumir metragem.') });
     };
-    CHICOTES_POR_PECA.forEach((peca) => { if (skusBom.has(peca.sku)) peca.chicotes.forEach((c) => add(c, `acompanha ${peca.nome}`)); });
+    /* Chicotes novos da caixa de topo: sem código cadastrado entram como "código a definir" (nunca somem do BOM). */
+    const addNovo = (c, motivo) => {
+      const cod = String(codigos[c.chave] || '').trim();
+      const sku = cod || `A-DEFINIR-${c.chave.replace(/[^A-Z0-9]+/gi, '')}`;
+      if (vistos.has(sku)) return;
+      vistos.add(sku);
+      const mm = c.mm || CHICOTE_MM_PADRAO;
+      const base = (cod && cat[cod] && cat[cod].descricao) || c.desc;
+      itens.push({ sku, descricao: `${base} — ${fmtMetros(mm)}${cod ? '' : ' — código VPEL a definir'}`, unidade: 'un', grupo_separacao: 'componentes', quantidade: 1,
+        origem: 'calculado_geometria', confianca: cod ? 'confirmado' : 'pendente_engenharia',
+        memoria_calculo: `Chicote automático: ${motivo}. 1 por elevador. Feito na VerticalParts. Comprimento ${fmtMetros(mm)} (definido pela Engenharia).` + (cod ? '' : ' Código VPEL ainda não cadastrado na lista "Chicotes da caixa de topo".') });
+    };
+    CHICOTES_POR_PECA.forEach((peca) => {
+      if (!skusBom.has(peca.sku)) return;
+      peca.chicotes.forEach((c) => {
+        if (CHICOTES_VPEL[c]) { add(c, `acompanha ${peca.nome}`); return; }
+        const novo = CHICOTES_CAIXA_TOPO_NOVOS.find((x) => x.chave === c);
+        if (!novo || (novo.cond && !op[novo.cond])) return;
+        addNovo(novo, `acompanha ${peca.nome}`);
+      });
+    });
     CHICOTES_DO_QUADRO.forEach((c) => add(c, 'saem direto do quadro de comando para a última altura (UA)'));
     return itens;
   }
@@ -701,7 +750,7 @@
   }
 
   window.QuadroComandoBomEngine = {
-    calcularLop, montarItensLop, montarItensLopParadas, LOP_MODELOS, montarItensInspecao, INSPECAO_MODELOS, montarItensChicotes, CHICOTES_VPEL, MRL_FIO_UA_MM,
+    calcularLop, montarItensLop, montarItensLopParadas, LOP_MODELOS, montarItensInspecao, INSPECAO_MODELOS, montarItensChicotes, CHICOTES_VPEL, CHICOTES_CAIXA_TOPO_NOVOS, MRL_FIO_UA_MM,
     listarVariantes, chaveVariante, chaveVarianteQuadro, montarBomDaEstrutura, montarBomFixo,
     somaIntervalos, alturaTotalMm, perimetroCaixaMm,
     montarTrechosFiacaoFixa, montarTrechoCaboManobra, montarChecklist,

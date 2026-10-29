@@ -230,7 +230,14 @@
 
     // Chicotes VPEL que acompanham a caixa do poço, a caixa de topo de cabine e o quadro (depois de todos os itens, para ver os códigos escolhidos).
     const trechosFixa = engine.montarTrechosFiacaoFixa(quadro.geometria, quadro.tipo_aplicacao);
-    bomItens = [...bomItens, ...engine.montarItensChicotes(bomItens, catalogo, trechosFixa)];
+    // Códigos VPEL dos chicotes (lista "Chicotes da caixa de topo"); sem a tabela/códigos o chicote entra como "código a definir".
+    let codigosChicote = {};
+    try {
+      const rc = await c.from('chicotes_caixa_topo').select('chave,codigo');
+      (rc.data || []).forEach((x) => { if (x.codigo) codigosChicote[x.chave] = x.codigo; });
+    } catch (e) { console.warn('[quadro-comando] lista de chicotes indisponível:', e); }
+    const portaOposta = (quadro.paradas || []).some((p) => p.abertura_traseira);
+    bomItens = [...bomItens, ...engine.montarItensChicotes(bomItens, catalogo, trechosFixa, { codigos: codigosChicote, portaOposta, celulaCarga: false, cob2: false })];
 
     const trechoManobra = engine.montarTrechoCaboManobra(quadro.geometria, quadro.intervalos);
     const trechosCarro = engine.montarTrechosFiacaoCarro(quadro.geometria, quadro.configuracao);
