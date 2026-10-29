@@ -372,7 +372,7 @@ const EI_EMPTY = {
 
 function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, saving }) {
   const [form, setForm] = React.useState(() => (initialData ? { ...EI_EMPTY, ...initialData } : EI_EMPTY));
-  const [tab, setTab] = React.useState('identificacao');
+  const [tab, setTab] = window.useRouteTab('embarques-importacao', 'identificacao', ['identificacao', 'pagamentos', 'embarque', 'frete', 'aduaneiro', 'faturamento', 'entrega']);
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
   const etaSalvo = isEdit && initialData ? initialData.eta_santos : null;
   const [mudancaEta, setMudancaEta] = React.useState(() => ({ data_comunicacao: new Date().toISOString().slice(0, 10), motivo: '' }));
@@ -393,7 +393,7 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
         { key: 'pagamentos', label: 'Pagamentos', icon: 'dollar' },
         { key: 'embarque', label: 'Embarque', icon: 'ship' },
         { key: 'frete', label: 'Frete', icon: 'truck' },
-        { key: 'desembaraco', label: 'Aduaneiro', icon: 'shield' },
+        { key: 'aduaneiro', label: 'Aduaneiro', icon: 'shield' },
         { key: 'faturamento', label: 'Faturamento', icon: 'fileSearch' },
         { key: 'entrega', label: 'Entrega', icon: 'package' },
       ]} active={tab} onChange={setTab}/>
@@ -459,7 +459,7 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
         </div>
       )}
 
-      {tab === 'desembaraco' && (
+      {tab === 'aduaneiro' && (
         <div style={{ marginTop: 14 }}>
           <div className="grid-3" style={{ gap: 10 }}>
             <PIField label="Ref. despachante"><PIInput value={form.referencia_despachante} onChange={set('referencia_despachante')}/></PIField>
@@ -595,7 +595,7 @@ function EmbarquesImportacaoPage() {
       if (editing) await store.atualizar(editing.id, form, pis);
       else await store.criar(form, pis);
       window.toast?.(editing ? 'Embarque atualizado.' : 'Embarque criado.', 'success');
-      setShowForm(false); setEditing(null); reload();
+      setShowForm(false); setEditing(null); window.VpRouter.navigate('embarques-importacao'); reload();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setSaving(false); }
   };
@@ -640,7 +640,7 @@ function EmbarquesImportacaoPage() {
       {showForm && (
         <div style={{ marginBottom: 20 }}>
           <EmbarqueImportacaoForm initialData={editing} isEdit={!!editing} pis={editing ? (pisByEmbarque[editing.id] || []) : []} saving={saving}
-            onSubmit={salvar} onCancel={() => { setShowForm(false); setEditing(null); }}/>
+            onSubmit={salvar} onCancel={() => { setShowForm(false); setEditing(null); window.VpRouter.navigate('embarques-importacao'); }}/>
         </div>
       )}
 
