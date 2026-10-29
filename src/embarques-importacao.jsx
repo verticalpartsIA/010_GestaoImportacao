@@ -359,7 +359,7 @@ const EI_EMPTY = {
   nome_embarque: '', status_etapa: 'Pagamento', referencia_embarque: '', porto_origem: '', porto_destino: '',
   navio: '', awb_bl: '', sealine: '', redestinacao: '', data_pedido_redestinacao: '',
   etd_original: '', etd_atual: '', houve_rolagem: false, historico_rolagens: [], containers: [],
-  tipo_frete: '', modalidade_frete: '', agente_carga: '', cotacao_frete: '', moeda_frete: 'USD',
+  cotacoes_frete: [], tipo_frete: '', modalidade_frete: '', agente_carga: '', cotacao_frete: '', moeda_frete: 'USD',
   aprovacao_frete: 'Pendente', pedido_booking: '', transit_time: '', free_time: '',
   referencia_despachante: '', custos_estimativa: '', documentos_marimex: '', transit_time_total: '',
   di: '', data_registro_di: '', canal_parametrizacao: '', ultima_data_free_time: '', eta_santos: '', historico_eta: [],
@@ -439,25 +439,32 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
         </div>
       )}
 
-      {tab === 'frete' && (
+      {tab === 'frete' && (() => {
+        const temVencedor = !!(window.EmbFreteCalc && window.EmbFreteCalc.vencedor(form.cotacoes_frete));
+        const lockV = temVencedor ? { disabled: true } : {};
+        return (
         <div className="stack" style={{ gap: 14, marginTop: 14 }}>
+          <window.EIFreteCotacoes cotacoes={form.cotacoes_frete} onChange={set('cotacoes_frete')}
+            emb={{ ...form, id: initialData ? initialData.id : null, numero_cotacao: numeroCotacaoEmbarque }} isEdit={!!(isEdit && initialData && initialData.id)}/>
+          <hr style={{ border: 0, borderTop: '1px solid var(--border)' }}/>
+          {temVencedor && <p className="small muted">🏆 Agente, cotação, transit time e free time abaixo vêm da cotação vencedora (editar lá em cima).</p>}
           <div className="grid-3" style={{ gap: 10 }}>
             <PIField label="Tipo de frete"><PISelect value={form.tipo_frete} onChange={set('tipo_frete')} options={EI_TIPOS_FRETE}/></PIField>
             <PIField label="Modalidade"><PISelect value={form.modalidade_frete} onChange={set('modalidade_frete')} options={EI_MODALIDADES}/></PIField>
-            <PIField label="Cotação frete"><PIInput type="number" value={form.cotacao_frete} onChange={set('cotacao_frete')}/></PIField>
-            <PIField label="Moeda frete"><PISelect value={form.moeda_frete} onChange={set('moeda_frete')} options={['USD', 'EUR', 'BRL', 'CNY', 'GBP']}/></PIField>
-            <PIField label="Transit time (dias)"><PIInput type="number" value={form.transit_time} onChange={set('transit_time')}/></PIField>
-            <PIField label="Free time (dias)"><PIInput type="number" value={form.free_time} onChange={set('free_time')}/></PIField>
+            <PIField label="Cotação frete"><input className="input" type="number" value={temVencedor ? (window.EmbFreteCalc.resumoVencedor(form.cotacoes_frete).cotacao_frete ?? '') : (form.cotacao_frete ?? '')} onChange={(e) => set('cotacao_frete')(e.target.value)} {...lockV}/></PIField>
+            <PIField label="Moeda frete"><PISelect value={temVencedor ? (window.EmbFreteCalc.resumoVencedor(form.cotacoes_frete).moeda_frete || form.moeda_frete) : form.moeda_frete} onChange={set('moeda_frete')} options={['USD', 'EUR', 'BRL', 'CNY', 'GBP']}/></PIField>
+            <PIField label="Transit time (dias)"><input className="input" type="number" value={temVencedor ? (window.EmbFreteCalc.resumoVencedor(form.cotacoes_frete).transit_time ?? '') : (form.transit_time ?? '')} onChange={(e) => set('transit_time')(e.target.value)} {...lockV}/></PIField>
+            <PIField label="Free time (dias)"><input className="input" type="number" value={temVencedor ? (window.EmbFreteCalc.resumoVencedor(form.cotacoes_frete).free_time ?? '') : (form.free_time ?? '')} onChange={(e) => set('free_time')(e.target.value)} {...lockV}/></PIField>
             <PIField label="Pedido de booking"><PIInput type="date" value={form.pedido_booking} onChange={set('pedido_booking')}/></PIField>
             <PIField label="Aprovação do frete"><PISelect value={form.aprovacao_frete} onChange={set('aprovacao_frete')} options={['Pendente', 'Aprovado', 'Reprovado']}/></PIField>
           </div>
           <PIField label="Agente de carga / freight forwarder">
-            <PIInput value={form.agente_carga} onChange={set('agente_carga')} list="dl-agentes-carga-emb"/>
+            <PIInput value={temVencedor ? (window.EmbFreteCalc.vencedor(form.cotacoes_frete).agente || '') : form.agente_carga} onChange={set('agente_carga')} list="dl-agentes-carga-emb"/>
             <CadFornecedorDatalist id="dl-agentes-carga-emb" categoria="Agente de Carga"/>
           </PIField>
-          <p className="small muted">Comparativo de cotações de frete entre agentes fica para uma fase seguinte — aqui o agente vencedor é registrado diretamente.</p>
         </div>
-      )}
+        );
+      })()}
 
       {tab === 'aduaneiro' && (
         <div style={{ marginTop: 14 }}>
