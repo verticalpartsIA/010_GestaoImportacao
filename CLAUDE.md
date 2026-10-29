@@ -21,7 +21,7 @@ Pedido do usuário: o botão/aba ativo em `/gestao-importacao/embarques-importac
 - `docs/MAPA_DE_ROTAS.md` regenerado (0 inconsistências). `index.html`: `embarques-importacao.jsx` v8→v9.
 - Validado só por `check-cache-bust` e o gerador do mapa; **não testado com clique real no navegador**.
 
-## Embarques de Importação — aba Frete: cotações de frete marítimo (29/10/2026)
+## Embarques de Importação — aba Frete: cotações de frete marítimo (29/10/2026, PR #1160, squash `52794e2`)
 
 Pedido do Gelson (prompt `CotacaoFreteMaritimo.md` + complemento): na aba **Frete** do embarque, até **4 cotações** de agentes, com fornecedor escolhido no Cadastro, taxas, prazos, anexos, **envio do pedido por e-mail pelo Inbox** e uma **vencedora**. Ordem das abas agora: Identificação · Pagamentos · **Frete** · Embarque · Aduaneiro · Faturamento · Entrega (PR #1158).
 - **Banco:** coluna `embarques_importacao.cotacoes_frete jsonb default '[]'` (migration `20261029200000`, **aplicada com CONFIRMO**; conferida). Cada item: `{id 'FRT-xxxxxxxx', fornecedor_id, agente, email, contato, taxas[{descricao,moeda USD|BRL,valor}], transit_time, free_time, observacao, anexos[], envios[], vencedor}`. Embarque antigo (null/lixo) carrega como lista vazia (`EmbFreteCalc.normalizar`).
@@ -33,6 +33,7 @@ Pedido do Gelson (prompt `CotacaoFreteMaritimo.md` + complemento): na aba **Fret
 - **Não feito:** extrair os valores da resposta do e-mail para as taxas (hoje o usuário digita olhando o Inbox); `emails_projeto.numero_cotacao` fica vazio quando o embarque não tem Nº de cotação (varejo) — o vínculo é pelo Message-ID/`referencia_id`.
 - Testes: `src/embarques-frete-calc.test.js` (6); e2e `e2e/embarques-frete.spec.js` (nova cotação, totais USD/BRL, limite de 4, vencedora única, trava dos campos, URL da aba). **Não testado com embarque salvo:** upload de anexo, envio real de e-mail, resposta no Inbox e gravação das cotações (o e2e simula o Supabase sem dados). Primeiro uso real: salvar um embarque, anexar 1 PDF pequeno e enviar para um e-mail seu.
 - `index.html`: `embarques-frete-calc.js` v1, `embarques-importacao-store.js` v12, `embarques-frete-cotacoes.jsx` v2, `embarques-importacao.jsx` v11.
+- **Status:** mergeado em `main` (migration já no banco). **Pendente:** 1º uso real (salvar embarque → anexar PDF pequeno → enviar a um e-mail do Gelson → conferir Enviados/resposta no Inbox); revisão do texto em chinês; o Gelson ainda não respondeu às 4 decisões acima (as adotadas são padrões meus).
 
 ## Entrega & Documentação — "Repositório Documentos" é tela NOVA, independente das outras 3 (28/10/2026)
 
