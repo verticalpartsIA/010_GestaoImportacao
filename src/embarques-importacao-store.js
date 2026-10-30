@@ -50,7 +50,9 @@
     const numerosSerie = unique(pis.flatMap((p) => p.numeros_serie || []));
     const numerosRequisicao = unique(pis.map((p) => p.numero_requisicao));
     const datasAbertura = pis.map((p) => p.data_abertura).filter(Boolean).sort();
-    const moeda = (pis[0] && pis[0].moeda) || 'USD';
+    /* Ordem estável (o banco não garante a ordem de listarPIsVinculadas): P.I. mais antiga primeiro, desempate pelo número. */
+    const ordenadas = pis.slice().sort((a, b) => String(a.data_abertura || '9999').localeCompare(String(b.data_abertura || '9999')) || String(a.numero_pi || '').localeCompare(String(b.numero_pi || '')) || String(a.id || '').localeCompare(String(b.id || '')));
+    const moeda = (ordenadas[0] && ordenadas[0].moeda) || 'USD';
     /* Onda 1 (30/10/2026): o total gravado soma só as P.I. na moeda da primeira (antes somava tudo como se fosse a mesma
        moeda). As demais aparecem em totaisPorMoeda e a tela avisa (moedasMistas). */
     const totaisPorMoeda = {};
@@ -65,7 +67,7 @@
        entrega) ficaria mudo pra sempre em produção — nenhum embarque
        real teria numero_cotacao gravado. Deriva da primeira P.I.
        vinculada, mesma lógica de fornecedor/incoterms acima. */
-    const numeroCotacao = pis.map((p) => p.numero_cotacao).find((v) => v != null) ?? null;
+    const numeroCotacao = ordenadas.map((p) => p.numero_cotacao).find((v) => v != null) ?? null;
     return { piNumbers, fornecedores, incoterms, categorias, numerosSerie, numerosRequisicao, dataPi: datasAbertura[0] || '', valorTotal, moeda, numeroCotacao, totaisPorMoeda, moedasMistas, cotacoesDistintas };
   }
 

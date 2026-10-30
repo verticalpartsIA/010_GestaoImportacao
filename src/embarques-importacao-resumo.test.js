@@ -54,3 +54,14 @@ test('resumoPIs — sem P.I.: valores neutros', () => {
   assert.equal(r.moedasMistas, false);
   assert.equal(r.numeroCotacao, null);
 });
+
+test('resumoPIs — a base não depende da ordem em que as P.I. chegam', () => {
+  const a = { id: '1', numero_pi: 'A', data_abertura: '2026-01-10', valor_total: 100, moeda: 'USD', numero_cotacao: 955 };
+  const b = { id: '2', numero_pi: 'B', data_abertura: '2026-02-01', valor_total: 700, moeda: 'CNY', numero_cotacao: 957 };
+  const r1 = carregar().resumoPIs([a, b]);
+  const r2 = carregar().resumoPIs([b, a]);
+  assert.equal(r1.moeda, 'USD');
+  assert.equal(r2.moeda, 'USD');
+  assert.equal(r2.valorTotal, 100);
+  assert.equal(r2.numeroCotacao, 955);
+});
