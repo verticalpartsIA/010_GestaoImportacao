@@ -387,7 +387,6 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
     // Registros antigos só têm eta_santos: ele vale como ETA e como Presença de carga.
     f.eta_original = f.eta_original || f.eta_santos || '';
     f.eta_atual = f.eta_atual || f.eta_santos || '';
-    f.presenca_carga = f.presenca_carga || f.eta_santos || '';
     return f;
   });
   const [tab, setTab] = window.useRouteTab('embarques-importacao', 'identificacao', ['identificacao', 'pagamentos', 'frete', 'embarque', 'aduaneiro', 'faturamento', 'entrega']);
@@ -493,6 +492,7 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
           </div>
           <div className="grid-3" style={{ gap: 10, marginTop: 14 }}>
             <PIField label="PRESENÇA DE CARGA"><PIInput type="date" value={form.presenca_carga} onChange={set('presenca_carga')}/></PIField>
+            {!form.presenca_carga && form.eta_santos && <p className="small muted" style={{ alignSelf: 'end' }}>Valor antigo em ETA Santos: {eiFmtDate(form.eta_santos)} (não copiado)</p>}
           </div>
           {form.canal_parametrizacao && form.canal_parametrizacao !== 'Verde' && (
             <div style={{ marginTop: 14, padding: 12, background: '#fff8e6', border: '1px solid #FBB039', borderRadius: 6 }}>
