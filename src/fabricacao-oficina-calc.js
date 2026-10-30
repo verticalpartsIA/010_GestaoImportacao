@@ -77,6 +77,17 @@
     'SAO_OT06MB132420': ['manobra', 'CABO DE MANOBRA CHATO'],
     'VPEL-529N': ['manobra', 'Cabo Manobra Elétrico com 23 Vias para Elevador (NACIONAL) - Ref.: DRAKA'],
     'VPB-086': ['manobra', 'Cabo de Comando Elétrico com 24 Vias'],
+    // Cabos modulares BST (circuito de segurança, botoeira, LIP/LOP): descrição vem do cadastro.
+    'VPB-097': ['manobra', ''],
+    'VPB-098': ['manobra', ''],
+    'VPB-099': ['manobra', ''],
+    'VPB-100': ['manobra', ''],
+    'VPB-101': ['manobra', ''],
+    'VPB-102': ['manobra', ''],
+    'VPB-103': ['manobra', ''],
+    'VPB-104': ['manobra', ''],
+    'VPB-105': ['manobra', ''],
+    'VPB-106': ['manobra', ''],
   };
   const CORTE_ROTULO = { aco: 'Cabo de Aço', cinta: 'Cinta de Tração', manobra: 'Cabo de Manobra' };
   function semAcento(v) { return String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
@@ -100,7 +111,7 @@
   // Descrição comercial: dicionário vence; senão a do cadastro (pcp_produtos / catálogo Omie).
   function descricaoCorte(codigo, descCadastro) {
     const d = CORTE_DESCRICOES[String(codigo || '').trim().toUpperCase()];
-    return d ? d[1] : (descCadastro ? String(descCadastro) : '');
+    return d && d[1] ? d[1] : (descCadastro ? String(descCadastro) : '');
   }
   // "VPEL-692 — Cabo de Aço para Elevador ..." (só o código se não houver descrição).
   function rotuloItemCorte(codigo, descCadastro) {
