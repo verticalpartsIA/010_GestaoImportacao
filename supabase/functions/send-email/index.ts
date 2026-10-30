@@ -53,27 +53,21 @@ function parseDestinatarios(to: unknown): string[] {
   return [];
 }
 
-/* 30/10 — assunto com acento: o denomailer 1.6.0 monta o encoded-word sem fechar o "?=" e com
-   espaços dentro (Outlook mostrava "=?utf-8?Q?...=c3=87..." cru). Codificamos nós mesmos (RFC 2047,
-   Base64, palavras <= 75 caracteres, cortando em fronteira de caractere) e entregamos só ASCII. */
+// O denomailer 1.6.0 reaplica a PROPRIA codificacao em todo assunto que tenha
+// caractere nao-ASCII ou comece com "=?" (quotedPrintableEncodeInline) e quebra
+// linha a cada 74 caracteres SEM dobra de cabecalho (RFC 2047/5322): num assunto
+// longo isso fecha o bloco de cabecalhos no meio e o resto vira corpo no Outlook/Gmail.
+// Por isso NUNCA mandamos encoded-word pronta. Assunto ASCII passa direto; assunto
+// acentuado curto (cabe em uma linha de 74) segue com a codificacao do denomailer;
+// assunto acentuado longo perde os acentos (NFD) para virar ASCII puro.
 function codificarAssunto(subject: string): string {
-  if (/^[\x20-\x7e]*$/.test(subject)) return subject;
+  const s = String(subject || "").replace(/[\r\n]+/g, " ").trim();
+  if (/^[\x20-\x7e]*$/.test(s) && !s.startsWith("=?")) return s;
   const enc = new TextEncoder();
-  const palavras: string[] = [];
-  let atual = "";
-  let bytesAtual = 0;
-  const fechar = () => {
-    if (!atual) return;
-    palavras.push(`=?UTF-8?B?${btoa(String.fromCharCode(...enc.encode(atual)))}?=`);
-    atual = ""; bytesAtual = 0;
-  };
-  for (const ch of subject) {
-    const n = enc.encode(ch).length;
-    if (bytesAtual + n > 45) fechar();
-    atual += ch; bytesAtual += n;
-  }
-  fechar();
-  return palavras.join(" ");
+  let qp = 12; // "=?utf-8?Q?" + "?="
+  for (const ch of s) { const n = enc.encode(ch).length; qp += n === 1 ? 1 : n * 3; }
+  if (qp <= 74 && !s.startsWith("=?")) return s;
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7e]/g, "?").replace(/^=\?/, "- =?");
 }
 
 function limparBase64(b64: string): string {
