@@ -357,7 +357,7 @@
   }
 
   // Envia o pedido de cotação ao agente pelo send-email (aparece em Enviados no Inbox) e registra o envio.
-  async function enviarPedidoCotacaoFrete(emb, cotacao, { to, subject, text }) {
+  async function enviarPedidoCotacaoFrete(emb, cotacao, { to, cc, subject, text }) {
     if (!emb || !emb.id) throw new Error('Salve o embarque antes de enviar a cotação.');
     if (!to) throw new Error('Informe o e-mail do agente.');
     const { attachments, links } = await anexosParaEmail(cotacao.anexos);
@@ -365,7 +365,7 @@
       ? text + '\n\n' + links.map((a) => `• ${a.nome}: ${a.url}`).join('\n')
       : text;
     const r = await window.EmailEnvioHelper.tentarEnviarDireto({
-      to, subject, text: corpo,
+      to, cc, subject, text: corpo,
       numeroCotacao: emb.numero_cotacao ?? undefined,
       referenciaTipo: 'cotacao_frete', referenciaId: cotacao.id,
       attachments: attachments.length ? attachments : undefined,

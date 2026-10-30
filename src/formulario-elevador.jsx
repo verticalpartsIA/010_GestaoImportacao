@@ -1110,6 +1110,7 @@ function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedir
   const suportado = !!cadastroMatch || Object.prototype.hasOwnProperty.call(FE_RFQ_CONTATOS_PADRAO, grupo.fornecedor);
   const [verResp, setVerResp] = React.useState(false);
   const [recipient, setRecipient] = React.useState(() => contatoPadrao);
+  const [ccRfq, setCcRfq] = React.useState(() => (window.EmailEnvioHelper ? window.EmailEnvioHelper.ccSalvo() : ''));
   const tocadoRef = React.useRef(false);
   React.useEffect(() => {
     if (cadastroMatch && !tocadoRef.current) {
@@ -1146,7 +1147,7 @@ function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedir
         <div style={{ marginTop: 10 }}>
           <div className="row gap-2">
             <Button variant="outline" size="sm" icon="fileText" onClick={() => setVerResp(true)}>Ver resposta do fornecedor</Button>
-            <Button variant="ghost" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', recipient)}>Reenviar (nova revisão) por e-mail</Button>
+            <Button variant="ghost" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', { ...recipient, cc: ccRfq })}>Reenviar (nova revisão) por e-mail</Button>
             <Button variant="ghost" size="sm" icon="refresh" disabled={busy} onClick={() => onPedirRevisao(grupo)}>Pedir nova revisão</Button>
           </div>
           {verResp && <FECotacaoRespostaModal cot={cot} onClose={() => setVerResp(false)}/>}
@@ -1158,9 +1159,10 @@ function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedir
             <FEInput value={recipient.email} onChange={setR('email')} placeholder="e-mail"/>
             <FEInput value={recipient.telefone} onChange={setR('telefone')} placeholder="WhatsApp (DDI+DDD+número)"/>
           </div>
+          {window.EmailCcInput && <div style={{ marginTop: 8 }}><window.EmailCcInput value={ccRfq} onChange={setCcRfq} /></div>}
           <div className="row gap-2" style={{ marginTop: 8 }}>
             <Button variant="outline" size="sm" icon="message" disabled={busy} onClick={() => onEnviar(grupo, 'whatsapp', recipient)}>{cot && cot.status !== 'rascunho' ? 'Reenviar (nova revisão) por WhatsApp' : 'WhatsApp'}</Button>
-            <Button variant="outline" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', recipient)}>{cot && cot.status !== 'rascunho' ? 'Reenviar (nova revisão) por e-mail' : 'E-mail'}</Button>
+            <Button variant="outline" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', { ...recipient, cc: ccRfq })}>{cot && cot.status !== 'rascunho' ? 'Reenviar (nova revisão) por e-mail' : 'E-mail'}</Button>
             <Button variant="ghost" size="sm" icon="copy" disabled={busy} onClick={() => onEnviar(grupo, 'link', recipient)}>Copiar link</Button>
           </div>
         </div>
@@ -1284,7 +1286,7 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
            com Proposta/Contrato de Venda/Contrato Instalador); a decisão do
            que fazer com sucesso/falha continua aqui, sem mudança. */
         const { enviouDireto, emailData } = await window.EmailEnvioHelper.tentarEnviarDireto({
-          to: recipient.email, subject: assuntoRfq, text: msg,
+          to: recipient.email, cc: recipient.cc, subject: assuntoRfq, text: msg,
           numeroCotacao, referenciaTipo: 'cotacao_fornecedor', referenciaId: cot.id,
         });
         if (enviouDireto) {

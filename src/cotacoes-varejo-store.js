@@ -192,10 +192,10 @@
   }
 
   /* E-mail direto pelo send-email (travas de allowlist/limite de taxa do servidor valem). Falhou → devolve mailto para o comprador. */
-  async function enviarPorEmail(lote, convite) {
+  async function enviarPorEmail(lote, convite, opts) {
     const { subject, text } = textoConvite(lote, convite);
     if (!convite.email) return { enviouDireto: false, semEmail: true };
-    const r = window.EmailEnvioHelper ? await window.EmailEnvioHelper.tentarEnviarDireto({ to: convite.email, subject, text, referenciaTipo: 'cotacao_varejo', referenciaId: convite.id }) : { enviouDireto: false };
+    const r = window.EmailEnvioHelper ? await window.EmailEnvioHelper.tentarEnviarDireto({ to: convite.email, cc: opts && opts.cc, subject, text, referenciaTipo: 'cotacao_varejo', referenciaId: convite.id }) : { enviouDireto: false };
     if (r.enviouDireto) await marcarEnviado({ ...convite, lote_id: lote.id }, 'email', convite.email);
     return { ...r, mailto: 'mailto:' + encodeURIComponent(convite.email) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(text) };
   }

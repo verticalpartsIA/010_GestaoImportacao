@@ -69,7 +69,7 @@
   }
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br/>');
 
-  async function enviar({ lote, convite, mensagem, anexos } = {}) {
+  async function enviar({ lote, convite, mensagem, anexos, cc } = {}) {
     const c = sb(); if (!c) throw new Error('Sem conexão com o banco.');
     if (!lote || !convite) throw new Error('Lote ou fornecedor não informado.');
     const texto = (mensagem || '').trim();
@@ -92,7 +92,7 @@
         + autor + ':\n' + (texto || '(attachments only)') + '\n' + (linksAnexos ? '\nAttachments:\n' + linksAnexos + '\n' : '')
         + '\nYou can reply directly to this e-mail.' + (link ? '\nQuotation portal: ' + link : '');
       const r = window.EmailEnvioHelper
-        ? await window.EmailEnvioHelper.tentarEnviarDireto({ to: destinos.join(', '), subject: 'Request for Quotation ' + lote.numero + ' — VerticalParts', text: corpo, referenciaTipo: 'cotacao_varejo', referenciaId: convite.id })
+        ? await window.EmailEnvioHelper.tentarEnviarDireto({ to: destinos.join(', '), cc, subject: 'Request for Quotation ' + lote.numero + ' — VerticalParts', text: corpo, referenciaTipo: 'cotacao_varejo', referenciaId: convite.id })
         : { enviouDireto: false };
       if (r.enviouDireto) aviso = { ok: true, para: destinos, motivo: null };
       else {

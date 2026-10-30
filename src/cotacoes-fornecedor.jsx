@@ -304,6 +304,7 @@ function CfTratativas({ cotacaoFornecedorId, numeroCotacao, cot }) {
   const [hist, setHist] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [texto, setTexto] = React.useState("");
+  const [cc, setCc] = React.useState(() => (window.EmailEnvioHelper ? window.EmailEnvioHelper.ccSalvo() : ''));
   const [anexos, setAnexos] = React.useState([]);
   const [enviando, setEnviando] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
@@ -353,7 +354,7 @@ function CfTratativas({ cotacaoFornecedorId, numeroCotacao, cot }) {
   const enviar = async () => {
     setEnviando(true);
     try {
-      const r = await store.enviar({ cotacaoFornecedorId, numeroCotacao, mensagem: texto, anexos });
+      const r = await store.enviar({ cotacaoFornecedorId, numeroCotacao, mensagem: texto, anexos, cc });
       setTexto(""); setAnexos([]);
       mostrarResultado(r);
       await reload(true);
@@ -467,6 +468,7 @@ function CfTratativas({ cotacaoFornecedorId, numeroCotacao, cot }) {
         </div>
       )}
       <div className="stack" style={{ gap: 6, marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+        {window.EmailCcInput && <window.EmailCcInput value={cc} onChange={setCc} />}
         <textarea className="input" rows={2} value={texto} onChange={e => setTexto(e.target.value)}
           placeholder="Escreva para o fornecedor — a mensagem fica registrada aqui e é enviada por e-mail…" style={{ resize: "vertical", fontFamily: "inherit" }}/>
         {anexos.length > 0 && (

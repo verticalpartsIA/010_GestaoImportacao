@@ -90,6 +90,7 @@ function EFAgenteSelect({ cot, onPick }) {
 function EFEnvioPanel({ emb, cot, onClose, onEnviado }) {
   const base = React.useMemo(() => efMontarMensagem(emb, cot), []);
   const [para, setPara] = React.useState(cot.email || '');
+  const [cc, setCc] = React.useState(() => (window.EmailEnvioHelper ? window.EmailEnvioHelper.ccSalvo() : ''));
   const [assunto, setAssunto] = React.useState(base.assunto);
   const [texto, setTexto] = React.useState(base.texto);
   const [enviando, setEnviando] = React.useState(false);
@@ -98,7 +99,7 @@ function EFEnvioPanel({ emb, cot, onClose, onEnviado }) {
     if (!para.trim()) { window.toast?.('Informe o e-mail do agente.', 'error'); return; }
     setEnviando(true);
     try {
-      const r = await window.EmbarquesImportacaoStore.enviarPedidoCotacaoFrete(emb, cot, { to: para.trim(), subject: assunto, text: texto });
+      const r = await window.EmbarquesImportacaoStore.enviarPedidoCotacaoFrete(emb, cot, { to: para.trim(), cc, subject: assunto, text: texto });
       if (r.ok) { window.toast?.('Pedido enviado por e-mail (fica em Enviados no Inbox).', 'success'); onEnviado(r.envio); onClose(); }
       else {
         window.toast?.('Não foi possível enviar pelo sistema. Abrindo seu programa de e-mail — este envio NÃO foi registrado.', 'error');
@@ -112,6 +113,7 @@ function EFEnvioPanel({ emb, cot, onClose, onEnviado }) {
     <div className="stack" style={{ gap: 8, padding: 12, border: '1px solid var(--vp-yellow, #f5c400)', borderRadius: 8, background: 'var(--vp-gray-50)' }}>
       <strong style={{ fontSize: 13 }}>Enviar pedido de cotação</strong>
       <PIField label="Para"><PIInput value={para} onChange={setPara} placeholder="e-mail do agente"/></PIField>
+      {window.EmailCcInput && <window.EmailCcInput value={cc} onChange={setCc} />}
       <PIField label="Assunto"><PIInput value={assunto} onChange={setAssunto}/></PIField>
       <PIField label="Mensagem">
         <textarea className="input" rows={12} value={texto} onChange={(e) => setTexto(e.target.value)}/>
@@ -274,6 +276,7 @@ function EFEnvioMultiplo({ lista, emb, isEdit, onChange, onClose }) {
   const base = React.useMemo(() => efMontarMensagem(emb, { contato: '' }), []);
   const [assunto, setAssunto] = React.useState(base.assunto);
   const [texto, setTexto] = React.useState(base.texto);
+  const [cc, setCc] = React.useState(() => (window.EmailEnvioHelper ? window.EmailEnvioHelper.ccSalvo() : ''));
   const [enviando, setEnviando] = React.useState(false);
   const [resultado, setResultado] = React.useState([]);
   React.useEffect(() => {
@@ -318,7 +321,7 @@ function EFEnvioMultiplo({ lista, emb, isEdit, onChange, onClose }) {
         const primeiro = String(c.contato || '').trim().split(/\s+/)[0];
         const corpo = texto.replace(/^Bom dia,?/, 'Bom dia' + (primeiro ? ', ' + primeiro : '') + ',');
         try {
-          const r = await window.EmbarquesImportacaoStore.enviarPedidoCotacaoFrete(emb, c, { to: c.email.trim(), subject: assunto, text: corpo });
+          const r = await window.EmbarquesImportacaoStore.enviarPedidoCotacaoFrete(emb, c, { to: c.email.trim(), cc, subject: assunto, text: corpo });
           if (r.ok) { atual = atual.map((x) => (x.id === cid ? { ...x, envios: [...(x.envios || []), r.envio] } : x)); res.push({ nome: c.agente, ok: true, para: c.email.trim() }); }
           else res.push({ nome: c.agente, ok: false, motivo: 'o sistema não conseguiu enviar' });
         } catch (e) { res.push({ nome: c.agente, ok: false, motivo: e.message }); }
@@ -352,6 +355,7 @@ function EFEnvioMultiplo({ lista, emb, isEdit, onChange, onClose }) {
         <input type="checkbox" checked={todos} onChange={(e) => setTodos(e.target.checked)}/> mostrar todos os fornecedores (não só "Agente de Carga")
       </label>
       {cheio && <div className="small" style={{ color: '#b00020' }}>Marcados demais: com os cartões que já existem passa de {EF.MAX_COTACOES}.</div>}
+      {window.EmailCcInput && <window.EmailCcInput value={cc} onChange={setCc} />}
       <PIField label="Assunto (igual para todos)"><PIInput value={assunto} onChange={setAssunto}/></PIField>
       <PIField label="Mensagem (a saudação ganha o nome do contato de cada agente)">
         <textarea className="input" rows={12} value={texto} onChange={(e) => setTexto(e.target.value)}/>

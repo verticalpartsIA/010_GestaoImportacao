@@ -39,6 +39,7 @@
     const [carregando, setCarregando] = useState(true);
     const [docs, setDocs] = useState([]);
     const [texto, setTexto] = useState(TEXTO_PADRAO(numeroCotacao != null ? numeroCotacao : ''));
+    const [cc, setCc] = useState(() => (window.EmailEnvioHelper ? window.EmailEnvioHelper.ccSalvo() : ''));
     const [enviando, setEnviando] = useState(false);
     const [erro, setErro] = useState('');
 
@@ -104,7 +105,7 @@
           const up = await ts.uploadAnexo(cot.id, new File([blob], d.nome, { type: d.mime || blob.type }));
           anexos.push(up);
         }
-        const r = await ts.enviar({ cotacaoFornecedorId: cot.id, numeroCotacao, mensagem: texto, anexos });
+        const r = await ts.enviar({ cotacaoFornecedorId: cot.id, numeroCotacao, mensagem: texto, anexos, cc });
         onEnviado && onEnviado(r);
         onClose();
       } catch (e) {
@@ -140,7 +141,8 @@
           </div>
         )}
         <div style={{ marginTop: 12 }}>
-          <div className="muted small" style={{ marginBottom: 4 }}>Mensagem (já em inglês, português e chinês — edite à vontade)</div>
+          {window.EmailCcInput && <window.EmailCcInput value={cc} onChange={setCc} />}
+          <div className="muted small" style={{ margin: '8px 0 4px' }}>Mensagem (já em inglês, português e chinês — edite à vontade)</div>
           <textarea className="input" rows={9} value={texto} onChange={(e) => setTexto(e.target.value)} disabled={enviando}
             style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: 12.5 }}/>
         </div>
