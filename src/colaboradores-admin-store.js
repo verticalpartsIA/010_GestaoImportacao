@@ -240,7 +240,11 @@
       ]},
       { modulo: 'status-obras', label: 'Status de Obras' },
       { modulo: 'linha-do-tempo', label: 'Linha do Tempo da Cotação' },
-      { modulo: 'art', label: 'ART' },
+      { modulo: 'art', label: 'ART', capacidades: [
+        ...ACOES_PADRAO,
+        /* 30/10/2026: a Juliana (Financeiro) marca o boleto da ART como pago. */
+        { chave: 'confirmar_pagamento', label: 'Marca o boleto da ART como pago' },
+      ]},
       { modulo: 'cronograma', label: 'Cronograma' },
       { modulo: 'central-documentos', label: 'Central de Documentos' },
       { modulo: 'databook', label: 'Data Book & Termo' },
