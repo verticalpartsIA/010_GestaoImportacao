@@ -22,6 +22,17 @@ function HandoverManutencaoPage() {
 
   React.useEffect(() => { reload(); }, []);
 
+  /* O projeto aberto vive na URL (/engenharia/handover/<id>): F5, link direto e Voltar/Avançar reabrem o certo. */
+  const [idUrl] = window.useRotaId('handover');
+  React.useEffect(() => {
+    if (loading) return;
+    if (!idUrl) { if (selected) { setSelected(null); setHandover(null); } return; }
+    if (selected && selected.id === idUrl) return;
+    const p = projetos.find((x) => String(x.id) === String(idUrl));
+    if (p) handleSelectProjeto(p);
+    else window.toast?.('Projeto não encontrado.', 'warning');
+  }, [loading, idUrl]);
+
   const handleSelectProjeto = async (p) => {
     setSelected(p);
     if (window.HandoverManutencao) {
@@ -99,7 +110,7 @@ function HandoverManutencaoPage() {
                   padding: 14,
                   cursor: "pointer",
                   position: "relative"
-                }} onClick={() => handleSelectProjeto(p)}>
+                }} onClick={() => window.VpRouter.navigate('handover', p.id)}>
                   <span style={{ position: "absolute", top: 0, left: 0, width: 24, height: 3, background: "var(--vp-yellow)" }}/>
                   <div className="row sb" style={{ marginBottom: 8 }}>
                     <div>

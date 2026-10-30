@@ -194,6 +194,7 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | (CardContratoInstalador em dossier-obra.jsx) | Abrir no Jurídico → | `contrato-instalador` | `/juridico/contrato-instalador` | `dossier-obra.jsx:592` |
 | (CVDetalhe em cotacoes-varejo.jsx) | (acionado por um handler — ver o código) | `cadastro-fornecedores` | `/cadastros/cadastro-fornecedores` | `cotacoes-varejo.jsx:633` |
 | (CVLista em cotacoes-varejo.jsx) | Ir para Importação Varejo | `compras` | `/logistica/compras` | `cotacoes-varejo.jsx:51` |
+| (DetalheView em solicitacoes-produto.jsx) | (acionado por um handler — ver o código) | `ficha-tecnica` | `/engenharia/ficha-tecnica` | `solicitacoes-produto.jsx:796` |
 | (LeadDetailView em comercial.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `comercial.jsx:1135` |
 | (LeadDetailView em comercial.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `comercial.jsx:1151` |
 | (LeadDetailView em comercial.jsx) | (acionado por um handler — ver o código) | `formulario-elevador` | `/comercial/formulario-elevador` | `comercial.jsx:1072` |
@@ -204,7 +205,7 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | (RPPainelProducao em painel-producao-pcp.jsx) | (acionado por um handler — ver o código) | `pcp` | `/logistica/pcp` | `painel-producao-pcp.jsx:100` |
 | (TabEquipamentos em dossier-obra.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `dossier-obra.jsx:1128` |
 | art | (acionado por um handler — ver o código) | `status-obras` | `/engenharia/status-obras` | `entrega.jsx:7` |
-| cadastro-instaladores | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `cadastro-instaladores.jsx:97` |
+| cadastro-instaladores | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `cadastro-instaladores.jsx:101` |
 | compras | (acionado por um handler — ver o código) | `cotacoes-varejo` | `/logistica/cotacoes-varejo` | `importacao-varejo.jsx:619` |
 | compras | (acionado por um handler — ver o código) | `cotacoes-varejo` | `/logistica/cotacoes-varejo` | `importacao-varejo.jsx:863` |
 | contrato-editor | Voltar para Contratos | `juridico` | `/juridico/juridico` | `contrato-editor.jsx:258` |

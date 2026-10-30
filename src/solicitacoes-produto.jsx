@@ -12,7 +12,7 @@ const SP_STATUS_CORES = {
   convertido_em_ficha: 'var(--vp-black)',
 };
 
-function SolicitacoesProdutoPage({ solicitacaoId }) {
+function SolicitacoesProdutoPage({ solicitacaoId, setRoute, setSubsel }) {
   const [view, setView] = React.useState(solicitacaoId ? 'detalhe' : 'lista');
   const [solicitacoes, setSolicitacoes] = React.useState([]);
   const [atual, setAtual] = React.useState(null);
@@ -139,6 +139,8 @@ function SolicitacoesProdutoPage({ solicitacaoId }) {
         />
       ) : (
         <DetalheView
+          setRoute={setRoute}
+          setSubsel={setSubsel}
           solicitacao={atual}
           loading={loading}
           onVoltar={_voltarParaLista}
@@ -788,7 +790,12 @@ function NovaView({ onSalvar, onCancelar, user }) {
   );
 }
 
-function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
+function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user, setRoute, setSubsel }) {
+  // Navegação padrão do projeto (setSubsel + setRoute vindos do App), sem PopStateEvent manual.
+  const irParaFicha = (fichaId) => {
+    if (setSubsel && setRoute) { setSubsel(fichaId); setRoute('ficha-tecnica'); return; }
+    if (window.VpRouter) { window.VpRouter.navigate('ficha-tecnica', fichaId); window.dispatchEvent(new PopStateEvent('popstate')); }
+  };
   if (loading || !solicitacao) {
     return <div style={styles.loadingContainer}>⏳ Carregando…</div>;
   }
@@ -874,13 +881,7 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
       onAtualizar({});
       const familia = solicitacao.categoria_sku ? ` Prefixo do código: ${solicitacao.categoria_sku} — na publicação o sistema usa o próximo número livre no Omie (ou informe o Código do Produto completo).` : '';
       alert('Ficha técnica criada!' + familia + (semImagem ? '\nA imagem anexada não pôde ser copiada — anexe a foto na ficha.' : '') + '\nAbrindo editor…');
-      if (window.VpRouter) {
-        window.VpRouter.navigate('ficha-tecnica', rec.id);
-        // navigate() só faz pushState (não dispara popstate); o app.jsx só
-        // troca de página reagindo a popstate, então disparamos manualmente
-        // pra simular uma navegação real do browser.
-        window.dispatchEvent(new PopStateEvent('popstate'));
-      }
+      irParaFicha(rec.id);
     } catch (e) {
       alert('Erro ao converter em ficha técnica: ' + e.message);
     }
@@ -1065,11 +1066,7 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
       {solicitacao.status === 'convertido_em_ficha' && solicitacao.ficha_tecnica_id && (
         <div style={styles.formActions}>
           <button
-            onClick={() => {
-              if (!window.VpRouter) return;
-              window.VpRouter.navigate('ficha-tecnica', solicitacao.ficha_tecnica_id);
-              window.dispatchEvent(new PopStateEvent('popstate'));
-            }}
+            onClick={() => irParaFicha(solicitacao.ficha_tecnica_id)}
             style={styles.btnPrimary}
           >
             ABRIR FICHA TÉCNICA

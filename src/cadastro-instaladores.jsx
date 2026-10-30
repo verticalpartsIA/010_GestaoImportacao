@@ -82,15 +82,19 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
      lido — "Ver documento" abria a lista sem abrir a empresa certa. Lê a
      URL de verdade (não um snapshot de render) quando a lista termina de
      carregar, que é quando o `pushState` já aconteceu. */
+  const [idUrl] = window.useRotaId('cadastro-instaladores');
   React.useEffect(() => {
     if (!empresas) return;
-    const loc = window.VpRouter && window.VpRouter.parseLocation();
-    const idUrl = loc && loc.route === 'cadastro-instaladores' ? loc.id : null;
-    if (!idUrl || (selected && selected.id === idUrl)) return;
+    // Voltar/Avançar do navegador: a URL sem id fecha a empresa aberta.
+    if (!idUrl) {
+      if (selected) { setSelected(null); setColaboradores([]); setObras(null); }
+      return;
+    }
+    if (selected && selected.id === idUrl) return;
     const emp = empresas.find((e) => e.id === idUrl);
     if (emp) selectEmpresa(emp);
     else window.toast?.('Empresa instaladora não encontrada (pode ter sido excluída).', 'warning');
-  }, [empresas]);
+  }, [empresas, idUrl]);
 
   const abrirObra = (obraId) => {
     setSubsel && setSubsel(obraId);
