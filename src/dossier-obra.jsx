@@ -18,6 +18,11 @@ const DOSSIER_STATUS_COLOR = {
   'Manutenção preventiva': 'var(--vp-info)',
 };
 
+/* Nº da obra exibido: VPOB-<cotação> quando há cotação; senão o id interno (obra legada). Fonte única do cálculo neste arquivo. */
+function dossierObraNo(o) {
+  return o.numero_cotacao != null ? window.MasterIdEngine.etapaId('obra', o.numero_cotacao) : o.id;
+}
+
 /* ---------- Status de Obras — visão consolidada de todos os Dossiês ---------- */
 function ObrasStatusPage({ setRoute, setSubsel }) {
   const [obras, setObras] = React.useState([]);
@@ -54,7 +59,7 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
   const rows = obras.filter((o) => {
     if (statusFiltro !== 'Todos' && o.status_master !== statusFiltro) return false;
     if (!q) return true;
-    const obraNo = o.numero_cotacao != null ? window.MasterIdEngine.etapaId('obra', o.numero_cotacao) : o.id;
+    const obraNo = dossierObraNo(o);
     const seriais = (equipPorObra[o.id] || []).join(' ');
     const alvo = [o.client_name, o.building_name, o.id, obraNo, o.parceiros_instaladores?.nome, seriais]
       .filter(Boolean).join(' ').toLowerCase();
@@ -104,7 +109,7 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
             )}
             {rows.map((o) => (
               <tr key={o.id} onClick={() => abrirDossier(o)} style={{ cursor: 'pointer' }}>
-                <td><span className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{o.numero_cotacao != null ? window.MasterIdEngine.etapaId('obra', o.numero_cotacao) : o.id}</span></td>
+                <td><span className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{dossierObraNo(o)}</span></td>
                 <td className="cell-main">{o.building_name || '—'}</td>
                 <td>{o.client_name || '—'}</td>
                 <td style={{ textTransform: 'capitalize' }}>{o.equip_type || '—'}</td>
@@ -358,7 +363,7 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
             <div style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>{dossier.building_name}</div>
             {dossier.numero_cotacao != null && (
               <div className="mono" style={{ fontSize: 12, opacity: 0.85, marginBottom: 6 }}>
-                Obra Nº {window.MasterIdEngine.etapaId('obra', dossier.numero_cotacao)}
+                Obra Nº {dossierObraNo(dossier)}
               </div>
             )}
             <div style={{ fontSize: 14, opacity: 0.9 }}>

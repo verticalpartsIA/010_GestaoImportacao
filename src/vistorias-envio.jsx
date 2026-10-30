@@ -20,7 +20,11 @@
    interno (obras legadas, sem cotação — ver resolverPorMasterId) senão. */
 function veVpobLabel(obra) {
   if (!obra) return '';
-  if (obra.numero_cotacao != null) return 'VPOB-' + String(obra.numero_cotacao).padStart(4, '0');
+  if (obra.numero_cotacao != null) {
+    // Fonte única da fórmula (MasterIdEngine); a reimplementação só fica como contingência.
+    if (window.MasterIdEngine) return window.MasterIdEngine.etapaId('obra', obra.numero_cotacao);
+    return 'VPOB-' + String(obra.numero_cotacao).padStart(4, '0');
+  }
   return obra.id;
 }
 

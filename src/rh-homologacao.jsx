@@ -234,10 +234,9 @@ function ModalNovoMontador({ initialData, isEdit, onClose, onSaved }) {
 
     setSaving(true);
     try {
-      await window.RHHomologacao.salvarMontador({
-        ...f,
-        certificacoes: f.certificacoes || {},
-      });
+      // `certificacoes` é campo obsoleto (homologação mora nos documentos por colaborador): nunca regravar, senão zera o valor antigo.
+      const { certificacoes: _obsoleto, ...resto } = f;
+      await window.RHHomologacao.salvarMontador(resto);
       window.toast(isEdit ? 'Dados atualizados com sucesso!' : 'Parceiro criado com sucesso!', 'success');
       onSaved?.();
       onClose();
