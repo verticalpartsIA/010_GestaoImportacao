@@ -81,7 +81,6 @@ const NAV_GROUPS = [
   /* Só o que define/projeta o produto. Vistoria, instalação, entrega e
      documentação saíram daqui — Engenharia parava de ser "gaveta de tudo". */
   { label: "Engenharia & Produto", items: [
-    { id: "engenharia", label: "Engenharia", icon: "ruler" },
     { id: "eng-projeto-elevadores", label: "Projeto de Elevadores", icon: "grid" },
     { id: "eng-configurador", label: "Projeto de Equipamento", icon: "grid" },
     { id: "solicitacoes-produto", label: "Solicitações de Produto", icon: "inbox" },
@@ -453,7 +452,7 @@ const MODULE_HOME = {
   "Comercial": "formularios",
   "CRM": "leads",
   "Jurídico": "juridico",
-  "Engenharia": "engenharia",
+  "Engenharia": "eng-projeto-elevadores", // o antigo hub "engenharia" saiu do menu (30/10/2026, nenhum dado em `projetos`)
   "RH Operacional": "rh-homologacao",
   "Logística": "compras",
   "Importação": "gi-painel",

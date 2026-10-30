@@ -14,7 +14,7 @@
 - O 1º segmento (**módulo**) vem do `BREADCRUMB_MAP` do `shell.jsx` via `MODULE_SLUG` do `router.js`; só o 2º segmento (a rota) decide o que abre.
 - A **aba padrão** deixa a URL limpa (sem o último segmento). Aba inválida na URL cai na padrão.
 - Abas entram na URL com `window.useRouteTab(rota, padrão, [válidas], comId?)` (em `router.js`).
-- Rotas no roteador: **89** · itens de menu: **76** · telas com abas na URL: **17**.
+- Rotas no roteador: **89** · itens de menu: **75** · telas com abas na URL: **17**.
 
 ## Verificações automáticas
 
@@ -92,7 +92,6 @@
 
 | Item do menu | Rota | Endereço | Abas (padrão em **negrito**) | Detalhe por id |
 |---|---|---|---|---|
-| Engenharia | `engenharia` | `/engenharia/engenharia` | — | — |
 | Projeto de Elevadores | `eng-projeto-elevadores` | `/engenharia/eng-projeto-elevadores` | — | — |
 | Projeto de Equipamento | `eng-configurador` | `/engenharia/eng-configurador` | — | — |
 | Solicitações de Produto | `solicitacoes-produto` | `/engenharia/solicitacoes-produto` | — | id na URL (passthrough) |
@@ -177,6 +176,7 @@
 | `contrato-editor` | `/juridico/contrato-editor/<id>` | — | id na URL (busca no banco) | volta para `juridico` |
 | `importacao-detail` | `/gestao-importacao/importacao-detail/<id>` | — | id na URL (busca no banco) | volta para `importacao` |
 | `importacao-rastreamento` | `/gestao-importacao/importacao-rastreamento` | — | — | — |
+| `engenharia` | `/engenharia/engenharia` | — | — | — |
 | `ncm-kanban` | `/engenharia/ncm-kanban` | — | — | — |
 | `ncm-detail` | `/engenharia/ncm-detail/<id>` | — | id na URL (busca no banco) | volta para `ncm-kanban` |
 | `dossier-obra` | `/engenharia/dossier-obra/<id>` | — | id na URL (passthrough) | — |
