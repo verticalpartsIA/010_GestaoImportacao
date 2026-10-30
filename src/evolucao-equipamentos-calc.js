@@ -210,7 +210,7 @@
         detalhe: `${nomeEmb ? nomeEmb + ': ' : ''}parametrização ${grave ? 'com conferência física/documental (costuma atrasar a liberação)' : 'com conferência documental'}` });
     }
     const passo = (k) => ((linha && linha.passos) || []).find((p) => p.key === k) || {};
-    const eta = paraData(e.presenca_carga || e.eta_santos);
+    const eta = paraData(e.presenca_carga);
     if (eta && passo('porto').estado === 'feito' && passo('obra').estado !== 'feito' && passo('obra').estado !== 'pulado') {
       const n = dias(eta, hoje);
       if (n > DIAS_PORTO_SEM_ENTREGA) lista.push({ categoria: 'logistica', etapa: 'obra', origem: 'interna', data: eta, dias: n, gravidade: n > 30 ? 'alta' : 'media',
