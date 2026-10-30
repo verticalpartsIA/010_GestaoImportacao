@@ -1766,7 +1766,18 @@ async function ciBaixarPdf(recLeve) {
 
     const sheetEl = container.querySelector('.ci-doc-sheet');
     if (!sheetEl) throw new Error('Não foi possível montar o documento para exportação.');
-    const canvas = await window.html2canvas(sheetEl, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
+
+    // Contrato longo existe de verdade (já teve 1 de 16 páginas, ver o
+    // comentário de assinar-app.jsx sobre o "contrato de 16 páginas") —
+    // capturar tudo num canvas só, sempre em scale:2, passaria do limite real
+    // de altura de canvas do Chromium (~32.767 px) bem no contrato em que
+    // mais importa ter o PDF. Reduz a escala só o necessário pra nunca estourar
+    // esse teto; a paginação abaixo deriva tudo do canvas de verdade (pxPerMm/
+    // pageHeightPx), então se adapta sozinha a qualquer escala usada aqui.
+    const sheetBox = sheetEl.getBoundingClientRect();
+    const MAX_CANVAS_ALTURA_PX = 28000;
+    const scale = Math.min(2, MAX_CANVAS_ALTURA_PX / Math.max(1, sheetBox.height));
+    const canvas = await window.html2canvas(sheetEl, { scale, useCORS: true, backgroundColor: '#ffffff', logging: false });
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
     const pw = pdf.internal.pageSize.getWidth();
@@ -1775,7 +1786,6 @@ async function ciBaixarPdf(recLeve) {
     const pageHeightPx = Math.round(ph * pxPerMm);
 
     // blocos "atômicos" — nunca partidos ao meio entre 2 páginas
-    const sheetBox = sheetEl.getBoundingClientRect();
     const cssToCanvas = canvas.width / sheetBox.width;
     const atoms = Array.from(sheetEl.querySelectorAll('.ci-doc-clause, .ci-doc-sign-block, .ci-doc-digital, .ci-doc-witness'))
       .map((el) => {
