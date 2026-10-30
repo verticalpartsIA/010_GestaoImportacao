@@ -15,7 +15,15 @@
    Decisões usado em desconto de proposta/contratação de mão de obra),
    não é mais um clique livre.
    ============================================================ */
-function PagamentosInstaladorPage() {
+/* Abre o contrato da parcela no painel do Contrato Instalador. Troca de página pelo App (setRoute) e,
+   em seguida, escreve o 3º segmento da URL que o drawer lê (useRotaItem) — navigate() sozinho não troca a tela. */
+function irParaContratoInstalador(setRoute, contratoId) {
+  if (!setRoute) return;
+  setRoute('contrato-instalador');
+  if (contratoId) setTimeout(() => { if (window.VpRouter) window.VpRouter.navigate('contrato-instalador', 'painel', contratoId); }, 60);
+}
+
+function PagamentosInstaladorPage({ setRoute }) {
   const [parcelas, setParcelas] = React.useState(null);
   const [decisoesPorParcela, setDecisoesPorParcela] = React.useState({});
   const [filtro, setFiltro] = React.useState('liberadas');
@@ -144,7 +152,9 @@ function PagamentosInstaladorPage() {
               return (
                 <tr key={p.id}>
                   <td><div className="cell-main">{contrato.contratada_nome || '—'}</div></td>
-                  <td className="mono" style={{ whiteSpace: 'nowrap' }}>{contrato.numero_documento || '—'}</td>
+                  <td className="mono" style={{ whiteSpace: 'nowrap' }}>{contrato.numero_documento && setRoute
+                    ? <a href="#" title="Abrir o contrato" onClick={(e) => { e.preventDefault(); irParaContratoInstalador(setRoute, p.contrato_id); }}>{contrato.numero_documento}</a>
+                    : (contrato.numero_documento || '—')}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{p.numero}. {p.descricao}</td>
                   <td className="mono" style={{ whiteSpace: 'nowrap' }}>{fmtMoeda(p.valor)}
                     {(() => { const ab = ((abatimentoPorContrato[p.contrato_id] || {}).porParcela || {})[p.id]; return ab && ab.abatido > 0

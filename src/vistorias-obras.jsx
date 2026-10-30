@@ -96,10 +96,11 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
     return (
       <div className="vistorias-obras">
         {!embedded && (
-          <div className="page-header" style={{ marginBottom: '2rem' }}>
-            <div style={{ flex: 1 }}>
-              <h1 style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>🏗️ Resultado Vistorias de Obras</h1>
-              <p style={{ color: 'var(--vp-gray-500)', fontSize: '0.95rem' }}>Escolha a obra pra ver o andamento das vistorias.</p>
+          <div className="page-head">
+            <div className="page-head__l">
+              <div className="page-head__eyebrow"><span className="vp-rule"/>Obras & Instalação</div>
+              <h1 className="page-head__title">Resultado Vistorias de Obras</h1>
+              <p className="page-head__sub">Escolha a obra pra ver o andamento das vistorias.</p>
             </div>
           </div>
         )}
@@ -128,13 +129,12 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
     <div className="vistorias-obras">
       {/* HEADER */}
       {!embedded && (
-        <div className="page-header" style={{ marginBottom: '2rem' }}>
-          <div style={{ flex: 1 }}>
-            <h1 style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>
-              🏗️ Resultado Vistorias de Obras
-            </h1>
+        <div className="page-head">
+          <div className="page-head__l">
+            <div className="page-head__eyebrow"><span className="vp-rule"/>Obras & Instalação</div>
+            <h1 className="page-head__title">Resultado Vistorias de Obras</h1>
             {obra && (
-              <p style={{ color: 'var(--vp-gray-500)', fontSize: '0.95rem' }}>
+              <p className="page-head__sub">
                 Obra: <strong>{obra.nome || 'Sem nome'}</strong>
                 {obra.endereco && ` • ${obra.endereco}`}
               </p>
