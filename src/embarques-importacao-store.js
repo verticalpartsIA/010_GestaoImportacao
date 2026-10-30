@@ -138,10 +138,16 @@
     };
 
     try {
-      const { data: existente, error: errBusca } = await c.from('embarques').select('id')
+      const { data: existente, error: errBusca } = await c.from('embarques').select('id, eta, last_ais_sync')
         .eq('origem_embarque_importacao_id', embarqueImportacaoId).maybeSingle();
       if (errBusca) throw errBusca;
       if (existente) {
+        /* O rastreio (AIS) pode ter atualizado o ETA depois do último ETA digitado: não apaga. */
+        if (existente.eta && existente.last_ais_sync) {
+          const hist = saved.historico_eta || [];
+          const ultimo = hist.reduce((m, h) => (h && h.registrado_em && h.registrado_em > m ? h.registrado_em : m), '');
+          if (!ultimo || String(ultimo) < String(existente.last_ais_sync)) { delete patch.eta; }
+        }
         const { error } = await c.from('embarques').update(patch).eq('id', existente.id);
         if (error) throw error;
       } else {
