@@ -126,6 +126,9 @@
     assinado:    { id:'assinado',    label:'Assinado',    icon:'✍',  tone:'green',  order:3 },
     expirado:    { id:'expirado',    label:'Expirado',    icon:'⚠',  tone:'red',    order:4 },
     recusado:    { id:'recusado',    label:'Recusado',    icon:'✕',  tone:'red',    order:4 },
+    /* Distrato do Contrato do Instalador (30/10/2026) — a Contratada e a fila da
+       VerticalParts assinaram o distrato (contratos_instalador_distratos). */
+    distratado:  { id:'distratado',  label:'Distratado',  icon:'📄', tone:'gray',   order:5 },
   };
 
   /* ---------- Notificação interna (Geral › Notificações) ---------- */

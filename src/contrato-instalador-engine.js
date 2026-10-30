@@ -754,6 +754,77 @@
     };
   }
 
+  /* Distrato (30/10/2026) — rescisão motivada e bilateral de um contrato JÁ ASSINADO.
+     Reaproveita contratante/contratada/endereço do form_state ORIGINAL (mesmo `s` de
+     buildContract) — nenhum dado novo é digitado sobre as partes, só o motivo e,
+     opcionalmente, a transferência de valor pra outro contrato (troca de obra do
+     montador). Mesma forma do `doc` de buildContract (titulo/numero/contratante/
+     contratada/clauses/cidadeAssinatura/dataDia/Mes/Ano) — CIContractPreview renderiza
+     os dois sem precisar saber qual é qual. */
+  function buildDistratoContract(s, ctx, numeroDoc) {
+    ctx = ctx || {};
+    const numero = numeroDoc || 'VPNI________-DISTRATO';
+    const valorTxt = ctx.valorTotal != null ? fmtMoeda(ctx.valorTotal) : null;
+    const clauses = [];
+
+    clauses.push({
+      id:'contrato_original', titulo:'DO CONTRATO ORIGINAL', baseNum:1, items:[
+        { n:'1.1', text:`As partes abaixo identificadas, já qualificadas no Contrato de Prestação de Serviços nº ${vBlank(ctx.numeroContrato, '____')}, tendo por objeto ${vBlank(ctx.objetoResumo, '(objeto do contrato original)')}` + (valorTxt ? `, no valor de R$ ${valorTxt}` : '') + ', resolvem, de comum acordo, DISTRATAR o referido instrumento, nos termos deste Termo de Distrato.' },
+      ],
+    });
+
+    clauses.push({
+      id:'motivo', titulo:'DO MOTIVO DO DISTRATO', baseNum:2, items:[
+        { n:'2.1', text:'O presente distrato tem como motivo: ' + vBlank(ctx.motivo, '(motivo do distrato)') },
+      ],
+    });
+
+    const quitacaoItems = [
+      { n:'3.1', text:'Os valores já pagos à CONTRATADA até a presente data permanecem quitados, não sendo devida restituição à CONTRATANTE em razão deste distrato (quitação parcial).' },
+      { n:'3.2', text:'Ficam canceladas, a partir da assinatura deste distrato, quaisquer parcelas de pagamento ainda não realizadas, vinculadas ao contrato ora distratado.' },
+    ];
+    if (ctx.transferencia && ctx.transferencia.contrato_destino_numero) {
+      quitacaoItems.push({ n:'3.3', text:`Fica acordado entre as partes que o valor de R$ ${fmtMoeda(ctx.transferencia.valor)} já recebido pela CONTRATADA no âmbito do contrato ora distratado será aproveitado para o contrato nº ${ctx.transferencia.contrato_destino_numero}, referente a nova obra/prestação de serviços, não sendo devida qualquer restituição em dinheiro.` });
+    }
+    clauses.push({ id:'quitacao', titulo:'DA QUITAÇÃO E DOS VALORES', baseNum:3, items: quitacaoItems });
+
+    clauses.push({
+      id:'disposicoes_distrato', titulo:'DAS DISPOSIÇÕES FINAIS', baseNum:4, items:[
+        { n:'4.1', text:'Este distrato não gera, para qualquer das partes, direito a indenização, multa ou penalidade adicional além do disposto acima, ressalvadas eventuais responsabilidades já constituídas até a presente data.' },
+        { n:'4.2', text:'As partes convencionam que o Foro para dirimir quaisquer dúvidas ou questões oriundas do presente distrato é o Foro da Comarca de Guarulhos, São Paulo, com exclusão de qualquer outro, por mais privilegiado que seja.' },
+      ],
+    });
+
+    clauses.forEach((c, i) => { c.ord = ORDINAIS[i] || ('#' + (i + 1)); renumClauseItems(c, i + 1); });
+
+    return {
+      titulo: 'TERMO DE DISTRATO DE CONTRATO DE PRESTAÇÃO DE SERVIÇOS',
+      numero,
+      /* CIContractPreview usa isto pra trocar o texto fixo de abertura/fecho — o
+         boilerplate de "firmar um contrato novo" contradiria o título e as
+         cláusulas (que dizem o oposto: estão DISTRATANDO um contrato existente). */
+      ehDistrato: true,
+      contratante: CONTRATANTE,
+      contratada: {
+        razao: vBlank(s.c_razao, 'RAZÃO SOCIAL'),
+        cnpj: vBlank(s.c_cnpj, 'XX.XXX.XXX/XXXX-XX'),
+        endereco: buildEnderecoContratada(s),
+        responsavel: vBlank(s.r_nome, 'NOME DO RESPONSÁVEL'),
+        nacionalidade: vBlank(s.r_nacionalidade, 'nacionalidade'),
+        estadoCivil: vBlank(s.r_estadoCivil, 'estado civil'),
+        profissao: vBlank(s.r_profissao, 'profissão'),
+        rg: vBlank(s.r_rg, 'XXX'),
+        cpf: vBlank(s.r_cpf, 'XXX'),
+        enderecoResp: buildEnderecoResponsavel(s),
+      },
+      clauses,
+      cidadeAssinatura: vBlank(s.cidadeAssinatura, 'Guarulhos'),
+      dataDia: vBlank(s.dataDia, 'XX'),
+      dataMes: vBlank(s.dataMes, '(mês)'),
+      dataAno: vBlank(s.dataAno, '2026'),
+    };
+  }
+
   /* ---------- Exporta tudo em window.CI ---------- */
   window.CI = {
     CONTRATANTE, MODALIDADES, EQUIPAMENTOS, TIPOS_ELEVADOR, PARADAS_OPCOES, ANEXOS,
@@ -765,6 +836,6 @@
     equipamentosDoContrato, slugEquipamento, numeroBaseContrato, proximoNumeroLivre,
     defaultState, pad2,
     isCargaEspecial, isLongaDistancia, isRemocao, activeConditionals, dataPrevistaTxt, MARCOS_CRONOGRAMA, cronogramaDoContrato, alertaCronograma, diasCorridosEntre, diasUteisEntre, dataBR, FASES_MONTAGEM, fasesDoContrato, andaresDe, descricaoLivreTemTexto, descricaoServicosValida, equipamentosDescritos,
-    buildContract,
+    buildContract, buildDistratoContract,
   };
 }());
