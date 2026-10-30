@@ -60,18 +60,21 @@ test('corte: escopo só cabo de aço, cinta de tração e cabo de manobra, com d
   assert.equal(C.categoriaCorte('VPEL-692'), 'aco');
   assert.equal(C.categoriaCorte('vpel-234n'), 'cinta');
   assert.equal(C.categoriaCorte('SAO_OT06MB132420'), 'manobra');
+  assert.equal(C.categoriaCorte('VPB-101'), 'manobra');
+  assert.equal(C.descricaoCorte('VPB-101', 'Cabo BST X'), 'Cabo BST X');
   assert.equal(C.categoriaCorte('VPB-086'), 'manobra');
   assert.equal(C.categoriaCorte('VPEL-999', 'Cabo de Aço 8x19 10MM'), 'aco');
   assert.equal(C.categoriaCorte('VPEL-702b', 'Sistema de Comando para Elevador'), null);
   assert.equal(C.rotuloItemCorte('VPEL-692', 'x'), 'VPEL-692 — Cabo de Aço para Elevador 8*19S+FC 9,5MM (3/8 pol)');
   assert.equal(C.rotuloItemCorte('ABC', 'Descrição do cadastro'), 'ABC — Descrição do cadastro');
   assert.equal(C.rotuloItemCorte('ABC', ''), 'ABC');
-  assert.equal(Object.keys(C.CORTE_DESCRICOES).length, 20);
+  assert.equal(Object.keys(C.CORTE_DESCRICOES).length, 30);
 });
 
 test('corte: OP antiga sem item_codigo usa o código do título', () => {
   assert.equal(C.codigoDaOrdem({ item_codigo: 'VPEL-692', titulo: 'x' }), 'VPEL-692');
   assert.equal(C.codigoDaOrdem({ item_codigo: null, titulo: 'Corte — VPEL-529n' }), 'VPEL-529n');
   assert.equal(C.categoriaCorte(C.codigoDaOrdem({ titulo: 'Corte — VPEL-692' })), 'aco');
-  assert.equal(C.categoriaCorte(C.codigoDaOrdem({ titulo: 'Corte — VPB-101' }), 'Corte — VPB-101'), null);
+  assert.equal(C.categoriaCorte(C.codigoDaOrdem({ titulo: 'Corte — VPB-101' }), 'Corte — VPB-101'), 'manobra');
+  assert.equal(C.categoriaCorte('VPB-107', 'Corte — VPB-107'), null);
 });
