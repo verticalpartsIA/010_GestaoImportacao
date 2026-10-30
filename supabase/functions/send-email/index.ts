@@ -53,6 +53,29 @@ function parseDestinatarios(to: unknown): string[] {
   return [];
 }
 
+/* 30/10 — assunto com acento: o denomailer 1.6.0 monta o encoded-word sem fechar o "?=" e com
+   espaços dentro (Outlook mostrava "=?utf-8?Q?...=c3=87..." cru). Codificamos nós mesmos (RFC 2047,
+   Base64, palavras <= 75 caracteres, cortando em fronteira de caractere) e entregamos só ASCII. */
+function codificarAssunto(subject: string): string {
+  if (/^[\x20-\x7e]*$/.test(subject)) return subject;
+  const enc = new TextEncoder();
+  const palavras: string[] = [];
+  let atual = "";
+  let bytesAtual = 0;
+  const fechar = () => {
+    if (!atual) return;
+    palavras.push(`=?UTF-8?B?${btoa(String.fromCharCode(...enc.encode(atual)))}?=`);
+    atual = ""; bytesAtual = 0;
+  };
+  for (const ch of subject) {
+    const n = enc.encode(ch).length;
+    if (bytesAtual + n > 45) fechar();
+    atual += ch; bytesAtual += n;
+  }
+  fechar();
+  return palavras.join(" ");
+}
+
 function limparBase64(b64: string): string {
   return String(b64 || "").replace(/^data:[^,]*,/, "").replace(/[^A-Za-z0-9+/=]/g, "");
 }
@@ -100,6 +123,7 @@ Deno.serve(async (req: Request) => {
   const destinatarios = parseDestinatarios(payload?.to);
   const subject = typeof payload?.subject === "string" ? payload.subject : "";
   const text = typeof payload?.text === "string" ? payload.text : undefined;
+  const cc = parseDestinatarios(payload?.cc).filter((c) => !destinatarios.some((d) => d.toLowerCase() === c.toLowerCase()));
   const html = typeof payload?.html === "string" ? payload.html : undefined;
   const replyTo = typeof payload?.replyTo === "string" ? payload.replyTo : undefined;
   const numeroCotacao = Number.isFinite(Number(payload?.numeroCotacao)) && payload?.numeroCotacao != null ? Number(payload.numeroCotacao) : null;
@@ -130,9 +154,10 @@ Deno.serve(async (req: Request) => {
      formato do e-mail, allowlist (só destinatários já conhecidos no sistema) e limite
      de taxa por IP/global. Nada abaixo daqui (anexos, base64, persistência, vínculo)
      foi alterado. Falha ao consultar o banco = bloqueia (fail-closed). */
-  const invalidos = destinatarios.filter((d) => !EMAIL_RE.test(d));
+  const todosDest = [...destinatarios, ...cc];
+  const invalidos = todosDest.filter((d) => !EMAIL_RE.test(d));
   if (invalidos.length) return json({ error: `Destinatário inválido: ${invalidos.join(", ")}` }, 400);
-  if (destinatarios.length > MAX_DESTINATARIOS) {
+  if (todosDest.length > MAX_DESTINATARIOS) {
     return json({ error: `Máximo de ${MAX_DESTINATARIOS} destinatários por envio.` }, 400);
   }
 
@@ -144,7 +169,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Envio temporariamente indisponível (verificação de segurança)." }, 503);
   }
 
-  const externos = destinatarios.filter((d) => {
+  const externos = todosDest.filter((d) => {
     const dom = d.split("@")[1]?.toLowerCase() || "";
     return !DOMINIOS_INTERNOS.includes(dom) && !EXTRAS_PERMITIDOS.includes(d.toLowerCase());
   });
@@ -162,7 +187,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const ip = (req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || "desconhecido").split(",")[0].trim();
-  const { data: taxa, error: errTaxa } = await guard.rpc("email_rate_check", { p_ip: ip, p_n: destinatarios.length, p_max_ip: MAX_ENVIOS_IP_10MIN, p_max_global: MAX_ENVIOS_GLOBAL_10MIN });
+  const { data: taxa, error: errTaxa } = await guard.rpc("email_rate_check", { p_ip: ip, p_n: todosDest.length, p_max_ip: MAX_ENVIOS_IP_10MIN, p_max_global: MAX_ENVIOS_GLOBAL_10MIN });
   if (errTaxa) {
     console.warn("[send-email] guard: email_rate_check falhou", errTaxa);
     return json({ error: "Envio temporariamente indisponível (verificação de segurança)." }, 503);
@@ -186,8 +211,9 @@ Deno.serve(async (req: Request) => {
     await client.send({
       from: `${FROM_NAME} <${USER}>`,
       to: destinatarios,
+      cc: cc.length ? cc : undefined,
       replyTo: replyTo || undefined,
-      subject,
+      subject: codificarAssunto(subject),
       content: text || "Ver versão HTML.",
       html: html || undefined,
       headers: { "Message-ID": messageId },
@@ -244,6 +270,7 @@ Deno.serve(async (req: Request) => {
           de_email: USER,
           de_nome: FROM_NAME,
           para: destinatarios,
+          cc: cc,
           assunto: subject,
           corpo_texto: text || null,
           corpo_html: html || null,
@@ -262,7 +289,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    return json({ ok: true, destinatarios, messageId, avisoPersistencia });
+    return json({ ok: true, destinatarios, cc, messageId, avisoPersistencia });
   } catch (e) {
     try { await client.close(); } catch (_) { /* já pode ter fechado sozinho no erro */ }
     console.warn("[send-email] falha ao enviar", e);

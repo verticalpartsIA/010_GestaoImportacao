@@ -47,6 +47,7 @@ function RVTratativa({ lote, convite, itens, respostas, editavel }) {
   const [emails, setEmails] = React.useState([]);
   const [aberto, setAberto] = React.useState({});
   const [texto, setTexto] = React.useState('');
+  const [cc, setCc] = React.useState(() => (window.EmailEnvioHelper ? window.EmailEnvioHelper.ccSalvo() : ''));
   const [anexos, setAnexos] = React.useState([]);
   const [enviando, setEnviando] = React.useState(false);
   const [aviso, setAviso] = React.useState(null);
@@ -87,7 +88,7 @@ function RVTratativa({ lote, convite, itens, respostas, editavel }) {
   const enviar = async () => {
     setEnviando(true); setAviso(null);
     try {
-      const r = await S.enviar({ lote, convite, mensagem: texto, anexos });
+      const r = await S.enviar({ lote, convite, mensagem: texto, anexos, cc });
       setTexto(''); setAnexos([]);
       const a = r.__email;
       setAviso(a.ok ? { ok: true, txt: 'Registrado e enviado por e-mail para ' + a.para.join(', ') + '. A resposta dele volta aqui.' } : { ok: false, txt: 'Mensagem registrada, mas o e-mail NÃO foi enviado: ' + a.motivo });
@@ -167,6 +168,7 @@ function RVTratativa({ lote, convite, itens, respostas, editavel }) {
       )}
       {editavel && convite.status !== 'rascunho' && (
         <div className="stack" style={{ gap: 6, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+          {window.EmailCcInput && <window.EmailCcInput value={cc} onChange={setCc} />}
           <textarea className="input" rows={3} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={'Escreva ao fornecedor (' + convite.fornecedor_nome + '). A mensagem vai por e-mail e a resposta dele volta para esta conversa.'} />
           {anexos.length > 0 && <div className="row gap-2" style={{ flexWrap: 'wrap' }}>{anexos.map((a, i) => <span key={i} className="badge">{a.nome} <button className="link-btn" onClick={() => setAnexos((x) => x.filter((_, j) => j !== i))}>×</button></span>)}</div>}
           <div className="row sb">

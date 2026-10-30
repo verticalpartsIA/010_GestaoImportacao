@@ -183,7 +183,7 @@ function CVModalAprovar({ resumo, cambio, onClose, onConfirmar, enviando }) {
 }
 
 /* ---------- Modal: pedir a cotação aos fornecedores convidados (e-mail / WhatsApp / link) ---------- */
-function CVModalPedirCotacao({ convites, forn, onClose, onEmail, onZap, onLink, onTodosEmail, enviandoTodos }) {
+function CVModalPedirCotacao({ convites, forn, onClose, onEmail, onZap, onLink, onTodosEmail, enviandoTodos, cc, onCc }) {
   const pendentes = convites.filter((cv) => cv.status === 'rascunho' && cv.email);
   return (
     <Modal title="Pedir cotação ao fornecedor" onClose={onClose} width={640}
@@ -194,6 +194,7 @@ function CVModalPedirCotacao({ convites, forn, onClose, onEmail, onZap, onLink, 
         </Button>
       </>}>
       <div className="stack" style={{ gap: 10 }}>
+        {window.EmailCcInput && <window.EmailCcInput value={cc} onChange={onCc} />}
         <p className="small">Cada fornecedor recebe um link próprio para informar preço por faixa de quantidade, prazo e quantidade mínima. Ele nunca vê os preços dos outros. Nada vai ao Omie nesta etapa.</p>
         {convites.map((cv) => {
           const s = CV_STATUS_CONVITE[cv.status] || CV_STATUS_CONVITE.rascunho;
@@ -374,6 +375,8 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const [confirmar, setConfirmar] = React.useState(null);   // { titulo, texto, rotulo, acao }
   const [modalPedir, setModalPedir] = React.useState(false);
   const [enviandoTodos, setEnviandoTodos] = React.useState(false);
+  const [cc, setCc] = React.useState(() => (window.EmailEnvioHelper ? window.EmailEnvioHelper.ccSalvo() : ''));
+  const ccOk = () => { const ruim = window.EmailEnvioHelper ? window.EmailEnvioHelper.ccInvalidos(cc) : []; if (ruim.length) { window.toast?.('Corrija o(s) e-mail(s) em cópia: ' + ruim.join(', '), 'warning'); return false; } return true; };
   const [sujo, setSujo] = React.useState(false);
   const [descItem, setDescItem] = React.useState(null);        // item cuja descrição p/ fornecedor está aberta
   const [npsConvite, setNpsConvite] = React.useState(null);    // convite sendo avaliado
@@ -465,9 +468,9 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     return true;
   };
   const enviarEmail = async (cv) => {
-    if (travaQtd()) return;
+    if (travaQtd() || !ccOk()) return;
     try {
-      const r = await S.enviarPorEmail(lote, cv);
+      const r = await S.enviarPorEmail(lote, cv, { cc });
       if (r.semEmail) { window.toast?.('Este fornecedor não tem e-mail no cadastro. Use "Link" ou "WhatsApp", ou complete o cadastro.', 'warning'); return; }
       if (r.enviouDireto) window.toast?.('E-mail enviado para ' + cv.email + '.', 'success');
       else { window.toast?.('Não consegui enviar direto — abrindo seu programa de e-mail.', 'warning'); window.open(r.mailto, '_blank'); }
@@ -475,12 +478,12 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     } catch (e) { window.toast?.('Erro ao enviar: ' + (e.message || e), 'error'); }
   };
   const enviarTodosEmail = async () => {
-    if (travaQtd()) return;
+    if (travaQtd() || !ccOk()) return;
     setEnviandoTodos(true);
     let ok = 0, falha = 0;
     try {
       for (const cv of convites.filter((x) => x.status === 'rascunho' && x.email)) {
-        try { const r = await S.enviarPorEmail(lote, cv); if (r.enviouDireto) ok++; else falha++; } catch (e) { falha++; }
+        try { const r = await S.enviarPorEmail(lote, cv, { cc }); if (r.enviouDireto) ok++; else falha++; } catch (e) { falha++; }
       }
       window.toast?.(ok + ' e-mail(s) enviado(s)' + (falha ? ' · ' + falha + ' não saiu(ram) — use "Copiar link" ou WhatsApp nesses.' : '.'), falha ? 'warning' : 'success');
       await carregar();
@@ -623,6 +626,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
             );
           })}
         </div>
+        {editavel && window.EmailCcInput && <div style={{ marginTop: 12, maxWidth: 520 }}><window.EmailCcInput value={cc} onChange={setCc} /></div>}
         {editavel && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
             <select className="input" style={{ minWidth: 260 }} value={novoForn} onChange={(e) => setNovoForn(e.target.value)}>
@@ -756,7 +760,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
         )}
       </Card>
 
-      {modalPedir && <CVModalPedirCotacao convites={convites} forn={forn} onClose={() => setModalPedir(false)} onEmail={enviarEmail} onZap={zap} onLink={copiarLink} onTodosEmail={enviarTodosEmail} enviandoTodos={enviandoTodos} />}
+      {modalPedir && <CVModalPedirCotacao convites={convites} forn={forn} onClose={() => setModalPedir(false)} onEmail={enviarEmail} onZap={zap} onLink={copiarLink} onTodosEmail={enviarTodosEmail} enviandoTodos={enviandoTodos} cc={cc} onCc={setCc} />}
       {confirmar && <CVModalConfirmar cfg={confirmar} onClose={() => setConfirmar(null)} />}
       {descItem && <CVModalDescricao item={descItem} onClose={() => setDescItem(null)} onSalvo={carregar} />}
       {npsConvite && <CVModalNPS lote={lote} convite={npsConvite} onClose={() => setNpsConvite(null)} onSalvo={carregarNps} />}

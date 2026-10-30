@@ -1822,6 +1822,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
   const [respondendo, setRespondendo] = React.useState(false);
   const [modoCompose, setModoCompose] = React.useState('responder'); // 'responder' | 'responder-todos' | 'encaminhar'
   const [destinatarioEncaminhar, setDestinatarioEncaminhar] = React.useState('');
+  const [ccResposta, setCcResposta] = React.useState('');
   const [respostaTexto, setRespostaTexto] = React.useState('');
   const [enviandoResposta, setEnviandoResposta] = React.useState(false);
   const [sugerindoIA, setSugerindoIA] = React.useState(false);
@@ -2026,6 +2027,8 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
       }
       const erroValidacao = validarEmails(to);
       if (erroValidacao) { window.toast?.(erroValidacao, 'warning'); setEnviandoResposta(false); return; }
+      const ccRuim = window.EmailEnvioHelper ? window.EmailEnvioHelper.ccInvalidos(ccResposta) : [];
+      if (ccRuim.length) { window.toast?.('Corrija o(s) e-mail(s) em cópia: ' + ccRuim.join(', '), 'warning'); setEnviandoResposta(false); return; }
       /* Fase 2 (JEV): sem Nº de cotação, sugere uma — o pop-up só aparece se há evidência (forte/perguntar). */
       if (active.numeroCotacao == null && numeroForcado.current == null && !vinculoDecidido.current && window.inboxBuscarSugestao) {
         const r = await window.inboxBuscarSugestao(modoCompose === 'encaminhar' ? to : active.from, subject);
@@ -2037,6 +2040,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
       const { data, error } = await sb.functions.invoke('send-email', {
         body: {
           to, subject, text,
+          cc: window.EmailEnvioHelper ? window.EmailEnvioHelper.normalizarLista(ccResposta) : undefined,
           numeroCotacao: numeroEfetivo,
           referenciaTipo: refForn ? 'tratativa_cotacao' : (numeroEfetivo != null ? 'resposta_inbox' : undefined),
           referenciaId: refForn ? refForn.id : undefined,
@@ -2537,6 +2541,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
                       Para: {[active.from, ...(active.to || []), ...(active.cc || [])].map((e) => String(e).toLowerCase()).filter((e, i, arr) => e && e !== NOSSO_EMAIL && arr.indexOf(e) === i).join(', ')}
                     </div>
                   )}
+                  <div style={{ marginBottom: 6 }}>{window.EmailCcInput && <window.EmailCcInput value={ccResposta} onChange={setCcResposta} />}</div>
                   <textarea className="input" rows={5} style={{ width: '100%', resize: 'vertical' }}
                     placeholder={modoCompose === 'encaminhar' ? 'Mensagem (opcional) antes do conteúdo encaminhado…' : `Respondendo a ${active.fromName || active.from}…`}
                     value={respostaTexto} onChange={(e) => setRespostaTexto(e.target.value)} autoFocus/>
@@ -2596,6 +2601,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
    a um projeto, igual ao RFQ do Formulário. */
 function EmailNovoModal({ onClose, onEnviado, inicial }) {
   const [para, setPara] = React.useState((inicial && inicial.para) || '');
+  const [cc, setCc] = React.useState(() => (window.EmailEnvioHelper ? window.EmailEnvioHelper.ccSalvo() : ''));
   const [assunto, setAssunto] = React.useState((inicial && inicial.assunto) || '');
   const [corpo, setCorpo] = React.useState('');
   const [numeroCotacaoInput, setNumeroCotacaoInput] = React.useState('');
@@ -2645,6 +2651,7 @@ function EmailNovoModal({ onClose, onEnviado, inicial }) {
       const { data, error } = await sb.functions.invoke('send-email', {
         body: {
           to: para.trim(), subject: assunto.trim(), text: corpo,
+          cc: window.EmailEnvioHelper ? window.EmailEnvioHelper.normalizarLista(cc) : undefined,
           numeroCotacao: numero || undefined,
           referenciaTipo: numero ? 'avulso_inbox' : undefined,
           attachments: anexos.length ? anexos.map((a) => ({ filename: a.filename, contentType: a.contentType, base64: a.base64 })) : undefined,
@@ -2686,6 +2693,7 @@ function EmailNovoModal({ onClose, onEnviado, inicial }) {
           </div> },
       <div className="stack" style={{ gap: 8 }}>
         <input className="input" placeholder="Para (e-mail)" value={para} onChange={(e) => setPara(e.target.value)}/>
+        {window.EmailCcInput && <window.EmailCcInput value={cc} onChange={setCc} />}
         <input className="input" placeholder="Assunto" value={assunto} onChange={(e) => setAssunto(e.target.value)}/>
         <textarea className="input" rows={7} style={{ resize: 'vertical' }} placeholder="Mensagem…" value={corpo} onChange={(e) => setCorpo(e.target.value)}/>
         <input className="input" style={{ maxWidth: 220 }} placeholder="Nº Cotação (opcional)" value={numeroCotacaoInput} onChange={(e) => setNumeroCotacaoInput(e.target.value)}/>
