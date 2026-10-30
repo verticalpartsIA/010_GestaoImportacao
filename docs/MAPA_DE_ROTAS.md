@@ -14,7 +14,7 @@
 - O 1º segmento (**módulo**) vem do `BREADCRUMB_MAP` do `shell.jsx` via `MODULE_SLUG` do `router.js`; só o 2º segmento (a rota) decide o que abre.
 - A **aba padrão** deixa a URL limpa (sem o último segmento). Aba inválida na URL cai na padrão.
 - Abas entram na URL com `window.useRouteTab(rota, padrão, [válidas], comId?)` (em `router.js`).
-- Rotas no roteador: **90** · itens de menu: **77** · telas com abas na URL: **17**.
+- Rotas no roteador: **89** · itens de menu: **76** · telas com abas na URL: **17**.
 
 ## Verificações automáticas
 
@@ -95,7 +95,6 @@
 | Engenharia | `engenharia` | `/engenharia/engenharia` | — | — |
 | Projeto de Elevadores | `eng-projeto-elevadores` | `/engenharia/eng-projeto-elevadores` | — | — |
 | Projeto de Equipamento | `eng-configurador` | `/engenharia/eng-configurador` | — | — |
-| Projetos ER/Es | `desenho-tecnico` | `/engenharia/desenho-tecnico` | — | — |
 | Solicitações de Produto | `solicitacoes-produto` | `/engenharia/solicitacoes-produto` | — | id na URL (passthrough) |
 | Ficha Técnica | `ficha-tecnica` | `/engenharia/ficha-tecnica` | — | id na URL (passthrough) |
 | Catálogo Siscomex | `ncm-catalogo` | `/cadastros/ncm-catalogo[/<aba>]` | **produtos**, operadores, pedidos | — |
@@ -190,8 +189,8 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 |---|---|---|---|---|
 | (? em central-documentos.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `central-documentos.jsx:84` |
 | (? em central-documentos.jsx) | (acionado por um handler — ver o código) | `rh-homologacao` | `/rh/rh-homologacao` | `central-documentos.jsx:86` |
-| (App em app.jsx) | (acionado por um handler — ver o código) | `dashboard` | `/geral/dashboard` | `app.jsx:349` |
-| (CardContratoInstalador em dossier-obra.jsx) | Abrir no Jurídico → | `contrato-instalador` | `/juridico/contrato-instalador` | `dossier-obra.jsx:598` |
+| (App em app.jsx) | (acionado por um handler — ver o código) | `dashboard` | `/geral/dashboard` | `app.jsx:348` |
+| (CardContratoInstalador em dossier-obra.jsx) | Abrir no Jurídico → | `contrato-instalador` | `/juridico/contrato-instalador` | `dossier-obra.jsx:600` |
 | (CVDetalhe em cotacoes-varejo.jsx) | (acionado por um handler — ver o código) | `cadastro-fornecedores` | `/cadastros/cadastro-fornecedores` | `cotacoes-varejo.jsx:633` |
 | (CVLista em cotacoes-varejo.jsx) | Ir para Importação Varejo | `compras` | `/logistica/compras` | `cotacoes-varejo.jsx:51` |
 | (DetalheView em solicitacoes-produto.jsx) | (acionado por um handler — ver o código) | `ficha-tecnica` | `/engenharia/ficha-tecnica` | `solicitacoes-produto.jsx:796` |
@@ -204,7 +203,7 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | (OndeParouWidget em dashboard.jsx) | Ver Prazos & Pendências | `financeiro` | `/adm-financeiro/financeiro` | `dashboard.jsx:438` |
 | (PrecificacaoDetail em precificacao.jsx) | Gerar proposta | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:298` |
 | (RPPainelProducao em painel-producao-pcp.jsx) | (acionado por um handler — ver o código) | `pcp` | `/logistica/pcp` | `painel-producao-pcp.jsx:100` |
-| (TabEquipamentos em dossier-obra.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `dossier-obra.jsx:1134` |
+| (TabEquipamentos em dossier-obra.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `dossier-obra.jsx:1136` |
 | art | (acionado por um handler — ver o código) | `status-obras` | `/engenharia/status-obras` | `entrega.jsx:7` |
 | cadastro-instaladores | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `cadastro-instaladores.jsx:101` |
 | compras | (acionado por um handler — ver o código) | `cotacoes-varejo` | `/logistica/cotacoes-varejo` | `importacao-varejo.jsx:619` |
@@ -259,7 +258,7 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | propostas | (acionado por um handler — ver o código) | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:596` |
 | propostas | (acionado por um handler — ver o código) | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:685` |
 | propostas | (acionado por um handler — ver o código) | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:686` |
-| status-obras | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `dossier-obra.jsx:69` |
+| status-obras | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `dossier-obra.jsx:71` |
 
 ## Estados internos que ainda NÃO têm endereço
 
@@ -274,8 +273,8 @@ São abas de formulário/modal, filtros, modos de visualização e passos de ass
 | `cotacoes-fornecedor.jsx:76` | CotacoesFornecedorPage | `tab` | `'todos'` | `cotacoes-fornecedor` |
 | `decisoes.jsx:297` | DecisoesPage | `aba` | `'pendentes'` | `decisoes` |
 | `decisoes.jsx:301` | DecisoesPage | `modoAdmin` | `false` | `decisoes` |
-| `dossier-obra.jsx:907` | TermoEntregaPanel | `modo` | `'self_service'` | `dossier-obra`, `status-obras` |
-| `dossier-obra.jsx:1590` | FormAdicionarItemTemplate | `etapa` | `''` | `dossier-obra`, `status-obras` |
+| `dossier-obra.jsx:909` | TermoEntregaPanel | `modo` | `'self_service'` | `dossier-obra`, `status-obras` |
+| `dossier-obra.jsx:1592` | FormAdicionarItemTemplate | `etapa` | `''` | `dossier-obra`, `status-obras` |
 | `formulario-quadro-comando-publico.jsx:253` | ? | `passo` | `0` | (modal/componente interno) |
 | `ims.jsx:75` | IMSForm | `tab` | `'identificacao'` | `ims-importacao` |
 | `ims.jsx:342` | IMSPage | `activeTab` | `'todos'` | `ims-importacao` |

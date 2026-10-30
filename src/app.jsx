@@ -59,7 +59,6 @@ const ROUTE_TITLE = {
   "ncm-detail": "Detalhe da Solicitação NCM",
   "eng-projeto-elevadores": "Projeto de Elevadores",
   "eng-configurador": "Projeto de Equipamento",
-  "desenho-tecnico": "Desenho Técnico ER | ES",
   "ficha-tecnica": "Ficha Técnica",
   "solicitacoes-produto": "Solicitações de Produto",
   juridico: "Contratos & Minutas",
@@ -387,7 +386,6 @@ function App() {
       case "ncm-detail": return <NcmDetailPage product={subsel?.ncmProduct} setRoute={setRoute}/>;
       case "eng-projeto-elevadores": return <window.ProjetoElevadorPage setRoute={setRoute}/>;
       case "eng-configurador": return <ConfiguradorPage setRoute={setRoute}/>;
-      case "desenho-tecnico": return <DesenhoTecnicoPage setRoute={setRoute}/>;
       case "ficha-tecnica": return <FichaTecnicaPage fichaId={subsel}/>; /* deep-link support: /nova-ficha-tecnica */
       case "solicitacoes-produto": return <SolicitacoesProdutoPage solicitacaoId={subsel} setRoute={setRoute} setSubsel={setSubsel}/>; /* deep-link support */
       case "juridico": return <JuridicoPage setRoute={setRoute} setSubsel={setSubsel}/>;
@@ -514,7 +512,6 @@ function App() {
               { value: "ncm-catalogo", label: "📋 Catálogo de Produtos" },
               { value: "eng-projeto-elevadores", label: "🛗 Projeto de Elevadores" },
               { value: "eng-configurador", label: "🛠 Projeto de Equipamento" },
-              { value: "desenho-tecnico", label: "📐 Desenho Técnico ER | ES" },
               { value: "ficha-tecnica", label: "📋 Ficha Técnica" },
               { value: "juridico", label: "Jurídico (✂️ redator)" },
               { value: "contrato-venda-equipamentos", label: "📄 Contrato Venda de Equipamentos" },
@@ -525,7 +522,7 @@ function App() {
               { value: "cronograma", label: "Cronograma de Instalação" },
               { value: "databook", label: "Data Book & Termo" },
               { value: "repositorio-documentos", label: "📁 Repositório Documentos" },
-              { value: "handover", label: "📦 Handover & Pós-venda" },
+              { value: "handover", label: "📦 Entrega Final" },
               { value: "importacao", label: "Importação (lista)" },
               { value: "importacao-detail", label: "Detalhe de Embarque" },
               { value: "importacao-rastreamento", label: "🛰️ Mapa de Navios" },

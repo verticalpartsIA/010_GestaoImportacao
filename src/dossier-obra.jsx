@@ -20,6 +20,8 @@ const DOSSIER_STATUS_COLOR = {
 
 /* Nº da obra exibido: VPOB-<cotação> quando há cotação; senão o id interno (obra legada). Fonte única do cálculo neste arquivo. */
 function dossierObraNo(o) {
+  // Código oficial da obra = o gravado (dossier_obra.codigo_obra, base da ART); o cálculo antigo só como contingência.
+  if (o.codigo_obra) return o.codigo_obra;
   return o.numero_cotacao != null ? window.MasterIdEngine.etapaId('obra', o.numero_cotacao) : o.id;
 }
 

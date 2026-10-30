@@ -219,7 +219,6 @@
       { modulo: 'eng-projeto-elevadores', label: 'Projeto de Elevadores' },
       { modulo: 'repositorio-documentos', label: 'Repositório Documentos' },
       { modulo: 'eng-configurador', label: 'Projeto de Equipamento' },
-      { modulo: 'desenho-tecnico', label: 'Projetos ER/Es' },
       { modulo: 'solicitacoes-produto', label: 'Solicitações de Produto' },
       { modulo: 'ficha-tecnica', label: 'Ficha Técnica', capacidades: [
         { chave: 'ver', label: 'Ver' },
@@ -323,7 +322,7 @@
     'Financeiro & Preços': ['cadastro-custos', 'precificacao', 'aval-financeiro', 'emissao-nf'],
     'Contratos & Jurídico': ['contrato-venda-equipamentos', 'aval-juridico', 'juridico'],
     'Suprimentos & Importação': ['importacao', 'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos', 'compras', 'cotacoes-varejo', 'pedidos-acompanhamento'],
-    'Engenharia & Produto': ['engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'desenho-tecnico', 'solicitacoes-produto', 'ficha-tecnica', 'ncm-catalogo', 'linha-do-tempo'],
+    'Engenharia & Produto': ['engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'solicitacoes-produto', 'ficha-tecnica', 'ncm-catalogo', 'linha-do-tempo'],
     /* 29/10/2026: 'cronograma' mudou de lugar no menu (ver shell.jsx) — fica também aqui.
        Mantido também em 'Obras & Instalação' de propósito, pra quem já tinha esse
        grupo alocado não perder a alçada (mesmo padrão de Matérias-Primas/Produtos, 18/10). */

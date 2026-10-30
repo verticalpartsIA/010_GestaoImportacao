@@ -44,46 +44,56 @@ window.SolicitacoesProdutoStore = (() => {
     return out;
   }
 
-  // Fluxo definido com o usuário em 20/09/2026:
-  // 1) Solicitação enviada avisa a Engenharia (Maurício), que designa quem da
-  //    equipe resolve.
-  // 2) Engenharia termina (marcarPronto) avisa Bianca (Importação), que
-  //    avalia/aprova/reprova e designa quem publica no Omie.
-  const EMAIL_ENGENHARIA_RESPONSAVEL = 'mauricio.araujo@verticalparts.com.br'; // 16/10/2026: Maurício no lugar da Arilene (inativa)
-  const EMAIL_IMPORTACAO_RESPONSAVEL = 'bianca@verticalparts.com.br';
+  // Fluxo definido com o usuário em 30/10/2026 (substitui o de 20/09):
+  // 1) Alguém não achou o produto no site e preenche a Solicitação (o "chamado"): WhatsApp para Gelson, Vinicius e
+  //    Alexandre, que entendem o pedido e criam a Ficha Técnica.
+  // 2) Criada a Ficha Técnica (converterEmFicha): WhatsApp para Beatriz e Andréia, que conferem o NCM e publicam no Omie.
+  // O aviso é uma linha em `alertas` por pessoa (o gi-avisos entrega no WhatsApp). Trocar alguém = editar as listas abaixo.
+  const DESTINATARIOS_NOVA_SOLICITACAO = [
+    'gelson.simoes@verticalparts.com.br',
+    'vinicius.leite@verticalparts.com.br',
+    'alexandre@verticalparts.com.br',
+  ];
+  const DESTINATARIOS_FICHA_CRIADA = [
+    'beatriz@verticalparts.com.br',
+    'andreia.oliveira@verticalparts.com.br',
+  ];
 
-  async function _notificarEngenharia(solicitacao) {
+  async function _avisar(emails, { idBase, title, sub, rota }) {
     try {
-      const { error } = await window.__VP_SB.sb.from('alertas').insert([{
-        id: `sol-${solicitacao.numero_solicitacao}`,
+      const linhas = emails.map((email) => ({
+        id: `${idBase}-${email.split('@')[0]}`,
         level: 'info',
-        title: `Nova Solicitação de Produto — ${solicitacao.numero_solicitacao}`,
-        sub: [solicitacao.cliente_nome, solicitacao.categoria_sku, solicitacao.solicitante_nome].filter(Boolean).join(' · '),
+        title,
+        sub,
         module: 'Engenharia',
+        rota: rota || null,
         resolved: false,
-        destinatario_email: EMAIL_ENGENHARIA_RESPONSAVEL,
-      }]);
-      if (error) console.warn('[SolicitacoesProdutoStore] Erro ao notificar Engenharia:', error);
+        destinatario_email: email,
+      }));
+      const { error } = await window.__VP_SB.sb.from('alertas').insert(linhas);
+      if (error) console.warn('[SolicitacoesProdutoStore] Erro ao avisar:', error);
     } catch (e) {
-      console.warn('[SolicitacoesProdutoStore] Erro ao notificar Engenharia:', e);
+      console.warn('[SolicitacoesProdutoStore] Erro ao avisar:', e);
     }
   }
 
-  async function _notificarImportacao(solicitacao) {
-    try {
-      const { error } = await window.__VP_SB.sb.from('alertas').insert([{
-        id: `sol-pronto-${solicitacao.numero_solicitacao}`,
-        level: 'info',
-        title: `Solicitação pronta para avaliação — ${solicitacao.numero_solicitacao}`,
-        sub: [solicitacao.cliente_nome, solicitacao.categoria_sku, 'Engenharia: ' + (solicitacao.engenheiro_responsavel || '—')].filter(Boolean).join(' · '),
-        module: 'Engenharia',
-        resolved: false,
-        destinatario_email: EMAIL_IMPORTACAO_RESPONSAVEL,
-      }]);
-      if (error) console.warn('[SolicitacoesProdutoStore] Erro ao notificar Importação:', error);
-    } catch (e) {
-      console.warn('[SolicitacoesProdutoStore] Erro ao notificar Importação:', e);
-    }
+  function _notificarEngenharia(solicitacao) {
+    return _avisar(DESTINATARIOS_NOVA_SOLICITACAO, {
+      idBase: `sol-${solicitacao.numero_solicitacao}`,
+      title: `Nova Solicitação de Produto — ${solicitacao.numero_solicitacao}`,
+      sub: [solicitacao.cliente_nome, solicitacao.categoria_sku, solicitacao.solicitante_nome].filter(Boolean).join(' · '),
+      rota: `/engenharia/solicitacoes-produto/${solicitacao.id}`,
+    });
+  }
+
+  function _notificarFichaCriada(solicitacao, fichaId) {
+    return _avisar(DESTINATARIOS_FICHA_CRIADA, {
+      idBase: `sol-ficha-${solicitacao.numero_solicitacao}`,
+      title: `Ficha Técnica criada — conferir NCM e publicar no Omie — ${solicitacao.numero_solicitacao}`,
+      sub: [solicitacao.categoria_sku, solicitacao.cliente_nome].filter(Boolean).join(' · '),
+      rota: fichaId ? `/engenharia/ficha-tecnica/${fichaId}` : '/engenharia/ficha-tecnica',
+    });
   }
 
   function _gerarNumero() {
@@ -273,7 +283,6 @@ window.SolicitacoesProdutoStore = (() => {
       modulo: 'Solicitações de Produto', acao: 'Marcou solicitação como pronta',
       alvo: atualizada.numero_solicitacao, alvo_id: id,
     });
-    _notificarImportacao(atualizada);
     return atualizada;
   }
 
@@ -286,6 +295,7 @@ window.SolicitacoesProdutoStore = (() => {
       modulo: 'Solicitações de Produto', acao: 'Converteu solicitação em Ficha Técnica',
       alvo: atualizada.numero_solicitacao, alvo_id: id, detalhe: { ficha_tecnica_id },
     });
+    _notificarFichaCriada(atualizada, ficha_tecnica_id);
     return atualizada;
   }
 
