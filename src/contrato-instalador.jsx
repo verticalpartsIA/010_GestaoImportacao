@@ -1716,7 +1716,7 @@ async function ciReenviar(rec, abrir) {
 async function ciAssinaturasEFila(rec) {
   const au = rec.audit || {};
   const assinaturas = au.signedAt
-    ? [{ papel: 'Contratada (instalador)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }]
+    ? [{ papel: 'Contratada (instalador)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, token: rec.token, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }]
     : [];
   let fila = [];
   try { fila = (await window.DocumentoSignatariosStore.listarPorDocumento('contrato_instalador', rec.id) || []).filter((x) => x.status !== 'expirado'); }
@@ -1876,6 +1876,227 @@ function CIFilaAssinaturas({ rec, podeEditar }) {
   );
 }
 
+/* Distrato de Contrato do Instalador (30/10/2026) — rescisão motivada e
+   bilateral de um contrato JÁ ASSINADO (com execução parcial, inclusive
+   parcela paga). Mesmo padrão visual/estrutural de CIFilaAssinaturas, só
+   trocando a fonte (contratos_instalador_distratos / CIDistratoStore). */
+function CIFilaDistrato({ distrato, podeEditar, onMsg }) {
+  const [linhas, setLinhas] = _ciUS([]);
+  _ciUE(() => {
+    let vivo = true;
+    window.CIDistratoStore.fila(distrato.token).then((l) => { if (vivo) setLinhas(l || []); });
+    return () => { vivo = false; };
+  }, [distrato.id, distrato.status]);
+  const ativas = linhas.filter((l) => l.status !== 'expirado');
+  if (!ativas.length) return null;
+  const situacao = (l) => l.status === 'assinado' ? '✅ assinado' : l.status === 'recusado' ? '❌ recusou' : l.liberada ? '⏳ é a vez' : 'aguardando';
+  const haVez = ativas.some((l) => l.liberada && ['enviado', 'visualizado'].includes(l.status));
+  const reenviar = async () => {
+    try { const r = await window.CIDistratoStore.reenviarAvisoVez(distrato.id); onMsg('Aviso reenviado para ' + r.para + '.'); }
+    catch (e) { onMsg(e.message || String(e)); }
+  };
+  return (
+    <div style={{ marginTop: 6, marginBottom: 6 }}>
+      <div className="ci-audit-rows">
+        <CIAuditRow k="1. Contratada (instalador)" v={distrato.status === 'assinado' || distrato.assinaturas_completas_em ? '✅ assinado' : '—'} />
+        {ativas.map((l) => (
+          <CIAuditRow key={l.ordem} k={(l.ordem + 1) + '. ' + l.papel + ' — ' + l.nome} v={situacao(l) + (l.signed_at ? ' em ' + window.CIDistratoStore.fmtDateTime(l.signed_at) : '')} />
+        ))}
+      </div>
+      {podeEditar && haVez && <button type="button" className="ci-mini-btn" onClick={reenviar}>Reenviar aviso da vez</button>}
+    </div>
+  );
+}
+
+/* Modal "Gerar Distrato": motivo obrigatório + transferência opcional do
+   valor já recebido pelo montador pra um contrato novo (troca de obra). */
+function ModalGerarDistrato({ rec, onClose, onGerado }) {
+  const [motivo, setMotivo] = _ciUS('');
+  const [transferir, setTransferir] = _ciUS(false);
+  const [buscaDestino, setBuscaDestino] = _ciUS('');
+  const [opcoesDestino, setOpcoesDestino] = _ciUS([]);
+  const [destino, setDestino] = _ciUS(null); // {id, numero_documento, contratada_nome}
+  const [valorTransfer, setValorTransfer] = _ciUS('');
+  const [enviando, setEnviando] = _ciUS(false);
+  const [erro, setErro] = _ciUS('');
+
+  /* Prefill do valor a transferir: soma das parcelas já PAGAS deste contrato
+     — "o valor que ele recebeu na obra A", como o usuário descreveu o caso. */
+  _ciUE(() => {
+    if (!transferir || valorTransfer) return undefined;
+    let vivo = true;
+    (async () => {
+      try {
+        const parcelas = window.ContratoInstaladorParcelasStore ? await window.ContratoInstaladorParcelasStore.listarParcelas(rec.id) : [];
+        if (!vivo) return;
+        const pago = (parcelas || []).filter((p) => p.status === 'pago').reduce((t, p) => t + (Number(p.valor) || 0), 0);
+        if (pago > 0) setValorTransfer(pago.toFixed(2).replace('.', ','));
+      } catch (_) { /* best-effort — a pessoa digita na mão se falhar */ }
+    })();
+    return () => { vivo = false; };
+  }, [transferir, rec.id]);
+
+  /* Busca do contrato de destino (nova obra do montador) entre os demais contratos do painel. */
+  _ciUE(() => {
+    if (!transferir) { setOpcoesDestino([]); return undefined; }
+    const q = buscaDestino.trim().toLowerCase();
+    if (q.length < 2) { setOpcoesDestino([]); return undefined; }
+    let vivo = true;
+    (async () => {
+      try {
+        const lista = await window.CIStore.listPainel();
+        if (!vivo) return;
+        const filtradas = (lista || [])
+          .filter((c) => c.id !== rec.id && c.status !== 'rascunho')
+          .filter((c) => (c.numero_documento || '').toLowerCase().includes(q) || (c.contratada_nome || '').toLowerCase().includes(q) || (c.objeto_resumo || '').toLowerCase().includes(q))
+          .slice(0, 8);
+        setOpcoesDestino(filtradas);
+      } catch (_) { setOpcoesDestino([]); }
+    })();
+    return () => { vivo = false; };
+  }, [transferir, buscaDestino]);
+
+  const podeEnviar = motivo.trim().length >= 10 && (!transferir || (!!destino && window.CI.moedaParaNumero(valorTransfer) > 0));
+
+  const confirmar = async () => {
+    if (!podeEnviar || enviando) return;
+    setEnviando(true);
+    setErro('');
+    try {
+      const transferencia = (transferir && destino)
+        ? { contrato_destino_id: destino.id, contrato_destino_numero: destino.numero_documento, valor: window.CI.moedaParaNumero(valorTransfer) }
+        : null;
+      const { id: distratoId, numero_documento: numeroDoc } = await window.CIDistratoStore.gerar(rec.id, motivo.trim(), transferencia);
+      // a lista do painel não carrega form_state — busca o registro completo se precisar (mesmo cuidado de ciBaixarPdf)
+      let contratoCompleto = rec;
+      if (!contratoCompleto || !contratoCompleto.form_state) contratoCompleto = (await window.CIStore.getById(rec.id)) || rec;
+      // Data da assinatura do DISTRATO é HOJE, não a data gravada no form_state do
+      // contrato original (essa é a data em que o contrato original foi assinado,
+      // sempre anterior — o distrato é um ato novo). Cidade mantém a do original.
+      const hoje = new Date();
+      const sDistrato = { ...(contratoCompleto.form_state || {}),
+        dataDia: window.CI.pad2(hoje.getDate()), dataMes: window.CI.MESES[hoje.getMonth()], dataAno: String(hoje.getFullYear()) };
+      const doc = window.CI.buildDistratoContract(sDistrato, {
+        motivo: motivo.trim(), transferencia,
+        valorTotal: rec.valor_total, numeroContrato: rec.numero_documento, objetoResumo: rec.objeto_resumo,
+      }, numeroDoc);
+      await window.CIDistratoStore.enviar(distratoId, doc);
+      onGerado();
+    } catch (e) {
+      setErro(e.message || String(e));
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <div className="ci-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget && !enviando) onClose(); }}>
+      <div className="ci-modal" style={{ maxWidth: 560, width: '92vw' }}>
+        <div className="ci-modal-head">
+          <div><h2>Gerar Distrato</h2><p>{rec.numero_documento} — {rec.contratada_nome}</p></div>
+          <button className="ci-modal-x" onClick={onClose} disabled={enviando}>✕</button>
+        </div>
+        <div className="ci-modal-body">
+          <div className="ci-cond-alert"><span className="ci-cond-dot"></span>
+            O Distrato é assinado primeiro pela Contratada (link próprio), seguido da ciência — na mesma sequência de hoje — de Diego (CEO), Juliana e Maurício. Quando todos assinarem, este contrato vira <b>Distratado</b>: as parcelas ainda pendentes são canceladas (as já pagas ficam quitadas, sem restituição) e novos lançamentos ficam bloqueados.
+          </div>
+          <div className="ci-field" style={{ marginTop: 10 }}>
+            <label>Justificativa / Motivo do distrato (obrigatório, mínimo 10 letras)</label>
+            <textarea className="ci-input" rows={3} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: o montador não pôde concluir a obra e foi substituído" />
+          </div>
+          <div className="ci-field" style={{ marginTop: 10 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 400 }}>
+              <input type="checkbox" checked={transferir} onChange={(e) => { setTransferir(e.target.checked); if (!e.target.checked) { setDestino(null); setValorTransfer(''); setBuscaDestino(''); } }} />
+              O montador trocou de obra: o valor já recebido aqui deve ser aproveitado em outro contrato
+            </label>
+          </div>
+          {transferir && (
+            <>
+              <div className="ci-field" style={{ marginTop: 10 }}>
+                <label>Contrato de destino (nova obra)</label>
+                {destino
+                  ? <div className="ci-legal-note">{destino.numero_documento} — {destino.contratada_nome} <button type="button" className="ci-mini-btn" onClick={() => setDestino(null)}>trocar</button></div>
+                  : (
+                    <>
+                      <input className="ci-input" value={buscaDestino} onChange={(e) => setBuscaDestino(e.target.value)} placeholder="Busque por nº do contrato, montador ou obra…" />
+                      {opcoesDestino.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+                          {opcoesDestino.map((c) => (
+                            <button key={c.id} type="button" className="ci-mini-btn" style={{ textAlign: 'left' }}
+                              onClick={() => { setDestino(c); setOpcoesDestino([]); setBuscaDestino(''); }}>
+                              {c.numero_documento} — {c.contratada_nome}{c.objeto_resumo ? ' · ' + c.objeto_resumo : ''}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+              </div>
+              <div className="ci-field" style={{ marginTop: 10 }}>
+                <label>Valor a transferir (R$)</label>
+                <input className="ci-input" value={valorTransfer} onChange={(e) => setValorTransfer(e.target.value)} placeholder="0,00" />
+              </div>
+            </>
+          )}
+          {erro && <div className="ci-legal-note" style={{ color: '#b00020' }}>{erro}</div>}
+        </div>
+        <div className="ci-modal-foot">
+          <button className="ci-btn ci-btn--ghost" onClick={onClose} disabled={enviando}>Cancelar</button>
+          <button className="ci-btn ci-btn--primary" onClick={confirmar} disabled={!podeEnviar || enviando}>{enviando ? 'Gerando…' : 'Gerar e enviar Distrato'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Seção "Distrato" do painel do contrato: mostra o(s) distrato(s) já gerados
+   (histórico — ver CIDistratoStore) e, sem nenhum ativo e o contrato
+   ASSINADO, o botão "Gerar Distrato". */
+function CIDistratoSection({ rec, podeEditar, onRefresh }) {
+  const [distratos, setDistratos] = _ciUS(null); // null = carregando
+  const [showModal, setShowModal] = _ciUS(false);
+  const [msg, setMsg] = _ciUS('');
+  const carregar = async () => {
+    if (!window.CIDistratoStore) { setDistratos([]); return; }
+    try { setDistratos(await window.CIDistratoStore.listarPorContrato(rec.id)); } catch (_) { setDistratos([]); }
+  };
+  _ciUE(() => { carregar(); }, [rec.id, rec.status]);
+  if (!window.CIDistratoStore) return null;
+  if (distratos === null) return null; // carregando — sem seção vazia piscando
+  const semAtivo = !distratos.some((d) => d.status !== 'recusado' && d.status !== 'expirado');
+  if (!distratos.length && rec.status !== 'assinado') return null; // nada a mostrar e nem sentido gerar ainda
+  return (
+    <div className="ci-drawer-sec">
+      <h3 className="ci-drawer-sec-title">Distrato</h3>
+      {!distratos.length && <p className="ci-legal-note">Nenhum distrato gerado para este contrato.</p>}
+      {distratos.map((d) => (
+        <div key={d.id} style={{ marginBottom: 12 }}>
+          <div className="ci-audit-rows">
+            <CIAuditRow k={d.numero_documento} v={(window.CIDistratoStore.STATUS[d.status] || {}).label} />
+            <CIAuditRow k="Motivo" v={d.motivo} />
+            {d.transferencia && d.transferencia.contrato_destino_numero && (
+              <CIAuditRow k="Transferência de valor" v={'R$ ' + window.CI.fmtMoeda(d.transferencia.valor) + ' para ' + d.transferencia.contrato_destino_numero} />
+            )}
+            {d.status === 'recusado' && d.audit && d.audit.refusedBy && <CIAuditRow k="Recusado por" v={d.audit.refusedBy + (d.audit.refusedReason ? ' — ' + d.audit.refusedReason : '')} />}
+          </div>
+          <CIFilaDistrato distrato={d} podeEditar={podeEditar} onMsg={setMsg} />
+          {d.status !== 'rascunho' && <a className="ci-mini-btn" href={window.CIDistratoStore.signUrl(d.token)} target="_blank" rel="noopener">Abrir link de assinatura (Contratada) ↗</a>}
+        </div>
+      ))}
+      {podeEditar && semAtivo && rec.status === 'assinado' && (
+        <div className="ci-drawer-actions" style={{ marginTop: 8 }}>
+          <button className="ci-btn ci-btn--ghost" onClick={() => setShowModal(true)}>Gerar Distrato</button>
+        </div>
+      )}
+      {msg && <div className="ci-legal-note">{msg}</div>}
+      {showModal && (
+        <ModalGerarDistrato rec={rec} onClose={() => setShowModal(false)}
+          onGerado={() => { setShowModal(false); carregar(); onRefresh && onRefresh(); }} />
+      )}
+    </div>
+  );
+}
+
 function CIAuditDrawer({ rec, onClose, onResend, onRefresh, onEditar }) {
   const a = rec.audit || {};
   const [ver, setVer] = _ciUS(undefined);   // undefined = fechado; null = revisão atual; número = revisão anterior
@@ -1979,6 +2200,7 @@ function CIAuditDrawer({ rec, onClose, onResend, onRefresh, onEditar }) {
             </div>
           )}
           <CIFilaAssinaturas rec={rec} podeEditar={podeAnular} />
+          <CIDistratoSection rec={rec} podeEditar={podeAnular} onRefresh={onRefresh} />
           <div className="ci-drawer-sec">
             <h3 className="ci-drawer-sec-title">Ações</h3>
             <div className="ci-drawer-actions">
@@ -2017,7 +2239,7 @@ function CIDocViewer({ rec, revisao, onClose }) {
   const status = snap ? snap.status : rec.status;
   const st = window.CIStore.STATUS[status] || window.CIStore.STATUS.rascunho;
   const assinaturas = au.signedAt
-    ? [{ papel: 'Contratada (instalador)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }]
+    ? [{ papel: 'Contratada (instalador)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, token: snap ? snap.token : rec.token, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }]
     : [];
   return (
     <div className="ci-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>

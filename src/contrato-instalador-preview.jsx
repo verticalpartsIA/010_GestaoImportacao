@@ -41,7 +41,7 @@ function CI_fmtDataHora(iso) {
   return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-/* Assinatura da fila da VerticalParts (Contratante — CEO, Testemunha 1 e 2): nome, data/hora e hash, ou "aguardando assinatura". */
+/* Assinatura da fila da VerticalParts (Contratante — CEO, Testemunha 1 e 2): nome, data/hora, hash e token, ou "aguardando assinatura". */
 function CI_FilaSlot({ f }) {
   if (!f) return null;
   const au = f.audit || {};
@@ -51,6 +51,7 @@ function CI_FilaSlot({ f }) {
       {au.signatureData ? <img className="ci-doc-digital-img" src={au.signatureData} alt={'Assinatura de ' + (au.signerName || f.nome)} /> : <span className="ci-doc-digital-name">{au.signerName || f.nome}</span>}
       <span className="ci-doc-digital-meta">Assinado em {CI_fmtDataHora(au.signedAt)} (horário de Brasília)</span>
       <span className="ci-doc-digital-hash">Hash: {au.hash || ''}</span>
+      {f.token && <span className="ci-doc-digital-hash">Token: {f.token}</span>}
     </div>
   );
 }
@@ -127,6 +128,7 @@ function CIContractPreview({ doc, highlightConditional, assinaturas, fila }) {
               <span className="ci-doc-digital-meta">Assinado em {CI_fmtDataHora(a.em)} (horário de Brasília) · {a.dispositivo || 'dispositivo não informado'}</span>
               <span className="ci-doc-digital-meta">IP: {a.ip || 'não informado'}</span>
               <span className="ci-doc-digital-hash">Hash: {a.hash || ''}</span>
+              {a.token && <span className="ci-doc-digital-hash">Token: {a.token}</span>}
             </div>
           ))}
         </div>
