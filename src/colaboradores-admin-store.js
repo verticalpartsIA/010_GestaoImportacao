@@ -243,6 +243,7 @@
       { modulo: 'linha-do-tempo', label: 'Linha do Tempo da Cotação' },
       { modulo: 'art', label: 'ART' },
       { modulo: 'cronograma', label: 'Cronograma' },
+      { modulo: 'central-documentos', label: 'Central de Documentos' },
       { modulo: 'databook', label: 'Data Book & Termo' },
       { modulo: 'handover', label: 'Entrega Final' },
     ]},
@@ -327,7 +328,7 @@
        Mantido também em 'Obras & Instalação' de propósito, pra quem já tinha esse
        grupo alocado não perder a alçada (mesmo padrão de Matérias-Primas/Produtos, 18/10). */
     'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'mapa-obras', 'cronograma', 'art'],
-    'Entrega & Documentação': ['databook', 'handover', 'repositorio-documentos'],
+    'Entrega & Documentação': ['central-documentos', 'databook', 'handover', 'repositorio-documentos'],
     'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador', 'cronograma'],
     'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'pcp', 'mes', 'mes-cadastros', 'relatorios-pcp', 'expedicao', 'separacao', 'etiquetas', 'fabricacao-corrimao', 'fabricacao-corte'],
     /* Fabricação saiu de Logística Interna (17/10/2026). Logística Interna mantém a lista completa de propósito: quem já tinha o grupo alocado não perde nada. */
