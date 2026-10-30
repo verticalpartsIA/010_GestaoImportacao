@@ -504,8 +504,8 @@ function NcmCatalogoPage({ setRoute }) {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Cadastros · Produtos</div>
-          <h1 className="page-head__title">Catálogo de Produtos</h1>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Importação · Catálogo Siscomex</div>
+          <h1 className="page-head__title">Catálogo Siscomex</h1>
           <p className="page-head__sub">Catálogo do Portal Único Siscomex — produtos e operadores estrangeiros usados na DUIMP. Cadastro obrigatório antes do registro da declaração.</p>
         </div>
         <div className="page-head__r">

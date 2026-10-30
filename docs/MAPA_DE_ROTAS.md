@@ -84,6 +84,7 @@
 | Embarques | `embarques-importacao` | `/gestao-importacao/embarques-importacao[/<aba>]` | **identificacao**, pagamentos, frete, embarque, aduaneiro, faturamento, entrega | — |
 | Rastreio Marítimo | `importacao` | `/gestao-importacao/importacao[/<aba>]` | **embarques**, documentos, aduana | — |
 | Análise de Preços | `gi-analise-precos` | `/gestao-importacao/gi-analise-precos` | — | — |
+| Catálogo Siscomex | `ncm-catalogo` | `/gestao-importacao/ncm-catalogo[/<aba>]` | **produtos**, operadores, pedidos | — |
 | Importação Varejo | `compras` | `/logistica/compras` | — | — |
 | Cotações de Varejo | `cotacoes-varejo` | `/logistica/cotacoes-varejo` | — | — |
 | Pedidos | `pedidos-acompanhamento` | `/logistica/pedidos-acompanhamento[/<aba>]` | **Nacional**, Importação | — |
@@ -96,7 +97,6 @@
 | Projeto de Equipamento | `eng-configurador` | `/engenharia/eng-configurador` | — | — |
 | Solicitações de Produto | `solicitacoes-produto` | `/engenharia/solicitacoes-produto` | — | id na URL (passthrough) |
 | Ficha Técnica | `ficha-tecnica` | `/engenharia/ficha-tecnica` | — | id na URL (passthrough) |
-| Catálogo Siscomex | `ncm-catalogo` | `/cadastros/ncm-catalogo[/<aba>]` | **produtos**, operadores, pedidos | — |
 | Linha do Tempo da Cotação | `linha-do-tempo` | `/engenharia/linha-do-tempo` | — | id na URL (passthrough) |
 
 ### Obras & Instalação
