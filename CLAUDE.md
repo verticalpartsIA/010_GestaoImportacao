@@ -1289,6 +1289,14 @@ Primeiro assunto feito no método novo (Constituição = este arquivo → Specif
 - **NPS** (`fornecedor_avaliacoes`, histórico imutável; view `fornecedor_nps_v`): 6 notas 0–5 (geral obrigatória) + comentário, no cartão do fornecedor do lote (`CVModalNPS`, `NpsMini`) e em Cadastros › Fornecedores (`FornecedorNPS`); a nota aparece na lista de convite (★). ⚠ **Já existia** `fornecedores_avaliacoes` (nota única 1–5, tela "Avaliações" do cadastro) — as duas coexistem sem unificar; decidir depois.
 - **Não testado com clique real em produção:** criar lote → convidar → responder pelo portal → aprovar → P.I./Proforma/Comprado; envio da Proforma por e-mail; IA da VPS (formato real da resposta); NPS gravando. Tutoriais de P.I./RFQ/Cotações de Varejo ficaram desatualizados.
 
+## Fabricação Corte — escopo restrito + código com descrição comercial (30/10/2026, PR #1171, squash `6a67666`)
+
+Pedido do Gelson (spec em 6 fases): `/logistica/fabricacao-corte` mostra **só** Cabos de Aço, Cintas de Tração e Cabos de Manobra, sempre como `código — descrição comercial`.
+- **Dicionário** `CORTE_DESCRICOES` em `fabricacao-oficina-calc.js` (20 códigos → categoria + descrição; códigos em MAIÚSCULAS, ex. `VPEL-234N`). Funções `categoriaCorte(codigo, texto)`, `descricaoCorte`, `rotuloItemCorte`. **Código novo desse grupo = acrescentar no dicionário** (e subir o teste de contagem).
+- **Filtro** (`FabricacaoOficinaPage`, só no destino `corte`): OP entra se o código está no dicionário **ou** se a descrição do cadastro / título da OP cita "cabo de aço", "cinta de tração" ou "cabo de manobra/comando". OP de corte antiga sem código e sem esses termos no título **deixa de aparecer** (não é bug). Corrimão não mudou. KPIs do topo contam só o escopo.
+- **Descrição:** o dicionário vence; senão `pcp_produtos.descricao`, senão `importacao_varejo_produtos.descricao` (lidas em `listar()` do store, campo `item_descricao`). A busca também acha pela descrição.
+- Testes: `fabricacao-oficina-calc.test.js` (+1). `?v=`: calc v3, store v4, `fabricacao-oficina.jsx` v4 (`index.html` e `fabricacao-oficina.html`, que carrega os mesmos scripts). **Não testado com clique real no navegador.**
+
 ## Instalação em Campo — populada com clientes reais (29/10/2026, PR #1138, squash `9070abc`)
 
 Pedido do usuário: `/engenharia/instalacao` ("Instalação em Campo") precisava mostrar os clientes com obra ativa (Montando/Prestes a iniciar). Achado real: a tela sempre apareceu vazia porque `InstalacaoPage` (`src/operacoes.jsx`) lia de `equipes`/`projetos` — **tabelas com zero registros em produção**, resquício do período mock, anterior ao pipeline real de `dossier_obra`.
