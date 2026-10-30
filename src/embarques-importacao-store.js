@@ -91,7 +91,7 @@
       referencia_despachante: form.referencia_despachante || null, custos_estimativa: num(form.custos_estimativa),
       documentos_marimex: form.documentos_marimex || null, transit_time_total: num(form.transit_time_total),
       di: form.di || null, data_registro_di: form.data_registro_di || null, canal_parametrizacao: form.canal_parametrizacao || null,
-      ultima_data_free_time: form.ultima_data_free_time || null, eta_santos: form.eta_santos || null, historico_eta: form.historico_eta || [],
+      ultima_data_free_time: form.ultima_data_free_time || null, eta_santos: form.eta_atual || form.eta_santos || null, eta_original: form.eta_original || null, eta_atual: form.eta_atual || null, presenca_carga: form.presenca_carga || null, historico_eta: form.historico_eta || [],
       conferencia_status: form.conferencia_status || null, conferencia_motivo: form.conferencia_motivo || null, conferencia_data: form.conferencia_data || null,
       empresa_desembaraco: form.empresa_desembaraco || null, faturamento_desembaraco: num(form.faturamento_desembaraco),
       numerario_desembaraco: num(form.numerario_desembaraco), valor_reembolso: num(form.valor_reembolso),
@@ -125,7 +125,7 @@
       container_type: (saved.containers && saved.containers[0] && saved.containers[0].tipo_tamanho) || null,
       origin: saved.porto_origem || null, destination: saved.porto_destino || null,
       etd: saved.etd_atual || saved.etd_original || null,
-      eta: saved.eta_santos || null, eta_original: saved.eta_santos || null,
+      eta: saved.eta_atual || saved.eta_santos || null, eta_original: saved.eta_original || saved.eta_atual || saved.eta_santos || null,
       status, numero_cotacao: saved.numero_cotacao || null,
     };
 

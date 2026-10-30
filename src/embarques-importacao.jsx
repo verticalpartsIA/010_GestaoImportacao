@@ -309,28 +309,38 @@ function EIRolagens({ form, set }) {
   );
 }
 
-/* ---------- ETA Santos com histórico de mudanças (19/10/2026) ----------
-   Mudar o ETA de um embarque já salvo grava a mudança em historico_eta ao salvar
-   (regra em RolagensCalc.registrarMudancaEta). Motivo e data da comunicação são opcionais. */
-function EIEtaSantos({ form, set, etaSalvo, mudanca, setMudanca }) {
-  const mudou = !!(etaSalvo && form.eta_santos && String(form.eta_santos).slice(0, 10) !== String(etaSalvo).slice(0, 10));
+/* ---------- ETA (Embarque) com bloco de alteração pelo armador (30/10/2026) ----------
+   Registrar alteração grava em historico_eta (RolagensCalc.registrarMudancaEta), atualiza o ETA atual
+   e limpa o bloco. eta_santos acompanha o ETA atual (Evolução/rastreio ainda leem essa coluna). */
+function EIEta({ form, setMany }) {
+  const RC = window.RolagensCalc;
+  const vazio = { nova_data: '', data_comunicacao: new Date().toISOString().slice(0, 10), motivo: '' };
+  const [nova, setNova] = React.useState(vazio);
   const hist = form.historico_eta || [];
+  const registrar = () => {
+    if (!nova.nova_data) return;
+    const anterior = form.eta_atual || form.eta_original || '';
+    const h = RC ? RC.registrarMudancaEta(hist, anterior, nova.nova_data,
+      { data_comunicacao: nova.data_comunicacao, motivo: nova.motivo, por: (window.__VP_USER && window.__VP_USER.email) || '' }) : hist;
+    setMany({ historico_eta: h, eta_original: form.eta_original || anterior || nova.nova_data, eta_atual: nova.nova_data, eta_santos: nova.nova_data });
+    setNova(vazio);
+  };
   return (
-    <div style={{ marginTop: 14 }}>
+    <div>
+      <h4 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700 }}>ETA — Estimated Time of Arrival</h4>
       <div className="grid-3" style={{ gap: 10 }}>
-        <PIField label="ETA Santos"><PIInput type="date" value={form.eta_santos} onChange={set('eta_santos')}/></PIField>
+        <PIField label="ETA original"><PIInput type="date" value={form.eta_original} onChange={(v) => setMany({ eta_original: v })}/></PIField>
+        <PIField label="ETA atual"><PIInput type="date" value={form.eta_atual} onChange={(v) => setMany({ eta_atual: v, eta_santos: v })}/></PIField>
       </div>
-      {mudou && (
-        <div style={{ marginTop: 8, padding: 10, borderRadius: 6, background: '#eff6ff', border: '1px solid #bfdbfe' }}>
-          <div className="small" style={{ fontWeight: 700, marginBottom: 6 }}>
-            ETA mudou de {eiFmtDate(etaSalvo)} para {eiFmtDate(form.eta_santos)} — vai para o histórico ao salvar
-          </div>
-          <div className="grid-3" style={{ gap: 10 }}>
-            <PIField label="Data da comunicação"><PIInput type="date" value={mudanca.data_comunicacao} onChange={(v) => setMudanca((m) => ({ ...m, data_comunicacao: v }))}/></PIField>
-            <PIField label="Motivo (opcional)"><PIInput value={mudanca.motivo} onChange={(v) => setMudanca((m) => ({ ...m, motivo: v }))} placeholder="ex.: atraso do navio, fila no porto"/></PIField>
-          </div>
+      <div style={{ background: 'var(--vp-gray-50)', borderRadius: 6, padding: 10, marginTop: 10, border: '1px solid #bfdbfe' }}>
+        <div className="small" style={{ fontWeight: 700, marginBottom: 8 }}>🔄 Registrar alteração de ETA pelo armador</div>
+        <div className="grid-3" style={{ gap: 10 }}>
+          <PIField label="Nova data ETA"><PIInput type="date" value={nova.nova_data} onChange={(v) => setNova((n) => ({ ...n, nova_data: v }))}/></PIField>
+          <PIField label="Data comunicação"><PIInput type="date" value={nova.data_comunicacao} onChange={(v) => setNova((n) => ({ ...n, data_comunicacao: v }))}/></PIField>
+          <PIField label="Motivo"><PIInput value={nova.motivo} onChange={(v) => setNova((n) => ({ ...n, motivo: v }))} placeholder="ex.: atraso no porto de transbordo"/></PIField>
         </div>
-      )}
+        <div style={{ textAlign: 'right', marginTop: 8 }}><Button variant="outline" size="sm" onClick={registrar} disabled={!nova.nova_data}>Registrar alteração</Button></div>
+      </div>
       {hist.length > 0 && (
         <div className="table-wrap" style={{ marginTop: 10 }}>
           <table className="t">
@@ -362,7 +372,7 @@ const EI_EMPTY = {
   cotacoes_frete: [], tipo_frete: '', modalidade_frete: '', agente_carga: '', cotacao_frete: '', moeda_frete: 'USD',
   aprovacao_frete: 'Pendente', pedido_booking: '', transit_time: '', free_time: '',
   referencia_despachante: '', custos_estimativa: '', documentos_marimex: '', transit_time_total: '',
-  di: '', data_registro_di: '', canal_parametrizacao: '', ultima_data_free_time: '', eta_santos: '', historico_eta: [],
+  di: '', data_registro_di: '', canal_parametrizacao: '', ultima_data_free_time: '', eta_santos: '', eta_original: '', eta_atual: '', presenca_carga: '', historico_eta: [],
   conferencia_status: '', conferencia_motivo: '', conferencia_data: '',
   empresa_desembaraco: '', faturamento_desembaraco: '', numerario_desembaraco: '', valor_reembolso: '',
   status_reembolso: 'Não solicitado', data_solicitacao_reembolso: '', data_recebimento_reembolso: '', observacoes_financeiras: '',
@@ -371,17 +381,18 @@ const EI_EMPTY = {
 };
 
 function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, saving }) {
-  const [form, setForm] = React.useState(() => (initialData ? { ...EI_EMPTY, ...initialData } : EI_EMPTY));
+  const [form, setForm] = React.useState(() => {
+    if (!initialData) return EI_EMPTY;
+    const f = { ...EI_EMPTY, ...initialData };
+    // Registros antigos só têm eta_santos: ele vale como ETA e como Presença de carga.
+    f.eta_original = f.eta_original || f.eta_santos || '';
+    f.eta_atual = f.eta_atual || f.eta_santos || '';
+    return f;
+  });
   const [tab, setTab] = window.useRouteTab('embarques-importacao', 'identificacao', ['identificacao', 'pagamentos', 'frete', 'embarque', 'aduaneiro', 'faturamento', 'entrega']);
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
-  const etaSalvo = isEdit && initialData ? initialData.eta_santos : null;
-  const [mudancaEta, setMudancaEta] = React.useState(() => ({ data_comunicacao: new Date().toISOString().slice(0, 10), motivo: '' }));
-  const enviar = () => {
-    const RC = window.RolagensCalc;
-    const hist = RC ? RC.registrarMudancaEta(form.historico_eta, etaSalvo, form.eta_santos,
-      { ...mudancaEta, por: (window.__VP_USER && window.__VP_USER.email) || '' }) : (form.historico_eta || []);
-    onSubmit({ ...form, historico_eta: hist });
-  };
+  const setMany = (patch) => setForm((f) => ({ ...f, ...patch }));
+  const enviar = () => onSubmit({ ...form });
   // Mesma regra do _payload no store: P.I. vinculada manda; senão o que já
   // está gravado no embarque (ou foi escolhido ao herdar containers).
   const numeroCotacaoEmbarque = window.EmbarquesImportacaoStore.resumoPIs(pis || []).numeroCotacao ?? form.numero_cotacao ?? null;
@@ -435,6 +446,7 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
             </p>
           ) : null}
           <EIRolagens form={form} set={set}/>
+          <EIEta form={form} setMany={setMany}/>
           <EIContainers containers={form.containers} onChange={set('containers')} numeroCotacao={numeroCotacaoEmbarque} onNumeroCotacao={set('numero_cotacao')}/>
         </div>
       )}
@@ -478,7 +490,10 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
             <PIField label="Canal parametrização"><PISelect value={form.canal_parametrizacao} onChange={set('canal_parametrizacao')} options={EI_CANAIS}/></PIField>
             <PIField label="Última data free time"><PIInput type="date" value={form.ultima_data_free_time} onChange={set('ultima_data_free_time')}/></PIField>
           </div>
-          <EIEtaSantos form={form} set={set} etaSalvo={etaSalvo} mudanca={mudancaEta} setMudanca={setMudancaEta}/>
+          <div className="grid-3" style={{ gap: 10, marginTop: 14 }}>
+            <PIField label="PRESENÇA DE CARGA"><PIInput type="date" value={form.presenca_carga} onChange={set('presenca_carga')}/></PIField>
+            {!form.presenca_carga && form.eta_santos && <p className="small muted" style={{ alignSelf: 'end' }}>Valor antigo em ETA Santos: {eiFmtDate(form.eta_santos)} (não copiado)</p>}
+          </div>
           {form.canal_parametrizacao && form.canal_parametrizacao !== 'Verde' && (
             <div style={{ marginTop: 14, padding: 12, background: '#fff8e6', border: '1px solid #FBB039', borderRadius: 6 }}>
               <p className="small" style={{ margin: '0 0 8px', fontWeight: 700, color: '#8a5a00' }}>
@@ -557,7 +572,7 @@ function EICard({ e, pis, onEdit, onDelete, onArchive }) {
             {e.arquivado && <span className="badge">Arquivado</span>}
           </div>
           <div className="cell-sub mono">
-            Fornecedor: {resumo.fornecedores.join(', ') || '—'} · ETD: {eiFmtDate(e.etd_atual || e.etd_original)}{e.houve_rolagem ? ' (rolado)' : ''} · ETA: {eiFmtDate(e.eta_santos)}
+            Fornecedor: {resumo.fornecedores.join(', ') || '—'} · ETD: {eiFmtDate(e.etd_atual || e.etd_original)}{e.houve_rolagem ? ' (rolado)' : ''} · ETA: {eiFmtDate(e.eta_atual || e.eta_santos)}
           </div>
           <div className="small" style={{ marginTop: 4 }}>
             <span style={{ color: 'var(--vp-success, #0a7)', fontWeight: 700 }}>{eiFmtMoeda(resumo.valorTotal || e.valor_total, resumo.moeda || e.moeda_valor_total)}</span>
