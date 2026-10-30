@@ -25,6 +25,10 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
   const [pagamentosPorObra, setPagamentosPorObra] = React.useState({});
   const [naoVinculados, setNaoVinculados] = React.useState(null);
   const [ultimoSync, setUltimoSync] = React.useState(null);
+  const [docsPorEmpresa, setDocsPorEmpresa] = React.useState({});
+  React.useEffect(() => {
+    window.RHHomologacao.resumoDocumentosPorEmpresa().then(setDocsPorEmpresa).catch(() => setDocsPorEmpresa({}));
+  }, []);
   const [sincronizando, setSincronizando] = React.useState(false);
 
   const reloadEmpresas = React.useCallback(() => {
@@ -196,6 +200,12 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
                 <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 8, display: 'flex', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 6, flexWrap: 'wrap' }}>
                   <span>👥 Funcionários: <b>{estatisticas[e.id]?.funcionarios ?? 0}</b></span>
                   <span>🛗 Elevadores: <b>{estatisticas[e.id]?.elevadores ?? 0}</b></span>
+                  {docsPorEmpresa[e.id] && docsPorEmpresa[e.id].vencido > 0 && (
+                    <a href="/rh/rh-homologacao" title="Abrir a Homologação de Instaladores" onClick={(ev) => { ev.stopPropagation(); ev.preventDefault(); window.pcpIrParaUrl && window.pcpIrParaUrl('/rh/rh-homologacao'); }}
+                      style={{ color: 'var(--vp-danger)', fontWeight: 600, textDecoration: 'none' }}>
+                      ⚠ {docsPorEmpresa[e.id].vencido} doc(s) vencido(s)
+                    </a>
+                  )}
                   <span>
                     💰 Pagamentos: {pagamentosPorEmpresa[e.id] ? (
                       <b>{window.OmiePagamentosStore.fmtMoeda(pagamentosPorEmpresa[e.id].valorPago)} pago · {window.OmiePagamentosStore.fmtMoeda(pagamentosPorEmpresa[e.id].valorTotal)} previsto</b>

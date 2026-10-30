@@ -111,7 +111,7 @@
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Entrega & Documentação</div>
           <h1 className="page-head__title">Central de Documentos</h1>
-          <p className="page-head__sub">Biblioteca de documentos por obra: ART, termos, Data Book e documentação do instalador.</p>
+          <p className="page-head__sub">Biblioteca de documentos por obra: ART, termos, Data Book e documentação do instalador. Documento solto, sem obra, vai em Repositório Documentos; projeto/desenho para enviar ao cliente, em Projeto de Elevadores › Desenhos.</p>
         </div>
       </div>
       <div style={{ display: 'flex', minHeight: 0 }}>

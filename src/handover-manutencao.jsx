@@ -328,6 +328,15 @@ function ModalEditarChecklist({ handover, projectId, onSaved, onCancel }) {
   const [checklistSelecionados, setChecklistSelecionados] = React.useState(
     new Set(handover.checklists_concluidos || [])
   );
+  /* "Data Book assinado" só pode ser marcado quando existe um DataBook anexado ao dossiê (Central de Documentos).
+     null = ainda consultando; falha ao consultar não trava (cai em liberado). */
+  const [temDataBook, setTemDataBook] = React.useState(null);
+  React.useEffect(() => {
+    let vivo = true;
+    window.__VP_SB.sb.from('dossier_documentos').select('id').eq('dossier_id', projectId).eq('tipo', 'DataBook').limit(1)
+      .then(({ data, error }) => { if (vivo) setTemDataBook(error ? true : (data || []).length > 0); });
+    return () => { vivo = false; };
+  }, [projectId]);
 
   const save = async () => {
     try {
@@ -349,21 +358,24 @@ function ModalEditarChecklist({ handover, projectId, onSaved, onCancel }) {
         <Button variant="primary" onClick={save}>Salvar</Button>
       </>}>
       <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-        {window.HandoverManutencao?.CHECKLIST_ENTREGA.map((item) => (
-          <label key={item.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', border:'1px solid var(--border)', borderRadius:4, cursor:'pointer', background: checklistSelecionados.has(item.id) ? 'var(--vp-gray-50)' : '#fff' }}>
-            <input type="checkbox" checked={checklistSelecionados.has(item.id)}
+        {window.HandoverManutencao?.CHECKLIST_ENTREGA.map((item) => {
+          const semDoc = item.id === 'databook_assinado' && temDataBook === false && !checklistSelecionados.has(item.id);
+          return (
+          <label key={item.id} title={semDoc ? 'Anexe o DataBook na Central de Documentos para poder marcar' : undefined} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', border:'1px solid var(--border)', borderRadius:4, cursor: semDoc ? 'not-allowed' : 'pointer', opacity: semDoc ? 0.6 : 1, background: checklistSelecionados.has(item.id) ? 'var(--vp-gray-50)' : '#fff' }}>
+            <input type="checkbox" checked={checklistSelecionados.has(item.id)} disabled={semDoc}
               onChange={(e) => {
                 const next = new Set(checklistSelecionados);
                 if (e.target.checked) next.add(item.id);
                 else next.delete(item.id);
                 setChecklistSelecionados(next);
               }} style={{ cursor:'pointer' }}/>
-            <span style={{ fontSize:13, flex:1 }}>{item.label}</span>
+            <span style={{ fontSize:13, flex:1 }}>{item.label}{semDoc && <span style={{ display:'block', fontSize:11, color:'var(--fg3)' }}>Anexe o DataBook na Central de Documentos para poder marcar.</span>}</span>
             <span style={{ fontSize:10, background:'var(--border)', color:'var(--fg3)', padding:'2px 6px', borderRadius:3 }}>
               {item.categoria}
             </span>
           </label>
-        ))}
+          );
+        })}
       </div>
     </Modal>
   );
