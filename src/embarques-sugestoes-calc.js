@@ -62,5 +62,59 @@
     return { valor: v, motivo: 'pelos campos já preenchidos' };
   }
 
-  window.EmbSugestoesCalc = { modalidade, tipoFrete, ultimaDataFreeTime, transitTimeTotal, statusEtapa, ETAPAS };
+
+  /* ETA após rolagem de ETD: o mesmo número de dias da rolagem (nova - anterior) aplicado ao ETA atual. */
+  function ajusteEtaPorRolagem(etdAnterior, etdNovo, etaAtual) {
+    const a = dia(etdAnterior); const n = dia(etdNovo); const e = dia(etaAtual);
+    if (!a || !n || !e) return null;
+    const d = diasEntre(a, n);
+    if (!d) return null;
+    return { dias: d, de: e, para: somarDias(e, d) };
+  }
+
+  function resumoContainers(lista) {
+    const m = {};
+    (lista || []).forEach((c) => { const t = txt(c && c.tipo_tamanho) || 'sem tipo'; m[t] = (m[t] || 0) + 1; });
+    return m;
+  }
+  function textoContainers(m) {
+    const ks = Object.keys(m);
+    return ks.length ? ks.map((k) => m[k] + 'x ' + k).join(' + ') : 'nenhum';
+  }
+  /* Containers do embarque x linhas da Precificação ({tipo_tamanho, quantidade}). null se já batem. */
+  function containersDiff(atual, linhas) {
+    const alvo = {};
+    (linhas || []).forEach((l) => { const t = txt(l && l.tipo_tamanho); const q = Number(l && l.quantidade) || 0; if (t && q > 0) alvo[t] = (alvo[t] || 0) + q; });
+    if (!Object.keys(alvo).length) return null;
+    const cur = resumoContainers(atual);
+    const ks = new Set(Object.keys(alvo).concat(Object.keys(cur)));
+    for (const k of ks) { if ((alvo[k] || 0) !== (cur[k] || 0)) return { atual: textoContainers(cur), cotacao: textoContainers(alvo), alvo }; }
+    return null;
+  }
+  /* Nova lista: mantém os containers já preenchidos que continuam valendo; completa/retira o resto. */
+  function reconciliarContainers(atual, alvo, vazio) {
+    const sobra = (atual || []).slice(); const out = [];
+    Object.keys(alvo).forEach((tipo) => {
+      let falta = alvo[tipo];
+      for (let i = 0; i < sobra.length && falta > 0;) {
+        if (txt(sobra[i].tipo_tamanho) === tipo) { out.push(sobra[i]); sobra.splice(i, 1); falta--; } else i++;
+      }
+      while (falta-- > 0) out.push(Object.assign({}, vazio, { tipo_tamanho: tipo }));
+    });
+    return { lista: out, removidos: sobra };
+  }
+
+  /* Faturamento: numerário sugerido = custos/estimativa; faturamento sugerido = frete vencedor em R$. */
+  function numerarioSugerido(custosEstimativa, atual) {
+    const v = Number(custosEstimativa);
+    if (!(v > 0) || String(v) === txt(atual)) return null;
+    return { valor: String(v), motivo: 'custos/estimativa da aba Aduaneiro' };
+  }
+  function faturamentoFrete(resumoVenc, atual) {
+    if (!resumoVenc || resumoVenc.moeda_frete !== 'BRL' || !(Number(resumoVenc.cotacao_frete) > 0)) return null;
+    const v = String(resumoVenc.cotacao_frete);
+    return v === txt(atual) ? null : { valor: v, motivo: 'frete vencedor em R$' };
+  }
+
+  window.EmbSugestoesCalc = { modalidade, tipoFrete, ultimaDataFreeTime, transitTimeTotal, statusEtapa, ajusteEtaPorRolagem, containersDiff, reconciliarContainers, numerarioSugerido, faturamentoFrete, ETAPAS };
 })();

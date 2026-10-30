@@ -184,6 +184,30 @@ function EIHerdarContainers({ numeroCotacaoConhecido, temContainers, onHerdar })
   );
 }
 
+/* Containers do embarque x Precificação (Onda 2): avisa quando a cotação mudou e oferece "Atualizar". */
+function EIContainersMudou({ list, numeroCotacao, onChange }) {
+  const [dif, setDif] = React.useState(null);
+  const chave = (list || []).map((c) => c.tipo_tamanho || '').join('|');
+  React.useEffect(() => {
+    let vivo = true; setDif(null);
+    const C = window.EmbSugestoesCalc; const store = window.EmbarquesImportacaoStore;
+    if (!C || !store || numeroCotacao == null || !(list || []).length) return undefined;
+    store.containersDaCotacao(numeroCotacao).then((r) => { if (vivo && r && r.linhas && r.linhas.length) setDif(C.containersDiff(list, r.linhas)); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [numeroCotacao, chave]);
+  if (!dif) return null;
+  const atualizar = () => {
+    const rec = window.EmbSugestoesCalc.reconciliarContainers(list, dif.alvo, { numero: '', tipo_tamanho: '', lacre: '', peso: '', data_embarque: '', data_chegada: '' });
+    const comDados = rec.removidos.filter((c) => c.numero || c.lacre || c.peso || c.data_embarque || c.data_chegada);
+    if (comDados.length && !window.confirm(comDados.length + ' container(es) com número/lacre/peso serão retirados da lista. Continuar?')) return;
+    onChange(rec.lista); setDif(null);
+  };
+  return <div className="small" style={{ background: '#fef3c7', color: '#92400e', borderRadius: 6, padding: '8px 12px', marginBottom: 10 }}>
+    💡 A cotação Nº {numeroCotacao} mudou: o embarque tem <b>{dif.atual}</b>, a cotação tem <b>{dif.cotacao}</b>.{' '}
+    <button type="button" className="btn btn--ghost btn--sm" onClick={atualizar}>Atualizar</button>
+  </div>;
+}
+
 /* ---------- Containers ---------- */
 function EIContainers({ containers, onChange, numeroCotacao, onNumeroCotacao }) {
   const list = containers || [];
@@ -196,6 +220,7 @@ function EIContainers({ containers, onChange, numeroCotacao, onNumeroCotacao }) 
         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Containers</h4>
         <Button variant="outline" size="sm" icon="plus" onClick={add}>Adicionar container</Button>
       </div>
+      <EIContainersMudou list={list} numeroCotacao={numeroCotacao} onChange={onChange}/>
       <EIHerdarContainers numeroCotacaoConhecido={numeroCotacao} temContainers={list.length > 0}
         onHerdar={(novos, numero) => { onChange([...list, ...novos]); if (numeroCotacao == null) onNumeroCotacao?.(numero); }}/>
       {list.length === 0 && <p className="small muted" style={{ textAlign: 'center', padding: '16px 0' }}>Nenhum container cadastrado.</p>}
@@ -251,7 +276,7 @@ function EINFes({ nfes, onChange }) {
 }
 
 /* ---------- Rolagens de ETD ---------- */
-function EIRolagens({ form, set }) {
+function EIRolagens({ form, set, setMany }) {
   const [nova, setNova] = React.useState({ nova_data: '', motivo: '', data_comunicacao: '' });
   const registrar = () => {
     if (!nova.nova_data) return;
@@ -261,6 +286,14 @@ function EIRolagens({ form, set }) {
     set('etd_atual')(nova.nova_data);
     set('houve_rolagem')(true);
     setNova({ nova_data: '', motivo: '', data_comunicacao: '' });
+    /* Sugestão (Onda 2): o ETA acompanha a rolagem. Só muda se a pessoa confirmar. */
+    const aj = window.EmbSugestoesCalc && window.EmbSugestoesCalc.ajusteEtaPorRolagem(anterior, nova.nova_data, form.eta_atual);
+    if (aj && setMany && window.confirm('A rolagem mudou o ETD em ' + (aj.dias > 0 ? '+' : '') + aj.dias + ' dia(s).\nAjustar também o ETA de ' + eiFmtDate(aj.de) + ' para ' + eiFmtDate(aj.para) + '?')) {
+      const RC2 = window.RolagensCalc; const h = form.historico_eta || [];
+      const novoHist = RC2 ? RC2.registrarMudancaEta(h, aj.de, aj.para,
+        { data_comunicacao: nova.data_comunicacao || new Date().toISOString().slice(0, 10), motivo: 'Acompanha a rolagem de ETD', por: (window.__VP_USER && window.__VP_USER.email) || '' }) : h;
+      setMany({ historico_eta: novoHist, eta_original: form.eta_original || aj.de, eta_atual: aj.para, eta_santos: aj.para });
+    }
   };
   /* Avisos de data suspeita (só avisam, nunca bloqueiam) — regra em rolagens-calc.js. */
   const RC = window.RolagensCalc;
@@ -439,6 +472,8 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
       modalidade: C.modalidade(window.EmbarquesImportacaoStore.resumoPIs(pis || []).incoterms, form.modalidade_frete),
       tt: C.transitTimeTotal(form.etd_atual, form.presenca_carga, form.transit_time_total),
       freeTime: C.ultimaDataFreeTime(form.presenca_carga, freeDias, form.ultima_data_free_time),
+      numerario: C.numerarioSugerido(form.custos_estimativa, form.numerario_desembaraco),
+      faturamento: C.faturamentoFrete(vencedor, form.faturamento_desembaraco),
     };
   })();
   const setMany = (patch) => setForm((f) => ({ ...f, ...patch }));
@@ -497,7 +532,7 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
               <b> Gestão Importação → Importação</b>.
             </p>
           ) : null}
-          <EIRolagens form={form} set={set}/>
+          <EIRolagens form={form} set={set} setMany={setMany}/>
           <EIEta form={form} setMany={setMany}/>
           <EIContainers containers={form.containers} onChange={set('containers')} numeroCotacao={numeroCotacaoEmbarque} onNumeroCotacao={set('numero_cotacao')}/>
         </div>
@@ -573,13 +608,25 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
 
       {tab === 'faturamento' && (
         <div className="stack" style={{ gap: 12, marginTop: 14 }}>
+          {(() => {
+            const F = window.EmbFreteCalc; const v = F && F.vencedor ? F.vencedor(form.cotacoes_frete) : null;
+            if (!v) return null;
+            const t = F.totais ? F.totais(v.taxas) : { usd: 0, brl: 0 };
+            return <div className="small" style={{ background: 'var(--vp-gray-50)', borderRadius: 6, padding: 10 }}>
+              <b>Frete vencedor (aba Frete, só leitura):</b> {v.agente || '—'} · USD {Number(t.usd).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · R$ {Number(t.brl).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {(v.taxas || []).length > 0 && <> · taxas: {(v.taxas || []).map((x) => (x.descricao || 'taxa') + ' ' + (x.moeda || '') + ' ' + x.valor).join('; ')}</>}
+              {(v.anexos || []).length > 0 && <> · {(v.anexos || []).length} anexo(s)</>}
+            </div>;
+          })()}
           <div className="grid-3" style={{ gap: 10 }}>
             <PIField label="Empresa de desembaraço">
               <PIInput value={form.empresa_desembaraco} onChange={set('empresa_desembaraco')} list="dl-desembaraco-emb"/>
               <CadFornecedorDatalist id="dl-desembaraco-emb"/>
             </PIField>
-            <PIField label="Valor do faturamento (R$)"><PIInput type="number" value={form.faturamento_desembaraco} onChange={set('faturamento_desembaraco')}/></PIField>
-            <PIField label="Valor do numerário (R$)"><PIInput type="number" value={form.numerario_desembaraco} onChange={set('numerario_desembaraco')}/></PIField>
+            <PIField label="Valor do faturamento (R$)"><PIInput type="number" value={form.faturamento_desembaraco} onChange={set('faturamento_desembaraco')}/>
+              <EISugestao sug={sugs.faturamento} onAplicar={set('faturamento_desembaraco')}/></PIField>
+            <PIField label="Valor do numerário (R$)"><PIInput type="number" value={form.numerario_desembaraco} onChange={set('numerario_desembaraco')}/>
+              <EISugestao sug={sugs.numerario} onAplicar={set('numerario_desembaraco')}/></PIField>
             <PIField label="Valor do reembolso (R$)"><PIInput type="number" value={form.valor_reembolso} onChange={set('valor_reembolso')}/></PIField>
             <PIField label="Status do reembolso"><PISelect value={form.status_reembolso} onChange={set('status_reembolso')} options={EI_STATUS_REEMBOLSO}/></PIField>
             <PIField label="Data solicitação reembolso"><PIInput type="date" value={form.data_solicitacao_reembolso} onChange={set('data_solicitacao_reembolso')}/></PIField>
