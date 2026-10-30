@@ -121,7 +121,7 @@ function RepositorioDocumentosPage() {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Entrega & Documentação</div>
           <h1 className="page-head__title">Repositório Documentos</h1>
-          <p className="page-head__sub">Qualquer documento que a Engenharia ache necessário guardar aqui</p>
+          <p className="page-head__sub">Qualquer documento que a Engenharia ache necessário guardar aqui, sem vínculo com obra. Documento de uma obra (ART, termos, Data Book) fica na Central de Documentos; projeto para enviar ao cliente, em Projeto de Elevadores › Desenhos.</p>
         </div>
         <div className="row gap-2">
           <Button variant="outline" onClick={carregar} disabled={loading}>{loading ? 'Atualizando…' : 'Atualizar'}</Button>

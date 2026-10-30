@@ -591,7 +591,7 @@ function NcmKanbanPage({ setRoute, setSubsel }) {
     { key: "AGUARD_JURIDICO",  label: "Aguard. jurídico",  hint: "Aguarda validação do código NCM" },
     { key: "APROVADO",         label: "Aprovado jurídico", hint: "Pronto para exportar" },
     { key: "APROVADO_PRONTO",  label: "Pronto LogComex",   hint: "Em cadastro pelo time de importação" },
-    { key: "CADASTRADO",       label: "Cadastrado Siscomex", hint: "Produto ATIVO disponível para Duimp" },
+    { key: "CADASTRADO",       label: "Cadastrado Siscomex", hint: "Controle manual do processo: mover o card não cadastra nada no catálogo" },
   ];
 
   const byCol = {};
@@ -650,9 +650,10 @@ function NcmKanbanPage({ setRoute, setSubsel }) {
               onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(null); }}
               onDrop={(e) => { e.preventDefault(); handleDrop(c.key); }}>
               <div className={"kanban__col-head" + (byCol[c.key].length > 0 ? " is-active" : "")}>
-                <span className="kanban__col-title">{c.label}</span>
+                <span className="kanban__col-title" title={c.hint}>{c.label}</span>
                 <span className="kanban__col-count">{byCol[c.key].length}</span>
               </div>
+              {c.key === "CADASTRADO" && <div style={{ fontSize: 10, color: 'var(--fg3)', padding: '4px 8px' }}>{c.hint}</div>}
               <div className="kanban__col-body">
                 {byCol[c.key].map(s => (
                   <div key={s.id}
