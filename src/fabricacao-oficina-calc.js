@@ -91,6 +91,12 @@
     if (/cabo\s+(de\s+)?(manobra|comando)/.test(t)) return 'manobra';
     return null;
   }
+  // Código efetivo da OP: OPs de corte antigas (Gerar OPs do PCP) nasceram sem item_codigo e só trazem o código no título ("Corte — VPEL-692").
+  function codigoDaOrdem(o) {
+    if (o && o.item_codigo) return String(o.item_codigo);
+    const m = String((o && o.titulo) || '').match(/^\s*Corte\s*[—–-]\s*(\S+)/i);
+    return m ? m[1] : '';
+  }
   // Descrição comercial: dicionário vence; senão a do cadastro (pcp_produtos / catálogo Omie).
   function descricaoCorte(codigo, descCadastro) {
     const d = CORTE_DESCRICOES[String(codigo || '').trim().toUpperCase()];
@@ -102,5 +108,5 @@
     return d ? `${codigo} — ${d}` : String(codigo || '');
   }
 
-  window.FabOficinaCalc = { progresso, etapaAtualId, pausado, unidadeDoTitulo, localizacaoDoItem, CORTE_DESCRICOES, CORTE_ROTULO, categoriaCorte, descricaoCorte, rotuloItemCorte };
+  window.FabOficinaCalc = { progresso, etapaAtualId, pausado, unidadeDoTitulo, localizacaoDoItem, CORTE_DESCRICOES, CORTE_ROTULO, categoriaCorte, codigoDaOrdem, descricaoCorte, rotuloItemCorte };
 })();

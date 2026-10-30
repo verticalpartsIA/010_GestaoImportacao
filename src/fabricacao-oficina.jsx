@@ -89,8 +89,8 @@ function FOCard({ ordem, destino, podeDesmarcar, onRecarregar, enviados, podeEnv
       <div className="fo-head">
         <div>
           <div className="fo-tit">{ordem.numero}{(ordem.numero_pedido_omie || ordem.numero_pedido) ? ` · Pedido Omie ${ordem.numero_pedido_omie || ordem.numero_pedido}` : ''}{un ? ` · unidade ${un.n}/${un.de}` : ''}</div>
-          <div className="fo-sub">{destino === 'corte' && ordem.item_codigo ? window.FabOficinaCalc.rotuloItemCorte(ordem.item_codigo, ordem.item_descricao) : ordem.titulo}</div>
-          {destino === 'corte' && ordem.item_codigo && <div className="fo-meta">{window.FabOficinaCalc.CORTE_ROTULO[window.FabOficinaCalc.categoriaCorte(ordem.item_codigo, ordem.item_descricao || ordem.titulo)] || ''} · {ordem.titulo}</div>}
+          <div className="fo-sub">{destino === 'corte' && window.FabOficinaCalc.codigoDaOrdem(ordem) ? window.FabOficinaCalc.rotuloItemCorte(window.FabOficinaCalc.codigoDaOrdem(ordem), ordem.item_descricao) : ordem.titulo}</div>
+          {destino === 'corte' && window.FabOficinaCalc.codigoDaOrdem(ordem) && <div className="fo-meta">{window.FabOficinaCalc.CORTE_ROTULO[window.FabOficinaCalc.categoriaCorte(window.FabOficinaCalc.codigoDaOrdem(ordem), ordem.item_descricao || ordem.titulo)] || ''} · {ordem.titulo}</div>}
           <div className="fo-meta">{ordem.cliente || 'Cliente não informado'}{ordem.item_codigo ? ' · ' + ordem.item_codigo : ''}{ordem.prazo_entrega ? ' · entrega ' + U.fmtData(ordem.prazo_entrega) : ''}{destino === 'corte' && ordem.quantidade ? ' · qtd ' + ordem.quantidade : ''}</div>
           {pausado && <div className="fo-pausa">PAUSADA — falta de material</div>}
           {ordem.status === 'concluida' && <div className="fo-ok">✓ Concluída{ordem.data_finalizacao ? ' em ' + U.fmtData(ordem.data_finalizacao) : ''}</div>}
@@ -150,7 +150,7 @@ function FabricacaoOficinaPage({ destino }) {
     if (destino === 'corte') {
       // Escopo da tela: só Cabos de Aço, Cintas de Tração e Cabos de Manobra.
       const CC = window.FabOficinaCalc;
-      const noEscopo = todasOrdens.filter((o) => CC.categoriaCorte(o.item_codigo, o.item_descricao || o.titulo));
+      const noEscopo = todasOrdens.filter((o) => CC.categoriaCorte(CC.codigoDaOrdem(o), o.item_descricao || o.titulo));
       if (concluidas) return noEscopo;
       return noEscopo.filter((o) => o.status !== 'concluida' || (o.item_codigo && o.pedido_codigo != null && !enviados.some((e) => e.ordem_id === o.id)));
     }
@@ -161,7 +161,7 @@ function FabricacaoOficinaPage({ destino }) {
     if (!ordens) return null;
     const termos = foNorm(busca).split(/\s+/).filter(Boolean);
     if (!termos.length) return ordens;
-    return ordens.filter((o) => { const t = foNorm([o.numero, o.titulo, o.cliente, o.numero_pedido, o.pedido_codigo, o.item_codigo, o.item_descricao, window.FabOficinaCalc.descricaoCorte(o.item_codigo, '')].join(' ')); return termos.every((x) => t.includes(x)); });
+    return ordens.filter((o) => { const t = foNorm([o.numero, o.titulo, o.cliente, o.numero_pedido, o.pedido_codigo, o.item_codigo, o.item_descricao, window.FabOficinaCalc.descricaoCorte(window.FabOficinaCalc.codigoDaOrdem(o), '')].join(' ')); return termos.every((x) => t.includes(x)); });
   }, [ordens, busca]);
 
   const grupos = React.useMemo(() => {
