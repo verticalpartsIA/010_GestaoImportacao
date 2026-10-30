@@ -70,6 +70,15 @@ function codificarAssunto(subject: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7e]/g, "?").replace(/^=\?/, "- =?");
 }
 
+// Corpo em Base64 (linhas de 76): o quoted-printable do denomailer 1.6.0 corta a linha no
+// meio de um caractere UTF-8 ("=c3=" + quebra + "=a9") e o "é" chegava como "c3©".
+function corpoBase64(txt: string): string {
+  const b = new TextEncoder().encode(txt);
+  let bin = "";
+  for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000));
+  return (btoa(bin).match(/.{1,76}/g) || []).join("\r\n");
+}
+
 function limparBase64(b64: string): string {
   return String(b64 || "").replace(/^data:[^,]*,/, "").replace(/[^A-Za-z0-9+/=]/g, "");
 }
@@ -208,8 +217,10 @@ Deno.serve(async (req: Request) => {
       cc: cc.length ? cc : undefined,
       replyTo: replyTo || undefined,
       subject: codificarAssunto(subject),
-      content: text || "Ver versão HTML.",
-      html: html || undefined,
+      mimeContent: [
+        { mimeType: 'text/plain; charset="utf-8"', content: corpoBase64(text || "Ver versão HTML."), transferEncoding: "base64" },
+        ...(html ? [{ mimeType: 'text/html; charset="utf-8"', content: corpoBase64(html), transferEncoding: "base64" }] : []),
+      ],
       headers: { "Message-ID": messageId },
       attachments: anexos.length
         ? anexos.map((a) => ({ filename: a.filename, content: a.base64, encoding: "base64", contentType: a.contentType }))
