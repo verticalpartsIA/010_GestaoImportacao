@@ -2,6 +2,16 @@
 
 Notas operacionais para uma sessão futura do Claude Code neste repo. O README.md tem a visão de produto/telas; este arquivo é sobre "como trabalhar aqui".
 
+## E-mail — CC em todos os envios + correção de acentos (30/10/2026, PR #1187, squash `b40b53e`)
+
+Pedido do Gelson (spec em 6 fases): campo **"Em cópia (CC)"** (vários e-mails separados por vírgula) em todo envio e fim do e-mail com caracteres quebrados no Outlook/Gmail. Autorizado a editar `send-email` e `read-inbox` (áreas blindadas); travas de `send-email` (400/403/429/503) intactas.
+- **CC:** `send-email` aceita `cc` (validado, entra na allowlist, no limite de 10 e no `email_rate_check`; gravado em `emails_projeto.cc`; resposta devolve `cc`). Front: `EmailEnvioHelper.tentarEnviarDireto({cc})`, componente `EmailCcInput` (lembra o último CC em `localStorage vp_email_cc`), ligado em Cotações de Varejo, RFQ de varejo, Tratativas, Enviar documentos ao fornecedor, Frete de embarque, RFQ de elevador, Inbox (novo e resposta).
+- **Causa do e-mail quebrado (denomailer 1.6.0):** (1) o assunto com acento ou começando com `=?` é recodificado pelo `quotedPrintableEncodeInline`, que quebra a cada 74 caracteres SEM dobra de cabeçalho: assunto longo fecha o bloco de cabeçalhos no meio e o resto vira corpo. Mandar encoded-word própria piora (`=3d`). (2) o corpo em quoted-printable corta a linha no meio de um caractere UTF-8 (`=c3=` + quebra + `=a9`) e o "é" chegava como `c3©`.
+- **Regra atual (`codificarAssunto`, `corpoBase64`):** assunto ASCII passa direto; acentuado curto (QP ≤ 74) segue com o denomailer; **acentuado longo perde os acentos (NFD)** — "COTACAO DE FRETE MARITIMO", de propósito. Corpo (text e html) vai por `mimeContent` em **Base64**, linhas de 76. **Não volte a mandar encoded-word pronta nem corpo em QP pelo denomailer.**
+- **`read-inbox` v17:** `decodeHeaderValue` junta encoded-words adjacentes do mesmo charset e decodifica os bytes juntos; corrige UTF-8 bruto. Leitura real da caixa ainda não exercitada por teste.
+- **Deploy:** `send-email` v24 e `read-inbox` v17 publicadas pelo Claude da VPS (CLI com bundle, a ferramenta MCP de arquivo único dá BOOT_ERROR). Antes de publicar, comparar produção × repo. Testado de verdade com 3 envios ao Gelson (Outlook e Gmail): assunto, cabeçalhos, acentos (texto e HTML) e CC ok.
+- Não feito: mensagens trilíngues do RFQ de elevadores/portal seguem como estavam (o Gelson disse que cotação nacional pode ser só PT-BR; ficou sem pedido explícito de qual envio mudar). `index.html`: `email-envio-helper.js` e demais scripts de envio bumpados.
+
 ## Cronograma de Pagamento da Instalação — reposicionado no menu (29/10/2026, PR #1135, squash `0258872`)
 
 Pedido do usuário: mover o item "Cronograma" do grupo "Obras & Instalação" para o fim de "Parceiros & Instaladores" (logo abaixo de "Pagamentos a Instaladores"). Investigação prévia mostrou que o item já existia (`id: "cronograma"`, componente `CronogramaPage` em `src/entrega.jsx`) — não era preciso criar rota nova.
