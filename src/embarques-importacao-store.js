@@ -50,8 +50,14 @@
     const numerosSerie = unique(pis.flatMap((p) => p.numeros_serie || []));
     const numerosRequisicao = unique(pis.map((p) => p.numero_requisicao));
     const datasAbertura = pis.map((p) => p.data_abertura).filter(Boolean).sort();
-    const valorTotal = pis.reduce((s, p) => s + (Number(p.valor_total) || 0), 0);
     const moeda = (pis[0] && pis[0].moeda) || 'USD';
+    /* Onda 1 (30/10/2026): o total gravado soma só as P.I. na moeda da primeira (antes somava tudo como se fosse a mesma
+       moeda). As demais aparecem em totaisPorMoeda e a tela avisa (moedasMistas). */
+    const totaisPorMoeda = {};
+    pis.forEach((p) => { const m = p.moeda || 'USD'; totaisPorMoeda[m] = (totaisPorMoeda[m] || 0) + (Number(p.valor_total) || 0); });
+    const moedasMistas = Object.keys(totaisPorMoeda).length > 1;
+    const valorTotal = totaisPorMoeda[moeda] || 0;
+    const cotacoesDistintas = unique(pis.map((p) => p.numero_cotacao).filter((v) => v != null));
     /* 23/08 — achado real: embarques-importacao.jsx nunca expõe
        numero_cotacao na tela (o embarque só se liga à cotação
        INDIRETAMENTE, via P.I. vinculada). Sem isso, todo o disparo de
@@ -60,7 +66,7 @@
        real teria numero_cotacao gravado. Deriva da primeira P.I.
        vinculada, mesma lógica de fornecedor/incoterms acima. */
     const numeroCotacao = pis.map((p) => p.numero_cotacao).find((v) => v != null) ?? null;
-    return { piNumbers, fornecedores, incoterms, categorias, numerosSerie, numerosRequisicao, dataPi: datasAbertura[0] || '', valorTotal, moeda, numeroCotacao };
+    return { piNumbers, fornecedores, incoterms, categorias, numerosSerie, numerosRequisicao, dataPi: datasAbertura[0] || '', valorTotal, moeda, numeroCotacao, totaisPorMoeda, moedasMistas, cotacoesDistintas };
   }
 
   function _payload(form, pis) {
