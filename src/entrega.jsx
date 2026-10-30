@@ -9,7 +9,7 @@ function ArtPage({ setRoute }) {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Instalação &amp; Entrega · ART</div>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Obras &amp; Instalação · ART</div>
           <h1 className="page-head__title">ART de Instalação</h1>
           <p className="page-head__sub">As ARTs e demais documentos da obra são geridos por obra, na aba Documentos do Dossiê.</p>
         </div>
@@ -44,7 +44,7 @@ function DataBookPage({ setRoute }) {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Instalação & Entrega · Encerramento</div>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Entrega & Documentação · Encerramento</div>
           <h1 className="page-head__title">Data Book & Termo de Conclusão</h1>
           <p className="page-head__sub">O Data Book de cada obra é gerido por obra, na aba Documentos do Dossiê.</p>
         </div>
@@ -115,7 +115,7 @@ function CronogramaPage() {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Instalação & Entrega · Cronograma</div>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Parceiros & Instaladores · Cronograma</div>
           <h1 className="page-head__title">Cronograma de Pagamento da Instalação</h1>
           <p className="page-head__sub">Pagamento da mão de obra de instalação em 4 fases, liberadas por marco físico do equipamento.</p>
         </div>
@@ -164,7 +164,7 @@ function CronogramaPage() {
                   </td>
                   <td>
                     <div className="row gap-2" style={{ justifyContent: 'flex-end' }}>
-                      <Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button>
+                      <Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir" onClick={(e) => { e.stopPropagation(); setSel(r); }}>Abrir</Button>
                       <Button variant="ghost" size="sm" icon="trash" title="Excluir" aria-label="Excluir"
                         onClick={(e) => { e.stopPropagation(); setExcluindo(r); }}/>
                     </div>

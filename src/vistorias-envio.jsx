@@ -11,9 +11,8 @@
    dossiê de engenharia reversa do Btime no README.md pro modelo de
    referência).
 
-   O link gerado no despacho ainda não abre nada (a página pública de
-   execução no celular é a Fase 3, não construída aqui) — o que existe
-   até aqui é só o registro da Atividade + o link/token pra ela.
+   O link gerado no despacho abre a página pública de execução no celular
+   (vistoria-execucao.html, rota /vistoria/:token).
    Fase 4: resultado alimentando src/vistorias-obras.jsx.
    ============================================================ */
 
