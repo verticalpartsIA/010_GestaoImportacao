@@ -75,8 +75,8 @@ function HandoverManutencaoPage() {
       <div className="page-head">
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Entrega & Documentação · Pós-venda</div>
-          <h1 className="page-head__title">Handover & Manutenção</h1>
-          <p className="page-head__sub">Entrega final, garantia e transição para Escamax (sistema de manutenção preventiva).</p>
+          <h1 className="page-head__title">Entrega Final</h1>
+          <p className="page-head__sub">Handover e pós-venda: entrega do equipamento ao cliente, garantia e transição para a Escamax (manutenção preventiva).</p>
         </div>
         <div className="page-head__r">
           <Button variant="primary" icon="check" onClick={() => setShowNovoHandover(true)}>Registrar Handover</Button>
@@ -131,7 +131,7 @@ function HandoverManutencaoPage() {
         </Card>
 
         {selected ? (
-          <Card title={`Handover & Pós-venda · ${selected.id}`} sub={selected.building_name}>
+          <Card title={`Entrega Final · ${selected.id}`} sub={selected.building_name}>
             {!handover ? (
               <div style={{
                 textAlign: 'center',

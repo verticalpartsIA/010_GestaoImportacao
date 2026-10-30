@@ -20,6 +20,7 @@
    interno (obras legadas, sem cotação — ver resolverPorMasterId) senão. */
 function veVpobLabel(obra) {
   if (!obra) return '';
+  if (obra.codigo_obra) return obra.codigo_obra; // código oficial da obra (dossier_obra.codigo_obra)
   if (obra.numero_cotacao != null) {
     // Fonte única da fórmula (MasterIdEngine); a reimplementação só fica como contingência.
     if (window.MasterIdEngine) return window.MasterIdEngine.etapaId('obra', obra.numero_cotacao);
@@ -549,7 +550,7 @@ function DespacharVistoria() {
     const sb = window.__VP_SB?.sb;
     if (!sb) return;
     Promise.all([
-      sb.from('dossier_obra').select('id, client_name, building_name, numero_cotacao').order('client_name'),
+      sb.from('dossier_obra').select('id, client_name, building_name, numero_cotacao, codigo_obra').order('client_name'),
       sb.from('equipamentos_obra').select('id, dossier_id, numero_serie'),
       Store.listarQuestionarios(),
       sb.from('colaboradores_vpsistema').select('id, nome').eq('is_active', true).order('nome'),

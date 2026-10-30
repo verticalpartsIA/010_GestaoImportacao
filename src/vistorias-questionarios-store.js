@@ -340,7 +340,7 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
 
     async listarAtividades() {
       const { data, error } = await sb().from('vistorias_atividades')
-        .select('*, dossier_obra(id, client_name, building_name, numero_cotacao), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome, tipo)')
+        .select('*, dossier_obra(id, client_name, building_name, numero_cotacao, codigo_obra), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome, tipo)')
         .order('criado_em', { ascending: false })
         .limit(50);
       if (error) throw error;
@@ -350,7 +350,7 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
     /* ---- Calendário/Agenda (Módulo ADM) — todas as atividades com data marcada ---- */
     async listarAtividadesAgendadas() {
       const { data, error } = await sb().from('vistorias_atividades')
-        .select('*, dossier_obra(id, client_name, building_name, numero_cotacao), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome, tipo)')
+        .select('*, dossier_obra(id, client_name, building_name, numero_cotacao, codigo_obra), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome, tipo)')
         .not('agendado_para', 'is', null)
         .order('agendado_para', { ascending: true });
       if (error) throw error;
@@ -392,10 +392,18 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
 
     async resolverPorMasterId(raw) {
       const parsed = this.parseMasterId(raw);
-      const OBRA_SELECT = 'id, client_name, building_name, city, state, numero_cotacao, equip_type';
+      const OBRA_SELECT = 'id, client_name, building_name, city, state, numero_cotacao, equip_type, codigo_obra';
 
       let obra = null;
-      if (parsed) {
+      /* Código oficial da obra (VPNI-0955 / VPNI-OB0025): procura primeiro pelo valor gravado — sem isso um código de
+         obra legada (VPNI-OB0025) seria lido como "cotação 25" pelo parse abaixo. */
+      const codigoObra = String(raw || '').trim().toUpperCase();
+      if (/^VPNI-/.test(codigoObra)) {
+        const { data, error } = await sb().from('dossier_obra').select(OBRA_SELECT).eq('codigo_obra', codigoObra).limit(1).maybeSingle();
+        if (error) throw error;
+        obra = data;
+      }
+      if (!obra && parsed) {
         const { data, error } = await sb().from('dossier_obra')
           .select(OBRA_SELECT).eq('numero_cotacao', parsed.numero).maybeSingle();
         if (error) throw error;
