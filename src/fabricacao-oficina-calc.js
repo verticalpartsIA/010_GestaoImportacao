@@ -54,5 +54,53 @@
     return partes;
   }
 
-  window.FabOficinaCalc = { progresso, etapaAtualId, pausado, unidadeDoTitulo, localizacaoDoItem };
+
+  // Fabricação Corte (30/10/2026): só Cabos de Aço, Cintas de Tração e Cabos de Manobra, sempre "código — descrição comercial".
+  const CORTE_DESCRICOES = {
+    'VPEL-484': ['aco', 'Cabo de Aço de Elevador 6*19S+FC 6MM (1/4 pol)'],
+    'VPEL-485': ['aco', 'Cabo de Aço de Elevador 8*19W+IWRC 6MM (1/4 pol)'],
+    'VPEL-694': ['aco', 'Cabo de Aço para Elevador 8*19W+IWRC 6MM (1/4 pol)'],
+    'VPEL-125': ['aco', 'Cabo de Aço de Elevador 8*19S+FC 8MM (5/16 pol)'],
+    'VPEL-692': ['aco', 'Cabo de Aço para Elevador 8*19S+FC 9,5MM (3/8 pol)'],
+    'VPEL-229': ['aco', 'Cabo de Aço de Elevador 8*19S+FC 12,7MM (1/2 pol)'],
+    'VPEL-693': ['aco', 'Cabo de Aço para Elevador 8*19S+FC 12,7MM (1/2 pol)'],
+    'VPEL-046': ['aco', 'Cabo de Aço de Elevador 8*19S+FC 13MM (1/2 pol)'],
+    'VPEL-048': ['aco', 'Cabo de Aço de Elevador 8*19S+FC 16MM (5/8 pol)'],
+    'SAO_OTAAA717X1': ['cinta', 'CINTA DE TRACAO PLANA 32KN LISA'],
+    'VPEL-115': ['cinta', 'Cinta de Tração de Elevador, Largura 30mm, com Ranhuras - Ref.: CCO'],
+    'VPEL-233': ['cinta', 'Cinta de Tração de Elevador 3.0x30 32kN, Lisa - Ref.: CCO'],
+    'VPEL-234': ['cinta', 'Cinta de Tração de Elevador 3.3x30 43kN, Lisa - Ref.: CCO'],
+    'VPEL-234N': ['cinta', 'Cinta de Tração de Elevador 3.3x30 43kN (Nacional), Lisa - Ref.: CCO'],
+    'VPEL-482': ['cinta', 'Cinta de Tração de Elevador (30 x 4,5mm) - Ref.: CCS'],
+    'VPEL-523': ['cinta', 'Cinta de Tração de Elevador (40 x 4,5mm) - Ref.: CCS'],
+    'VPEL-523N': ['cinta', 'Cinta de Tração de Elevador (40 x 4,5mm) (NACIONAL) - Ref.: CCS'],
+    'SAO_OT06MB132420': ['manobra', 'CABO DE MANOBRA CHATO'],
+    'VPEL-529N': ['manobra', 'Cabo Manobra Elétrico com 23 Vias para Elevador (NACIONAL) - Ref.: DRAKA'],
+    'VPB-086': ['manobra', 'Cabo de Comando Elétrico com 24 Vias'],
+  };
+  const CORTE_ROTULO = { aco: 'Cabo de Aço', cinta: 'Cinta de Tração', manobra: 'Cabo de Manobra' };
+  function semAcento(v) { return String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+
+  // Categoria do item de corte: pelo código do dicionário; senão pelo texto (descrição do cadastro ou título da OP). null = fora do escopo.
+  function categoriaCorte(codigo, texto) {
+    const d = CORTE_DESCRICOES[String(codigo || '').trim().toUpperCase()];
+    if (d) return d[0];
+    const t = semAcento(texto);
+    if (/cabo\s+de\s+aco|cabo\s+aco/.test(t)) return 'aco';
+    if (/cinta\s+de\s+tracao|cinta\s+tracao/.test(t)) return 'cinta';
+    if (/cabo\s+(de\s+)?(manobra|comando)/.test(t)) return 'manobra';
+    return null;
+  }
+  // Descrição comercial: dicionário vence; senão a do cadastro (pcp_produtos / catálogo Omie).
+  function descricaoCorte(codigo, descCadastro) {
+    const d = CORTE_DESCRICOES[String(codigo || '').trim().toUpperCase()];
+    return d ? d[1] : (descCadastro ? String(descCadastro) : '');
+  }
+  // "VPEL-692 — Cabo de Aço para Elevador ..." (só o código se não houver descrição).
+  function rotuloItemCorte(codigo, descCadastro) {
+    const d = descricaoCorte(codigo, descCadastro);
+    return d ? `${codigo} — ${d}` : String(codigo || '');
+  }
+
+  window.FabOficinaCalc = { progresso, etapaAtualId, pausado, unidadeDoTitulo, localizacaoDoItem, CORTE_DESCRICOES, CORTE_ROTULO, categoriaCorte, descricaoCorte, rotuloItemCorte };
 })();

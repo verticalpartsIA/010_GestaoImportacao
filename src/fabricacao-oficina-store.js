@@ -88,6 +88,19 @@
       c.from('pcp_pedidos').select('codigo_pedido, numero_pedido').in('codigo_pedido', [...new Set(lista.map((o) => o.pedido_codigo).filter((x) => x != null))]),
     ]);
     [st, oc, lk, sb2, pedidos].forEach((r) => { if (r.error) throw new Error(r.error.message); });
+    // Corte: descrição comercial do cadastro (PCP, senão catálogo de importação) — o dicionário do calc vence na tela.
+    const descCad = {};
+    if (destino === 'corte') {
+      const cods = [...new Set(lista.map((o) => o.item_codigo).filter(Boolean))];
+      if (cods.length) {
+        const [pp, iv] = await Promise.all([
+          c.from('pcp_produtos').select('codigo, descricao').in('codigo', cods),
+          c.from('importacao_varejo_produtos').select('codigo, descricao').in('codigo', cods),
+        ]);
+        (iv.data || []).forEach((r) => { if (r.descricao) descCad[r.codigo] = r.descricao; });
+        (pp.data || []).forEach((r) => { if (r.descricao) descCad[r.codigo] = r.descricao; });
+      }
+    }
     const numPedido = {};
     (pedidos.data || []).forEach((p) => { numPedido[p.codigo_pedido] = p.numero_pedido; });
     const porOrdem = (rows) => { const m = {}; (rows || []).forEach((r) => { (m[r.ordem_id] = m[r.ordem_id] || []).push(r); }); return m; };
@@ -101,6 +114,7 @@
         return {
           ...o,
           numero_pedido: numPedido[o.pedido_codigo] || null,
+          item_descricao: descCad[o.item_codigo] || null,
           etapas: (etapasCat || []).map((e) => ({ id: e.id, ordem: e.ordem, texto: e.texto, peso: e.peso,
             flegado: !!(feitos[e.id] && feitos[e.id].flegado), flegado_em: feitos[e.id] ? feitos[e.id].flegado_em : null, flegado_por: feitos[e.id] ? feitos[e.id].flegado_por : null })),
           ocorrencias: ocM[o.id] || [],

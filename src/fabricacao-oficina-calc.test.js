@@ -55,3 +55,16 @@ test('unidadeDoTitulo', () => {
   assert.deepEqual(C.unidadeDoTitulo('Corrimão X — unidade 2/3'), { n: 2, de: 3 });
   assert.equal(C.unidadeDoTitulo('Corrimão X'), null);
 });
+
+test('corte: escopo só cabo de aço, cinta de tração e cabo de manobra, com descrição comercial', () => {
+  assert.equal(C.categoriaCorte('VPEL-692'), 'aco');
+  assert.equal(C.categoriaCorte('vpel-234n'), 'cinta');
+  assert.equal(C.categoriaCorte('SAO_OT06MB132420'), 'manobra');
+  assert.equal(C.categoriaCorte('VPB-086'), 'manobra');
+  assert.equal(C.categoriaCorte('VPEL-999', 'Cabo de Aço 8x19 10MM'), 'aco');
+  assert.equal(C.categoriaCorte('VPEL-702b', 'Sistema de Comando para Elevador'), null);
+  assert.equal(C.rotuloItemCorte('VPEL-692', 'x'), 'VPEL-692 — Cabo de Aço para Elevador 8*19S+FC 9,5MM (3/8 pol)');
+  assert.equal(C.rotuloItemCorte('ABC', 'Descrição do cadastro'), 'ABC — Descrição do cadastro');
+  assert.equal(C.rotuloItemCorte('ABC', ''), 'ABC');
+  assert.equal(Object.keys(C.CORTE_DESCRICOES).length, 20);
+});
