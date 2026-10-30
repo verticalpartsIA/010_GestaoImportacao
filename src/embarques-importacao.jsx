@@ -198,7 +198,7 @@ function EIContainersMudou({ list, numeroCotacao, onChange }) {
   if (!dif) return null;
   const atualizar = () => {
     const rec = window.EmbSugestoesCalc.reconciliarContainers(list, dif.alvo, { numero: '', tipo_tamanho: '', lacre: '', peso: '', data_embarque: '', data_chegada: '' });
-    const comDados = rec.removidos.filter((c) => c.numero || c.lacre || c.peso);
+    const comDados = rec.removidos.filter((c) => c.numero || c.lacre || c.peso || c.data_embarque || c.data_chegada);
     if (comDados.length && !window.confirm(comDados.length + ' container(es) com número/lacre/peso serão retirados da lista. Continuar?')) return;
     onChange(rec.lista); setDif(null);
   };
