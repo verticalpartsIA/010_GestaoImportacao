@@ -34,6 +34,30 @@ const EIM_SEALINES = [
 function eiFmtDate(d) { return d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '—'; }
 function eiFmtMoeda(v, moeda) { return (v == null || v === '' || isNaN(v)) ? '—' : `${moeda || 'BRL'} ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`; }
 
+/* Sugestão de herança (Onda 2): mostra o valor sugerido e só preenche com o clique em "Aplicar". */
+function EISugestao({ sug, onAplicar }) {
+  if (!sug) return null;
+  return <div className="small" style={{ marginTop: 4, color: '#92400e' }}>
+    💡 Sugerido: <b>{sug.valor}</b> <span className="muted">({sug.motivo})</span>{' '}
+    <button type="button" className="btn btn--ghost btn--sm" onClick={() => onAplicar(sug.valor)}>Aplicar</button>
+  </div>;
+}
+
+/* Avisos de P.I. que não combinam entre si (Onda 1, 30/10/2026): moedas diferentes e Nºs de cotação diferentes.
+   O embarque só guarda UM Nº de cotação (o da primeira P.I. que tem) e UMA moeda para o total. */
+function EIAvisosPIs({ resumo }) {
+  const msgs = [];
+  if (resumo.moedasMistas) {
+    msgs.push('As P.I. vinculadas estão em moedas diferentes (' + Object.keys(resumo.totaisPorMoeda).map((m) => eiFmtMoeda(resumo.totaisPorMoeda[m], m)).join(' + ')
+      + '). O valor total gravado no embarque conta só as P.I. em ' + resumo.moeda + '.');
+  }
+  if ((resumo.cotacoesDistintas || []).length > 1) {
+    msgs.push('As P.I. vinculadas têm Nºs de cotação diferentes (' + resumo.cotacoesDistintas.join(', ') + '). O embarque usa o Nº ' + resumo.numeroCotacao + ' (da primeira).');
+  }
+  if (!msgs.length) return null;
+  return <div style={{ padding: '8px 12px', borderRadius: 6, background: '#fef3c7', color: '#92400e', fontSize: 12, marginBottom: 10 }}>{msgs.map((m, i) => <div key={i}>⚠ {m}</div>)}</div>;
+}
+
 /* ---------- PIs vinculadas (somente leitura — fonte é a P.I.) ---------- */
 function EIPIsVinculadas({ pis }) {
   const store = window.EmbarquesImportacaoStore;
@@ -44,6 +68,7 @@ function EIPIsVinculadas({ pis }) {
         <p className="small muted" style={{ textAlign: 'center', padding: '20px 0' }}>Nenhuma P.I. vinculada ainda. Vincule pela tela de P.I. (botão "Vincular embarque").</p>
       ) : (
         <div className="stack" style={{ gap: 8 }}>
+          <EIAvisosPIs resumo={resumo}/>
           <div className="grid-3" style={{ gap: 8, fontSize: 12 }}>
             <div><span className="muted">Fornecedores: </span>{resumo.fornecedores.join(', ') || '—'}</div>
             <div><span className="muted">Incoterms: </span>{resumo.incoterms.join(', ') || '—'}</div>
@@ -73,13 +98,24 @@ function EIPagamentos({ pis }) {
   if (pis.length === 0) return <Card title="Pagamentos"><p className="small muted" style={{ textAlign: 'center', padding: '20px 0' }}>Nenhuma P.I. vinculada. Os pagamentos aparecem aqui assim que uma P.I. for vinculada.</p></Card>;
   return (
     <Card title="Pagamentos" sub="Preenchidos automaticamente a partir das P.I. vinculadas — edite pela P.I.">
+      <EIAvisosPIs resumo={resumo}/>
       <div style={{ background: 'var(--vp-gray-50)', borderRadius: 6, padding: 10, marginBottom: 10 }}>
         <span className="small muted">Valor total do embarque: </span><b>{eiFmtMoeda(resumo.valorTotal, resumo.moeda)}</b>
+        {resumo.moedasMistas && <span className="small muted"> (só as P.I. em {resumo.moeda})</span>}
       </div>
       <div className="stack" style={{ gap: 8 }}>
         {pis.map((pi) => (
           <div key={pi.id} style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 10 }}>
             <div className="row sb"><b className="small">P.I. {pi.numero_pi}{pi.fornecedor ? ` — ${pi.fornecedor}` : ''}</b><span className="small">{eiFmtMoeda(pi.valor_total, pi.moeda)}</span></div>
+            {(() => {
+              /* Mesma conta da tela de P.I.: pagamentos próprios + transferências entre P.I. (PIStore.calcValorQuitado). */
+              const total = Number(pi.valor_total) || 0;
+              const quitado = window.PIStore ? window.PIStore.calcValorQuitado(pi) : null;
+              if (quitado == null || !total) return null;
+              const pct = Math.round((quitado / total) * 1000) / 10;
+              const falta = Math.max(0, total - quitado);
+              return <div className="small" style={{ marginTop: 6 }}>Pago: <b>{eiFmtMoeda(quitado, pi.moeda)}</b> ({pct.toLocaleString('pt-BR')}%) · Falta pagar: <b style={{ color: falta > 0.005 ? '#b45309' : '#15803d' }}>{eiFmtMoeda(falta, pi.moeda)}</b></div>;
+            })()}
             <div className="grid-2" style={{ gap: 8, marginTop: 6, fontSize: 12 }}>
               <div>1º pagto: {eiFmtDate(pi.data_primeiro_pagamento)} · {eiFmtMoeda(pi.valor_primeiro_pagamento, pi.moeda)}</div>
               <div>2º pagto: {eiFmtDate(pi.data_segundo_pagamento)} · {eiFmtMoeda(pi.valor_segundo_pagamento, pi.moeda)}</div>
@@ -148,6 +184,30 @@ function EIHerdarContainers({ numeroCotacaoConhecido, temContainers, onHerdar })
   );
 }
 
+/* Containers do embarque x Precificação (Onda 2): avisa quando a cotação mudou e oferece "Atualizar". */
+function EIContainersMudou({ list, numeroCotacao, onChange }) {
+  const [dif, setDif] = React.useState(null);
+  const chave = (list || []).map((c) => c.tipo_tamanho || '').join('|');
+  React.useEffect(() => {
+    let vivo = true; setDif(null);
+    const C = window.EmbSugestoesCalc; const store = window.EmbarquesImportacaoStore;
+    if (!C || !store || numeroCotacao == null || !(list || []).length) return undefined;
+    store.containersDaCotacao(numeroCotacao).then((r) => { if (vivo && r && r.linhas && r.linhas.length) setDif(C.containersDiff(list, r.linhas)); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [numeroCotacao, chave]);
+  if (!dif) return null;
+  const atualizar = () => {
+    const rec = window.EmbSugestoesCalc.reconciliarContainers(list, dif.alvo, { numero: '', tipo_tamanho: '', lacre: '', peso: '', data_embarque: '', data_chegada: '' });
+    const comDados = rec.removidos.filter((c) => c.numero || c.lacre || c.peso || c.data_embarque || c.data_chegada);
+    if (comDados.length && !window.confirm(comDados.length + ' container(es) com número/lacre/peso serão retirados da lista. Continuar?')) return;
+    onChange(rec.lista); setDif(null);
+  };
+  return <div className="small" style={{ background: '#fef3c7', color: '#92400e', borderRadius: 6, padding: '8px 12px', marginBottom: 10 }}>
+    💡 A cotação Nº {numeroCotacao} mudou: o embarque tem <b>{dif.atual}</b>, a cotação tem <b>{dif.cotacao}</b>.{' '}
+    <button type="button" className="btn btn--ghost btn--sm" onClick={atualizar}>Atualizar</button>
+  </div>;
+}
+
 /* ---------- Containers ---------- */
 function EIContainers({ containers, onChange, numeroCotacao, onNumeroCotacao }) {
   const list = containers || [];
@@ -160,6 +220,7 @@ function EIContainers({ containers, onChange, numeroCotacao, onNumeroCotacao }) 
         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Containers</h4>
         <Button variant="outline" size="sm" icon="plus" onClick={add}>Adicionar container</Button>
       </div>
+      <EIContainersMudou list={list} numeroCotacao={numeroCotacao} onChange={onChange}/>
       <EIHerdarContainers numeroCotacaoConhecido={numeroCotacao} temContainers={list.length > 0}
         onHerdar={(novos, numero) => { onChange([...list, ...novos]); if (numeroCotacao == null) onNumeroCotacao?.(numero); }}/>
       {list.length === 0 && <p className="small muted" style={{ textAlign: 'center', padding: '16px 0' }}>Nenhum container cadastrado.</p>}
@@ -215,7 +276,7 @@ function EINFes({ nfes, onChange }) {
 }
 
 /* ---------- Rolagens de ETD ---------- */
-function EIRolagens({ form, set }) {
+function EIRolagens({ form, set, setMany }) {
   const [nova, setNova] = React.useState({ nova_data: '', motivo: '', data_comunicacao: '' });
   const registrar = () => {
     if (!nova.nova_data) return;
@@ -225,6 +286,14 @@ function EIRolagens({ form, set }) {
     set('etd_atual')(nova.nova_data);
     set('houve_rolagem')(true);
     setNova({ nova_data: '', motivo: '', data_comunicacao: '' });
+    /* Sugestão (Onda 2): o ETA acompanha a rolagem. Só muda se a pessoa confirmar. */
+    const aj = window.EmbSugestoesCalc && window.EmbSugestoesCalc.ajusteEtaPorRolagem(anterior, nova.nova_data, form.eta_atual);
+    if (aj && setMany && window.confirm('A rolagem mudou o ETD em ' + (aj.dias > 0 ? '+' : '') + aj.dias + ' dia(s).\nAjustar também o ETA de ' + eiFmtDate(aj.de) + ' para ' + eiFmtDate(aj.para) + '?')) {
+      const RC2 = window.RolagensCalc; const h = form.historico_eta || [];
+      const novoHist = RC2 ? RC2.registrarMudancaEta(h, aj.de, aj.para,
+        { data_comunicacao: nova.data_comunicacao || new Date().toISOString().slice(0, 10), motivo: 'Acompanha a rolagem de ETD', por: (window.__VP_USER && window.__VP_USER.email) || '' }) : h;
+      setMany({ historico_eta: novoHist, eta_original: form.eta_original || aj.de, eta_atual: aj.para, eta_santos: aj.para });
+    }
   };
   /* Avisos de data suspeita (só avisam, nunca bloqueiam) — regra em rolagens-calc.js. */
   const RC = window.RolagensCalc;
@@ -391,6 +460,22 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
   });
   const [tab, setTab] = window.useRouteTab('embarques-importacao', 'identificacao', ['identificacao', 'pagamentos', 'frete', 'embarque', 'aduaneiro', 'faturamento', 'entrega']);
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
+  /* Sugestões de herança (Onda 2): só aparecem como dica com botão "Aplicar"; nada é gravado sozinho. */
+  const sugs = (() => {
+    const C = window.EmbSugestoesCalc; if (!C) return {};
+    const pagou = (pis || []).some((p) => window.PIStore && (window.PIStore.calcValorQuitado(p) || 0) > 0);
+    const vencedor = window.EmbFreteCalc && window.EmbFreteCalc.resumoVencedor ? window.EmbFreteCalc.resumoVencedor(form.cotacoes_frete) : null;
+    const freeDias = vencedor && vencedor.free_time != null && vencedor.free_time !== '' ? vencedor.free_time : form.free_time;
+    return {
+      status: C.statusEtapa(form, pagou, form.status_etapa),
+      tipo: C.tipoFrete(form.cotacoes_frete, form.tipo_frete),
+      modalidade: C.modalidade(window.EmbarquesImportacaoStore.resumoPIs(pis || []).incoterms, form.modalidade_frete),
+      tt: C.transitTimeTotal(form.etd_atual, form.presenca_carga, form.transit_time_total),
+      freeTime: C.ultimaDataFreeTime(form.presenca_carga, freeDias, form.ultima_data_free_time),
+      numerario: C.numerarioSugerido(form.custos_estimativa, form.numerario_desembaraco),
+      faturamento: C.faturamentoFrete(vencedor, form.faturamento_desembaraco),
+    };
+  })();
   const setMany = (patch) => setForm((f) => ({ ...f, ...patch }));
   const enviar = () => onSubmit({ ...form });
   // Mesma regra do _payload no store: P.I. vinculada manda; senão o que já
@@ -415,7 +500,8 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
             <label className="up-eyebrow muted">Nome do embarque (destaque)</label>
             <input className="input" style={{ fontSize: 16, fontWeight: 700 }} value={form.nome_embarque} onChange={(e) => set('nome_embarque')(e.target.value)} placeholder="Ex: Embarque China - Equipamentos Elétricos"/>
           </div>
-          <PIField label="Status da etapa"><PISelect value={form.status_etapa} onChange={set('status_etapa')} options={EI_STATUS}/></PIField>
+          <PIField label="Status da etapa"><PISelect value={form.status_etapa} onChange={set('status_etapa')} options={EI_STATUS}/>
+            <EISugestao sug={sugs.status} onAplicar={set('status_etapa')}/></PIField>
           {isEdit ? <EIPIsVinculadas pis={pis}/> : <p className="small muted">Salve o embarque para poder vincular P.I. a ele (pela tela de P.I.).</p>}
         </div>
       )}
@@ -438,6 +524,7 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
             </PIField>
             <PIField label="Redestinação"><PIInput value={form.redestinacao} onChange={set('redestinacao')}/></PIField>
             <PIField label="Data pedido redestinação"><PIInput type="date" value={form.data_pedido_redestinacao} onChange={set('data_pedido_redestinacao')}/></PIField>
+            <PIField label="Data carregamento (prontidão da carga)"><PIInput type="date" value={form.data_carregamento} onChange={set('data_carregamento')}/></PIField>
           </div>
           {form.awb_bl ? (
             <p className="small muted">
@@ -445,7 +532,7 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
               <b> Gestão Importação → Importação</b>.
             </p>
           ) : null}
-          <EIRolagens form={form} set={set}/>
+          <EIRolagens form={form} set={set} setMany={setMany}/>
           <EIEta form={form} setMany={setMany}/>
           <EIContainers containers={form.containers} onChange={set('containers')} numeroCotacao={numeroCotacaoEmbarque} onNumeroCotacao={set('numero_cotacao')}/>
         </div>
@@ -461,17 +548,25 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
           <hr style={{ border: 0, borderTop: '1px solid var(--border)' }}/>
           {temVencedor && <p className="small muted">🏆 Agente, cotação, transit time e free time abaixo vêm da cotação vencedora (editar lá em cima).</p>}
           <div className="grid-3" style={{ gap: 10 }}>
-            <PIField label="Tipo de frete"><PISelect value={form.tipo_frete} onChange={set('tipo_frete')} options={EI_TIPOS_FRETE}/></PIField>
-            <PIField label="Modalidade"><PISelect value={form.modalidade_frete} onChange={set('modalidade_frete')} options={EI_MODALIDADES}/></PIField>
+            <PIField label="Tipo de frete"><PISelect value={form.tipo_frete} onChange={set('tipo_frete')} options={EI_TIPOS_FRETE}/>
+              <EISugestao sug={sugs.tipo} onAplicar={set('tipo_frete')}/></PIField>
+            <PIField label="Modalidade"><PISelect value={form.modalidade_frete} onChange={set('modalidade_frete')} options={EI_MODALIDADES}/>
+              <EISugestao sug={sugs.modalidade} onAplicar={set('modalidade_frete')}/></PIField>
             <PIField label="Cotação frete"><input className="input" type="number" value={temVencedor ? (window.EmbFreteCalc.resumoVencedor(form.cotacoes_frete).cotacao_frete ?? '') : (form.cotacao_frete ?? '')} onChange={(e) => set('cotacao_frete')(e.target.value)} {...lockV}/></PIField>
-            <PIField label="Moeda frete"><PISelect value={temVencedor ? (window.EmbFreteCalc.resumoVencedor(form.cotacoes_frete).moeda_frete || form.moeda_frete) : form.moeda_frete} onChange={set('moeda_frete')} options={['USD', 'EUR', 'BRL', 'CNY', 'GBP']}/></PIField>
+            <PIField label="Moeda frete">
+              {temVencedor
+                ? <select className="input" disabled value={window.EmbFreteCalc.resumoVencedor(form.cotacoes_frete).moeda_frete || form.moeda_frete || ''}>{['USD', 'EUR', 'BRL', 'CNY', 'GBP'].map((m) => <option key={m} value={m}>{m}</option>)}</select>
+                : <PISelect value={form.moeda_frete} onChange={set('moeda_frete')} options={['USD', 'EUR', 'BRL', 'CNY', 'GBP']}/>}
+            </PIField>
             <PIField label="Transit time (dias)"><input className="input" type="number" value={temVencedor ? (window.EmbFreteCalc.resumoVencedor(form.cotacoes_frete).transit_time ?? '') : (form.transit_time ?? '')} onChange={(e) => set('transit_time')(e.target.value)} {...lockV}/></PIField>
             <PIField label="Free time (dias)"><input className="input" type="number" value={temVencedor ? (window.EmbFreteCalc.resumoVencedor(form.cotacoes_frete).free_time ?? '') : (form.free_time ?? '')} onChange={(e) => set('free_time')(e.target.value)} {...lockV}/></PIField>
             <PIField label="Pedido de booking"><PIInput type="date" value={form.pedido_booking} onChange={set('pedido_booking')}/></PIField>
             <PIField label="Aprovação do frete"><PISelect value={form.aprovacao_frete} onChange={set('aprovacao_frete')} options={['Pendente', 'Aprovado', 'Reprovado']}/></PIField>
           </div>
           <PIField label="Agente de carga / freight forwarder">
-            <PIInput value={temVencedor ? (window.EmbFreteCalc.vencedor(form.cotacoes_frete).agente || '') : form.agente_carga} onChange={set('agente_carga')} list="dl-agentes-carga-emb"/>
+            {temVencedor
+              ? <input className="input" disabled value={window.EmbFreteCalc.vencedor(form.cotacoes_frete).agente || ''}/>
+              : <PIInput value={form.agente_carga} onChange={set('agente_carga')} list="dl-agentes-carga-emb"/>}
             <CadFornecedorDatalist id="dl-agentes-carga-emb" categoria="Agente de Carga"/>
           </PIField>
         </div>
@@ -484,11 +579,13 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
             <PIField label="Ref. despachante"><PIInput value={form.referencia_despachante} onChange={set('referencia_despachante')}/></PIField>
             <PIField label="Custos/estimativa (R$)"><PIInput type="number" value={form.custos_estimativa} onChange={set('custos_estimativa')}/></PIField>
             <PIField label="Docs Marimex"><PIInput value={form.documentos_marimex} onChange={set('documentos_marimex')}/></PIField>
-            <PIField label="TT total (dias)"><PIInput type="number" value={form.transit_time_total} onChange={set('transit_time_total')}/></PIField>
+            <PIField label="TT total (dias)"><PIInput type="number" value={form.transit_time_total} onChange={set('transit_time_total')}/>
+              <EISugestao sug={sugs.tt} onAplicar={set('transit_time_total')}/></PIField>
             <PIField label="DUIMP"><PIInput value={form.di} onChange={set('di')}/></PIField>
             <PIField label="Data registro DUIMP"><PIInput type="date" value={form.data_registro_di} onChange={set('data_registro_di')}/></PIField>
             <PIField label="Canal parametrização"><PISelect value={form.canal_parametrizacao} onChange={set('canal_parametrizacao')} options={EI_CANAIS}/></PIField>
-            <PIField label="Última data free time"><PIInput type="date" value={form.ultima_data_free_time} onChange={set('ultima_data_free_time')}/></PIField>
+            <PIField label="Última data free time"><PIInput type="date" value={form.ultima_data_free_time} onChange={set('ultima_data_free_time')}/>
+              <EISugestao sug={sugs.freeTime} onAplicar={set('ultima_data_free_time')}/></PIField>
           </div>
           <div className="grid-3" style={{ gap: 10, marginTop: 14 }}>
             <PIField label="PRESENÇA DE CARGA"><PIInput type="date" value={form.presenca_carga} onChange={set('presenca_carga')}/></PIField>
@@ -511,13 +608,25 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
 
       {tab === 'faturamento' && (
         <div className="stack" style={{ gap: 12, marginTop: 14 }}>
+          {(() => {
+            const F = window.EmbFreteCalc; const v = F && F.vencedor ? F.vencedor(form.cotacoes_frete) : null;
+            if (!v) return null;
+            const t = F.totais ? F.totais(v.taxas) : { usd: 0, brl: 0 };
+            return <div className="small" style={{ background: 'var(--vp-gray-50)', borderRadius: 6, padding: 10 }}>
+              <b>Frete vencedor (aba Frete, só leitura):</b> {v.agente || '—'} · USD {Number(t.usd).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · R$ {Number(t.brl).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {(v.taxas || []).length > 0 && <> · taxas: {(v.taxas || []).map((x) => (x.descricao || 'taxa') + ' ' + (x.moeda || '') + ' ' + x.valor).join('; ')}</>}
+              {(v.anexos || []).length > 0 && <> · {(v.anexos || []).length} anexo(s)</>}
+            </div>;
+          })()}
           <div className="grid-3" style={{ gap: 10 }}>
             <PIField label="Empresa de desembaraço">
               <PIInput value={form.empresa_desembaraco} onChange={set('empresa_desembaraco')} list="dl-desembaraco-emb"/>
               <CadFornecedorDatalist id="dl-desembaraco-emb"/>
             </PIField>
-            <PIField label="Valor do faturamento (R$)"><PIInput type="number" value={form.faturamento_desembaraco} onChange={set('faturamento_desembaraco')}/></PIField>
-            <PIField label="Valor do numerário (R$)"><PIInput type="number" value={form.numerario_desembaraco} onChange={set('numerario_desembaraco')}/></PIField>
+            <PIField label="Valor do faturamento (R$)"><PIInput type="number" value={form.faturamento_desembaraco} onChange={set('faturamento_desembaraco')}/>
+              <EISugestao sug={sugs.faturamento} onAplicar={set('faturamento_desembaraco')}/></PIField>
+            <PIField label="Valor do numerário (R$)"><PIInput type="number" value={form.numerario_desembaraco} onChange={set('numerario_desembaraco')}/>
+              <EISugestao sug={sugs.numerario} onAplicar={set('numerario_desembaraco')}/></PIField>
             <PIField label="Valor do reembolso (R$)"><PIInput type="number" value={form.valor_reembolso} onChange={set('valor_reembolso')}/></PIField>
             <PIField label="Status do reembolso"><PISelect value={form.status_reembolso} onChange={set('status_reembolso')} options={EI_STATUS_REEMBOLSO}/></PIField>
             <PIField label="Data solicitação reembolso"><PIInput type="date" value={form.data_solicitacao_reembolso} onChange={set('data_solicitacao_reembolso')}/></PIField>
@@ -527,6 +636,7 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
             <label className="up-eyebrow muted">Observações financeiras</label>
             <textarea className="input" rows={3} value={form.observacoes_financeiras} onChange={(e) => set('observacoes_financeiras')(e.target.value)}/>
           </div>
+          <EINFes nfes={form.nfes} onChange={set('nfes')}/>
         </div>
       )}
 
@@ -535,11 +645,10 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
           <div className="grid-3" style={{ gap: 10 }}>
             <PIField label="Data limite entrega"><PIInput type="date" value={form.data_limite_entrega} onChange={set('data_limite_entrega')}/></PIField>
             <PIField label="Local de entrega"><PIInput value={form.local_entrega} onChange={set('local_entrega')}/></PIField>
-            <PIField label="Data carregamento"><PIInput type="date" value={form.data_carregamento} onChange={set('data_carregamento')}/></PIField>
             <PIField label="Data entrega"><PIInput type="date" value={form.data_entrega} onChange={set('data_entrega')}/></PIField>
             <PIField label="Devolução container"><PIInput type="date" value={form.devolucao_container} onChange={set('devolucao_container')}/></PIField>
           </div>
-          <EINFes nfes={form.nfes} onChange={set('nfes')}/>
+          <p className="small muted">Data entrega e Data limite entrega alimentam a Evolução dos Equipamentos (Mapa de Obras): ao alterar aqui, a etapa "Chegou na obra" muda lá.</p>
         </div>
       )}
 

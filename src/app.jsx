@@ -397,7 +397,7 @@ function App() {
       case "instalacao": return <InstalacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "mapa-obras": return <window.MapaObrasPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "central-documentos": return <window.CentralDocumentosPage setRoute={setRoute} setSubsel={setSubsel} subsel={subsel}/>;
-      case "art": return <ArtPage setRoute={setRoute}/>;
+      case "art": return <window.ObraArtPage/>;
       case "cronograma": return <CronogramaPage/>;
       case "databook": return <DataBookPage setRoute={setRoute}/>;
       case "handover": return <window.HandoverManutencaoPage/>;

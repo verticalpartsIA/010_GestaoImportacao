@@ -3,41 +3,12 @@
    ART · Cronograma de pagamento da instalação · Data Book / Termo
    ============================================================ */
 
-function ArtPage({ setRoute }) {
-  const irObras = () => setRoute && setRoute('status-obras');
-  return (
-    <div className="page fade-in">
-      <div className="page-head">
-        <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Obras &amp; Instalação · ART</div>
-          <h1 className="page-head__title">ART de Instalação</h1>
-          <p className="page-head__sub">As ARTs e demais documentos da obra são geridos por obra, na aba Documentos do Dossiê.</p>
-        </div>
-        <div className="page-head__r">
-          <Button variant="primary" icon="arrowRight" onClick={irObras}>Abrir obras</Button>
-        </div>
-      </div>
-      <div style={{ border: '1px solid var(--border)', background: 'var(--vp-gray-50)', padding: '32px', maxWidth: 760, margin: '8px auto 0' }}>
-        <p style={{ fontSize: 13, color: 'var(--fg1)', lineHeight: 1.8, margin: 0 }}>
-          Para guardar a ART de uma obra: emita a ART no site do CREA, baixe o PDF e anexe-o na aba
-          {' '}<b>Documentos</b> da <b>Dossiê da Obra</b> correspondente (VPEL-EL). No mesmo lugar ficam
-          {' '}Termo de Vistoria, DataBook, Alvará e Termo de Entrega Final — com checklist de prontidão por obra,
-          {' '}para quem precisar do documento só pegar e enviar.
-        </p>
-        <div style={{ marginTop: 16 }}>
-          <Button variant="outline" icon="briefcase" onClick={irObras}>Ir para a lista de obras</Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* Antes lia/gravava a tabela legada `projetos` (issue #274, desconectada
    da esteira real) — duplicava, pior, o que o Dossiê da Obra já faz: a
    aba Documentos já trata "DataBook" como um dos tipos de documento
    obrigatórios da obra (TIPOS_DOC_OBRA em dossier-obra.jsx), com
    checklist de prontidão. Vira redirect, mesmo padrão já usado por
-   ArtPage acima — achado "Importante" da auditoria de código. */
+   a antiga ArtPage — achado "Importante" da auditoria de código. */
 function DataBookPage({ setRoute }) {
   const irObras = () => setRoute && setRoute('status-obras');
   return (
@@ -386,4 +357,4 @@ function ModalNovoCronograma({ onClose, onSaved }) {
   );
 }
 
-Object.assign(window, { ArtPage, CronogramaPage, DataBookPage });
+Object.assign(window, { CronogramaPage, DataBookPage });
