@@ -1929,7 +1929,7 @@ function ModalGerarDistrato({ rec, onClose, onGerado }) {
       try {
         const parcelas = window.ContratoInstaladorParcelasStore ? await window.ContratoInstaladorParcelasStore.listarParcelas(rec.id) : [];
         if (!vivo) return;
-        const pago = (parcelas || []).filter((p) => p.status === 'pago').reduce((t, p) => t + (Number(p.valor) || 0), 0);
+        const pago = (parcelas || []).filter((p) => p.status === 'paga').reduce((t, p) => t + (Number(p.valor) || 0), 0);
         if (pago > 0) setValorTransfer(pago.toFixed(2).replace('.', ','));
       } catch (_) { /* best-effort — a pessoa digita na mão se falhar */ }
     })();

@@ -72,7 +72,7 @@ function CIContractPreview({ doc, highlightConditional, assinaturas, fila }) {
 
       <h1 className="ci-doc-title">{doc.titulo}</h1>
 
-      <p className="ci-doc-p ci-doc-intro">Pelo presente contrato de prestação de serviços, as partes a seguir nomeadas:</p>
+      <p className="ci-doc-p ci-doc-intro">{doc.ehDistrato ? 'Pelo presente instrumento de distrato, as partes a seguir nomeadas:' : 'Pelo presente contrato de prestação de serviços, as partes a seguir nomeadas:'}</p>
 
       <p className="ci-doc-p">
         <b>{ct.razaoSocial}</b>, inscrita no CNPJ/MF sob o nº {ct.cnpj}, com sede à {ct.endereco}, neste ato representada por <b>{ct.representante}</b>, {ct.repNacionalidade}, {ct.repEstadoCivil}, {ct.repProfissao}, portador do RG: {ct.repRG} e do CPF: {ct.repCPF}, com escritório no endereço acima mencionado, doravante denominada simplesmente <b>CONTRATANTE</b>
@@ -82,7 +82,9 @@ function CIContractPreview({ doc, highlightConditional, assinaturas, fila }) {
         <b>{cd.razao}</b>, inscrita no CNPJ sob o nº {cd.cnpj}, com sede à {cd.endereco}, neste ato representada nos termos de seu ato constitutivo por <b>{cd.responsavel}</b>, {cd.nacionalidade}, {cd.estadoCivil}, {cd.profissao}, portador da cédula de identidade RG de nº {cd.rg}, inscrito no CPF nº {cd.cpf}, residente e domiciliado na {cd.enderecoResp}, doravante denominada <b>CONTRATADA</b>,
       </p>
 
-      <p className="ci-doc-p">As partes acima identificadas têm, entre si, justo e acertado o presente Contrato de Prestação de Serviços Técnicos de Profissional Autônomo, que se regerá pelas cláusulas seguintes e pelas condições de preço, forma e termo de pagamento descritas no presente.</p>
+      <p className="ci-doc-p">{doc.ehDistrato
+        ? 'As partes acima identificadas têm, entre si, justo e acertado o presente Termo de Distrato, que se regerá pelas cláusulas seguintes.'
+        : 'As partes acima identificadas têm, entre si, justo e acertado o presente Contrato de Prestação de Serviços Técnicos de Profissional Autônomo, que se regerá pelas cláusulas seguintes e pelas condições de preço, forma e termo de pagamento descritas no presente.'}</p>
 
       {doc.clauses.map((c) => (
         <section key={c.id} className={'ci-doc-clause' + (c.conditional && highlightConditional ? ' ci-doc-clause--cond' : '')}>
@@ -94,7 +96,9 @@ function CIContractPreview({ doc, highlightConditional, assinaturas, fila }) {
         </section>
       ))}
 
-      <p className="ci-doc-p ci-doc-closing">E por estarem assim justos e contratados, as partes firmam o presente em 02 (duas) vias de igual teor e forma, na presença das testemunhas abaixo.</p>
+      <p className="ci-doc-p ci-doc-closing">{doc.ehDistrato
+        ? 'E por estarem assim justos e acordados, as partes firmam o presente distrato em 02 (duas) vias de igual teor e forma, na presença das testemunhas abaixo.'
+        : 'E por estarem assim justos e contratados, as partes firmam o presente em 02 (duas) vias de igual teor e forma, na presença das testemunhas abaixo.'}</p>
 
       <p className="ci-doc-p ci-doc-local">{doc.cidadeAssinatura}, {doc.dataDia} de {doc.dataMes} de {doc.dataAno}.</p>
 

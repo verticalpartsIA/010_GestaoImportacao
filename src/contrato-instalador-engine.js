@@ -800,6 +800,10 @@
     return {
       titulo: 'TERMO DE DISTRATO DE CONTRATO DE PRESTAÇÃO DE SERVIÇOS',
       numero,
+      /* CIContractPreview usa isto pra trocar o texto fixo de abertura/fecho — o
+         boilerplate de "firmar um contrato novo" contradiria o título e as
+         cláusulas (que dizem o oposto: estão DISTRATANDO um contrato existente). */
+      ehDistrato: true,
       contratante: CONTRATANTE,
       contratada: {
         razao: vBlank(s.c_razao, 'RAZÃO SOCIAL'),
