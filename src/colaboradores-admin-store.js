@@ -163,7 +163,7 @@
       { modulo: 'cadastro-fornecedores', label: 'Fornecedores' },
       { modulo: 'cadastro-materias-primas', label: 'Matérias-Primas' },
       { modulo: 'cadastro-produtos', label: 'Produtos' },
-      { modulo: 'ncm-catalogo', label: 'Produtos' },
+      { modulo: 'ncm-catalogo', label: 'Catálogo Siscomex' },
       { modulo: 'cadastro-instaladores', label: 'Empresas Instaladoras' },
       { modulo: 'cadastro-custos', label: 'Atualização de Custos' },
     ]},
@@ -321,7 +321,7 @@
     'Comercial | Pré-venda': ['formularios', 'controle-cotacoes', 'cotacoes-fornecedor', 'propostas', 'contratos-sociais'],
     'Financeiro & Preços': ['cadastro-custos', 'precificacao', 'aval-financeiro', 'emissao-nf'],
     'Contratos & Jurídico': ['contrato-venda-equipamentos', 'aval-juridico', 'juridico'],
-    'Suprimentos & Importação': ['importacao', 'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos', 'compras', 'cotacoes-varejo', 'pedidos-acompanhamento'],
+    'Suprimentos & Importação': ['importacao', 'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos', 'ncm-catalogo', 'compras', 'cotacoes-varejo', 'pedidos-acompanhamento'],
     'Engenharia & Produto': ['engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'solicitacoes-produto', 'ficha-tecnica', 'ncm-catalogo', 'linha-do-tempo'],
     /* 29/10/2026: 'cronograma' mudou de lugar no menu (ver shell.jsx) — fica também aqui.
        Mantido também em 'Obras & Instalação' de propósito, pra quem já tinha esse
