@@ -1272,6 +1272,10 @@ Diagnóstico read-only (12 fios rompidos, 7 em curto) e plano em `docs/superpowe
 - Ondas 2 (sugestões: modalidade pelo incoterm, free time, status da etapa, ETA após rolagem, containers, Faturamento) e 3 (presença de carga na Evolução, ETA do AIS) **não começaram**.
 - `embarques-importacao.jsx` v15. Testes: `embarques-importacao-resumo.test.js`. Não testado com clique real no navegador.
 
+## Embarques — Onda 2: sugestões com botão "Aplicar" (30/10/2026, local, não commitado)
+
+`src/embarques-sugestoes-calc.js` (`window.EmbSugestoesCalc`, funções puras, 5 testes) + componente `EISugestao` em `embarques-importacao.jsx` (v16). Mostra "💡 Sugerido: X (motivo) — Aplicar"; **nunca grava sozinho**. Feitas: T6 modalidade pelo incoterm da P.I. (só se todas apontam a mesma) e tipo "Marítimo" quando há cotação de frete; T7 última data de free time = presença de carga + dias de free time; T8 status da etapa pelos campos preenchidos (só avança); T9 só o **TT total** (ETD atual → presença de carga). **Não feitas ainda:** T9 ajuste do ETA após rolagem, T10 containers ressincronizar, T11 Faturamento herdando frete. Sem banco. Não testado com clique no navegador.
+
 ## Método de trabalho (regra do Gelson, 24/10/2026) — este CLAUDE.md é a CONSTITUIÇÃO
 
 Para trabalho novo de produto/telas/banco: **SPECIFY → CLARIFY → PLAN → TASKS → ANALYZE → IMPLEMENT**. Este arquivo é a constituição (regras permanentes e limites); os demais passos vão em `docs/superpowers/specs/<data>-<assunto>.md` (um arquivo por assunto, não arquivos soltos). Não se implementa antes de Specify/Clarify; migration/cron/deploy só com "CONFIRMO" dele depois de descrever o que será aplicado. Correção pequena e óbvia não precisa do ciclo inteiro.
