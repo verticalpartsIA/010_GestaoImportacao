@@ -602,6 +602,35 @@ function CardContratoInstalador({ dossier, setRoute }) {
   );
 }
 
+/* Handover (Entrega Final): a coluna `handover` (jsonb) mora na mesma linha de dossier_obra e é editada na tela
+   "Entrega Final" (/engenharia/handover/<id>). Este card só LÊ e leva até lá, pra quem está no Dossiê enxergar o estado. */
+function CardHandover({ dossier }) {
+  const [h, setH] = React.useState(undefined); // undefined = carregando, null = sem handover
+  React.useEffect(() => {
+    let vivo = true;
+    const c = window.__VP_SB && window.__VP_SB.sb;
+    if (!c) { setH(null); return; }
+    c.from('dossier_obra').select('handover').eq('id', dossier.id).maybeSingle()
+      .then(({ data }) => { if (vivo) setH((data && data.handover) || null); });
+    return () => { vivo = false; };
+  }, [dossier.id]);
+  if (h === undefined) return null;
+  const estado = !h ? 'Aguardando handover' : h.escamax_transferido ? 'Transferido para a Escamax' : 'Handover registrado';
+  const fmt = (iso) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : null; };
+  const garantia = h && fmt(h.data_fim_garantia);
+  const abrir = () => { if (window.pcpIrParaUrl) window.pcpIrParaUrl('/engenharia/handover/' + encodeURIComponent(dossier.id)); };
+  return (
+    <div style={{ background: 'var(--vp-gray-100)', border: '1px solid var(--border)', borderRadius: 6, padding: 16 }}>
+      <div style={{ fontSize: 12, color: 'var(--fg2)', textTransform: 'uppercase', marginBottom: 8 }}>Entrega Final (Handover)</div>
+      <div style={{ fontSize: 13, fontWeight: 600 }}>{estado}</div>
+      {garantia && <div style={{ fontSize: 12, color: 'var(--fg2)', marginTop: 2 }}>Garantia até {garantia}</div>}
+      <div style={{ marginTop: 10 }}>
+        <Button variant="outline" size="small" onClick={abrir}>Abrir em Entrega Final →</Button>
+      </div>
+    </div>
+  );
+}
+
 function TabVisaoGeral({ dossier, setModalOpen, reload, setRoute }) {
   const pendenciasAtivas = dossier.pendencias?.filter(p => !p.resolved_at) || [];
   const pendenciaBloqueante = pendenciasAtivas.some(p => p.bloqueante);
@@ -709,6 +738,7 @@ function TabVisaoGeral({ dossier, setModalOpen, reload, setRoute }) {
       </div>
 
       <CardContratoInstalador dossier={dossier} setRoute={setRoute} />
+      <CardHandover dossier={dossier} />
 
       {/* PENDÊNCIAS */}
       <div style={{
