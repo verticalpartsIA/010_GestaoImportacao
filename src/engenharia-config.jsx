@@ -343,8 +343,8 @@ function ConfiguradorPage({ setRoute }) {
   const [specs, setSpecs] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [filter, setFilter] = React.useState("Todos");
-  const [edit, setEdit] = React.useState(null);
-  const [showModal, setShowModal] = React.useState(false);
+  /* O projeto aberto vive na URL (/engenharia/eng-configurador/<id> ou /novo): F5, link direto e Voltar/Avançar funcionam. */
+  const [idUrl, setIdUrl] = window.useRotaId("eng-configurador");
 
   const reload = React.useCallback(() => {
     setLoading(true);
@@ -355,6 +355,8 @@ function ConfiguradorPage({ setRoute }) {
 
   if (loading) return <div style={{ textAlign: "center", padding: "60px 0", color: "var(--fg3)", fontSize: 13 }}>Carregando…</div>;
 
+  const edit = idUrl && idUrl !== "novo" ? (specs.find(x => String(x.id) === String(idUrl)) || null) : null;
+  const showModal = idUrl === "novo" || !!edit;
   const tipos = ["Todos", "escada_rolante", "esteira_rolante"];
   const rows = specs.filter(s => filter === "Todos" || s.tipo === filter);
 
@@ -367,7 +369,7 @@ function ConfiguradorPage({ setRoute }) {
           <p className="page-head__sub">Especificação técnica de escadas e esteiras rolantes — com desenho e anexos — para orientar a compra do equipamento correto.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="primary" icon="plus" onClick={() => { setEdit(null); setShowModal(true); }}>Novo projeto de equipamento</Button>
+          <Button variant="primary" icon="plus" onClick={() => setIdUrl("novo")}>Novo projeto de equipamento</Button>
         </div>
       </div>
 
@@ -395,7 +397,7 @@ function ConfiguradorPage({ setRoute }) {
               <tr><td colSpan={99}><div className="empty"><h4>Nenhum equipamento configurado</h4><p>Clique em "Novo projeto de equipamento" para especificar uma escada ou esteira rolante.</p></div></td></tr>
             )}
             {rows.map(s => (
-              <tr key={s.id} style={{ cursor: "pointer" }} onClick={() => { setEdit(s); setShowModal(true); }}>
+              <tr key={s.id} style={{ cursor: "pointer" }} onClick={() => setIdUrl(s.id)}>
                 <td><div className="cell-main">{s.referencia || "—"}</div><div className="cell-sub">{s.id}{s.responsavel ? ` · ${s.responsavel}` : ""}</div></td>
                 <td>{tipoLabel(s.tipo)}</td>
                 <td><span className="small">{eqResumo(s.tipo, s.params || {})}</span></td>
@@ -410,7 +412,7 @@ function ConfiguradorPage({ setRoute }) {
       </div>
       </Card>
 
-      {showModal && <ConfiguradorModal spec={edit} onClose={() => { setShowModal(false); setEdit(null); }} onSaved={reload}/>}
+      {showModal && <ConfiguradorModal spec={edit} onClose={() => setIdUrl(null)} onSaved={reload}/>}
     </div>
   );
 }
