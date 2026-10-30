@@ -1710,6 +1710,140 @@ async function ciReenviar(rec, abrir) {
   }
 }
 
+/* "Assinaturas digitais" (a Contratada/instalador, só a revisão ATUAL) + fila
+   da VerticalParts p/ renderizar o documento — mesma montagem que CIDocViewer
+   já faz pra "Visualizar documento", reaproveitada pro "Baixar contrato". */
+async function ciAssinaturasEFila(rec) {
+  const au = rec.audit || {};
+  const assinaturas = au.signedAt
+    ? [{ papel: 'Contratada (instalador)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }]
+    : [];
+  let fila = [];
+  try { fila = (await window.DocumentoSignatariosStore.listarPorDocumento('contrato_instalador', rec.id) || []).filter((x) => x.status !== 'expirado'); }
+  catch (_) { fila = []; }
+  return { assinaturas, fila };
+}
+
+/* Botão "Baixar contrato" (download em PDF) — 30/10/2026.
+   Não há motor react-pdf pra este contrato (diferente de Contrato de Venda/
+   Proposta); reaproveita o MESMO renderizador (`CIContractPreview`) já usado
+   em "Visualizar documento"/impressão nativa, montado fora da tela com a
+   classe `.ci-print-doc` já existente (posição absoluta, não `display:none` —
+   precisa de layout de verdade pro html2canvas capturar, mesmo motivo
+   documentado no CSS pro print da página pública), e gera um PDF de verdade
+   com html2canvas + jsPDF, paginando por bloco atômico (cláusula, bloco de
+   assinatura, bloco de assinaturas digitais, testemunhas) — nunca corta um
+   desses ao meio entre 2 páginas. Mesmo algoritmo do "Salvar PDF" da Ficha
+   Técnica (`ficha-tecnica.jsx`), só com as classes do documento do Instalador.
+   Funciona em qualquer status (inclusive assinado, trazendo o bloco de
+   assinaturas digitais com IP/dispositivo/hash — REGRA TRAVADA, ver
+   CLAUDE.md) — nada aqui grava ou altera nada no banco. */
+async function ciBaixarPdf(recLeve) {
+  if (!window.html2canvas || !window.jspdf) {
+    window.toast ? window.toast('Biblioteca de PDF ainda carregando — tente de novo em instantes.', 'warning') : alert('Biblioteca de PDF ainda carregando — tente de novo em instantes.');
+    return;
+  }
+  let container = null;
+  let root = null;
+  try {
+    // o painel (lista) não carrega doc/form_state — busca o registro completo
+    let rec = recLeve;
+    if (!rec || !rec.doc) rec = await window.CIStore.getById(recLeve.id);
+    if (!rec || !rec.doc || !rec.doc.clauses) throw new Error('Documento ainda não disponível para este contrato.');
+
+    const { assinaturas, fila } = await ciAssinaturasEFila(rec);
+
+    container = document.createElement('div');
+    container.className = 'ci-print-doc';
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
+    await new Promise((resolve) => {
+      root.render(<window.CIContractPreview doc={rec.doc} assinaturas={assinaturas} fila={fila} />);
+      // 2 ticks de rAF pro React montar e o layout "de verdade" assentar antes
+      // do html2canvas capturar (mesmo cuidado do "Salvar PDF" da Ficha Técnica).
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
+
+    const sheetEl = container.querySelector('.ci-doc-sheet');
+    if (!sheetEl) throw new Error('Não foi possível montar o documento para exportação.');
+
+    // Contrato longo existe de verdade (já teve 1 de 16 páginas, ver o
+    // comentário de assinar-app.jsx sobre o "contrato de 16 páginas") —
+    // capturar tudo num canvas só, sempre em scale:2, passaria do limite real
+    // de altura de canvas do Chromium (~32.767 px) bem no contrato em que
+    // mais importa ter o PDF. Reduz a escala só o necessário pra nunca estourar
+    // esse teto; a paginação abaixo deriva tudo do canvas de verdade (pxPerMm/
+    // pageHeightPx), então se adapta sozinha a qualquer escala usada aqui.
+    const sheetBox = sheetEl.getBoundingClientRect();
+    const MAX_CANVAS_ALTURA_PX = 28000;
+    const scale = Math.min(2, MAX_CANVAS_ALTURA_PX / Math.max(1, sheetBox.height));
+    const canvas = await window.html2canvas(sheetEl, { scale, useCORS: true, backgroundColor: '#ffffff', logging: false });
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
+    const pw = pdf.internal.pageSize.getWidth();
+    const ph = pdf.internal.pageSize.getHeight();
+    const pxPerMm = canvas.width / pw;
+    const pageHeightPx = Math.round(ph * pxPerMm);
+
+    // blocos "atômicos" — nunca partidos ao meio entre 2 páginas
+    const cssToCanvas = canvas.width / sheetBox.width;
+    const atoms = Array.from(sheetEl.querySelectorAll('.ci-doc-clause, .ci-doc-sign-block, .ci-doc-digital, .ci-doc-witness'))
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        return { top: Math.round((r.top - sheetBox.top) * cssToCanvas), bottom: Math.round((r.bottom - sheetBox.top) * cssToCanvas) };
+      })
+      .filter((a) => a.bottom > 0)
+      .sort((a, b) => a.top - b.top);
+
+    const finalCuts = [0];
+    let pageStart = 0;
+    for (const atom of atoms) {
+      if (atom.bottom <= pageStart) continue;
+      if (atom.bottom - pageStart > pageHeightPx) {
+        if (atom.top > pageStart) { finalCuts.push(atom.top); pageStart = atom.top; }
+        while (atom.bottom - pageStart > pageHeightPx) { pageStart += pageHeightPx; finalCuts.push(pageStart); }
+      }
+    }
+    finalCuts.push(canvas.height);
+    if (finalCuts.length > 2) {
+      const lastH = finalCuts[finalCuts.length - 1] - finalCuts[finalCuts.length - 2];
+      if (lastH < pageHeightPx * 0.25) finalCuts.splice(finalCuts.length - 2, 1);
+    }
+
+    let first = true;
+    for (let i = 1; i < finalCuts.length; i++) {
+      const cursor = finalCuts[i - 1];
+      const cut = finalCuts[i];
+      const sliceH = cut - cursor;
+      if (sliceH <= 0) continue;
+      const sliceCanvas = document.createElement('canvas');
+      sliceCanvas.width = canvas.width;
+      sliceCanvas.height = sliceH;
+      const ctx = sliceCanvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+      ctx.drawImage(canvas, 0, cursor, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+      const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.97);
+      if (!first) pdf.addPage();
+      first = false;
+      const naturalH = sliceH / pxPerMm;
+      const drawH = Math.min(ph, naturalH);
+      const drawW = pw * (drawH / naturalH);
+      const offsetX = (pw - drawW) / 2;
+      pdf.addImage(sliceData, 'JPEG', offsetX, 0, drawW, drawH, undefined, 'FAST');
+    }
+
+    const nomeBase = (rec.numero_documento || 'Contrato').replace(/[\\/:*?"<>|]+/g, '-');
+    pdf.save(nomeBase + '-Contrato.pdf');
+  } catch (e) {
+    console.error('PDF do Contrato do Instalador falhou:', e);
+    window.toast ? window.toast('Não foi possível gerar o PDF: ' + (e.message || e), 'error') : alert('Não foi possível gerar o PDF: ' + (e.message || e));
+  } finally {
+    if (root) root.unmount();
+    if (container) container.remove();
+  }
+}
+
 /* Fila de assinaturas da VerticalParts depois que o Contratado assinou (16/10/2026): Diego → Juliana → Maurício. Só leitura + reenviar o aviso da vez. */
 function CIFilaAssinaturas({ rec, podeEditar }) {
   const [linhas, setLinhas] = _ciUS([]);
@@ -1745,6 +1879,12 @@ function CIFilaAssinaturas({ rec, podeEditar }) {
 function CIAuditDrawer({ rec, onClose, onResend, onRefresh, onEditar }) {
   const a = rec.audit || {};
   const [ver, setVer] = _ciUS(undefined);   // undefined = fechado; null = revisão atual; número = revisão anterior
+  const [baixando, setBaixando] = _ciUS(false);
+  const baixarPdf = async () => {
+    if (baixando) return;
+    setBaixando(true);
+    try { await ciBaixarPdf(rec); } finally { setBaixando(false); }
+  };
   const del = async () => {
     if (!window.confirm('Excluir este rascunho? Esta ação não pode ser desfeita.')) return;
     try {
@@ -1843,6 +1983,7 @@ function CIAuditDrawer({ rec, onClose, onResend, onRefresh, onEditar }) {
             <h3 className="ci-drawer-sec-title">Ações</h3>
             <div className="ci-drawer-actions">
               <button className="ci-btn ci-btn--ghost" onClick={() => setVer(null)}>Visualizar documento</button>
+              <button className="ci-btn ci-btn--ghost" onClick={baixarPdf} disabled={baixando}>{baixando ? 'Gerando PDF…' : '⬇ Baixar contrato'}</button>
               {podeAnular && onEditar && <button className="ci-btn ci-btn--ghost" onClick={() => onEditar(rec)}>Editar documento{rec.status === 'rascunho' ? '' : ' (cria nova revisão)'}</button>}
               {rec.status !== 'rascunho' && <a className="ci-btn ci-btn--ghost" href={signUrl} target="_blank" rel="noopener">Abrir link de assinatura ↗</a>}
               {(rec.status === 'enviado' || rec.status === 'visualizado' || rec.status === 'expirado' || rec.status === 'rascunho') &&
@@ -1934,6 +2075,12 @@ function CIDashboard() {
   }, []);
 
   const [editRec, setEditRec] = _ciUS(null);
+  const [baixandoId, setBaixandoId] = _ciUS(null);
+  const baixarPdfDaLinha = async (c) => {
+    if (baixandoId) return;
+    setBaixandoId(c.id);
+    try { await ciBaixarPdf(c); } finally { setBaixandoId(null); }
+  };
   const drawerRec = drawerId ? contracts.find(c => c.id === drawerId) : null;
   const [fullRec, setFullRec] = _ciUS(null);   // registro completo (doc, form_state, revisao, revisoes) — a lista do painel não carrega esses campos
   _ciUE(() => {
@@ -2018,6 +2165,7 @@ function CIDashboard() {
                   <td onClick={(e) => e.stopPropagation()}>
                     <div className="ci-cell-actions">
                       <button className="ci-icon-btn" title="Auditoria" onClick={() => setDrawerId(c.id)}>👁</button>
+                      <button className="ci-icon-btn" title="Baixar contrato (PDF)" disabled={baixandoId === c.id} onClick={() => baixarPdfDaLinha(c)}>{baixandoId === c.id ? '⏳' : '⬇'}</button>
                       {c.status !== 'rascunho' && <a className="ci-icon-btn" title="Abrir assinatura" href={window.CIStore.signUrl(c.token)} target="_blank" rel="noopener">🔗</a>}
                       {(c.status === 'enviado' || c.status === 'visualizado' || c.status === 'rascunho' || c.status === 'expirado') &&
                         <button className="ci-mini-btn" onClick={() => ciReenviar(c, (r) => { setSendRec(r); refresh(); })}>{c.status === 'rascunho' ? 'Enviar' : 'Reenviar'}</button>}
