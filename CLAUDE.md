@@ -1261,6 +1261,17 @@ Pedido do usuário via `formularioEscadas.md` (planilha técnica de Escaladores/
 - Testes: `src/formulario-elevador-escada-calc.test.js` (3, extração por eval do mesmo jeito que `proposta-preview-espec.test.js` já fazia — o arquivo é JSX/UMD de browser, sem `module.exports`). Suíte completa 852/852. `index.html`: `router.js` v36→37, `shell.jsx` v126→127, `app.jsx` v108→109, `formulario-elevador.jsx` v22→23; `formulario-cliente.html`: `formulario-elevador.jsx` v42→43. `docs/MAPA_DE_ROTAS.md` regenerado (90 rotas, 0 inconsistências).
 - **Não testado com clique real no navegador** — validado por `@babel/standalone` (transform limpo em `formulario-elevador.jsx`/`app.jsx`/`shell.jsx`), `npm test` e `node scripts/check-cache-bust.js origin/main`.
 
+## Embarques de Importação — conectividade entre as 7 abas, Onda 1 (30/10/2026, local, não commitado)
+
+Diagnóstico read-only (12 fios rompidos, 7 em curto) e plano em `docs/superpowers/specs/2026-10-30-embarques-conectividade-abas.md` (3 ondas). **Onda 1 feita**, só front, sem banco:
+- Aba Frete: com cotação **vencedora**, Agente de carga e Moeda frete ficam travados (antes aceitavam digitação que o salvar descartava).
+- `resumoPIs` (`embarques-importacao-store.js` v14): o total gravado soma só as P.I. na **moeda da primeira**; `totaisPorMoeda`, `moedasMistas` e `cotacoesDistintas` alimentam um aviso amarelo (Identificação e Pagamentos). O embarque continua guardando UM Nº de cotação (o da primeira P.I. que tem).
+- Pagamentos mostra "Pago / % / Falta pagar" por P.I. (`PIStore.calcValorQuitado`, que já considera transferências entre P.I.).
+- `data_carregamento` foi da aba Entrega para Embarque e as NF-e da Entrega para Faturamento (mesmas colunas e gatilhos; só mudou onde são desenhadas).
+- **Decisões do Gelson:** Presença de carga = chegada **real** (a Onda 3 fará Evolução/Linha do Tempo usarem ela; hoje ninguém a lê); ETA do AIS: **só não apagar** (nada de mexer em `ais-sync`); heranças **sugerem com botão**, nunca gravam sozinhas.
+- Ondas 2 (sugestões: modalidade pelo incoterm, free time, status da etapa, ETA após rolagem, containers, Faturamento) e 3 (presença de carga na Evolução, ETA do AIS) **não começaram**.
+- `embarques-importacao.jsx` v15. Testes: `embarques-importacao-resumo.test.js`. Não testado com clique real no navegador.
+
 ## Método de trabalho (regra do Gelson, 24/10/2026) — este CLAUDE.md é a CONSTITUIÇÃO
 
 Para trabalho novo de produto/telas/banco: **SPECIFY → CLARIFY → PLAN → TASKS → ANALYZE → IMPLEMENT**. Este arquivo é a constituição (regras permanentes e limites); os demais passos vão em `docs/superpowers/specs/<data>-<assunto>.md` (um arquivo por assunto, não arquivos soltos). Não se implementa antes de Specify/Clarify; migration/cron/deploy só com "CONFIRMO" dele depois de descrever o que será aplicado. Correção pequena e óbvia não precisa do ciclo inteiro.
