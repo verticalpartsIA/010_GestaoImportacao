@@ -34,6 +34,15 @@ const EIM_SEALINES = [
 function eiFmtDate(d) { return d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '—'; }
 function eiFmtMoeda(v, moeda) { return (v == null || v === '' || isNaN(v)) ? '—' : `${moeda || 'BRL'} ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`; }
 
+/* Sugestão de herança (Onda 2): mostra o valor sugerido e só preenche com o clique em "Aplicar". */
+function EISugestao({ sug, onAplicar }) {
+  if (!sug) return null;
+  return <div className="small" style={{ marginTop: 4, color: '#92400e' }}>
+    💡 Sugerido: <b>{sug.valor}</b> <span className="muted">({sug.motivo})</span>{' '}
+    <button type="button" className="btn btn--ghost btn--sm" onClick={() => onAplicar(sug.valor)}>Aplicar</button>
+  </div>;
+}
+
 /* Avisos de P.I. que não combinam entre si (Onda 1, 30/10/2026): moedas diferentes e Nºs de cotação diferentes.
    O embarque só guarda UM Nº de cotação (o da primeira P.I. que tem) e UMA moeda para o total. */
 function EIAvisosPIs({ resumo }) {
@@ -418,6 +427,20 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
   });
   const [tab, setTab] = window.useRouteTab('embarques-importacao', 'identificacao', ['identificacao', 'pagamentos', 'frete', 'embarque', 'aduaneiro', 'faturamento', 'entrega']);
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
+  /* Sugestões de herança (Onda 2): só aparecem como dica com botão "Aplicar"; nada é gravado sozinho. */
+  const sugs = (() => {
+    const C = window.EmbSugestoesCalc; if (!C) return {};
+    const pagou = (pis || []).some((p) => window.PIStore && (window.PIStore.calcValorQuitado(p) || 0) > 0);
+    const vencedor = window.EmbFreteCalc && window.EmbFreteCalc.resumoVencedor ? window.EmbFreteCalc.resumoVencedor(form.cotacoes_frete) : null;
+    const freeDias = vencedor && vencedor.free_time != null && vencedor.free_time !== '' ? vencedor.free_time : form.free_time;
+    return {
+      status: C.statusEtapa(form, pagou, form.status_etapa),
+      tipo: C.tipoFrete(form.cotacoes_frete, form.tipo_frete),
+      modalidade: C.modalidade(window.EmbarquesImportacaoStore.resumoPIs(pis || []).incoterms, form.modalidade_frete),
+      tt: C.transitTimeTotal(form.etd_atual, form.presenca_carga, form.transit_time_total),
+      freeTime: C.ultimaDataFreeTime(form.presenca_carga, freeDias, form.ultima_data_free_time),
+    };
+  })();
   const setMany = (patch) => setForm((f) => ({ ...f, ...patch }));
   const enviar = () => onSubmit({ ...form });
   // Mesma regra do _payload no store: P.I. vinculada manda; senão o que já
@@ -442,7 +465,8 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
             <label className="up-eyebrow muted">Nome do embarque (destaque)</label>
             <input className="input" style={{ fontSize: 16, fontWeight: 700 }} value={form.nome_embarque} onChange={(e) => set('nome_embarque')(e.target.value)} placeholder="Ex: Embarque China - Equipamentos Elétricos"/>
           </div>
-          <PIField label="Status da etapa"><PISelect value={form.status_etapa} onChange={set('status_etapa')} options={EI_STATUS}/></PIField>
+          <PIField label="Status da etapa"><PISelect value={form.status_etapa} onChange={set('status_etapa')} options={EI_STATUS}/>
+            <EISugestao sug={sugs.status} onAplicar={set('status_etapa')}/></PIField>
           {isEdit ? <EIPIsVinculadas pis={pis}/> : <p className="small muted">Salve o embarque para poder vincular P.I. a ele (pela tela de P.I.).</p>}
         </div>
       )}
@@ -489,8 +513,10 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
           <hr style={{ border: 0, borderTop: '1px solid var(--border)' }}/>
           {temVencedor && <p className="small muted">🏆 Agente, cotação, transit time e free time abaixo vêm da cotação vencedora (editar lá em cima).</p>}
           <div className="grid-3" style={{ gap: 10 }}>
-            <PIField label="Tipo de frete"><PISelect value={form.tipo_frete} onChange={set('tipo_frete')} options={EI_TIPOS_FRETE}/></PIField>
-            <PIField label="Modalidade"><PISelect value={form.modalidade_frete} onChange={set('modalidade_frete')} options={EI_MODALIDADES}/></PIField>
+            <PIField label="Tipo de frete"><PISelect value={form.tipo_frete} onChange={set('tipo_frete')} options={EI_TIPOS_FRETE}/>
+              <EISugestao sug={sugs.tipo} onAplicar={set('tipo_frete')}/></PIField>
+            <PIField label="Modalidade"><PISelect value={form.modalidade_frete} onChange={set('modalidade_frete')} options={EI_MODALIDADES}/>
+              <EISugestao sug={sugs.modalidade} onAplicar={set('modalidade_frete')}/></PIField>
             <PIField label="Cotação frete"><input className="input" type="number" value={temVencedor ? (window.EmbFreteCalc.resumoVencedor(form.cotacoes_frete).cotacao_frete ?? '') : (form.cotacao_frete ?? '')} onChange={(e) => set('cotacao_frete')(e.target.value)} {...lockV}/></PIField>
             <PIField label="Moeda frete">
               {temVencedor
@@ -518,11 +544,13 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
             <PIField label="Ref. despachante"><PIInput value={form.referencia_despachante} onChange={set('referencia_despachante')}/></PIField>
             <PIField label="Custos/estimativa (R$)"><PIInput type="number" value={form.custos_estimativa} onChange={set('custos_estimativa')}/></PIField>
             <PIField label="Docs Marimex"><PIInput value={form.documentos_marimex} onChange={set('documentos_marimex')}/></PIField>
-            <PIField label="TT total (dias)"><PIInput type="number" value={form.transit_time_total} onChange={set('transit_time_total')}/></PIField>
+            <PIField label="TT total (dias)"><PIInput type="number" value={form.transit_time_total} onChange={set('transit_time_total')}/>
+              <EISugestao sug={sugs.tt} onAplicar={set('transit_time_total')}/></PIField>
             <PIField label="DUIMP"><PIInput value={form.di} onChange={set('di')}/></PIField>
             <PIField label="Data registro DUIMP"><PIInput type="date" value={form.data_registro_di} onChange={set('data_registro_di')}/></PIField>
             <PIField label="Canal parametrização"><PISelect value={form.canal_parametrizacao} onChange={set('canal_parametrizacao')} options={EI_CANAIS}/></PIField>
-            <PIField label="Última data free time"><PIInput type="date" value={form.ultima_data_free_time} onChange={set('ultima_data_free_time')}/></PIField>
+            <PIField label="Última data free time"><PIInput type="date" value={form.ultima_data_free_time} onChange={set('ultima_data_free_time')}/>
+              <EISugestao sug={sugs.freeTime} onAplicar={set('ultima_data_free_time')}/></PIField>
           </div>
           <div className="grid-3" style={{ gap: 10, marginTop: 14 }}>
             <PIField label="PRESENÇA DE CARGA"><PIInput type="date" value={form.presenca_carga} onChange={set('presenca_carga')}/></PIField>
