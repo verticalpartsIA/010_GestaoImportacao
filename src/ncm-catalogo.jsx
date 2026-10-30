@@ -109,7 +109,7 @@ function nextOpCodigo(list) {
 /* ---------- MODAL: Novo Produto do Catálogo ---------- */
 function ModalProdutoCatalogo({ operadores, proximoCodigo, onClose, onSaved }) {
   const [f, setF] = React.useState({
-    cpf_cnpj_raiz:"54123456", modalidade:"IMPORTACAO", ncm:"", ncm_descricao:"",
+    cpf_cnpj_raiz:"15822325", modalidade:"IMPORTACAO", ncm:"", ncm_descricao:"",
     denominacao:"", detalhamento:"", unidade_medida:"UNIDADE", codigo_interno:"",
   });
   const [atributos, setAtributos] = React.useState([]);
@@ -155,7 +155,7 @@ function ModalProdutoCatalogo({ operadores, proximoCodigo, onClose, onSaved }) {
         <div className="up-eyebrow muted" style={{ fontSize:9, letterSpacing:".08em" }}>Dados não retificáveis</div>
         <div className="grid-3" style={{ gap:12 }}>
           <div className="stack" style={{ gap:4 }}>{lbl("CNPJ raiz", true)}
-            <input className="input" value={f.cpf_cnpj_raiz} onChange={e => set("cpf_cnpj_raiz", e.target.value)} placeholder="54123456"/></div>
+            <input className="input" value={f.cpf_cnpj_raiz} onChange={e => set("cpf_cnpj_raiz", e.target.value)} placeholder="15822325"/></div>
           <div className="stack" style={{ gap:4 }}>{lbl("Modalidade", true)}
             <select className="input" value={f.modalidade} onChange={e => set("modalidade", e.target.value)}>
               <option value="IMPORTACAO">Importação</option><option value="EXPORTACAO">Exportação</option></select></div>
@@ -210,7 +210,7 @@ function ModalProdutoCatalogo({ operadores, proximoCodigo, onClose, onSaved }) {
 /* ---------- MODAL: Novo Operador Estrangeiro ---------- */
 function ModalOperadorEstrangeiro({ onClose, onSaved }) {
   const [f, setF] = React.useState({
-    cpf_cnpj_raiz:"54123456", pais:"CN", nome:"", logradouro:"", cidade:"",
+    cpf_cnpj_raiz:"15822325", pais:"CN", nome:"", logradouro:"", cidade:"",
     tin:"", email:"", codigo_interno:"", codigo_postal:"", subdivisao:"",
   });
   const [saving, setSaving] = React.useState(false);
@@ -247,7 +247,7 @@ function ModalOperadorEstrangeiro({ onClose, onSaved }) {
       <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
         <div className="grid-2" style={{ gap:12 }}>
           <div className="stack" style={{ gap:4 }}>{lbl("CNPJ raiz", true)}
-            <input className="input" value={f.cpf_cnpj_raiz} onChange={e => set("cpf_cnpj_raiz", e.target.value)} placeholder="54123456"/></div>
+            <input className="input" value={f.cpf_cnpj_raiz} onChange={e => set("cpf_cnpj_raiz", e.target.value)} placeholder="15822325"/></div>
           <div className="stack" style={{ gap:4 }}>{lbl("País do operador", true)}
             <select className="input" value={f.pais} onChange={e => set("pais", e.target.value)}>
               {CAT_PAISES.map(p => <option key={p.c} value={p.c}>{p.n} ({p.c})</option>)}</select></div>

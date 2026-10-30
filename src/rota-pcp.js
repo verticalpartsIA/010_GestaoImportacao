@@ -59,6 +59,27 @@
     t.querySelectorAll('tr').forEach(r => { if (r.cells.length > 2 && r.cells[i]) r.cells[i].classList.add('pcp-col-hot'); });
   }
 
+  /* Filtro/busca da tela na query string (?chave=valor): F5 e link direto reabrem a tela filtrada.
+     Estado local inicializado da URL; o setter regrava com replaceState (não cria entrada no Voltar/Avançar e não
+     mexe no caminho, então o roteador e o App não reagem). Valor vazio ou igual ao padrão sai da URL. */
+  function useQueryParam(chave, padrao) {
+    const ler = () => {
+      try { const v = new URLSearchParams(window.location.search).get(chave); return v == null ? padrao : v; } catch (_) { return padrao; }
+    };
+    const [valor, setValor] = React.useState(ler);
+    const set = (novo) => {
+      const v = novo == null ? padrao : String(novo);
+      setValor(v);
+      try {
+        const u = new URL(window.location.href);
+        if (v === '' || v === padrao) u.searchParams.delete(chave); else u.searchParams.set(chave, v);
+        window.history.replaceState(window.history.state, '', u.pathname + u.search + u.hash);
+      } catch (_) { /* sem history: segue só em memória */ }
+    };
+    return [valor, set];
+  }
+
+  window.useQueryParam = useQueryParam;
   window.useRotaItem = useRotaItem;
   window.useRotaId = useRotaId;
   window.pcpColHover = pcpColHover;

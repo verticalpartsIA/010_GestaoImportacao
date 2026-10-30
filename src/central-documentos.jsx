@@ -106,10 +106,17 @@
     const obraSelecionada = obras.find((o) => o.client_name === obraId);
 
     return (
-      <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
+      <div className="page fade-in">
+      <div className="page-head">
+        <div className="page-head__l">
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Entrega & Documentação</div>
+          <h1 className="page-head__title">Central de Documentos</h1>
+          <p className="page-head__sub">Biblioteca de documentos por obra: ART, termos, Data Book e documentação do instalador.</p>
+        </div>
+      </div>
+      <div style={{ display: 'flex', minHeight: 0 }}>
         {/* Coluna esquerda — seletor de obras (a "estante" da biblioteca) */}
         <div style={{ width: 300, borderRight: '1px solid #e5e5e5', padding: 16, overflowY: 'auto', flexShrink: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>📁 Central de Documentos</div>
           <input
             type="text" value={busca} onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar obra (cliente)…"
@@ -223,6 +230,7 @@
             </>
           )}
         </div>
+      </div>
       </div>
     );
   }

@@ -28,8 +28,9 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
   const [obras, setObras] = React.useState([]);
   const [equipPorObra, setEquipPorObra] = React.useState({}); // dossier_id -> [numero_serie,...]
   const [loading, setLoading] = React.useState(true);
-  const [statusFiltro, setStatusFiltro] = React.useState('Todos');
-  const [busca, setBusca] = React.useState('');
+  // Filtro e busca vivem na URL (?status=…&q=…): F5 e link direto reabrem a lista filtrada.
+  const [statusFiltro, setStatusFiltro] = window.useQueryParam('status', 'Todos');
+  const [busca, setBusca] = window.useQueryParam('q', '');
   const statusFlow = (window.__DOSSIER && window.__DOSSIER.STATUS_FLOW) || [];
   const statuses = ['Todos', ...statusFlow];
 

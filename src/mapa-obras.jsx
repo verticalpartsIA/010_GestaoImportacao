@@ -125,7 +125,16 @@ function MapaObrasPage({ setRoute, setSubsel }) {
   const [erro, setErro] = React.useState(null);
   const [geo, setGeo] = React.useState(() => moLerCacheGeo());
   const [geocodificando, setGeocodificando] = React.useState(false);
-  const [filtro, setFiltro] = React.useState({ andamento: true, concluida: true, aguardando: true });
+  // Grupos ocultos ficam na URL (?ocultar=concluida,aguardando): F5 e link direto mantêm o filtro.
+  const [ocultarQ, setOcultarQ] = window.useQueryParam("ocultar", "");
+  const filtro = React.useMemo(() => {
+    const ocultos = ocultarQ ? ocultarQ.split(",") : [];
+    return { andamento: !ocultos.includes("andamento"), concluida: !ocultos.includes("concluida"), aguardando: !ocultos.includes("aguardando") };
+  }, [ocultarQ]);
+  const setFiltro = (fnOuObj) => {
+    const prox = typeof fnOuObj === "function" ? fnOuObj(filtro) : fnOuObj;
+    setOcultarQ(["andamento", "concluida", "aguardando"].filter((k) => !prox[k]).join(","));
+  };
   const [recarregar, setRecarregar] = React.useState(0);
   const [aba, setAba] = window.useRouteTab("mapa-obras", "mapa", ["mapa", "evolucao"]);
   const [foco, setFoco] = React.useState(null);

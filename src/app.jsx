@@ -413,7 +413,7 @@ function App() {
       case "aval-financeiro": return <window.AvalFinanceiroPage setRoute={setRoute}/>;
       case "aval-juridico": return <window.AvalJuridicoPage setRoute={setRoute}/>;
       case "comissoes": return <ComissoesPage/>;
-      case "pagamentos-instalador": return <PagamentosInstaladorPage/>;
+      case "pagamentos-instalador": return <PagamentosInstaladorPage setRoute={setRoute}/>;
       case "rh-homologacao": return <window.RHHomologacaoPage/>;
       case "cadastro-instaladores": return <window.CadastroInstaladoresPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "cadastro-custos": return <window.CadastroCustosPage setSubsel={setSubsel} subsel={subsel}/>;

@@ -823,7 +823,7 @@ function ICClienteCard({ grupo, aberto, onToggle, onAbrirObra }) {
 function InstalacaoPage({ setRoute, setSubsel }) {
   const [dados, setDados] = React.useState(null); // { dossies, equipamentos, instaladores, elenco }
   const [erro, setErro] = React.useState(null);
-  const [busca, setBusca] = React.useState('');
+  const [busca, setBusca] = window.useQueryParam('q', ''); // busca na URL (?q=…): F5 e link direto reabrem filtrado
   const [abertos, setAbertos] = React.useState({});
 
   React.useEffect(() => {
