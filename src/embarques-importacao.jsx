@@ -644,6 +644,7 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
         <div className="stack" style={{ gap: 16, marginTop: 14 }}>
           <div className="grid-3" style={{ gap: 10 }}>
             <PIField label="Data limite entrega"><PIInput type="date" value={form.data_limite_entrega} onChange={set('data_limite_entrega')}/></PIField>
+            <p className="small muted" style={{ gridColumn: '1 / -1', margin: 0 }}>As datas de entrega alimentam a etapa “Chegou na obra” da Evolução dos Equipamentos.</p>
             <PIField label="Local de entrega"><PIInput value={form.local_entrega} onChange={set('local_entrega')}/></PIField>
             <PIField label="Data entrega"><PIInput type="date" value={form.data_entrega} onChange={set('data_entrega')}/></PIField>
             <PIField label="Devolução container"><PIInput type="date" value={form.devolucao_container} onChange={set('devolucao_container')}/></PIField>

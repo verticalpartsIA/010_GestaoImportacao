@@ -99,7 +99,7 @@
     const { data: embarques } = await c.from('embarques_importacao').select('*').eq('numero_cotacao', numeroCotacao);
     (embarques || []).forEach((e) => {
       add(e.etd_atual || e.etd_original, 'Transporte marítimo', 'Navio saiu do porto de origem', null, 'Embarque');
-      add(e.eta_santos, 'Transporte marítimo', 'Navio chegou no porto de Santos', null, 'Embarque');
+      add(e.presenca_carga || e.eta_santos, 'Transporte marítimo', e.presenca_carga ? 'Carga chegou ao porto de Santos (presença de carga)' : 'Navio chegou no porto de Santos (estimativa)', null, 'Embarque');
       add(e.data_registro_di, 'Despachante', 'DUIMP registrada', null, 'Embarque');
       add(e.conferencia_data, 'Despachante', `Conferência aduaneira: ${e.conferencia_status || '—'}`, null, 'Embarque');
       add(e.data_entrega, 'Transporte terrestre', 'Equipamento entregue no endereço do cliente', null, 'Embarque');
