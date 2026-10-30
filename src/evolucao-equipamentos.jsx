@@ -63,7 +63,7 @@ function EvPasso({ p, atual, atrasada, ok }) {
   if (atual) { cls.push("atual"); if (atrasada) cls.push("atraso"); }
   const icone = p.estado === "feito" || p.estado === "pulado" ? "✓" : atual ? "●" : "";
   let dt = "—", dtCls = "ev-dt";
-  if (p.estado === "feito") dt = p.data ? evData(p.data) : "sem data";
+  if (p.estado === "feito") dt = p.data ? evData(p.data) + (p.fonte === "eta" ? " (estimado)" : "") : "sem data";
   else if (p.estado === "pulado") dt = "sem data";
   else if (p.estado === "previsto" && p.data) { dt = "prev. " + evData(p.data); dtCls += atual && atrasada ? " atraso" : " prev"; }
   else if (atual) dt = "agora";
