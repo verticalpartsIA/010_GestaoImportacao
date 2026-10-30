@@ -63,7 +63,7 @@ function HandoverManutencaoPage() {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Instalação & Entrega · Pós-venda</div>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Entrega & Documentação · Pós-venda</div>
           <h1 className="page-head__title">Handover & Manutenção</h1>
           <p className="page-head__sub">Entrega final, garantia e transição para Escamax (sistema de manutenção preventiva).</p>
         </div>

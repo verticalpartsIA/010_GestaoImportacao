@@ -66,8 +66,8 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Engenharia · Status de Obras</div>
-          <h1 className="page-head__title">Status de Obras</h1>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Obras & Instalação · Dossiês de Obras</div>
+          <h1 className="page-head__title">Dossiês de Obras</h1>
           <p className="page-head__sub">Visão consolidada de todas as obras em andamento — onde cada uma está parada e quem é o responsável.</p>
         </div>
       </div>
