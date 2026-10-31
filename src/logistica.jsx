@@ -1693,15 +1693,32 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
      vivo (read-inbox), que não sabe de exclusões — por isso filtra aqui,
      contra a lista de ids já marcados como excluídos no banco. */
   const [excluidos, setExcluidos] = React.useState([]);
+  const [exclVerificados, setExclVerificados] = React.useState(() => new Set());   // ids já conferidos (não pisca e-mail excluído)
+  /* #1213 E.4: antes buscava os 500 primeiros excluídos de TODA a tabela (passando disso, os mais antigos voltavam a
+     aparecer) e ignorava erro. Agora pergunta só pelos e-mails carregados na tela, em lotes de 100 ids. Em falha mantém a
+     lista anterior e avisa no console (os excluídos nesta sessão continuam escondidos pelo estado local). */
+  const chaveExcl = emails.map((e) => e.id).filter((id) => /^[0-9a-f-]{36}$/i.test(String(id))).sort().join(',');
+  const marcarExclVerificados = (ids) => setExclVerificados((prev) => { const n = new Set(prev); ids.forEach((id) => n.add(id)); return n; });
   const carregarExcluidos = React.useCallback(() => {
-    window.__VP_SB.sb.from('emails_projeto').select('id').not('excluido_em', 'is', null).limit(500)
-      .then(({ data }) => setExcluidos((data || []).map((d) => d.id)));
-  }, []);
+    if (!chaveExcl) return;
+    const ids = chaveExcl.split(',');
+    const lotes = [];
+    for (let i = 0; i < ids.length; i += 100) lotes.push(ids.slice(i, i + 100));
+    Promise.all(lotes.map((lote) => window.__VP_SB.sb.from('emails_projeto').select('id').in('id', lote).not('excluido_em', 'is', null)))
+      .then((resps) => {
+        const falhou = resps.find((r) => r && r.error);
+        if (falhou) { console.warn('[Inbox] não foi possível ler os e-mails excluídos', falhou.error); marcarExclVerificados(ids); return; }   // falha: mostra (não esconde e-mail)
+        const achados = resps.flatMap((r) => (r.data || []).map((d) => d.id));
+        setExcluidos((prev) => [...new Set([...prev, ...achados])]);
+        marcarExclVerificados(ids);
+      })
+      .catch((e) => { console.warn('[Inbox] não foi possível ler os e-mails excluídos', e); marcarExclVerificados(ids); });
+  }, [chaveExcl]);
   React.useEffect(() => { carregarExcluidos(); }, [carregarExcluidos]);
   const emailsVisiveis = React.useMemo(() => (perm === undefined || !meta.pronto) ? []
-    : emails.filter((e) => !excluidos.includes(e.id))
+    : emails.filter((e) => !excluidos.includes(e.id) && (!/^[0-9a-f-]{36}$/i.test(String(e.id)) || exclVerificados.has(e.id)))
       // #1213 E.2: sem saber o responsável (falha de leitura) não dá para aplicar a regra de dono — mostra tudo com aviso, nunca esconde.
-      .filter((e) => meta.erro || verOk(meta.dono[e.id] || null, (meta.atribuido || {})[e.id] || null)), [emails, excluidos, meta, perm]);
+      .filter((e) => meta.erro || verOk(meta.dono[e.id] || null, (meta.atribuido || {})[e.id] || null)), [emails, excluidos, exclVerificados, meta, perm]);
   /* 04/10 — triagem silenciosa (estilo JEV, só regras; autorizada pelo usuário): a decisão (assunto/departamento/
      prioridade/confiança) é calculada no banco e só LIDA aqui (inbox-triagem.jsx). Esconde apenas e-mail automático
      com confiança suficiente (nunca apaga; "ver tudo" devolve) e destaca o que precisa de resposta. Sem classificação,
@@ -1796,9 +1813,18 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
     }
     if (buscouParaAbrir.current === idParaAbrir) return;
     buscouParaAbrir.current = idParaAbrir;
-    window.__VP_SB.sb.from('emails_projeto').select('assunto').eq('id', idParaAbrir).maybeSingle().then(({ data }) => {
+    /* #1213 E.7: e-mail excluído da lista (soft-delete) não abre — avisa e limpa o id da URL (com subsel nulo o App
+       preservaria o id antigo no endereço). */
+    const largarLink = (msg) => {
+      window.toast?.(msg, 'warning');
+      if (setSubsel) setSubsel(null);
+      if (window.VpRouter) window.VpRouter.navigate('inbox', null);
+    };
+    window.__VP_SB.sb.from('emails_projeto').select('assunto, excluido_em').eq('id', idParaAbrir).maybeSingle().then(({ data, error }) => {
+      if (error) return largarLink('Não foi possível abrir este e-mail agora.');
+      if (data && data.excluido_em) return largarLink('Este e-mail foi excluído da lista do site.');
       if (data && data.assunto) setBusca('assunto:"' + String(data.assunto).replace(/["]/g, ' ').trim() + '"');
-      else { window.toast?.('Não encontrei este e-mail (pode ter sido excluído).', 'warning'); if (setSubsel) setSubsel(null); }
+      else largarLink('Não encontrei este e-mail (pode ter sido excluído).');
     });
   }, [idParaAbrir, todasLinhas.length, perm, loading, activeId]);
   const nomeDe = (email) => { const p = ((perm && perm.colaboradores) || []).find((x) => String(x.email).toLowerCase() === String(email || '').toLowerCase()); return (p && p.nome) || email; };
@@ -1843,13 +1869,18 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
   const [marcandoGatilho, setMarcandoGatilho] = React.useState(false);
   const [novoEmailAberto, setNovoEmailAberto] = React.useState(false);
 
+  /* #1213 E.5: só a leitura mais recente vale — uma resposta antiga do IMAP que chegue depois não sobrescreve a nova. */
+  const leituraInbox = React.useRef(0);
   const carregar = React.useCallback(() => {
+    const minha = ++leituraInbox.current;
+    const atual = () => minha === leituraInbox.current;
     setLoading(true); setErro(null);
     window.__VP_SB.sb.functions.invoke('read-inbox', { body: { limit: 25 } }).then(({ data, error }) => {
+      if (!atual()) return;
       if (error) { setErro(error.message || String(error)); setEmails([]); return; }
       if (data && data.error) { setErro(data.error); setEmails([]); return; }
       setEmails((data && data.messages) || []);
-    }).catch((e) => setErro(e.message || String(e))).finally(() => setLoading(false));
+    }).catch((e) => { if (atual()) setErro(e.message || String(e)); }).finally(() => { if (atual()) setLoading(false); });
   }, []);
   React.useEffect(() => { carregar(); }, [carregar]);
 
@@ -1866,10 +1897,14 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
   React.useEffect(() => {
     const sb = window.__VP_SB?.sb;
     if (!sb) return;
+    /* #1213 E.5: o cron grava vários e-mails de uma vez (um INSERT por mensagem) — sem esperar, cada um disparava uma
+       leitura IMAP inteira. Agora junta os avisos de 3 s numa leitura só. */
+    let espera = null;
+    const agendar = () => { clearTimeout(espera); espera = setTimeout(carregar, 3000); };
     const canal = sb.channel('emails-projeto-entrada')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'emails_projeto', filter: 'direcao=eq.entrada' }, carregar)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'emails_projeto', filter: 'direcao=eq.entrada' }, agendar)
       .subscribe();
-    return () => sb.removeChannel(canal);
+    return () => { clearTimeout(espera); sb.removeChannel(canal); };
   }, [carregar]);
 
   /* 11/09 — achado real do usuário: mandou o RFQ pra fornecedora, não
@@ -1890,7 +1925,9 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
     setCarregandoEnviados(true);
     window.__VP_SB.sb.from('emails_projeto').select('*').eq('direcao', 'saida').is('excluido_em', null)
       .order('data_mensagem', { ascending: false }).limit(limiteEnv)
-      .then(async ({ data }) => {
+      .then(async ({ data, error: errEnv }) => {
+        // #1213 E.6: falha de leitura não pode virar "Nenhum e-mail enviado ainda" — mantém o que já estava na tela e avisa.
+        if (errEnv) { console.warn('[Inbox] falha ao carregar Enviados', errEnv); window.toast?.('Não foi possível carregar os e-mails enviados agora. Use Atualizar para tentar de novo.', 'error'); return; }
         const rows = data || [];
         const paths = [...new Set(rows.flatMap((r) => (r.anexos || []).map((a) => a.path).filter(Boolean)))];
         if (!paths.length) { setEnviados(rows); return; }
@@ -1941,10 +1978,12 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
     if (!window.confirm(`Tem certeza que deseja excluir este e-mail?${cv && cv.total > 1 ? `\n\n(Só esta mensagem — a conversa tem ${cv.total}. Para a conversa toda, marque a linha e use Excluir na barra.)` : ''}\n\n"${assunto}"\n\nEle continua existindo na caixa de e-mail real — isso só remove da lista do site.`)) return;
     try {
       const user = window.__VP_USER || {};
-      const { error } = await window.__VP_SB.sb.from('emails_projeto')
+      const { data: gravadas, error } = await window.__VP_SB.sb.from('emails_projeto')
         .update({ excluido_em: new Date().toISOString(), excluido_por: user.email || null })
-        .eq('id', email.id);
+        .eq('id', email.id).select('id');
       if (error) throw error;
+      // #1213 E.3: update barrado (RLS) ou e-mail inexistente volta 0 linhas sem erro — não pode virar "excluído".
+      if (!gravadas || !gravadas.length) throw new Error('o e-mail não foi encontrado ou você não tem permissão para alterá-lo.');
       if (ehEnviado(email)) setEnviados((prev) => prev.filter((e) => e.id !== email.id));
       else setExcluidos((prev) => [...prev, email.id]);
       if (activeId === email.id) abrirEmail(null);
@@ -2181,12 +2220,13 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
         .update({ excluido_em: new Date().toISOString(), excluido_por: (window.__VP_USER || {}).email || null }).in('id', ids).select('id');
       if (error) throw error;
       const feitos = new Set((data || []).map((r) => r.id));
+      if (!feitos.size) throw new Error('nenhum e-mail foi alterado (não encontrados ou sem permissão).');
       setEnviados((prev) => prev.filter((e) => !feitos.has(e.id)));
       setExcluidos((prev) => [...prev, ...feitos]);
       if (activeId && feitos.has(activeId)) abrirEmail(null);
       setSelecionados(new Set());
       if (window.VPLog) window.VPLog.registrar({ modulo: 'Inbox de E-mail', acao: 'Excluiu e-mails da lista (soft-delete, em massa)', alvo: `${feitos.size} e-mail(s)` });
-      window.toast?.(`${feitos.size} e-mail(s) excluído(s) da lista.`, 'success');
+      window.toast?.(`${feitos.size} e-mail(s) excluído(s) da lista.${feitos.size < ids.length ? ` ${ids.length - feitos.size} não puderam ser excluídos.` : ''}`, feitos.size < ids.length ? 'warning' : 'success');
     } catch (e) { window.toast?.('Erro ao excluir: ' + (e.message || e), 'error'); }
   };
 

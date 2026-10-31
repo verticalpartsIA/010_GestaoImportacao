@@ -11,6 +11,7 @@ const { coletarErros } = require('./helpers');
 const EU = 'vendedor.teste@verticalparts.com.br';
 const ID1 = '11111111-1111-4111-8111-111111111111';
 const ID2 = '22222222-2222-4222-8222-222222222222';
+const ID3 = '33333333-3333-4333-8333-333333333333';   // e-mail que existe no banco, mas foi excluído da lista
 
 function mensagens() {
   return [
@@ -35,6 +36,10 @@ async function preparar(page, state) {
     const req = route.request();
     const url = new URL(req.url());
     const tabela = url.pathname.replace('/rest/v1/', '');
+    // Exclusão (soft-delete) barrada: o PostgREST devolve 0 linhas sem erro.
+    if (req.method() === 'PATCH' && tabela === 'emails_projeto' && state.patchZero) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    }
     if (req.method() !== 'GET') return route.fallback();
     const objeto = (req.headers()['accept'] || '').includes('vnd.pgrst.object');
     const responder = (linhas) => {
@@ -50,6 +55,13 @@ async function preparar(page, state) {
     if (tabela === 'alcadas_capacidade' && url.searchParams.get('modulo') === 'eq.inbox') {
       const cap = (url.searchParams.get('capacidade') || '').replace('eq.', '');
       return responder((state.caps || []).includes(cap) ? [{ id: 'a-' + cap }] : []);
+    }
+    if (tabela === 'emails_projeto' && (url.searchParams.get('select') || '') === 'id' && url.searchParams.get('excluido_em') === 'not.is.null') {
+      return responder((state.excluidos || []).map((id) => ({ id })));
+    }
+    if (tabela === 'emails_projeto' && (url.searchParams.get('select') || '').includes('excluido_em') && (url.searchParams.get('id') || '').startsWith('eq.')) {
+      const id = url.searchParams.get('id').slice(3);
+      return responder(id === ID3 ? [{ assunto: 'Assunto apagado', excluido_em: '2026-10-29T10:00:00Z' }] : []);
     }
     if (tabela === 'emails_projeto' && (url.searchParams.get('select') || '').includes('dono_email') && (url.searchParams.get('id') || '').startsWith('in.')) {
       if (state.metaErro) return route.fulfill({ status: 414, contentType: 'application/json', body: JSON.stringify({ message: 'URI Too Long (simulado)' }) });
@@ -105,4 +117,31 @@ test('E.2 — sem falha, a regra de dono continua valendo (e-mail meu aparece)',
   await page.goto('/geral/inbox');
   await expect(page.locator('.inbox__row', { hasText: 'Assunto um' })).toBeVisible({ timeout: 45_000 });
   await expect(page.getByText('Não foi possível conferir o responsável dos e-mails')).toHaveCount(0);
+});
+
+test('E.3 — exclusão barrada (0 linhas) avisa erro e o e-mail continua na lista', async ({ page }) => {
+  await preparar(page, { admin: true, patchZero: true });
+  await page.goto('/geral/inbox');
+  const linha = page.locator('.inbox__row', { hasText: 'Assunto dois' });
+  await expect(linha).toBeVisible({ timeout: 45_000 });
+  page.once('dialog', (d) => d.accept());
+  await linha.hover();
+  await linha.locator('.ig-lixo button').click();
+  await expect(page.getByText(/Erro ao excluir/)).toBeVisible();
+  await expect(page.getByText('E-mail excluído da lista.')).toHaveCount(0);
+  await expect(linha).toBeVisible();
+});
+
+test('E.4 — e-mail já excluído no banco não aparece na caixa', async ({ page }) => {
+  await preparar(page, { admin: true, excluidos: [ID1] });
+  await page.goto('/geral/inbox');
+  await expect(page.locator('.inbox__row', { hasText: 'Assunto dois' })).toBeVisible({ timeout: 45_000 });
+  await expect(page.locator('.inbox__row', { hasText: 'Assunto um' })).toHaveCount(0);
+});
+
+test('E.7 — link direto de e-mail excluído avisa e limpa a URL', async ({ page }) => {
+  await preparar(page, { admin: true });
+  await page.goto('/geral/inbox/' + ID3);
+  await expect(page.getByText('Este e-mail foi excluído da lista do site.')).toBeVisible({ timeout: 45_000 });
+  await expect(page).toHaveURL(/\/geral\/inbox\/?$/);
 });
