@@ -29,6 +29,67 @@ function CadEnderecoFields({ form, set }) {
   );
 }
 
+/* 🔒 ÁREA BLINDADA (CLAUDE.md, 31/10/2026): cadastro com transação nunca é excluído — a lixeira confere as
+   transações no banco e, se houver alguma, oferece INATIVAR. Falha ao conferir = não apaga nada. */
+async function cadExcluirOuInativar(store, item, rotulo, reload) {
+  let lista;
+  try { lista = await store.vinculos(item.id); }
+  catch (e) { window.toast?.(e.message, 'error'); return; }
+  const nome = item.razao_social || item.nome_fantasia || item.codigo || '';
+  if (lista.length > 0) {
+    const txt = lista.map((v) => `• ${v.fonte} (${v.qtd})`).join('\n');
+    if (item.ativo === false) {
+      window.alert(`O ${rotulo} "${nome}" tem transações e não pode ser excluído (regra da empresa). Ele já está inativo.\n\n${txt}`);
+      return;
+    }
+    if (!window.confirm(`O ${rotulo} "${nome}" tem transações e NÃO pode ser excluído (regra da empresa):\n\n${txt}\n\nDeseja INATIVAR o cadastro? Ele sai das listas de escolha, mas o histórico e o código continuam.`)) return;
+    try { await store.inativar(item.id); window.toast?.(`${rotulo[0].toUpperCase()}${rotulo.slice(1)} inativado.`, 'success'); reload(); }
+    catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    return;
+  }
+  if (!window.confirm(`O ${rotulo} "${nome}" não tem nenhuma transação. Excluir definitivamente?`)) return;
+  try { await store.remover(item.id); window.toast?.(`${rotulo[0].toUpperCase()}${rotulo.slice(1)} excluído.`, 'success'); reload(); }
+  catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+}
+
+/* T8 #1228 (31/10/2026): busca por CNPJ/CPF aceita o número com pontuação ("12.345.678/0001-90"):
+   o banco grava só dígitos, então compara também os dígitos do que foi digitado. */
+function cadCasaDocumento(item, q) {
+  const qd = String(q || '').replace(/\D/g, '');
+  if ((item.cnpj || '').includes(q) || (item.cpf || '').includes(q)) return true;
+  return qd.length >= 3 && ((item.cnpj || '').includes(qd) || (item.cpf || '').includes(qd));
+}
+
+/* T8 #1228: link para um cadastro que não está na lista (excluído, link antigo ou lista incompleta) —
+   antes abria o formulário como se fosse "Novo", sem aviso. */
+function CadNaoEncontrado({ rotulo, listaIncompleta, onVoltar }) {
+  return (
+    <div className="card" style={{ border: '1px solid var(--vp-yellow, #ffd400)', background: '#fffbe6', padding: 12, marginBottom: 14 }}>
+      <div className="row sb" style={{ alignItems: 'center', gap: 12 }}>
+        <div className="small">
+          <b>{rotulo} não encontrado.</b> O link pode ser antigo ou o cadastro foi excluído{listaIncompleta ? ' — ou a lista não carregou inteira (veja o aviso abaixo)' : ''}.
+        </div>
+        <Button variant="outline" size="sm" onClick={onVoltar}>Voltar à lista</Button>
+      </div>
+    </div>
+  );
+}
+
+/* T4 #1224 (31/10/2026): leitura falhou no meio = aviso visível, nunca lista parcial calada. */
+function CadAvisoLeitura({ erro, qtd, rotulo, onRetry }) {
+  if (!erro) return null;
+  return (
+    <div className="card" style={{ border: '1px solid var(--vp-danger, #c62828)', background: '#fff5f5', padding: 12, marginBottom: 14 }}>
+      <div className="row sb" style={{ alignItems: 'center', gap: 12 }}>
+        <div className="small">
+          <b>Lista incompleta:</b> não foi possível ler todos os {rotulo} ({erro}). {qtd > 0 ? `Mostrando só os ${qtd} que chegaram.` : 'Nada foi carregado.'}
+        </div>
+        <Button variant="outline" size="sm" onClick={onRetry}>Tentar de novo</Button>
+      </div>
+    </div>
+  );
+}
+
 /* ============================================================
    CLIENTES
    ============================================================ */
@@ -153,6 +214,7 @@ function ClienteForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
 
 function CadastroClientesPage() {
   const [items, setItems] = React.useState(null);
+  const [erroLeitura, setErroLeitura] = React.useState(null);
   const [search, setSearch] = React.useState('');
   const [saving, setSaving] = React.useState(false);
   const ord = window.useOrdenacao(); // 23/10 (pedido do usuário) — ordenação por coluna
@@ -169,7 +231,8 @@ function CadastroClientesPage() {
      /cadastros-mestres/cadastro-clientes/<id>/historico → modal de histórico */
   const [rotaId] = window.useRotaId('cadastro-clientes');
   const [sub] = window.useRotaItem('cadastro-clientes', rotaId);
-  const showForm = rotaId === 'novo' || (!!rotaId && sub !== 'historico');
+  const naoEncontrado = !!(items && rotaId && rotaId !== 'novo' && !items.some((c) => c.id === rotaId));
+  const showForm = rotaId === 'novo' || (!!rotaId && sub !== 'historico' && !naoEncontrado);
   const editing = (items && rotaId && rotaId !== 'novo' && sub !== 'historico') ? (items.find((c) => c.id === rotaId) || null) : null;
   const historicoDe = (items && rotaId && sub === 'historico') ? (items.find((c) => c.id === rotaId) || null) : null;
   const abrirNovo = () => { if (window.VpRouter) window.VpRouter.navigate('cadastro-clientes', 'novo'); };
@@ -180,7 +243,11 @@ function CadastroClientesPage() {
     if (showForm && formRef.current) formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [showForm, editing]);
 
-  const reload = React.useCallback(() => { window.CadastrosClientesStore.listarTodos().then(setItems).catch(() => setItems([])); }, []);
+  const reload = React.useCallback(() => {
+    window.CadastrosClientesStore.listarTodosDetalhado()
+      .then((r) => { setItems(r.itens); setErroLeitura(r.erro); })
+      .catch((e) => { setItems([]); setErroLeitura(e.message || 'falha de leitura'); });
+  }, []);
   React.useEffect(() => { reload(); }, [reload]);
 
   const salvar = async (form) => {
@@ -194,18 +261,14 @@ function CadastroClientesPage() {
     finally { setSaving(false); }
   };
 
-  const excluir = async (cli) => {
-    if (!window.confirm(`Excluir o cliente "${cli.razao_social}"? Isso pode afetar formulários/propostas já vinculados.`)) return;
-    try { await window.CadastrosClientesStore.remover(cli.id); window.toast?.('Cliente excluído.', 'success'); reload(); }
-    catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
-  };
+  const excluir = (cli) => cadExcluirOuInativar(window.CadastrosClientesStore, cli, 'cliente', reload);
 
   if (items === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   const filtered = items.filter((c) => {
     const q = search.toLowerCase();
     return !q || (c.razao_social || '').toLowerCase().includes(q) || (c.nome_fantasia || '').toLowerCase().includes(q)
-      || (c.codigo || '').toLowerCase().includes(q) || (c.cnpj || '').includes(q) || (c.cpf || '').includes(q);
+      || (c.codigo || '').toLowerCase().includes(q) || cadCasaDocumento(c, q);
   });
   const ordenados = ord.aplicar(filtered, {
     codigo: (c) => c.codigo, razaoSocial: (c) => c.razao_social, doc: (c) => c.cnpj || c.cpf,
@@ -226,6 +289,7 @@ function CadastroClientesPage() {
         </div>
       </div>
 
+      {naoEncontrado && <CadNaoEncontrado rotulo="Cliente" listaIncompleta={!!erroLeitura} onVoltar={fecharModal}/>}
       {showForm && (
         <div ref={formRef} style={{ marginBottom: 20, scrollMarginTop: 16 }}>
           <ClienteForm key={editing ? editing.id : 'novo'} initialData={editing} isEdit={!!editing} saving={saving} onSubmit={salvar} onCancel={fecharModal}/>
@@ -233,6 +297,7 @@ function CadastroClientesPage() {
       )}
 
       <input className="input" style={{ marginBottom: 14 }} placeholder="Buscar por código, nome ou CNPJ/CPF…" value={search} onChange={(e) => setSearch(e.target.value)}/>
+      <CadAvisoLeitura erro={erroLeitura} qtd={items.length} rotulo="clientes" onRetry={reload}/>
       <div className="small muted" style={{ marginBottom: 10 }}>{filtered.length} cliente(s) encontrado(s)</div>
 
       <div className="table-wrap table-wrap--sticky">
@@ -375,6 +440,35 @@ function cadFmtEstrelas(media) {
   return '★'.repeat(cheias) + '☆'.repeat(5 - cheias) + ` (${media.toFixed(1)})`;
 }
 
+/* ---------- NPS das cotações (0 a 5 em 6 critérios) — alimentado em Cotações de Varejo ---------- */
+function FornecedorNPS({ fornecedorId, nome }) {
+  const [linhas, setLinhas] = React.useState(null);
+  React.useEffect(() => {
+    const S = window.CotacoesVarejoStore; if (!S) { setLinhas([]); return; }
+    S.avaliacoesDoFornecedor(fornecedorId, nome).then(setLinhas).catch(() => setLinhas([]));
+  }, [fornecedorId]);
+  if (linhas === null || !window.NpsMini) return null;
+  const S = window.CotacoesVarejoStore;
+  const resumo = linhas.length ? (() => { const r = { avaliacoes: linhas.length }; S.NPS_CRITERIOS.forEach(([k]) => { const v = linhas.map((h) => h['nota_' + k]).filter((n) => n != null); r[k] = v.length ? v.reduce((a, b) => a + Number(b), 0) / v.length : null; }); return r; })() : null;
+  return (
+    <Card title="Avaliação nas cotações (NPS 0–5)" sub={linhas.length ? 'Notas dadas pelo comprador ao fechar cada cotação de varejo.' : 'Nenhuma avaliação ainda — elas nascem em Cotações de Varejo, no cartão do fornecedor.'}>
+      {linhas.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 20 }}>
+          <window.NpsMini resumo={resumo} linhas={linhas} />
+          <div className="stack" style={{ gap: 6 }}>
+            {linhas.slice().reverse().slice(0, 8).map((a) => (
+              <div key={a.id} className="small" style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 8 }}>
+                <b>★ {a.nota_geral}</b> · {a.lote_numero || 'lote'}{a.comentario ? ' — ' + a.comentario : ''}
+                <div className="cell-sub">{a.avaliado_por || '—'} · {new Date(a.avaliado_em).toLocaleDateString('pt-BR')}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /* ---------- Avaliações de um fornecedor (só aparece editando) ---------- */
 function FornecedorAvaliacoes({ fornecedorId }) {
   const [avaliacoes, setAvaliacoes] = React.useState(null);
@@ -488,12 +582,14 @@ function FornecedorForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
         <Button variant="primary" onClick={submit} disabled={saving}>{saving ? 'Salvando…' : (isEdit ? 'Salvar alterações' : 'Cadastrar fornecedor')}</Button>
       </div>
       {isEdit && <div style={{ marginTop: 16 }}><FornecedorAvaliacoes fornecedorId={initialData.id}/></div>}
+      {isEdit && <div style={{ marginTop: 16 }}><FornecedorNPS fornecedorId={initialData.id} nome={initialData.razao_social || initialData.nome_fantasia}/></div>}
     </Card>
   );
 }
 
 function CadastroFornecedoresPage() {
   const [items, setItems] = React.useState(null);
+  const [erroLeitura, setErroLeitura] = React.useState(null);
   const [search, setSearch] = React.useState('');
   const [filterCategoria, setFilterCategoria] = React.useState('Todas');
   const [saving, setSaving] = React.useState(false);
@@ -504,7 +600,8 @@ function CadastroFornecedoresPage() {
      /cadastros-mestres/cadastro-fornecedores/novo   → novo fornecedor
      /cadastros-mestres/cadastro-fornecedores/<id>   → editar aquele fornecedor */
   const [rotaId] = window.useRotaId('cadastro-fornecedores');
-  const showForm = rotaId === 'novo' || !!rotaId;
+  const naoEncontrado = !!(items && rotaId && rotaId !== 'novo' && !items.some((f) => f.id === rotaId));
+  const showForm = rotaId === 'novo' || (!!rotaId && !naoEncontrado);
   const editing = (items && rotaId && rotaId !== 'novo') ? (items.find((f) => f.id === rotaId) || null) : null;
   const abrirNovo = () => { if (window.VpRouter) window.VpRouter.navigate('cadastro-fornecedores', 'novo'); };
   const abrirEditar = (f) => { if (window.VpRouter) window.VpRouter.navigate('cadastro-fornecedores', f.id); };
@@ -517,7 +614,9 @@ function CadastroFornecedoresPage() {
   const [medias, setMedias] = React.useState({});
 
   const reload = React.useCallback(() => {
-    window.CadastrosFornecedoresStore.listarTodos().then(setItems).catch(() => setItems([]));
+    window.CadastrosFornecedoresStore.listarTodosDetalhado()
+      .then((r) => { setItems(r.itens); setErroLeitura(r.erro); })
+      .catch((e) => { setItems([]); setErroLeitura(e.message || 'falha de leitura'); });
     window.CadastrosFornecedoresStore.mediasAvaliacoes().then(setMedias).catch(() => setMedias({}));
   }, []);
   React.useEffect(() => { reload(); }, [reload]);
@@ -533,18 +632,14 @@ function CadastroFornecedoresPage() {
     finally { setSaving(false); }
   };
 
-  const excluir = async (f) => {
-    if (!window.confirm(`Excluir o fornecedor "${f.razao_social}"?`)) return;
-    try { await window.CadastrosFornecedoresStore.remover(f.id); window.toast?.('Fornecedor excluído.', 'success'); reload(); }
-    catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
-  };
+  const excluir = (f) => cadExcluirOuInativar(window.CadastrosFornecedoresStore, f, 'fornecedor', reload);
 
   if (items === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   const filtered = items.filter((f) => {
     const q = search.toLowerCase();
     const matchSearch = !q || (f.razao_social || '').toLowerCase().includes(q) || (f.nome_fantasia || '').toLowerCase().includes(q)
-      || (f.codigo || '').toLowerCase().includes(q) || (f.cnpj || '').includes(q) || (f.cpf || '').includes(q);
+      || (f.codigo || '').toLowerCase().includes(q) || cadCasaDocumento(f, q);
     const matchCat = filterCategoria === 'Todas' || (f.categorias || []).includes(filterCategoria);
     return matchSearch && matchCat;
   });
@@ -568,6 +663,7 @@ function CadastroFornecedoresPage() {
         </div>
       </div>
 
+      {naoEncontrado && <CadNaoEncontrado rotulo="Fornecedor" listaIncompleta={!!erroLeitura} onVoltar={fecharForm}/>}
       {showForm && (
         <div ref={formRef} style={{ marginBottom: 20, scrollMarginTop: 16 }}>
           <FornecedorForm key={editing ? editing.id : 'novo'} initialData={editing} isEdit={!!editing} saving={saving} onSubmit={salvar} onCancel={fecharForm}/>
@@ -581,6 +677,7 @@ function CadastroFornecedoresPage() {
           {window.CadastrosFornecedoresStore.CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
+      <CadAvisoLeitura erro={erroLeitura} qtd={items.length} rotulo="fornecedores" onRetry={reload}/>
       <div className="small muted" style={{ marginBottom: 10 }}>{filtered.length} fornecedor(es) encontrado(s)</div>
 
       <div className="table-wrap table-wrap--sticky">

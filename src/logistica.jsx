@@ -776,7 +776,9 @@ function ImportacaoDetail({ embarque, setRoute }) {
             <KvBlock label="IMO" value={e.imo} mono/>
             <KvBlock label="Armador / Linha" value={e.line ? `${e.line}${e.sealine ? ' (' + e.sealine + ')' : ''}` : (e.sealine || '—')}/>
             <KvBlock label="BL" value={e.bl} mono/>
-            <KvBlock label="Nº Container" value={e.container_number} mono/>
+            <KvBlock label="Nº Container" value={(Array.isArray(e.containers_lista) && e.containers_lista.length > 1)
+              ? e.containers_lista.map((x) => [x.numero || 's/ nº', x.tipo_tamanho].filter(Boolean).join(' · ')).join(' | ')
+              : e.container_number} mono/>
             <KvBlock label="Lacre" value={e.seal} mono/>
             <KvBlock label="Carga" value={`${e.containers}× ${e.type || e.container_type}${e.freight_condition ? " · " + e.freight_condition : ""}`}/>
             <KvBlock label="Rota" value={`${e.from || e.origin} → ${e.to || e.destination}`}/>
@@ -1637,14 +1639,66 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
   /* Abrir um e-mail (clique na linha, na conversa, na faixa "precisa de você"…) também grava
      na URL (/geral/inbox/<id>) — antes só setActiveId, então o endereço na barra do navegador
      nunca refletia qual e-mail estava aberto. Fechar (null) volta pra /geral/inbox. */
-  const abrirEmail = (id) => { setActiveId(id); if (setSubsel) setSubsel(id); };
-  const [folder, setFolder] = React.useState("inbox");
+  const abrirEmail = (id, opts) => {
+    setActiveId(id); if (setSubsel) setSubsel(id);
+    // Fechar: com subsel nulo o App preservaria o id antigo no endereço (o F5 reabria o e-mail) — limpa aqui (31/10/2026).
+    if (!id && window.VpRouter) { const loc = window.VpRouter.parseLocation(); if (loc && loc.route === 'inbox' && loc.id) window.VpRouter.navigate('inbox', null, null, opts); }
+  };
+  /* Pasta e pesquisa na URL (31/10/2026, F5 e link): /geral/inbox[/<id do e-mail>]?pasta=<pasta>&q=<pesquisa>.
+     O caminho continua do App (id do e-mail via setSubsel); a query é desta tela. VpRouter.navigate (usado pelo App)
+     troca só o caminho, então devolvemos a query depois de cada navegação (evento vp:navigate). Trocar de pasta cria
+     entrada no Voltar/Avançar; digitar na pesquisa só substitui (sem uma entrada por tecla). Caixa de entrada e pesquisa
+     vazia deixam a URL limpa. Janelas de ação (Escrever, Atribuir, Pedir decisão, Extrair preço…) ficam fora de propósito.
+     Nada aqui toca send-email/read-inbox/vínculo/soft-delete (área blindada). */
+  const lerQueryInbox = () => {
+    try { const u = new URLSearchParams(window.location.search); return { pasta: u.get('pasta') || 'inbox', q: u.get('q') || '' }; }
+    catch (_) { return { pasta: 'inbox', q: '' }; }
+  };
+  const urlComQuery = (pasta, q) => {
+    const u = new URL(window.location.href);
+    if (pasta && pasta !== 'inbox') u.searchParams.set('pasta', pasta); else u.searchParams.delete('pasta');
+    if (q) u.searchParams.set('q', q); else u.searchParams.delete('q');
+    return u.pathname + u.search + u.hash;
+  };
+  const urlAtual = () => window.location.pathname + window.location.search + window.location.hash;
+  const naRotaInbox = () => { const loc = window.VpRouter && window.VpRouter.parseLocation(); return !!(loc && loc.route === 'inbox'); };
+  const [folder, setFolderState] = React.useState(() => lerQueryInbox().pasta);
+  const queryRef = React.useRef({ folder: 'inbox', busca: '' });
+  const setFolder = (pasta, opts) => {
+    setFolderState(pasta);
+    queryRef.current = { ...queryRef.current, folder: pasta };
+    if (!naRotaInbox()) return;
+    const url = urlComQuery(pasta, queryRef.current.busca);
+    if (url === urlAtual()) return;
+    try { if (opts && opts.replace) window.history.replaceState(window.history.state, '', url); else window.history.pushState(window.history.state, '', url); } catch (_) { /* segue só na tela */ }
+  };
   const [enviadosBase, setEnviados] = React.useState([]);
   const [carregandoEnviados, setCarregandoEnviados] = React.useState(false);
   const [limiteEnv, setLimiteEnv] = React.useState(50);               // fase 4B: "Carregar mais" nos Enviados
   /* Fase 4B (04/10): a pesquisa também olha o HISTÓRICO COMPLETO no banco (inbox-historico.jsx). As linhas achadas entram
      na lista junto das carregadas (sem duplicar); tudo mais (pastas, permissões, marcadores) trata como e-mail comum. */
-  const [busca, setBusca] = React.useState('');
+  const [busca, setBusca] = React.useState(() => lerQueryInbox().q);
+  queryRef.current = { folder, busca };
+  React.useEffect(() => {
+    if (!naRotaInbox()) return;
+    const url = urlComQuery(folder, busca);
+    if (url !== urlAtual()) { try { window.history.replaceState(window.history.state, '', url); } catch (_) { /* segue só na tela */ } }
+  }, [busca]);
+  React.useEffect(() => {
+    const reaplicar = () => {   // o App trocou o caminho (abrir/fechar e-mail): devolve ?pasta=&q=
+      if (!naRotaInbox()) return;
+      const url = urlComQuery(queryRef.current.folder, queryRef.current.busca);
+      if (url !== urlAtual()) { try { window.history.replaceState(window.history.state, '', url); } catch (_) { /* segue só na tela */ } }
+    };
+    const voltar = () => {      // Voltar/Avançar: a pasta e a pesquisa vêm da URL
+      if (!naRotaInbox()) return;
+      const q = lerQueryInbox();
+      setFolderState(q.pasta); setBusca(q.q);
+    };
+    window.addEventListener('vp:navigate', reaplicar);
+    window.addEventListener('popstate', voltar);
+    return () => { window.removeEventListener('vp:navigate', reaplicar); window.removeEventListener('popstate', voltar); };
+  }, []);
   const consulta = window.InboxBusca ? window.InboxBusca.parseConsulta(busca) : null;
   const buscando = !!(consulta && !window.InboxBusca.vazia(consulta));
   const hist = (window.useInboxHistorico || (() => ({ entrada: [], saida: [], carregando: false, truncado: false })))(consulta, buscando);
@@ -1693,13 +1747,32 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
      vivo (read-inbox), que não sabe de exclusões — por isso filtra aqui,
      contra a lista de ids já marcados como excluídos no banco. */
   const [excluidos, setExcluidos] = React.useState([]);
+  const [exclVerificados, setExclVerificados] = React.useState(() => new Set());   // ids já conferidos (não pisca e-mail excluído)
+  /* #1213 E.4: antes buscava os 500 primeiros excluídos de TODA a tabela (passando disso, os mais antigos voltavam a
+     aparecer) e ignorava erro. Agora pergunta só pelos e-mails carregados na tela, em lotes de 100 ids. Em falha mantém a
+     lista anterior e avisa no console (os excluídos nesta sessão continuam escondidos pelo estado local). */
+  const chaveExcl = emails.map((e) => e.id).filter((id) => /^[0-9a-f-]{36}$/i.test(String(id))).sort().join(',');
+  const marcarExclVerificados = (ids) => setExclVerificados((prev) => { const n = new Set(prev); ids.forEach((id) => n.add(id)); return n; });
   const carregarExcluidos = React.useCallback(() => {
-    window.__VP_SB.sb.from('emails_projeto').select('id').not('excluido_em', 'is', null).limit(500)
-      .then(({ data }) => setExcluidos((data || []).map((d) => d.id)));
-  }, []);
+    if (!chaveExcl) return;
+    const ids = chaveExcl.split(',');
+    const lotes = [];
+    for (let i = 0; i < ids.length; i += 100) lotes.push(ids.slice(i, i + 100));
+    Promise.all(lotes.map((lote) => window.__VP_SB.sb.from('emails_projeto').select('id').in('id', lote).not('excluido_em', 'is', null)))
+      .then((resps) => {
+        const falhou = resps.find((r) => r && r.error);
+        if (falhou) { console.warn('[Inbox] não foi possível ler os e-mails excluídos', falhou.error); marcarExclVerificados(ids); return; }   // falha: mostra (não esconde e-mail)
+        const achados = resps.flatMap((r) => (r.data || []).map((d) => d.id));
+        setExcluidos((prev) => [...new Set([...prev, ...achados])]);
+        marcarExclVerificados(ids);
+      })
+      .catch((e) => { console.warn('[Inbox] não foi possível ler os e-mails excluídos', e); marcarExclVerificados(ids); });
+  }, [chaveExcl]);
   React.useEffect(() => { carregarExcluidos(); }, [carregarExcluidos]);
   const emailsVisiveis = React.useMemo(() => (perm === undefined || !meta.pronto) ? []
-    : emails.filter((e) => !excluidos.includes(e.id)).filter((e) => verOk(meta.dono[e.id] || null, (meta.atribuido || {})[e.id] || null)), [emails, excluidos, meta, perm]);
+    : emails.filter((e) => !excluidos.includes(e.id) && (!/^[0-9a-f-]{36}$/i.test(String(e.id)) || exclVerificados.has(e.id)))
+      // #1213 E.2: sem saber o responsável (falha de leitura) não dá para aplicar a regra de dono — mostra tudo com aviso, nunca esconde.
+      .filter((e) => meta.erro || verOk(meta.dono[e.id] || null, (meta.atribuido || {})[e.id] || null)), [emails, excluidos, exclVerificados, meta, perm]);
   /* 04/10 — triagem silenciosa (estilo JEV, só regras; autorizada pelo usuário): a decisão (assunto/departamento/
      prioridade/confiança) é calculada no banco e só LIDA aqui (inbox-triagem.jsx). Esconde apenas e-mail automático
      com confiança suficiente (nunca apaga; "ver tudo" devolve) e destaca o que precisa de resposta. Sem classificação,
@@ -1784,14 +1857,30 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
   const buscouParaAbrir = React.useRef(null);
   React.useEffect(() => {
     if (!idParaAbrir || perm === undefined || loading) return;
-    if (todasLinhas.some((m) => m.id === idParaAbrir)) { setFolder('all'); setActiveId(idParaAbrir); if (setSubsel) setSubsel(null); return; }
+    /* #1213 E.1: clicar numa linha já abre o e-mail (abrirEmail) e grava o id na URL — esse id volta como `subsel`.
+       Sem esta saída, o clique caía aqui e trocava a pasta para "Todos os e-mails". Este efeito é só para o id que
+       chega de fora (link direto, Voltar/Avançar, "Ver documento" da Central). */
+    if (idParaAbrir === activeId) return;
+    if (todasLinhas.some((m) => m.id === idParaAbrir)) {
+      if (!listaFiltrada.some((m) => m.id === idParaAbrir)) setFolder('all', { replace: true });   // só troca de pasta se a atual não mostra o e-mail
+      setActiveId(idParaAbrir); if (setSubsel) setSubsel(null); return;
+    }
     if (buscouParaAbrir.current === idParaAbrir) return;
     buscouParaAbrir.current = idParaAbrir;
-    window.__VP_SB.sb.from('emails_projeto').select('assunto').eq('id', idParaAbrir).maybeSingle().then(({ data }) => {
+    /* #1213 E.7: e-mail excluído da lista (soft-delete) não abre — avisa e limpa o id da URL (com subsel nulo o App
+       preservaria o id antigo no endereço). */
+    const largarLink = (msg) => {
+      window.toast?.(msg, 'warning');
+      if (setSubsel) setSubsel(null);
+      if (window.VpRouter) window.VpRouter.navigate('inbox', null);
+    };
+    window.__VP_SB.sb.from('emails_projeto').select('assunto, excluido_em').eq('id', idParaAbrir).maybeSingle().then(({ data, error }) => {
+      if (error) return largarLink('Não foi possível abrir este e-mail agora.');
+      if (data && data.excluido_em) return largarLink('Este e-mail foi excluído da lista do site.');
       if (data && data.assunto) setBusca('assunto:"' + String(data.assunto).replace(/["]/g, ' ').trim() + '"');
-      else { window.toast?.('Não encontrei este e-mail (pode ter sido excluído).', 'warning'); if (setSubsel) setSubsel(null); }
+      else largarLink('Não encontrei este e-mail (pode ter sido excluído).');
     });
-  }, [idParaAbrir, todasLinhas.length, perm, loading]);
+  }, [idParaAbrir, todasLinhas.length, perm, loading, activeId]);
   const nomeDe = (email) => { const p = ((perm && perm.colaboradores) || []).find((x) => String(x.email).toLowerCase() === String(email || '').toLowerCase()); return (p && p.nome) || email; };
   const pontaAtiva = active ? (ehEnviado(active) ? (active.to || []).join(',') : active.from) : '';
   const sugAtiva = (window.useSugestaoVinculo || (() => null))(active, pontaAtiva);
@@ -1822,6 +1911,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
   const [respondendo, setRespondendo] = React.useState(false);
   const [modoCompose, setModoCompose] = React.useState('responder'); // 'responder' | 'responder-todos' | 'encaminhar'
   const [destinatarioEncaminhar, setDestinatarioEncaminhar] = React.useState('');
+  const [ccResposta, setCcResposta] = React.useState('');
   const [respostaTexto, setRespostaTexto] = React.useState('');
   const [enviandoResposta, setEnviandoResposta] = React.useState(false);
   const [sugerindoIA, setSugerindoIA] = React.useState(false);
@@ -1833,13 +1923,18 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
   const [marcandoGatilho, setMarcandoGatilho] = React.useState(false);
   const [novoEmailAberto, setNovoEmailAberto] = React.useState(false);
 
+  /* #1213 E.5: só a leitura mais recente vale — uma resposta antiga do IMAP que chegue depois não sobrescreve a nova. */
+  const leituraInbox = React.useRef(0);
   const carregar = React.useCallback(() => {
+    const minha = ++leituraInbox.current;
+    const atual = () => minha === leituraInbox.current;
     setLoading(true); setErro(null);
     window.__VP_SB.sb.functions.invoke('read-inbox', { body: { limit: 25 } }).then(({ data, error }) => {
+      if (!atual()) return;
       if (error) { setErro(error.message || String(error)); setEmails([]); return; }
       if (data && data.error) { setErro(data.error); setEmails([]); return; }
       setEmails((data && data.messages) || []);
-    }).catch((e) => setErro(e.message || String(e))).finally(() => setLoading(false));
+    }).catch((e) => { if (atual()) setErro(e.message || String(e)); }).finally(() => { if (atual()) setLoading(false); });
   }, []);
   React.useEffect(() => { carregar(); }, [carregar]);
 
@@ -1856,10 +1951,14 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
   React.useEffect(() => {
     const sb = window.__VP_SB?.sb;
     if (!sb) return;
+    /* #1213 E.5: o cron grava vários e-mails de uma vez (um INSERT por mensagem) — sem esperar, cada um disparava uma
+       leitura IMAP inteira. Agora junta os avisos de 3 s numa leitura só. */
+    let espera = null;
+    const agendar = () => { clearTimeout(espera); espera = setTimeout(carregar, 3000); };
     const canal = sb.channel('emails-projeto-entrada')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'emails_projeto', filter: 'direcao=eq.entrada' }, carregar)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'emails_projeto', filter: 'direcao=eq.entrada' }, agendar)
       .subscribe();
-    return () => sb.removeChannel(canal);
+    return () => { clearTimeout(espera); sb.removeChannel(canal); };
   }, [carregar]);
 
   /* 11/09 — achado real do usuário: mandou o RFQ pra fornecedora, não
@@ -1880,7 +1979,9 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
     setCarregandoEnviados(true);
     window.__VP_SB.sb.from('emails_projeto').select('*').eq('direcao', 'saida').is('excluido_em', null)
       .order('data_mensagem', { ascending: false }).limit(limiteEnv)
-      .then(async ({ data }) => {
+      .then(async ({ data, error: errEnv }) => {
+        // #1213 E.6: falha de leitura não pode virar "Nenhum e-mail enviado ainda" — mantém o que já estava na tela e avisa.
+        if (errEnv) { console.warn('[Inbox] falha ao carregar Enviados', errEnv); window.toast?.('Não foi possível carregar os e-mails enviados agora. Use Atualizar para tentar de novo.', 'error'); return; }
         const rows = data || [];
         const paths = [...new Set(rows.flatMap((r) => (r.anexos || []).map((a) => a.path).filter(Boolean)))];
         if (!paths.length) { setEnviados(rows); return; }
@@ -1931,10 +2032,12 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
     if (!window.confirm(`Tem certeza que deseja excluir este e-mail?${cv && cv.total > 1 ? `\n\n(Só esta mensagem — a conversa tem ${cv.total}. Para a conversa toda, marque a linha e use Excluir na barra.)` : ''}\n\n"${assunto}"\n\nEle continua existindo na caixa de e-mail real — isso só remove da lista do site.`)) return;
     try {
       const user = window.__VP_USER || {};
-      const { error } = await window.__VP_SB.sb.from('emails_projeto')
+      const { data: gravadas, error } = await window.__VP_SB.sb.from('emails_projeto')
         .update({ excluido_em: new Date().toISOString(), excluido_por: user.email || null })
-        .eq('id', email.id);
+        .eq('id', email.id).select('id');
       if (error) throw error;
+      // #1213 E.3: update barrado (RLS) ou e-mail inexistente volta 0 linhas sem erro — não pode virar "excluído".
+      if (!gravadas || !gravadas.length) throw new Error('o e-mail não foi encontrado ou você não tem permissão para alterá-lo.');
       if (ehEnviado(email)) setEnviados((prev) => prev.filter((e) => e.id !== email.id));
       else setExcluidos((prev) => [...prev, email.id]);
       if (activeId === email.id) abrirEmail(null);
@@ -2026,6 +2129,8 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
       }
       const erroValidacao = validarEmails(to);
       if (erroValidacao) { window.toast?.(erroValidacao, 'warning'); setEnviandoResposta(false); return; }
+      const ccRuim = window.EmailEnvioHelper ? window.EmailEnvioHelper.ccInvalidos(ccResposta) : [];
+      if (ccRuim.length) { window.toast?.('Corrija o(s) e-mail(s) em cópia: ' + ccRuim.join(', '), 'warning'); setEnviandoResposta(false); return; }
       /* Fase 2 (JEV): sem Nº de cotação, sugere uma — o pop-up só aparece se há evidência (forte/perguntar). */
       if (active.numeroCotacao == null && numeroForcado.current == null && !vinculoDecidido.current && window.inboxBuscarSugestao) {
         const r = await window.inboxBuscarSugestao(modoCompose === 'encaminhar' ? to : active.from, subject);
@@ -2037,6 +2142,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
       const { data, error } = await sb.functions.invoke('send-email', {
         body: {
           to, subject, text,
+          cc: window.EmailEnvioHelper ? window.EmailEnvioHelper.normalizarLista(ccResposta) : undefined,
           numeroCotacao: numeroEfetivo,
           referenciaTipo: refForn ? 'tratativa_cotacao' : (numeroEfetivo != null ? 'resposta_inbox' : undefined),
           referenciaId: refForn ? refForn.id : undefined,
@@ -2168,12 +2274,13 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
         .update({ excluido_em: new Date().toISOString(), excluido_por: (window.__VP_USER || {}).email || null }).in('id', ids).select('id');
       if (error) throw error;
       const feitos = new Set((data || []).map((r) => r.id));
+      if (!feitos.size) throw new Error('nenhum e-mail foi alterado (não encontrados ou sem permissão).');
       setEnviados((prev) => prev.filter((e) => !feitos.has(e.id)));
       setExcluidos((prev) => [...prev, ...feitos]);
       if (activeId && feitos.has(activeId)) abrirEmail(null);
       setSelecionados(new Set());
       if (window.VPLog) window.VPLog.registrar({ modulo: 'Inbox de E-mail', acao: 'Excluiu e-mails da lista (soft-delete, em massa)', alvo: `${feitos.size} e-mail(s)` });
-      window.toast?.(`${feitos.size} e-mail(s) excluído(s) da lista.`, 'success');
+      window.toast?.(`${feitos.size} e-mail(s) excluído(s) da lista.${feitos.size < ids.length ? ` ${ids.length - feitos.size} não puderam ser excluídos.` : ''}`, feitos.size < ids.length ? 'warning' : 'success');
     } catch (e) { window.toast?.('Erro ao excluir: ' + (e.message || e), 'error'); }
   };
 
@@ -2237,7 +2344,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
     if (!window.confirm(`Apagar o marcador “${mc.nome}”?\n\nOs e-mails não são apagados — só perdem este marcador.`)) return;
     const err = await mk.apagar(mc.id);
     if (err) { window.toast?.(err, 'error'); return; }
-    if (folder === 'm:' + mc.id) setFolder('inbox');
+    if (folder === 'm:' + mc.id) setFolder('inbox', { replace: true });
     window.toast?.('Marcador apagado.', 'success');
   };
   const contaPasta = (pasta, soNaoLidas) => (O ? todasLinhas.filter((m) => O.visivelNaPasta(m, pasta, ctxPasta) && (!soNaoLidas || naoLida(m))).length : 0);
@@ -2253,6 +2360,16 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
     { id: "all", label: "Todos os e-mails", icon: "layers" },
     { id: "spam", label: "Spam", icon: "warning", count: contaPasta('spam', true) },
   ];
+  /* Pasta vinda do link que não existe para esta pessoa (marcador apagado ou que ela não vê, "Sem responsável" sem a
+     alçada de triagem, nome inventado): avisa e volta à Caixa de entrada. Espera alçadas e marcadores carregarem. */
+  const pastaValida = folders.some((f) => f.id === folder)
+    || (String(folder).startsWith('m:') && (mk.marcadores || []).some((x) => 'm:' + x.id === folder));
+  const podeConferirPasta = perm !== undefined && mk.pronto !== false;   // perm undefined = carregando; null = falhou (mostra tudo)
+  React.useEffect(() => {
+    if (!podeConferirPasta || pastaValida) return;
+    window.toast?.('Esta pasta não está disponível para você (marcador apagado ou sem permissão) — mostrando a Caixa de entrada.', 'warning');
+    setFolder('inbox', { replace: true });
+  }, [podeConferirPasta, pastaValida, folder]);
 
   if (perm && !pode('ver')) {
     return (
@@ -2313,7 +2430,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
           {folders.map((f) => {
             const I = Icon[f.icon] || Icon.mail;
             return (
-              <div key={f.id} className={"inbox__folder " + (folder === f.id && !buscando ? "is-active" : "")} onClick={() => { setBusca(''); setFolder(f.id); abrirEmail(null); }}>
+              <div key={f.id} className={"inbox__folder " + (folder === f.id && !buscando ? "is-active" : "")} onClick={() => { abrirEmail(null, { replace: true }); setBusca(''); setFolder(f.id); }}>
                 <I size={14}/>
                 <span>{f.label}</span>
                 {f.count ? <span className="count">{f.count}</span> : null}
@@ -2322,7 +2439,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
           })}
           {window.InboxSecaoMarcadores && O && (
             <window.InboxSecaoMarcadores arvore={mkArvore} pasta={folder}
-              onAbrir={(id) => { setBusca(''); setFolder(id); abrirEmail(null); }} onNovo={() => setModalMarcador(true)}
+              onAbrir={(id) => { abrirEmail(null, { replace: true }); setBusca(''); setFolder(id); }} onNovo={() => setModalMarcador(true)}
               contagem={(id) => todasLinhas.filter((m) => (mk.porEmail[m.id] || []).includes(id) && naoLida(m) && !spamDe(m)).length}
               podeGerir={(m) => O.podeGerirMarcador(m, eu, capsOrg)} onApagar={apagarMarcador}/>
           )}
@@ -2360,6 +2477,11 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
               <span className="mono">{listaFiltrada.length}</span>
             </div>
           </div>
+          {meta.erro && (
+            <div className="small" style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', background: 'var(--vp-warning-tint, rgba(245,158,11,.10))' }}>
+              Não foi possível conferir o responsável dos e-mails — mostrando todos. <a href="#" onClick={(ev) => { ev.preventDefault(); if (meta.recarregar) meta.recarregar(); }}>Tentar de novo</a>
+            </div>
+          )}
           {folder === "inbox" && !buscando && window.InboxFaixaImportante && (
             <window.InboxFaixaImportante itens={importantes} ocultos={silenciosos.length} foco={foco} onToggleFoco={() => setFoco((f) => !f)} onAbrir={abrirEmail}/>
           )}
@@ -2537,6 +2659,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
                       Para: {[active.from, ...(active.to || []), ...(active.cc || [])].map((e) => String(e).toLowerCase()).filter((e, i, arr) => e && e !== NOSSO_EMAIL && arr.indexOf(e) === i).join(', ')}
                     </div>
                   )}
+                  <div style={{ marginBottom: 6 }}>{window.EmailCcInput && <window.EmailCcInput value={ccResposta} onChange={setCcResposta} />}</div>
                   <textarea className="input" rows={5} style={{ width: '100%', resize: 'vertical' }}
                     placeholder={modoCompose === 'encaminhar' ? 'Mensagem (opcional) antes do conteúdo encaminhado…' : `Respondendo a ${active.fromName || active.from}…`}
                     value={respostaTexto} onChange={(e) => setRespostaTexto(e.target.value)} autoFocus/>
@@ -2596,6 +2719,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
    a um projeto, igual ao RFQ do Formulário. */
 function EmailNovoModal({ onClose, onEnviado, inicial }) {
   const [para, setPara] = React.useState((inicial && inicial.para) || '');
+  const [cc, setCc] = React.useState(() => (window.EmailEnvioHelper ? window.EmailEnvioHelper.ccSalvo() : ''));
   const [assunto, setAssunto] = React.useState((inicial && inicial.assunto) || '');
   const [corpo, setCorpo] = React.useState('');
   const [numeroCotacaoInput, setNumeroCotacaoInput] = React.useState('');
@@ -2645,6 +2769,7 @@ function EmailNovoModal({ onClose, onEnviado, inicial }) {
       const { data, error } = await sb.functions.invoke('send-email', {
         body: {
           to: para.trim(), subject: assunto.trim(), text: corpo,
+          cc: window.EmailEnvioHelper ? window.EmailEnvioHelper.normalizarLista(cc) : undefined,
           numeroCotacao: numero || undefined,
           referenciaTipo: numero ? 'avulso_inbox' : undefined,
           attachments: anexos.length ? anexos.map((a) => ({ filename: a.filename, contentType: a.contentType, base64: a.base64 })) : undefined,
@@ -2686,6 +2811,7 @@ function EmailNovoModal({ onClose, onEnviado, inicial }) {
           </div> },
       <div className="stack" style={{ gap: 8 }}>
         <input className="input" placeholder="Para (e-mail)" value={para} onChange={(e) => setPara(e.target.value)}/>
+        {window.EmailCcInput && <window.EmailCcInput value={cc} onChange={setCc} />}
         <input className="input" placeholder="Assunto" value={assunto} onChange={(e) => setAssunto(e.target.value)}/>
         <textarea className="input" rows={7} style={{ resize: 'vertical' }} placeholder="Mensagem…" value={corpo} onChange={(e) => setCorpo(e.target.value)}/>
         <input className="input" style={{ maxWidth: 220 }} placeholder="Nº Cotação (opcional)" value={numeroCotacaoInput} onChange={(e) => setNumeroCotacaoInput(e.target.value)}/>

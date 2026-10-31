@@ -74,6 +74,7 @@ const NAV_GROUPS = [
     { id: "embarques-importacao", label: "Embarques", icon: "ship", indent: true },
     { id: "importacao", label: "Rastreio Marítimo", icon: "ship", indent: true },
     { id: "gi-analise-precos", label: "Análise de Preços", icon: "calculator", indent: true },
+    { id: "ncm-catalogo", label: "Catálogo Siscomex", icon: "fileSearch", indent: true },
     { id: "compras", label: "Importação Varejo", icon: "truck" },
     { id: "cotacoes-varejo", label: "Cotações de Varejo", icon: "fileSearch" },
     { id: "pedidos-acompanhamento", label: "Pedidos", icon: "package" },
@@ -81,13 +82,10 @@ const NAV_GROUPS = [
   /* Só o que define/projeta o produto. Vistoria, instalação, entrega e
      documentação saíram daqui — Engenharia parava de ser "gaveta de tudo". */
   { label: "Engenharia & Produto", items: [
-    { id: "engenharia", label: "Engenharia", icon: "ruler" },
     { id: "eng-projeto-elevadores", label: "Projeto de Elevadores", icon: "grid" },
     { id: "eng-configurador", label: "Projeto de Equipamento", icon: "grid" },
-    { id: "desenho-tecnico", label: "Projetos ER/Es", icon: "ruler" },
     { id: "solicitacoes-produto", label: "Solicitações de Produto", icon: "inbox" },
     { id: "ficha-tecnica", label: "Ficha Técnica", icon: "fileText" },
-    { id: "ncm-catalogo", label: "Catálogo Siscomex", icon: "fileSearch" },
     { id: "linha-do-tempo", label: "Linha do Tempo da Cotação", icon: "clock" },
   ]},
   /* Novo grupo — execução da obra. "Dossiês de Obras" é a tela que já lista
@@ -101,14 +99,21 @@ const NAV_GROUPS = [
     { id: "vistorias", label: "Resultado Vistorias de Obras", icon: "history" },
     { id: "instalacao", label: "Instalação em Campo", icon: "hardhat" },
     { id: "mapa-obras", label: "Mapa de Obras", icon: "pin" },
-    { id: "cronograma", label: "Cronograma", icon: "clock" },
     { id: "art", label: "ART", icon: "scale" },
   ]},
-  /* Novo grupo — fechamento documental/entrega, separado de execução de obra. */
+  /* Novo grupo — fechamento documental/entrega, separado de execução de obra.
+     Os 3 itens históricos (Central de Documentos/Data Book & Termo/Entrega
+     Final) são telas DIFERENTES, cada uma com sua própria função — nunca
+     consolidar num item só sem pedido explícito (já aconteceu, revertido:
+     ver "Repositório Documentos" abaixo). "Repositório Documentos" é um 4º
+     item NOVO, independente dos outros 3: um upload genérico de qualquer
+     documento que a Engenharia ache necessário guardar (ver
+     repositorio-documentos.jsx/-store.js), rota própria `repositorio-documentos`. */
   { label: "Entrega & Documentação", items: [
     { id: "central-documentos", label: "Central de Documentos", icon: "fileSearch" },
     { id: "databook", label: "Data Book & Termo", icon: "fileSearch" },
     { id: "handover", label: "Entrega Final", icon: "package" },
+    { id: "repositorio-documentos", label: "Repositório Documentos", icon: "upload" },
   ]},
   /* Novo grupo — o ciclo inteiro do parceiro instalador (cadastro → homologação
      → contrato → pagamento) num só lugar. Permissão de edição continua
@@ -120,6 +125,13 @@ const NAV_GROUPS = [
     { id: "rh-homologacao", label: "Homologação de Instaladores", icon: "hardhat" },
     { id: "contrato-instalador", label: "Contrato Instalador", icon: "hardhat" },
     { id: "pagamentos-instalador", label: "Pagamentos a Instaladores", icon: "dollar", restrict: ["financeiro", "engenharia", "admin"] },
+    /* Cronograma de Pagamento da Instalação (29/10/2026) — só reagrupa no
+       menu (pedido do usuário: mora melhor perto de Pagamentos a
+       Instaladores, que já paga a mão de obra por marco físico). Rota,
+       URL (/engenharia/cronograma) e `id` de alçada NÃO mudaram, mesmo
+       padrão já usado em PCP/MES→Fabricação (17/10) e Matérias-Primas/
+       Produtos (18/10) — mudar a URL seria decisão à parte. */
+    { id: "cronograma", label: "Cronograma de Pagamento da Instalação", icon: "clock" },
   ]},
   /* Placeholders sem rota própria (Expedição/Logística) ocultados — item
      visível deve significar "posso entrar e fazer algo" (Achado 12). */
@@ -349,6 +361,8 @@ const BREADCRUMB_MAP = {
   "crm-analise":    { module: "CRM", page: "Análise", icon: "trending" },
   formularios:   { module: "Comercial", page: "Formulários", icon: "layers" },
   "formulario-elevador": { module: "Comercial", page: "Formulário — Elevador", icon: "layers" },
+  "formulario-escada": { module: "Comercial", page: "Formulário — Escada Rolante", icon: "layers" },
+  "formulario-esteira": { module: "Comercial", page: "Formulário — Esteira Rolante", icon: "layers" },
   "formulario-quadro-comando": { module: "Comercial", page: "Quadro de Comando", icon: "layers" },
   "controle-cotacoes":   { module: "Comercial", page: "Controle de Cotações", icon: "history" },
   "cotacao-quadro-comando": { module: "Comercial", page: "Cotação Quadro de Comando", icon: "grid" },
@@ -359,9 +373,10 @@ const BREADCRUMB_MAP = {
   propostas:     { module: "Comercial", page: "Propostas", icon: "proposal" },
   "proposta-editor": { module: "Comercial", page: "Editor de Proposta", icon: "proposal" },
   "dossier-obra":  { module: "Engenharia", page: "Dossiê da Obra", icon: "briefcase" },
-  "status-obras":  { module: "Engenharia", page: "Status de Obras", icon: "building" },
+  "status-obras":  { module: "Obras & Instalação", page: "Dossiês de Obras", icon: "building" },
   "linha-do-tempo": { module: "Engenharia", page: "Linha do Tempo da Cotação", icon: "clock" },
-  "central-documentos": { module: "Engenharia", page: "Central de Documentos", icon: "fileSearch" },
+  "central-documentos": { module: "Entrega & Documentação", page: "Central de Documentos", icon: "fileSearch" },
+  "repositorio-documentos": { module: "Engenharia", page: "Repositório Documentos", icon: "upload" },
   juridico:      { module: "Jurídico", page: "Contratos & Minutas", icon: "scale" },
   "aval-juridico": { module: "Jurídico", page: "Aval Jurídico", icon: "scale" },
   "contrato-editor": { module: "Jurídico", page: "Editor de Contrato", icon: "fileText" },
@@ -372,14 +387,13 @@ const BREADCRUMB_MAP = {
   "cadastro-materias-primas": { module: "Fabricação", page: "Matérias-Primas", icon: "layers" },
   "cadastro-produtos": { module: "Fabricação", page: "Produtos", icon: "package" },
   engenharia:    { module: "Engenharia", page: "Engenharia", icon: "ruler" },
-  "ncm-catalogo": { module: "Cadastros", page: "Produtos", icon: "fileSearch" },
+  "ncm-catalogo": { module: "Importação", page: "Catálogo Siscomex", icon: "fileSearch" },
   "cadastro-instaladores": { module: "Cadastros", page: "Empresas Instaladoras", icon: "hardhat" },
   "cadastro-custos": { module: "Cadastros", page: "Atualização de Custos", icon: "calculator" },
   "ncm-kanban": { module: "Engenharia", page: "Solicitações NCM", icon: "fileSearch" },
   "ncm-detail": { module: "Engenharia", page: "Detalhe da Solicitação NCM", icon: "fileSearch" },
   "eng-projeto-elevadores": { module: "Engenharia", page: "Projeto de Elevadores", icon: "grid" },
   "eng-configurador": { module: "Engenharia", page: "Projeto de Equipamento", icon: "grid" },
-  "desenho-tecnico": { module: "Engenharia", page: "Desenho Técnico ER | ES", icon: "ruler" },
   "solicitacoes-produto": { module: "Engenharia", page: "Solicitações de Produto", icon: "inbox" },
   "ficha-tecnica":   { module: "Engenharia", page: "Ficha Técnica", icon: "fileText" },
   importacao:    { module: "Importação", page: "Gestão Importação — Rastreio Marítimo (AIS)", icon: "ship" },
@@ -409,14 +423,14 @@ const BREADCRUMB_MAP = {
   pcp:           { module: "Logística", page: "PCP — Planejamento e Controle da Produção", icon: "calendar" },
   mes:           { module: "Logística", page: "MES — Sistema de Execução da Manufatura", icon: "settings" },
   "mes-cadastros": { module: "Logística", page: "MES — Cadastros do chão de fábrica", icon: "layers" },
-  "vistorias-envio": { module: "Instalação & Entrega", page: "Vistorias de Obras", icon: "send" },
-  vistorias:     { module: "Instalação & Entrega", page: "Resultado Vistorias de Obras", icon: "history" },
-  instalacao:    { module: "Instalação & Entrega", page: "Instalação em Campo", icon: "hardhat" },
-  "mapa-obras":  { module: "Instalação & Entrega", page: "Mapa de Obras", icon: "pin" },
-  art:           { module: "Instalação & Entrega", page: "ART de Instalação", icon: "scale" },
-  cronograma:    { module: "Instalação & Entrega", page: "Cronograma de Instalação", icon: "clock" },
-  databook:      { module: "Instalação & Entrega", page: "Data Book & Termo", icon: "fileSearch" },
-  handover:      { module: "Instalação & Entrega", page: "Handover & Pós-venda", icon: "package" },
+  "vistorias-envio": { module: "Obras & Instalação", page: "Vistorias de Obras", icon: "send" },
+  vistorias:     { module: "Obras & Instalação", page: "Resultado Vistorias de Obras", icon: "history" },
+  instalacao:    { module: "Obras & Instalação", page: "Instalação em Campo", icon: "hardhat" },
+  "mapa-obras":  { module: "Obras & Instalação", page: "Mapa de Obras", icon: "pin" },
+  art:           { module: "Obras & Instalação", page: "ART de Instalação", icon: "scale" },
+  cronograma:    { module: "Parceiros & Instaladores", page: "Cronograma de Pagamento da Instalação", icon: "clock" },
+  databook:      { module: "Entrega & Documentação", page: "Data Book & Termo", icon: "fileSearch" },
+  handover:      { module: "Entrega & Documentação", page: "Entrega Final", icon: "package" },
   financeiro:    { module: "Financeiro", page: "Prazos & Pendências", icon: "dollar" },
   "aval-financeiro": { module: "Financeiro", page: "Aval Financeiro", icon: "shield" },
   comissoes:     { module: "Financeiro", page: "Comissões", icon: "award" },
@@ -438,11 +452,13 @@ const MODULE_HOME = {
   "Comercial": "formularios",
   "CRM": "leads",
   "Jurídico": "juridico",
-  "Engenharia": "engenharia",
+  "Engenharia": "eng-projeto-elevadores", // o antigo hub "engenharia" saiu do menu (30/10/2026, nenhum dado em `projetos`)
   "RH Operacional": "rh-homologacao",
   "Logística": "compras",
   "Importação": "gi-painel",
-  "Instalação & Entrega": "vistorias-envio",
+  "Obras & Instalação": "status-obras",
+  "Entrega & Documentação": "central-documentos",
+  "Parceiros & Instaladores": "cadastro-instaladores",
   "Financeiro": "financeiro",
   "Admin": "logs",
 };
@@ -465,7 +481,9 @@ const HELP_TOPICS = {
   "cotacoes-varejo": "Os lotes de cotação que o comprador pediu na Importação Varejo. Abra um lote, convide fornecedores já cadastrados e envie o link; cada um responde com preço por faixa de quantidade, prazo e MOQ. No mapa comparativo digite quanto comprar de cada fornecedor (pode dividir, e pode ser mais ou menos que o pedido) e aprove: só então a requisição vai ao Omie.",
   "cadastro-produtos": "Tela só de consulta: os produtos vêm do Omie. Pesquise por código ou descrição, filtre por família e leia cada coluna; o código do produto abre a Montagem do Produto. Se um dado estiver errado, a correção é feita no Omie, não aqui.",
   formularios: "Formulários de intake por tipo de equipamento. O de Elevador coleta os dados que alimentam cotação e precificação.",
-  "formulario-elevador": "Formulário de coleta de dados do elevador, da escada ou da esteira. Escolha o cliente, informe a obra e cadastre cada equipamento: o rascunho sempre salva, e os campos com * são obrigatórios para enviar a cotação (o que faltar acende em vermelho). Com o formulário salvo, use Enviar cotação a fornecedores. O botão Link p/ cliente preencher deixa o próprio cliente preencher.",
+  "formulario-elevador": "Formulário de coleta de dados do elevador, da escada ou da esteira. Escolha o cliente, informe a obra e cadastre cada equipamento: o rascunho sempre salva, e os campos com * são obrigatórios para enviar a cotação (o que faltar acende em vermelho). Com o formulário salvo, use Enviar cotação a fornecedores. O botão Link p/ cliente preencher deixa o próprio cliente preencher. Trocar o Tipo de equipamento do 1º card muda o endereço na barra do navegador (elevador/escada/esteira) — é a mesma tela.",
+  "formulario-escada": "Mesmo formulário de coleta de dados do elevador — aberto já com Escada Rolante selecionada no 1º equipamento. Preencha a Aplicação/Uso, o Desnível Vertical e os demais parâmetros da planilha técnica; o resto segue igual (cliente, obra, envio ao fornecedor).",
+  "formulario-esteira": "Mesmo formulário de coleta de dados do elevador — aberto já com Esteira Rolante selecionada no 1º equipamento. Preencha a Aplicação/Uso, o Desnível Vertical e os demais parâmetros da planilha técnica; o resto segue igual (cliente, obra, envio ao fornecedor).",
   "cotacoes-fornecedor": "Cotações enviadas aos fornecedores (Glarie/Seloon…). Acompanhe status, tratativas e a decisão de compra.",
   precificacao: "Precificação a partir da cotação respondida. Só libera depois da Análise Técnica aprovada.",
   propostas: "Propostas comerciais geradas da precificação aprovada. Editor com PDF de 18 páginas para Elevador.",
@@ -505,6 +523,8 @@ const TUTORIAIS = {
   "aval-juridico": "contratos-juridico/aval-juridico",
   formularios: "comercial-pre-venda/formularios",
   "formulario-elevador": "comercial-pre-venda/formulario-de-equipamento",
+  "formulario-escada": "comercial-pre-venda/formulario-de-equipamento",
+  "formulario-esteira": "comercial-pre-venda/formulario-de-equipamento",
   "controle-cotacoes": "comercial-pre-venda/controle-de-cotacoes",
   "cotacoes-fornecedor": "comercial-pre-venda/cotacoes-a-fornecedor",
   "cotacao-fornecedor-detail": "comercial-pre-venda/cotacao-a-fornecedor-detalhe",

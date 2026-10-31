@@ -47,6 +47,7 @@ function RVTratativa({ lote, convite, itens, respostas, editavel }) {
   const [emails, setEmails] = React.useState([]);
   const [aberto, setAberto] = React.useState({});
   const [texto, setTexto] = React.useState('');
+  const [cc, setCc] = React.useState(() => (window.EmailEnvioHelper ? window.EmailEnvioHelper.ccSalvo() : ''));
   const [anexos, setAnexos] = React.useState([]);
   const [enviando, setEnviando] = React.useState(false);
   const [aviso, setAviso] = React.useState(null);
@@ -87,7 +88,7 @@ function RVTratativa({ lote, convite, itens, respostas, editavel }) {
   const enviar = async () => {
     setEnviando(true); setAviso(null);
     try {
-      const r = await S.enviar({ lote, convite, mensagem: texto, anexos });
+      const r = await S.enviar({ lote, convite, mensagem: texto, anexos, cc });
       setTexto(''); setAnexos([]);
       const a = r.__email;
       setAviso(a.ok ? { ok: true, txt: 'Registrado e enviado por e-mail para ' + a.para.join(', ') + '. A resposta dele volta aqui.' } : { ok: false, txt: 'Mensagem registrada, mas o e-mail NÃO foi enviado: ' + a.motivo });
@@ -160,8 +161,14 @@ function RVTratativa({ lote, convite, itens, respostas, editavel }) {
       </div>
 
       {aviso && <div style={{ padding: '8px 10px', fontSize: 12, border: '1px solid ' + (aviso.ok ? '#86efac' : '#fbb039'), background: aviso.ok ? '#f0fdf4' : '#fff8e6', color: aviso.ok ? '#166534' : '#8a5a00' }}>{aviso.ok ? '✓ ' : '⚠ '}{aviso.txt}</div>}
-      {editavel && (
+      {editavel && convite.status === 'rascunho' && (
+        <div className="small muted" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+          O pedido de cotação ainda não foi enviado a este fornecedor, então o link do portal dele ainda não funciona. Envie primeiro na aba <a href={'/gestao-importacao/rfq-importacao/' + lote.id + '/comparar'} onClick={(e) => { e.preventDefault(); rvIrPara('/gestao-importacao/rfq-importacao/' + lote.id + '/comparar'); }}>Comparar e escolher vencedor</a> (botão "Pedir cotação ao fornecedor"); depois você conversa por aqui.
+        </div>
+      )}
+      {editavel && convite.status !== 'rascunho' && (
         <div className="stack" style={{ gap: 6, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+          {window.EmailCcInput && <window.EmailCcInput value={cc} onChange={setCc} />}
           <textarea className="input" rows={3} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={'Escreva ao fornecedor (' + convite.fornecedor_nome + '). A mensagem vai por e-mail e a resposta dele volta para esta conversa.'} />
           {anexos.length > 0 && <div className="row gap-2" style={{ flexWrap: 'wrap' }}>{anexos.map((a, i) => <span key={i} className="badge">{a.nome} <button className="link-btn" onClick={() => setAnexos((x) => x.filter((_, j) => j !== i))}>×</button></span>)}</div>}
           <div className="row sb">
@@ -171,6 +178,43 @@ function RVTratativa({ lote, convite, itens, respostas, editavel }) {
         </div>
       )}
     </div>
+  );
+}
+
+/* ---------- Aba P.I.: as P.I. em rascunho nascidas da aprovação do lote + andamento da Proforma ---------- */
+function RFQVarejoPIs({ lote }) {
+  const [pis, setPis] = React.useState(null);
+  React.useEffect(() => {
+    const c = (window.__VP_SB || {}).sb; if (!c) { setPis([]); return; }
+    c.from('pi_importacao').select('id, numero_pi, fornecedor, moeda, valor_total, status, producao').contains('producao', { origem_lote: lote.id }).order('created_at')
+      .then(({ data, error }) => setPis(error ? [] : (data || [])));
+  }, [lote.id, lote.status]);
+  const regs = lote.requisicoes || [];
+  const PROFORMA = { enviada: 'Proforma pedida por e-mail', so_registrada: 'Proforma pedida só na tratativa (e-mail não saiu)', falhou: 'Pedido de Proforma não saiu — escreva na aba Fornecedores' };
+  if (pis === null) return <div className="small muted">Carregando…</div>;
+  if (!pis.length) return (
+    <Card title="P.I. deste lote">
+      <div className="small muted">{lote.status === 'aprovado' ? 'Nenhuma P.I. ligada a este lote (lote aprovado antes desta etapa existir).' : 'Ainda não há P.I. Na aba "Comparar e escolher vencedor", escolha as quantidades e aprove: nasce 1 P.I. em rascunho por fornecedor vencedor e o pedido de Proforma segue para ele.'}</div>
+    </Card>
+  );
+  return (
+    <Card title="P.I. deste lote" sub="Rascunhos criados ao aprovar o vencedor. Troque o número provisório pelo da P.I. do fornecedor e complete os dados ao receber a Proforma.">
+      <div style={{ display: 'grid', gap: 10 }}>
+        {pis.map((p) => {
+          const reg = regs.find((r) => r.pi_id === p.id) || {};
+          return (
+            <div key={p.id} style={{ border: '1px solid var(--border, #e5e7eb)', borderRadius: 8, padding: '10px 12px', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 240 }}>
+                <div style={{ fontWeight: 800 }}>{p.numero_pi} <Badge variant={(p.producao || {}).rascunho_auto ? 'warning' : 'success'}>{(p.producao || {}).rascunho_auto ? 'rascunho' : (p.status || 'P.I.')}</Badge></div>
+                <div className="small muted">{p.fornecedor} · {p.moeda} {Number(p.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                {reg.proforma && <div className="small">{PROFORMA[reg.proforma] || reg.proforma}</div>}
+              </div>
+              <Button variant="outline" size="sm" onClick={() => rvIrPara('/gestao-importacao/pi-importacao/' + p.id)}>Abrir P.I.</Button>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
 
@@ -188,10 +232,29 @@ function RFQVarejoDetalhe({ loteId, onVoltar }) {
   if (erro) return <div className="page fade-in"><div className="alert danger"><div><div className="alert__title">Não foi possível abrir o lote</div><div className="alert__sub">{erro}</div></div></div><Button variant="outline" onClick={onVoltar}>← RFQ</Button></div>;
   if (!dados) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
-  const { lote, itens, convites, respostas } = dados;
+  const { lote, convites, respostas } = dados;
+  // Fornecedores removidos/substituídos continuam consultáveis (somente leitura): respostas, preços e conversa não morrem.
+  const removidos = dados.convitesRemovidos || [];
+  const todos = convites.concat(removidos);
+  const itens = dados.itens.concat(dados.itensRemovidos || []);
   const st = RV_STATUS_LOTE[lote.status] || RV_STATUS_LOTE.rascunho;
   const aberto = lote.status === 'rascunho' || lote.status === 'em_cotacao';
-  const sel = convites.find((c) => c.id === conviteSel) || convites[0] || null;
+  const sel = todos.find((c) => c.id === conviteSel) || convites[0] || todos[0] || null;
+  // O 3º segmento da URL é a aba: 'comparar' | 'pi' | id do fornecedor (Fornecedores e tratativas).
+  const aba = conviteSel === 'comparar' || conviteSel === 'pi' ? conviteSel : 'tratativas';
+  const abas = (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '0 0 14px' }}>
+      {[['tratativas', 'Fornecedores e tratativas', () => setConviteSel(convites[0] ? convites[0].id : null)], ['comparar', 'Comparar e escolher vencedor', () => setConviteSel('comparar')], ['pi', 'P.I.', () => setConviteSel('pi')]].map(([id, rot, ir]) => (
+        <button key={id} onClick={ir} className={'btn btn--sm ' + (aba === id ? 'btn--primary' : 'btn--outline')}>{rot}</button>
+      ))}
+    </div>
+  );
+  if (aba === 'comparar') return (
+    <div>
+      <div className="page" style={{ paddingBottom: 0 }}>{abas}</div>
+      <window.CVDetalhe key={loteId} loteId={loteId} onVoltar={onVoltar} />
+    </div>
+  );
 
   return (
     <div className="page fade-in">
@@ -203,25 +266,27 @@ function RFQVarejoDetalhe({ loteId, onVoltar }) {
         </div>
         <div className="page-head__r">
           <Button variant="outline" onClick={onVoltar}>← RFQ</Button>
-          <Button variant="outline" onClick={() => rvIrPara('/logistica/cotacoes-varejo/' + lote.id)}>Mapa comparativo e aprovação</Button>
+          <Button variant="outline" onClick={() => setConviteSel('comparar')}>Comparar e escolher vencedor</Button>
         </div>
       </div>
-      {convites.length === 0 ? (
-        <Card title="Fornecedores"><div className="small muted">Nenhum fornecedor foi convidado neste lote ainda. Convide e peça a cotação em <a href={'/logistica/cotacoes-varejo/' + lote.id} onClick={(e) => { e.preventDefault(); rvIrPara('/logistica/cotacoes-varejo/' + lote.id); }}>Cotações de Varejo</a>.</div></Card>
+      {abas}
+      {aba === 'pi' ? <RFQVarejoPIs lote={lote} /> : todos.length === 0 ? (
+        <Card title="Fornecedores"><div className="small muted">Nenhum fornecedor foi convidado neste lote ainda. Convide e peça a cotação na aba <a href={'/gestao-importacao/rfq-importacao/' + lote.id + '/comparar'} onClick={(e) => { e.preventDefault(); setConviteSel('comparar'); }}>Comparar e escolher vencedor</a>.</div></Card>
       ) : (
         <>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-            {convites.map((cv) => {
+            {todos.map((cv) => {
               const s = RV_STATUS_CONVITE[cv.status] || RV_STATUS_CONVITE.rascunho; const ativo = sel && sel.id === cv.id;
               return (
-                <button key={cv.id} onClick={() => setConviteSel(cv.id)} className={'btn btn--sm ' + (ativo ? 'btn--primary' : 'btn--outline')}>
-                  {cv.fornecedor_nome} <span style={{ opacity: 0.8 }}>· {s.label}</span>
+                <button key={cv.id} onClick={() => setConviteSel(cv.id)} className={'btn btn--sm ' + (ativo ? 'btn--primary' : 'btn--outline')} style={cv.removido_em ? { borderStyle: 'dashed', opacity: 0.85 } : undefined} title={cv.removido_em ? 'Removido do lote — histórico somente leitura' : ''}>
+                  {cv.fornecedor_nome} <span style={{ opacity: 0.8 }}>· {cv.removido_em ? 'removido' : s.label}</span>
                 </button>
               );
             })}
           </div>
+          {sel && sel.removido_em && <div className="alert warning" style={{ marginBottom: 12 }}><div><div className="alert__title">Fornecedor removido deste lote em {rvData(sel.removido_em)}</div><div className="alert__sub">{sel.removido_motivo || 'Sem motivo informado.'} Histórico somente leitura: o link dele deixou de funcionar e não é possível enviar novas mensagens.</div></div></div>}
           {sel && <Card title={sel.fornecedor_nome} sub={(sel.email || 'sem e-mail no cadastro') + ' · ' + sel.moeda + ' · rodada ' + sel.rodada + (sel.respondido_em ? ' · respondeu ' + rvData(sel.respondido_em) : '')}>
-            <RVTratativa key={sel.id} lote={lote} convite={sel} itens={itens} respostas={respostas} editavel={aberto} />
+            <RVTratativa key={sel.id} lote={lote} convite={sel} itens={itens} respostas={respostas} editavel={aberto && !sel.removido_em} />
           </Card>}
         </>
       )}

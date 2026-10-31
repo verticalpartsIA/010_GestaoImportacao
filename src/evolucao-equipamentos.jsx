@@ -63,7 +63,7 @@ function EvPasso({ p, atual, atrasada, ok }) {
   if (atual) { cls.push("atual"); if (atrasada) cls.push("atraso"); }
   const icone = p.estado === "feito" || p.estado === "pulado" ? "✓" : atual ? "●" : "";
   let dt = "—", dtCls = "ev-dt";
-  if (p.estado === "feito") dt = p.data ? evData(p.data) : "sem data";
+  if (p.estado === "feito") dt = p.data ? evData(p.data) + (p.fonte === "eta" ? " (estimado)" : "") : "sem data";
   else if (p.estado === "pulado") dt = "sem data";
   else if (p.estado === "previsto" && p.data) { dt = "prev. " + evData(p.data); dtCls += atual && atrasada ? " atraso" : " prev"; }
   else if (atual) dt = "agora";
@@ -237,7 +237,7 @@ function useEvolucaoItens(obras) {
       try {
         const [eqRes, embRes, prog] = await Promise.all([
           ids.length ? sb.from("equipamentos_obra").select("id, dossier_id, numero_serie, tipo, atualizado_em, previsao_chegada_material, chegada_real_material, previsao_inicio, data_real_inicio, previsao_termino, data_real_termino").in("dossier_id", ids) : { data: [] },
-          cotacoes.length ? sb.from("embarques_importacao").select("id, nome_embarque, numero_cotacao, etd_original, etd_atual, eta_santos, data_entrega, data_limite_entrega, arquivado, updated_at, created_at, houve_rolagem, historico_rolagens, historico_eta, canal_parametrizacao").in("numero_cotacao", cotacoes) : { data: [] },
+          cotacoes.length ? sb.from("embarques_importacao").select("id, nome_embarque, numero_cotacao, etd_original, etd_atual, eta_santos, presenca_carga, data_entrega, data_limite_entrega, arquivado, updated_at, created_at, houve_rolagem, historico_rolagens, historico_eta, canal_parametrizacao").in("numero_cotacao", cotacoes) : { data: [] },
           window.AcompanhamentoObraStore && ids.length ? window.AcompanhamentoObraStore.resumoProgressoBatch(ids).catch(() => ({})) : {},
         ]);
         if (eqRes.error) throw eqRes.error;
@@ -256,7 +256,7 @@ function useEvolucaoItens(obras) {
             pis = piRes.data || [];
             const embIds = Array.from(new Set(pis.map((p) => p.embarque_id)));
             if (embIds.length) {
-              const r = await sb.from("embarques_importacao").select("id, nome_embarque, numero_cotacao, etd_original, etd_atual, eta_santos, data_entrega, data_limite_entrega, arquivado, updated_at, created_at, houve_rolagem, historico_rolagens, historico_eta, canal_parametrizacao").in("id", embIds);
+              const r = await sb.from("embarques_importacao").select("id, nome_embarque, numero_cotacao, etd_original, etd_atual, eta_santos, presenca_carga, data_entrega, data_limite_entrega, arquivado, updated_at, created_at, houve_rolagem, historico_rolagens, historico_eta, canal_parametrizacao").in("id", embIds);
               if (r.error) throw r.error;
               embSerie = r.data || [];
             }

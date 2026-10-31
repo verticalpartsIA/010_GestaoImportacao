@@ -129,6 +129,7 @@ function CVCelula({ resp, qtdRef, melhor, editavel, valorQtd, onQtd, onTudo }) {
             </div>
           )}
           {aplicada && aplicada.abaixoMin && <div style={{ color: 'var(--vp-amber-700, #b45309)' }}>⚠ vende a partir de {cvFmtNum(aplicada.min)}</div>}
+          {(() => { const fo = C.faixasForaDeOrdem(resp.faixas); return fo ? <div style={{ color: '#b91c1c', fontWeight: 700 }} title={'O preço sobe de ' + fo.de.preco + ' (a partir de ' + fo.de.min + ') para ' + fo.para.preco + ' (a partir de ' + fo.para.min + '). Confirme com o fornecedor.'}>⚠ preço sobe com a quantidade{fo.tipo === 'salto' ? ' (×' + (fo.para.preco / fo.de.preco).toFixed(0) + ') — confira' : ''}</div> : null; })()}
         </div>
       )}
       {resp && Array.isArray(resp.fotos_fornecedor) && resp.fotos_fornecedor.length > 0 && (
@@ -152,17 +153,17 @@ function CVCelula({ resp, qtdRef, melhor, editavel, valorQtd, onQtd, onTudo }) {
   );
 }
 
-/* ---------- Modal: aprovar e enviar ao Omie ---------- */
+/* ---------- Modal: aprovar o vencedor e pedir a P.I. ---------- */
 function CVModalAprovar({ resumo, cambio, onClose, onConfirmar, enviando }) {
   const nomes = Object.keys(resumo.porConvite);
   return (
-    <Modal title="Aprovar o lote e enviar ao Omie" onClose={onClose} width={720}
+    <Modal title="Aprovar o vencedor e pedir a P.I." onClose={onClose} width={720}
       footer={<>
         <Button variant="ghost" onClick={onClose} disabled={enviando}>Voltar</Button>
         <Button variant="primary" icon="send" onClick={onConfirmar} disabled={enviando}>{enviando ? 'Enviando…' : 'Confirmar — é o martelo'}</Button>
       </>}>
       <div className="stack" style={{ gap: 12 }}>
-        <p className="small">Será criada <b>1 Requisição de Compra no Omie por fornecedor vencedor</b> (categoria "Compras de Mercadorias para Revenda Importada"), com a quantidade e o preço decididos abaixo. Preços em dólar são convertidos pelo câmbio do lote (R$ {cvFmtNum(cambio)}). Depois de aprovado o lote não muda mais.</p>
+        <p className="small">Será criada <b>1 P.I. em rascunho por fornecedor vencedor</b> (em Gestão Importação › P.I.), com os itens, quantidades e preços decididos abaixo, e enviaremos ao fornecedor, na tratativa, o <b>pedido de Proforma Invoice</b> em português, inglês e chinês. Os itens passam a constar como "Comprado" na Importação Varejo. <b>Nada vai ao Omie.</b> Depois de aprovado o lote não muda mais.{cambio > 0 ? ' Dólar da cotação: R$ ' + cvFmtNum(cambio) + '.' : ''}</p>
         {nomes.map((cid) => {
           const g = resumo.porConvite[cid];
           return (
@@ -182,7 +183,7 @@ function CVModalAprovar({ resumo, cambio, onClose, onConfirmar, enviando }) {
 }
 
 /* ---------- Modal: pedir a cotação aos fornecedores convidados (e-mail / WhatsApp / link) ---------- */
-function CVModalPedirCotacao({ convites, forn, onClose, onEmail, onZap, onLink, onTodosEmail, enviandoTodos }) {
+function CVModalPedirCotacao({ convites, forn, onClose, onEmail, onZap, onLink, onTodosEmail, enviandoTodos, cc, onCc }) {
   const pendentes = convites.filter((cv) => cv.status === 'rascunho' && cv.email);
   return (
     <Modal title="Pedir cotação ao fornecedor" onClose={onClose} width={640}
@@ -193,6 +194,7 @@ function CVModalPedirCotacao({ convites, forn, onClose, onEmail, onZap, onLink, 
         </Button>
       </>}>
       <div className="stack" style={{ gap: 10 }}>
+        {window.EmailCcInput && <window.EmailCcInput value={cc} onChange={onCc} />}
         <p className="small">Cada fornecedor recebe um link próprio para informar preço por faixa de quantidade, prazo e quantidade mínima. Ele nunca vê os preços dos outros. Nada vai ao Omie nesta etapa.</p>
         {convites.map((cv) => {
           const s = CV_STATUS_CONVITE[cv.status] || CV_STATUS_CONVITE.rascunho;
@@ -229,6 +231,134 @@ function CVModalConfirmar({ cfg, onClose }) {
   );
 }
 
+/* ---------- NPS: mini-gráfico (barras por critério + evolução da nota geral) ---------- */
+function NpsMini({ resumo, linhas }) {
+  const S = window.CotacoesVarejoStore;
+  if (!resumo) return <div className="small muted">Sem avaliações ainda.</div>;
+  const f1 = (v) => (v == null ? '—' : Number(v).toFixed(1).replace('.', ','));
+  const serie = (linhas || []).map((l) => Number(l.nota_geral)).filter((n) => Number.isFinite(n)).slice(-12);
+  const W = 120, H = 28;
+  const pts = serie.map((n, i) => (serie.length === 1 ? W / 2 : (i * W) / (serie.length - 1)).toFixed(1) + ',' + (H - 3 - (n / 5) * (H - 6)).toFixed(1)).join(' ');
+  return (
+    <div style={{ display: 'grid', gap: 4 }}>
+      <div style={{ fontWeight: 800 }}>★ {f1(resumo.geral)} <span className="small muted" style={{ fontWeight: 400 }}>({resumo.avaliacoes} avaliação(ões))</span></div>
+      {S.NPS_CRITERIOS.map(([k, rot]) => (
+        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+          <span style={{ width: 62 }}>{rot}</span>
+          <span style={{ flex: 1, height: 6, background: '#eee', borderRadius: 3, overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', width: ((Number(resumo[k]) || 0) / 5 * 100) + '%', background: 'var(--vp-yellow, #f6c000)' }} /></span>
+          <span style={{ width: 24, textAlign: 'right' }}>{f1(resumo[k])}</span>
+        </div>
+      ))}
+      {serie.length > 1 && <svg width={W} height={H} style={{ marginTop: 2 }} aria-label="Evolução da nota geral"><polyline points={pts} fill="none" stroke="#111" strokeWidth="1.5" /></svg>}
+    </div>
+  );
+}
+
+function CVModalNPS({ lote, convite, onClose, onSalvo }) {
+  const S = window.CotacoesVarejoStore;
+  const [notas, setNotas] = React.useState({});
+  const [coment, setComent] = React.useState('');
+  const [hist, setHist] = React.useState([]);
+  const [salvando, setSalvando] = React.useState(false);
+  React.useEffect(() => { S.avaliacoesDoFornecedor(convite.fornecedor_id, convite.fornecedor_nome).then(setHist); }, [convite.id]);
+  const resumo = hist.length ? (() => { const r = { avaliacoes: hist.length }; S.NPS_CRITERIOS.forEach(([k]) => { const v = hist.map((h) => h['nota_' + k]).filter((n) => n != null); r[k] = v.length ? v.reduce((a, b) => a + Number(b), 0) / v.length : null; }); return r; })() : null;
+  const salvar = async () => {
+    setSalvando(true);
+    try { await S.avaliarFornecedor({ lote, convite, notas, comentario: coment }); window.toast?.('Avaliação registrada.', 'success'); onSalvo && onSalvo(); onClose(); }
+    catch (e) { window.toast?.(String(e.message || e), 'error'); setSalvando(false); }
+  };
+  return (
+    <Modal title={'Avaliar ' + convite.fornecedor_nome} onClose={onClose} width={640}
+      footer={<><Button variant="ghost" onClick={onClose}>Fechar</Button><Button variant="primary" onClick={salvar} disabled={salvando || notas.geral == null}>{salvando ? 'Salvando…' : 'Registrar avaliação'}</Button></>}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 190px', gap: 18 }}>
+        <div className="stack" style={{ gap: 10 }}>
+          <p className="small">Nota de 0 a 5 em cada critério (a geral é obrigatória). Fica no histórico do fornecedor e aparece quando você for convidá-lo em cotações futuras.</p>
+          {S.NPS_CRITERIOS.map(([k, rot]) => (
+            <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 82, fontWeight: k === 'geral' ? 800 : 400 }}>{rot}{k === 'geral' ? ' *' : ''}</span>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {[0, 1, 2, 3, 4, 5].map((n) => <button key={n} type="button" onClick={() => setNotas((p) => ({ ...p, [k]: p[k] === n ? null : n }))} className={'btn btn--sm ' + (notas[k] === n ? 'btn--primary' : 'btn--outline')} style={{ minWidth: 34 }}>{n}</button>)}
+              </div>
+            </div>
+          ))}
+          <textarea className="input" rows={3} placeholder="Comentário (opcional) — o que foi bom ou ruim nesta cotação" value={coment} onChange={(e) => setComent(e.target.value)} />
+        </div>
+        <div>
+          <div className="small muted" style={{ marginBottom: 6 }}>Histórico deste fornecedor</div>
+          <NpsMini resumo={resumo} linhas={hist} />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ---------- Descrição técnica do produto para o fornecedor ---------- */
+function CVModalDescricao({ item, onClose, onSalvo }) {
+  const S = window.CotacoesVarejoStore;
+  const [d, setD] = React.useState({ aplicacao: '', equipamento: '', tensao: '', potencia: '', medidas: '', material: '', observacao: '', texto_pt: '', texto_en: '', texto_zh: '' });
+  const [perguntas, setPerguntas] = React.useState([]);
+  const [fontes, setFontes] = React.useState([]);
+  const [bruta, setBruta] = React.useState('');
+  const [ficha, setFicha] = React.useState('');
+  const [web, setWeb] = React.useState(false);
+  const [ia, setIa] = React.useState(false);
+  const [gerando, setGerando] = React.useState(false);
+  const [salvando, setSalvando] = React.useState(false);
+  const set = (k, v) => setD((p) => ({ ...p, [k]: v }));
+  React.useEffect(() => { S.obterDescricao(item.codigo).then((g) => { if (g) { const n = {}; Object.keys(g).forEach((k) => { if (g[k] != null) n[k] = g[k]; }); setD((p) => ({ ...p, ...n })); } }); }, [item.id]);
+  const sugerir = async () => {
+    setGerando(true);
+    try {
+      const r = await S.sugerirDescricaoIA({ ...d, codigo: item.codigo, descricao: item.descricao, ficha, web });
+      setBruta(''); setPerguntas(r.perguntas); setFontes(r.fontes || []);
+      if (r.texto_pt || r.texto_en || r.texto_zh) {
+        // Texto novo SUBSTITUI os três (idioma que não veio fica vazio): manter a tradução antiga ao lado do texto novo deixaria idiomas incoerentes (ex.: 220 V × 380 V).
+        setD((p) => ({ ...p, texto_pt: r.texto_pt, texto_en: r.texto_en, texto_zh: r.texto_zh })); setIa(true);
+        if (!(r.texto_pt && r.texto_en && r.texto_zh)) window.toast?.('A IA não escreveu todos os idiomas. Os que faltam ficaram vazios — peça de novo ou preencha à mão antes de salvar.', 'warning');
+      }
+      else window.toast?.('A IA não escreveu o texto: precisa de mais dados (veja as perguntas). Cole a ficha técnica do fabricante e tente de novo.', 'warning');
+    }
+    catch (e) { setBruta(e.bruto || ''); window.toast?.(String(e.message || e), 'error'); }
+    finally { setGerando(false); }
+  };
+  const salvar = async () => {
+    setSalvando(true);
+    try {
+      await S.salvarDescricao(item.codigo, { ...d, gerado_por_ia: ia });
+      await S.atualizarItem(item.id, { obs_vp: S.montarObsVP(d) || null });
+      window.toast?.('Descrição salva e enviada ao lote (e guardada para os próximos).', 'success'); onSalvo && onSalvo(); onClose();
+    } catch (e) { window.toast?.(String(e.message || e), 'error'); setSalvando(false); }
+  };
+  const campo = (k, rot, ph) => <label className="small" style={{ display: 'block' }}>{rot}<input className="input" style={{ width: '100%' }} placeholder={ph} value={d[k] || ''} onChange={(e) => set(k, e.target.value)} /></label>;
+  const texto = (k, rot) => <label className="small" style={{ display: 'block' }}>{rot}<textarea className="input" rows={4} style={{ width: '100%' }} value={d[k] || ''} onChange={(e) => set(k, e.target.value)} /></label>;
+  return (
+    <Modal title={'Descrição para o fornecedor — ' + item.codigo} onClose={onClose} width={820}
+      footer={<><Button variant="ghost" onClick={onClose}>Fechar</Button><Button variant="primary" onClick={salvar} disabled={salvando || !(d.texto_pt || d.texto_en || d.texto_zh)}>{salvando ? 'Salvando…' : 'Salvar descrição'}</Button></>}>
+      <div className="stack" style={{ gap: 10 }}>
+        <p className="small">Nossa descrição no Omie: <b>{item.descricao || '—'}</b>. Conte ao fornecedor onde a peça é usada e o que importa; a IA monta o texto em português, inglês e chinês. Você revisa antes de salvar — o que o fornecedor lê é o texto final.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          {campo('aplicacao', 'Onde é aplicada', 'ex.: roldana do carro, porta de cabine…')}
+          {campo('equipamento', 'Tipo de equipamento', 'elevador, escada rolante, esteira…')}
+          {campo('tensao', 'Tensão', 'ex.: 220 VAC')}
+          {campo('potencia', 'Potência', 'ex.: 0,75 kW')}
+          {campo('medidas', 'Medidas', 'ex.: Ø 160 × 20 mm, furo 12 mm')}
+          {campo('material', 'Material / acabamento', 'ex.: aço 304, nylon…')}
+        </div>
+        {campo('observacao', 'Observação nossa', 'qualquer detalhe que ajude o fornecedor a entender')}
+        <label className="small" style={{ display: 'block' }}>Ficha técnica / texto do fabricante (cole aqui — é a melhor fonte para a IA)<textarea className="input" rows={5} style={{ width: '100%' }} placeholder="Cole o catálogo, a página do fabricante ou a descrição do fornecedor. A IA usa isto como base e não inventa além disso." value={ficha} onChange={(e) => setFicha(e.target.value)} /></label>
+        <label className="small" style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={web} onChange={(e) => setWeb(e.target.checked)} /> Tentar pesquisar na internet (só funciona se a IA da VPS tiver acesso à web; ela diz se não tiver)</label>
+        <div><Button variant="outline" icon="send" onClick={sugerir} disabled={gerando}>{gerando ? 'A IA está escrevendo…' : 'Sugerir com IA'}</Button> <span className="small muted">usa o Copiloto da VPS (20 perguntas por hora por pessoa)</span></div>
+        {bruta && <div className="alert warning"><div><div className="alert__title">O que a IA respondeu</div><div className="alert__sub" style={{ whiteSpace: 'pre-wrap' }}>{bruta}</div></div></div>}
+        {fontes.length > 0 && <div className="small">Fontes usadas pela IA: {fontes.map((f, i) => <span key={i}>{i ? ' · ' : ''}{/^https?:\/\//.test(f) ? <a href={f} target="_blank" rel="noopener noreferrer">{f}</a> : f}</span>)}</div>}
+        {perguntas.length > 0 && <div className="alert warning"><div><div className="alert__title">A IA precisa saber</div><div className="alert__sub">{perguntas.map((q, i) => <div key={i}>• {q}</div>)} Responda nos campos acima (ou cole a ficha) e peça a sugestão de novo.</div></div></div>}
+        {texto('texto_en', 'English (o fornecedor lê primeiro)')}
+        {texto('texto_zh', '中文')}
+        {texto('texto_pt', 'Português (nosso)')}
+      </div>
+    </Modal>
+  );
+}
+
 /* ---------- Detalhe do lote: mapa comparativo ---------- */
 function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const C = window.CotacoesVarejoCalc; const S = window.CotacoesVarejoStore;
@@ -245,7 +375,17 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const [confirmar, setConfirmar] = React.useState(null);   // { titulo, texto, rotulo, acao }
   const [modalPedir, setModalPedir] = React.useState(false);
   const [enviandoTodos, setEnviandoTodos] = React.useState(false);
+  const [cc, setCc] = React.useState(() => (window.EmailEnvioHelper ? window.EmailEnvioHelper.ccSalvo() : ''));
+  const ccOk = () => { const ruim = window.EmailEnvioHelper ? window.EmailEnvioHelper.ccInvalidos(cc) : []; if (ruim.length) { window.toast?.('Corrija o(s) e-mail(s) em cópia: ' + ruim.join(', '), 'warning'); return false; } return true; };
   const [sujo, setSujo] = React.useState(false);
+  const [descItem, setDescItem] = React.useState(null);        // item cuja descrição p/ fornecedor está aberta
+  const [npsConvite, setNpsConvite] = React.useState(null);    // convite sendo avaliado
+  const [npsMap, setNpsMap] = React.useState({});
+  const [busca, setBusca] = React.useState('');
+  const [limite, setLimite] = React.useState(50);
+  const [substituir, setSubstituir] = React.useState(null);   // convite que está sendo substituído
+  const [subForn, setSubForn] = React.useState('');
+  const [subMotivo, setSubMotivo] = React.useState('');
   const fotosTentadas = React.useRef(false);
 
   React.useEffect(() => { window.PropostaStore?.temCapacidade?.('cotacoes-varejo', 'criar').then(setPodeGerenciar).catch(() => setPodeGerenciar(false)); }, []);
@@ -266,9 +406,22 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
 
   // Câmbio sugerido (USD/BRL do dia) quando o lote ainda não tem um.
   React.useEffect(() => {
-    if (!dados || dados.lote.cambio_usd_brl || !window.CambioAPI) return;
-    window.CambioAPI.buscarUsdBrl().then((r) => setCambio((c) => c || String(Number(r.valor).toFixed(4)))).catch(() => {});
+    if (!dados || !window.CambioAPI) return;
+    window.CambioAPI.buscarUsdBrl().then((r) => {
+      S.registrarCambioDia(r.valor);   // a resposta do fornecedor herda o dólar do dia (trigger no banco)
+      if (!dados.lote.cambio_usd_brl) setCambio((c) => c || String(Number(r.valor).toFixed(4)));
+    }).catch(() => {});
   }, [dados && dados.lote.id]);
+
+  const carregarNps = React.useCallback(() => { S.npsDosFornecedores().then(setNpsMap).catch(() => {}); }, []);
+  React.useEffect(() => { carregarNps(); }, [carregarNps]);
+  // Descrições técnicas já guardadas do produto entram sozinhas nos itens sem observação (uma vez por abertura).
+  const descTentadas = React.useRef(false);
+  React.useEffect(() => {
+    if (!dados || descTentadas.current || !podeGerenciar || !['rascunho', 'em_cotacao'].includes(dados.lote.status)) return;
+    descTentadas.current = true;
+    S.aplicarDescricoesGuardadas(dados.itens).then((n) => { if (n) carregar(); }).catch(() => {});
+  }, [dados && dados.lote.id, podeGerenciar]);
 
   // Fotos: procura no banco / traz da Ficha Técnica uma vez por abertura.
   React.useEffect(() => {
@@ -297,7 +450,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     setSalvando(true);
     try {
       await S.salvarDecisoes(lote.id, decisoesAtuais);
-      if (cambioNum > 0 && cambioNum !== Number(lote.cambio_usd_brl || 0)) await S.atualizarLote(lote.id, { cambio_usd_brl: cambioNum });
+      if (cambioNum > 0 && cambioNum !== Number(lote.cambio_usd_brl || 0)) await S.atualizarLote(lote.id, { cambio_usd_brl: cambioNum, cambio_cotacao_em: new Date().toISOString(), cambio_fonte: 'informado' });
       if (!silencioso) window.toast?.('Decisões salvas.', 'success');
       await carregar();
     } catch (e) { window.toast?.('Erro ao salvar: ' + (e.message || e), 'error'); throw e; }
@@ -308,9 +461,16 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     const f = forn.find((x) => x.id === novoForn); if (!f) return;
     try { await S.convidarFornecedor(lote.id, f); setNovoForn(''); await carregar(); } catch (e) { window.toast?.(e.message || String(e), 'error'); }
   };
+  const semQtd = itens.filter((i) => !(cvNum(i.quantidade_pedida) > 0));
+  const travaQtd = () => {
+    if (!semQtd.length) return false;
+    window.toast?.('Informe a quantidade de ' + semQtd.length + ' produto(s) antes de pedir a cotação (' + semQtd.slice(0, 3).map((i) => i.codigo).join(', ') + (semQtd.length > 3 ? '…' : '') + '). O fornecedor precisa saber quanto queremos.', 'warning');
+    return true;
+  };
   const enviarEmail = async (cv) => {
+    if (travaQtd() || !ccOk()) return;
     try {
-      const r = await S.enviarPorEmail(lote, cv);
+      const r = await S.enviarPorEmail(lote, cv, { cc });
       if (r.semEmail) { window.toast?.('Este fornecedor não tem e-mail no cadastro. Use "Link" ou "WhatsApp", ou complete o cadastro.', 'warning'); return; }
       if (r.enviouDireto) window.toast?.('E-mail enviado para ' + cv.email + '.', 'success');
       else { window.toast?.('Não consegui enviar direto — abrindo seu programa de e-mail.', 'warning'); window.open(r.mailto, '_blank'); }
@@ -318,22 +478,25 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     } catch (e) { window.toast?.('Erro ao enviar: ' + (e.message || e), 'error'); }
   };
   const enviarTodosEmail = async () => {
+    if (travaQtd() || !ccOk()) return;
     setEnviandoTodos(true);
     let ok = 0, falha = 0;
     try {
       for (const cv of convites.filter((x) => x.status === 'rascunho' && x.email)) {
-        try { const r = await S.enviarPorEmail(lote, cv); if (r.enviouDireto) ok++; else falha++; } catch (e) { falha++; }
+        try { const r = await S.enviarPorEmail(lote, cv, { cc }); if (r.enviouDireto) ok++; else falha++; } catch (e) { falha++; }
       }
       window.toast?.(ok + ' e-mail(s) enviado(s)' + (falha ? ' · ' + falha + ' não saiu(ram) — use "Copiar link" ou WhatsApp nesses.' : '.'), falha ? 'warning' : 'success');
       await carregar();
     } finally { setEnviandoTodos(false); }
   };
   const copiarLink = async (cv) => {
+    if (travaQtd()) return;
     const link = S.portalUrl(cv.token);
     try { await navigator.clipboard.writeText(link); window.toast?.('Link copiado.', 'success'); } catch (e) { window.prompt('Copie o link:', link); }
     try { await S.marcarEnviado({ ...cv, lote_id: lote.id }, 'link'); await carregar(); } catch (e) {}
   };
   const zap = async (cv) => {
+    if (travaQtd()) return;
     const f = forn.find((x) => x.id === cv.fornecedor_id); const tel = f && f.telefone;
     if (!tel) { window.toast?.('Sem telefone no cadastro deste fornecedor.', 'warning'); return; }
     window.open(S.whatsAppHref(tel, lote, cv), '_blank');
@@ -342,9 +505,9 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const rodada = async (cv) => { try { await S.novaRodada(cv); window.toast?.('Nova rodada aberta — reenvie o link ao fornecedor.', 'success'); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
   const tirar = (cv) => setConfirmar({
     titulo: 'Remover fornecedor do lote', rotulo: 'Remover fornecedor',
-    texto: 'Remover ' + cv.fornecedor_nome + ' deste lote? Os preços que ele já respondeu e as quantidades que você digitou para ele também saem. O link que ele recebeu deixa de funcionar. Depois você pode convidar outro fornecedor no lugar.',
+    texto: 'Remover ' + cv.fornecedor_nome + ' deste lote? Ele sai do mapa e as quantidades que você digitou para ele são zeradas. O link que ele recebeu deixa de funcionar. O que ele respondeu e as conversas continuam guardados em "Fornecedores removidos" — nada é apagado. Para trocar por outro, use "Substituir".',
     acao: async () => {
-      await S.removerConvite(cv.id);
+      await S.removerConvite(cv.id, 'Removido pelo comprador');
       setQtd((p) => { const n = {}; Object.keys(p).forEach((k) => { if (k.split('|')[1] !== cv.id) n[k] = p[k]; }); return n; });
       window.toast?.(cv.fornecedor_nome + ' removido do lote.', 'success');
       await carregar();
@@ -377,7 +540,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const editarItem = async (item, campo, valor) => { try { await S.atualizarItem(item.id, { [campo]: valor }); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
   const tirarItem = (item) => setConfirmar({
     titulo: 'Tirar produto do lote', rotulo: 'Tirar produto',
-    texto: 'Tirar ' + item.codigo + ' deste lote? As respostas dos fornecedores para ele também saem.',
+    texto: 'Tirar ' + item.codigo + ' deste lote? Ele sai do mapa e da cotação; as respostas já dadas pelos fornecedores ficam guardadas no histórico.',
     acao: async () => { await S.removerItem(item.id); await carregar(); },
   });
 
@@ -387,14 +550,28 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
       await salvar(true);
       const d = await S.obterLote(lote.id);
       const res = await S.aprovarLote(d);
-      if (res.erros.length) window.toast?.('Atenção: ' + res.erros.join(' | ') + ' — corrija e aprove de novo; o que já foi enviado não se repete.', 'warning');
-      else window.toast?.('Lote aprovado. Requisições criadas no Omie: ' + res.requisicoes.map((r) => r.req_omie).join(', '), 'success');
+      if (res.erros.length) window.toast?.('Atenção: ' + res.erros.join(' | ') + (res.completo ? '' : ' — corrija e aprove de novo; o que já foi criado não se repete.'), 'warning');
+      else window.toast?.('Lote aprovado. P.I. em rascunho criada(s): ' + res.requisicoes.map((r) => r.pi_numero).join(', ') + '. Acompanhe a Proforma na RFQ Importação.', 'success');
       setModalAprovar(false); await carregar();
     } catch (e) { window.toast?.('Erro ao aprovar: ' + (e.message || e), 'error'); }
     finally { setAprovando(false); }
   };
 
   const fornecedoresLivres = forn.filter((f) => !convites.some((c) => c.fornecedor_id === f.id));
+  const termo = busca.trim().toLowerCase();
+  const itensFiltrados = termo ? itens.filter((i) => ((i.codigo || '') + ' ' + (i.descricao || '')).toLowerCase().includes(termo)) : itens;
+  const itensVisiveis = itensFiltrados.slice(0, limite);
+  const chaveNps = (cv) => npsMap[cv.fornecedor_id] || npsMap[String(cv.fornecedor_nome || '').toLowerCase()] || null;
+  const abrirSubstituir = (cv) => { setSubstituir(cv); setSubForn(''); setSubMotivo(''); };
+  const confirmarSubstituir = async () => {
+    const f = forn.find((x) => x.id === subForn); if (!f || !substituir) return;
+    try {
+      await S.substituirConvite(lote.id, substituir, f, subMotivo.trim() || null);
+      setQtd((p) => { const n = {}; Object.keys(p).forEach((k) => { if (k.split('|')[1] !== substituir.id) n[k] = p[k]; }); return n; });
+      window.toast?.(substituir.fornecedor_nome + ' substituído por ' + (f.nome_fantasia || f.razao_social) + '. Envie a cotação ao novo fornecedor.', 'success');
+      setSubstituir(null); await carregar();
+    } catch (e) { window.toast?.(String(e.message || e), 'error'); }
+  };
 
   return (
     <div className="page fade-in">
@@ -407,19 +584,20 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
         <div className="page-head__r">
           <Button variant="outline" onClick={onVoltar}>← Lotes</Button>
           {editavel && sujo && <Button variant="outline" icon="check" onClick={() => salvar(false)} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar decisões'}</Button>}
-          {editavel && <Button variant={convites.some((c) => c.status !== 'rascunho') ? 'outline' : 'primary'} icon="send" onClick={() => setModalPedir(true)} disabled={!convites.length} title={convites.length ? '' : 'Convide ao menos um fornecedor abaixo'}>Pedir cotação ao fornecedor</Button>}
-          {editavel && <Button variant={convites.some((c) => c.status !== 'rascunho') ? 'primary' : 'outline'} icon="check" onClick={() => setModalAprovar(true)} disabled={!decisoesAtuais.length} title={decisoesAtuais.length ? '' : 'Só depois que os fornecedores responderem e você digitar as quantidades a comprar'}>Aprovar compra e enviar ao Omie</Button>}
+          {editavel && <Button variant={convites.some((c) => c.status !== 'rascunho') ? 'outline' : 'primary'} icon="send" onClick={() => { if (!travaQtd()) setModalPedir(true); }} disabled={!convites.length} title={convites.length ? '' : 'Convide ao menos um fornecedor abaixo'}>Pedir cotação ao fornecedor</Button>}
+          {editavel && <Button variant={convites.some((c) => c.status !== 'rascunho') ? 'primary' : 'outline'} icon="check" onClick={() => setModalAprovar(true)} disabled={!decisoesAtuais.length} title={decisoesAtuais.length ? '' : 'Só depois que os fornecedores responderem e você digitar as quantidades a comprar'}>Aprovar vencedor e pedir P.I.</Button>}
           {editavel && <Button variant="ghost" onClick={cancelarLoteConfirmado}>Cancelar lote</Button>}
         </div>
       </div>
 
       {lote.status === 'aprovado' && (
         <div className="alert success" style={{ marginBottom: 16 }}><Icon.check /><div><div className="alert__title">Lote aprovado em {cvFmtData(lote.aprovado_em)}</div>
-          <div className="alert__sub">{(lote.requisicoes || []).map((r) => r.fornecedor + ' → requisição ' + r.req_omie + ' (' + r.itens + ' itens)').join(' · ') || '—'}</div></div></div>
+          <div className="alert__sub">{(lote.requisicoes || []).map((r) => r.pi_numero ? r.fornecedor + ' → P.I. em rascunho ' + r.pi_numero + ' (' + r.itens + ' itens' + (r.proforma === 'enviada' ? ', Proforma pedida' : r.proforma ? ', Proforma: ver tratativa' : '') + ')' : r.fornecedor + ' → requisição ' + r.req_omie + ' (' + r.itens + ' itens)').join(' · ') || '—'}</div></div></div>
       )}
 
       <Card title="Fornecedores convidados" sub="Só fornecedores já cadastrados em Cadastros › Fornecedores. Cada um recebe um link próprio e nunca vê os preços dos outros.">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+          {lote.cambio_usd_brl && <div className="small" style={{ flexBasis: '100%' }}><b>Dólar da cotação:</b> R$ {Number(lote.cambio_usd_brl).toFixed(4).replace('.', ',')}{lote.cambio_cotacao_em ? ' · fixado em ' + cvFmtData(lote.cambio_cotacao_em) : ' · ainda não fixado (fixa no 1º envio)'}{lote.cambio_fonte === 'ptax' ? ' · PTAX do dia' : lote.cambio_fonte === 'informado' ? ' · informado por você' : ''}</div>}
           {convites.length === 0 && <span className="small muted">Nenhum fornecedor convidado ainda.</span>}
           {convites.map((cv) => {
             const s = CV_STATUS_CONVITE[cv.status] || CV_STATUS_CONVITE.rascunho;
@@ -427,12 +605,20 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
               <div key={cv.id} style={{ border: '1px solid var(--border, #e5e7eb)', borderRadius: 8, padding: '8px 10px', minWidth: 230 }}>
                 <div style={{ fontWeight: 800 }}>{cv.fornecedor_nome} <Badge variant={s.variant}>{s.label}</Badge></div>
                 <div className="small muted">{cv.moeda} · rodada {cv.rodada}{cv.respondido_em ? ' · respondeu ' + cvFmtData(cv.respondido_em) : ''}</div>
+                {(() => { const n = chaveNps(cv); return <div className="small" style={{ cursor: 'pointer' }} onClick={() => setNpsConvite(cv)} title="Ver e registrar a avaliação (NPS) deste fornecedor">{n ? '★ ' + Number(n.geral).toFixed(1).replace('.', ',') + ' · ' + n.avaliacoes + ' aval.' : 'sem avaliação'} <span style={{ color: 'var(--vp-info, #1d6fd1)' }}>{(cv.status === 'respondido' || lote.status === 'aprovado') ? '· avaliar' : '· ver'}</span></div>; })()}
+                {(() => {
+                  const rs = (dados.respostas || []).filter((r) => r.convite_id === cv.id && r.cambio_resposta).sort((a, b) => String(b.cambio_resposta_em).localeCompare(String(a.cambio_resposta_em)));
+                  if (!rs.length) return null;
+                  const base = Number(lote.cambio_usd_brl) || 0; const d = base > 0 ? (Number(rs[0].cambio_resposta) / base - 1) * 100 : null;
+                  return <div className="small muted" title="Dólar do dia em que o fornecedor respondeu, comparado ao dólar fixado na cotação">Dólar na resposta: R$ {Number(rs[0].cambio_resposta).toFixed(4).replace('.', ',')}{d != null ? ' (' + (d >= 0 ? '+' : '') + d.toFixed(1).replace('.', ',') + '% vs. cotação)' : ''}</div>;
+                })()}
                 {editavel && (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
                     <button className="link-btn" onClick={() => enviarEmail(cv)}>E-mail</button>
                     <button className="link-btn" onClick={() => zap(cv)}>WhatsApp</button>
                     <button className="link-btn" onClick={() => copiarLink(cv)}>Link</button>
                     {cv.status === 'respondido' && <button className="link-btn" onClick={() => rodada(cv)} title="Pede ao fornecedor que atualize os preços (2ª rodada de negociação)">Nova rodada</button>}
+                    <Button variant="outline" size="sm" onClick={() => abrirSubstituir(cv)} title="Troca este fornecedor por outro cadastrado; o antigo fica no histórico">Substituir</Button>
                     <Button variant="outline" size="sm" onClick={() => tirar(cv)} title="Tira este fornecedor do lote (para trocar por outro ou desistir de cotar com ele)">Remover fornecedor</Button>
                   </div>
                 )}
@@ -440,14 +626,15 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
             );
           })}
         </div>
+        {editavel && window.EmailCcInput && <div style={{ marginTop: 12, maxWidth: 520 }}><window.EmailCcInput value={cc} onChange={setCc} /></div>}
         {editavel && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
             <select className="input" style={{ minWidth: 260 }} value={novoForn} onChange={(e) => setNovoForn(e.target.value)}>
               <option value="">Convidar fornecedor cadastrado…</option>
-              {fornecedoresLivres.map((f) => <option key={f.id} value={f.id}>{f.nome_fantasia || f.razao_social}{f.email ? '' : ' (sem e-mail)'}</option>)}
+              {fornecedoresLivres.map((f) => { const n = npsMap[f.id]; return <option key={f.id} value={f.id}>{f.nome_fantasia || f.razao_social}{n ? ' ★' + Number(n.geral).toFixed(1).replace('.', ',') : ''}{f.email ? '' : ' (sem e-mail)'}</option>; })}
             </select>
             <Button variant="outline" size="sm" onClick={convidar} disabled={!novoForn}>Convidar</Button>
-            <button className="link-btn" onClick={() => setRoute && setRoute('cadastro-fornecedores')} title="Fornecedor novo precisa existir no cadastro antes de entrar no lote">+ Cadastrar novo fornecedor</button>
+            <button className="link-btn" onClick={() => { if (setRoute) { setRoute('cadastro-fornecedores'); return; } try { window.VpRouter.navigate('cadastro-fornecedores'); window.dispatchEvent(new PopStateEvent('popstate')); } catch (e) { window.location.href = '/cadastros/cadastro-fornecedores'; } }} title="Fornecedor novo precisa existir no cadastro antes de entrar no lote">+ Cadastrar novo fornecedor</button>
             <div className="spacer" style={{ flex: 1 }} />
             <label className="small">Câmbio USD/BRL do lote&nbsp;
               <input className="input text-right" style={{ width: 90 }} value={cambio} onChange={(e) => { setCambio(e.target.value); setSujo(true); }} />
@@ -456,10 +643,40 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
         )}
       </Card>
 
+      {semQtd.length > 0 && editavel && (
+        <div className="alert warning" style={{ marginTop: 12 }}><Icon.warning /><div><div className="alert__title">{semQtd.length} produto(s) sem quantidade</div><div className="alert__sub">Estes itens não tinham sugestão de compra. Preencha a coluna "Qtd. pedida" (campo amarelo) antes de enviar a cotação.</div></div></div>
+      )}
+      {(dados.convitesRemovidos || []).length > 0 && (
+        <>
+          <div style={{ height: 12 }} />
+          <Card title="Fornecedores removidos ou substituídos (histórico)" sub="Ficam guardados: respostas, preços e conversas não se perdem. O link que receberam deixou de funcionar.">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+              {dados.convitesRemovidos.map((cv) => {
+                const nResp = (dados.respostas || []).filter((r) => r.convite_id === cv.id).length;
+                const novo = dados.convites.find((x) => x.substitui_convite_id === cv.id);
+                return (
+                  <div key={cv.id} style={{ border: '1px dashed var(--border, #cbd5e1)', borderRadius: 8, padding: '8px 10px', minWidth: 230, opacity: .85 }}>
+                    <div style={{ fontWeight: 800 }}>{cv.fornecedor_nome} <Badge variant="neutral">removido</Badge></div>
+                    <div className="small muted">{cvFmtData(cv.removido_em)}{cv.removido_por ? ' · ' + cv.removido_por : ''}</div>
+                    <div className="small">{cv.removido_motivo || '—'}{novo ? ' → substituído por ' + novo.fornecedor_nome : ''}</div>
+                    <div className="small muted">{nResp} resposta(s) guardada(s){cv.respondido_em ? ' · respondeu ' + cvFmtData(cv.respondido_em) : ''}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        </>
+      )}
+
       <div style={{ height: 12 }} />
       <Card title="Mapa comparativo" sub={convites.length ? 'Verde = menor preço para a quantidade em questão. ★ = comprar a quantidade pedida deste fornecedor.' : 'Convide fornecedores acima para montar o comparativo.'}>
-        <div className="table-wrap" style={{ overflowX: 'auto' }}>
-          <table className="t">
+        <style>{'.cv-mapa thead th{position:sticky;top:0;z-index:3;background:var(--surface,#fff)}'}</style>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+          <input className="input" style={{ minWidth: 280 }} placeholder="Buscar produto por código ou descrição…" value={busca} onChange={(e) => { setBusca(e.target.value); setLimite(50); }} />
+          <span className="small muted">{itensFiltrados.length === itens.length ? itens.length + ' produto(s)' : itensFiltrados.length + ' de ' + itens.length + ' produto(s)'}</span>
+        </div>
+        <div className="table-wrap" style={{ overflow: 'auto', maxHeight: '75vh' }}>
+          <table className="t cv-mapa">
             <thead>
               <tr>
                 <th style={{ width: 64 }}>Foto</th><th>Código</th><th>Descrição</th><th className="text-right">Qtd. pedida</th>
@@ -468,7 +685,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
               </tr>
             </thead>
             <tbody>
-              {itens.map((it) => {
+              {itensVisiveis.map((it) => {
                 const decs = decisoesAtuais.filter((d) => d.item_id === it.id);
                 const comprada = decs.reduce((a, d) => a + d.quantidade, 0);
                 const qtdRef = comprada > 0 ? comprada : cvNum(it.quantidade_pedida);
@@ -501,12 +718,15 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                     <td style={{ maxWidth: 260 }}>
                       {it.descricao}
                       {editavel
-                        ? <input className="input" style={{ width: '100%', marginTop: 4, fontSize: 12 }} placeholder="Obs. VerticalParts (aparece para o fornecedor)" defaultValue={it.obs_vp || ''} onBlur={(e) => { if ((e.target.value || '') !== (it.obs_vp || '')) editarItem(it, 'obs_vp', e.target.value || null); }} />
-                        : (it.obs_vp ? <div className="small muted">{it.obs_vp}</div> : null)}
+                        ? <>
+                            <textarea key={it.obs_vp || ''} className="input" rows={(it.obs_vp || '').length > 90 ? 3 : 1} style={{ width: '100%', marginTop: 4, fontSize: 12 }} placeholder="Obs. VerticalParts (o fornecedor lê no portal)" defaultValue={it.obs_vp || ''} onBlur={(e) => { if ((e.target.value || '') !== (it.obs_vp || '')) editarItem(it, 'obs_vp', e.target.value || null); }} />
+                            <button className="link-btn" onClick={() => setDescItem(it)} title="Descrição técnica em português, inglês e chinês, com ajuda da IA">{it.obs_vp ? '✎ descrição EN/中文' : '+ descrição EN/中文 (com IA)'}</button>
+                          </>
+                        : (it.obs_vp ? <div className="small muted" style={{ whiteSpace: 'pre-wrap' }}>{it.obs_vp}</div> : null)}
                     </td>
                     <td className="text-right">
                       {editavel
-                        ? <input className="input text-right" style={{ width: 80 }} type="number" min="1" step="any" defaultValue={it.quantidade_pedida} onBlur={(e) => { const v = cvNum(e.target.value); if (v > 0 && v !== cvNum(it.quantidade_pedida)) editarItem(it, 'quantidade_pedida', v); }} />
+                        ? <input className="input text-right" style={{ width: 80, ...(cvNum(it.quantidade_pedida) > 0 ? {} : { borderColor: '#d97706', background: '#fffbeb' }) }} placeholder="a definir" title={cvNum(it.quantidade_pedida) > 0 ? '' : 'Sem sugestão de compra: informe a quantidade que queremos cotar'} type="number" min="1" step="any" defaultValue={cvNum(it.quantidade_pedida) > 0 ? it.quantidade_pedida : ''} onBlur={(e) => { const v = cvNum(e.target.value); if (v > 0 && v !== cvNum(it.quantidade_pedida)) editarItem(it, 'quantidade_pedida', v); }} />
                         : cvFmtNum(it.quantidade_pedida)}
                       {editavel && <div><button className="link-btn muted" onClick={() => tirarItem(it)}>tirar</button></div>}
                     </td>
@@ -535,19 +755,44 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
             )}
           </table>
         </div>
+        {itensFiltrados.length > itensVisiveis.length && (
+          <div style={{ textAlign: 'center', marginTop: 8 }}><Button variant="outline" size="sm" onClick={() => setLimite((l) => l + 50)}>Mostrar mais 50 ({itensFiltrados.length - itensVisiveis.length} restantes)</Button></div>
+        )}
       </Card>
 
-      {modalPedir && <CVModalPedirCotacao convites={convites} forn={forn} onClose={() => setModalPedir(false)} onEmail={enviarEmail} onZap={zap} onLink={copiarLink} onTodosEmail={enviarTodosEmail} enviandoTodos={enviandoTodos} />}
+      {modalPedir && <CVModalPedirCotacao convites={convites} forn={forn} onClose={() => setModalPedir(false)} onEmail={enviarEmail} onZap={zap} onLink={copiarLink} onTodosEmail={enviarTodosEmail} enviandoTodos={enviandoTodos} cc={cc} onCc={setCc} />}
       {confirmar && <CVModalConfirmar cfg={confirmar} onClose={() => setConfirmar(null)} />}
+      {descItem && <CVModalDescricao item={descItem} onClose={() => setDescItem(null)} onSalvo={carregar} />}
+      {npsConvite && <CVModalNPS lote={lote} convite={npsConvite} onClose={() => setNpsConvite(null)} onSalvo={carregarNps} />}
+      {substituir && (
+        <Modal title={'Substituir ' + substituir.fornecedor_nome} onClose={() => setSubstituir(null)} width={480}
+          footer={<><Button variant="ghost" onClick={() => setSubstituir(null)}>Voltar</Button><Button variant="primary" onClick={confirmarSubstituir} disabled={!subForn}>Substituir</Button></>}>
+          <div className="stack" style={{ gap: 10 }}>
+            <p className="small">O novo fornecedor recebe um link próprio e entra no mapa. {substituir.fornecedor_nome} sai do mapa, mas o que ele respondeu e as conversas ficam guardados no histórico.</p>
+            <select className="input" value={subForn} onChange={(e) => setSubForn(e.target.value)}>
+              <option value="">Escolha o novo fornecedor cadastrado…</option>
+              {fornecedoresLivres.map((f) => <option key={f.id} value={f.id}>{f.nome_fantasia || f.razao_social}{f.email ? '' : ' (sem e-mail)'}</option>)}
+            </select>
+            <input className="input" placeholder="Motivo (opcional) — ex.: preço alto, não respondeu" value={subMotivo} onChange={(e) => setSubMotivo(e.target.value)} />
+          </div>
+        </Modal>
+      )}
       {modalAprovar && <CVModalAprovar resumo={resumoModal} cambio={cambioNum} enviando={aprovando} onClose={() => setModalAprovar(false)} onConfirmar={aprovar} />}
     </div>
   );
 }
 
+/* O lote agora vive na RFQ Importação (abas Fornecedores e tratativas · Comparar e escolher vencedor · P.I.).
+   O link antigo /logistica/cotacoes-varejo/<lote> continua valendo e leva para lá. */
 function CotacoesVarejoPage({ setRoute }) {
-  const [loteId, setLoteId] = window.useRotaId('cotacoes-varejo');
-  if (loteId) return <CVDetalhe key={loteId} loteId={loteId} onVoltar={() => setLoteId(null)} setRoute={setRoute} />;
-  return <CVLista onAbrir={(id) => setLoteId(id)} setRoute={setRoute} />;
+  const [loteId] = window.useRotaId('cotacoes-varejo');
+  React.useEffect(() => {
+    if (!loteId) return;
+    try { window.history.replaceState({}, '', '/gestao-importacao/rfq-importacao/' + loteId + '/comparar'); window.dispatchEvent(new PopStateEvent('popstate')); }
+    catch (e) { window.location.href = '/gestao-importacao/rfq-importacao/' + loteId + '/comparar'; }
+  }, [loteId]);
+  if (loteId) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Abrindo o lote na RFQ Importação…</div>;
+  return <CVLista onAbrir={(id) => { window.history.pushState({}, '', '/gestao-importacao/rfq-importacao/' + id + '/comparar'); window.dispatchEvent(new PopStateEvent('popstate')); }} setRoute={setRoute} />;
 }
 
-Object.assign(window, { CotacoesVarejoPage });
+Object.assign(window, { CotacoesVarejoPage, CVDetalhe, NpsMini });

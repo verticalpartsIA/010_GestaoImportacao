@@ -53,7 +53,7 @@ function InboxModalPrecoVarejo({ email, eu, onClose, onRegistrado }) {
       try {
         const c = window.__VP_SB.sb;
         const [it, rs] = await Promise.all([
-          c.from('iv_cotacao_itens').select('id, codigo, descricao, unidade, quantidade_pedida, ordem').eq('lote_id', convite.lote_id).order('ordem').order('codigo'),
+          c.from('iv_cotacao_itens').select('id, codigo, descricao, unidade, quantidade_pedida, ordem').eq('lote_id', convite.lote_id).is('removido_em', null).order('ordem').order('codigo'),
           c.from('iv_cotacao_respostas').select('*').eq('convite_id', convite.id),
         ]);
         if (it.error) throw it.error;
@@ -99,7 +99,7 @@ function InboxModalPrecoVarejo({ email, eu, onClose, onRegistrado }) {
     finally { setSalvando(false); }
   };
 
-  const abrirLote = () => { if (convite) { window.history.pushState({}, '', '/logistica/cotacoes-varejo/' + convite.lote_id); window.dispatchEvent(new PopStateEvent('popstate')); onClose(); } };
+  const abrirLote = () => { if (convite) { window.history.pushState({}, '', '/gestao-importacao/rfq-importacao/' + convite.lote_id + '/comparar'); window.dispatchEvent(new PopStateEvent('popstate')); onClose(); } };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>

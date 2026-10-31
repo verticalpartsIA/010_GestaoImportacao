@@ -77,6 +77,15 @@
     return data || null;
   }
 
+  /* T6 #1226 (31/10/2026): grava o vínculo com o cadastro de Fornecedores ao lado do nome (fornecedor_id).
+     Só liga quando o nome bate com UM cadastro; senão fica sem vínculo (o nome continua valendo). */
+  async function _comFornecedorId(row, idAtual) {
+    const S = window.CadastrosFornecedoresStore;
+    if (!S || !S.resolverIdPorNome) return row;
+    try { return { ...row, fornecedor_id: await S.resolverIdPorNome(row.fornecedor, idAtual || null) }; }
+    catch (e) { console.warn('[PIStore] vínculo do fornecedor não resolvido', e); return row; }
+  }
+
   function _payload(form) {
     const itens = (form.itens || []).map((i) => {
       const q = parseFloat(i.quantidade) || 0;
@@ -119,7 +128,7 @@
   async function criar(form) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     if (!form.numero_pi || !form.numero_pi.trim()) throw new Error('Informe o número da P.I.');
-    const row = { ..._payload(form), created_by: (window.__VP_USER || {}).email || null };
+    const row = await _comFornecedorId({ ..._payload(form), created_by: (window.__VP_USER || {}).email || null }, form.fornecedor_id);
     const { data, error } = await c.from('pi_importacao').insert(row).select().single();
     if (error) throw error;
     if (window.EventosFluxo) window.EventosFluxo.registrar({
@@ -158,7 +167,7 @@
         observacoes: 'P.I. criada automaticamente quando a compra foi liberada (3 avais OK). Confira os dados e troque o número pelo da P.I. do fornecedor.',
         producao: { rascunho_auto: true },
       };
-      const row = { ..._payload(form), created_by: 'automático (compra liberada)' };
+      const row = await _comFornecedorId({ ..._payload(form), created_by: 'automático (compra liberada)' }, form.fornecedor_id);
       const { data, error } = await c.from('pi_importacao').insert(row).select().single();
       if (error) throw error;
       if (window.VPLog) window.VPLog.registrar({ modulo: 'P.I.', acao: 'Criou P.I. automática', alvo: data.numero_pi, alvo_id: data.id, detalhe: { numero_cotacao: n } });
@@ -181,7 +190,7 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { data: antes, error: errAntes } = await c.from('pi_importacao').select('numero_cotacao, embarque_id, numero_pi, producao').eq('id', id).maybeSingle();
     if (errAntes) throw errAntes;
-    const row = { ..._payload(form), updated_at: new Date().toISOString() };
+    const row = await _comFornecedorId({ ..._payload(form), updated_at: new Date().toISOString() }, form.fornecedor_id);
     /* Rascunho automático confirmado: o usuário trocou o número provisório pelo da P.I. real. */
     const confirmouRascunho = ehRascunhoAutomatico(antes) && row.numero_pi && !String(row.numero_pi).startsWith(PREFIXO_RASCUNHO);
     if (confirmouRascunho) row.producao = { ...(row.producao || {}), rascunho_auto: false };
@@ -294,8 +303,41 @@
     return out;
   }
 
+  /* P.I. em RASCUNHO nascida da aprovação de um lote de Cotações de Varejo (1 por fornecedor vencedor). Sem Nº de cotação
+     (varejo não é equipamento). Idempotente por convite: aprovar de novo não duplica. O número provisório deve ser trocado pelo
+     da P.I. do fornecedor ao recebê-la. NÃO emite PI_CRIADA (só rascunho). */
+  async function criarRascunhoDeLote({ lote, convite, itens, ordem, cambioLote, cambioResposta }) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data: ja, error: e0 } = await c.from('pi_importacao').select('id, numero_pi').contains('producao', { convite_id: convite.id }).limit(1);
+    if (e0) throw e0;
+    if (ja && ja.length) return ja[0];
+    const m = convite.moeda === 'RMB' ? 'CNY' : (convite.moeda || 'USD');
+    const moeda = ['USD', 'EUR', 'BRL', 'CNY', 'GBP'].includes(m) ? m : 'USD';
+    const linhas = await Promise.all((itens || []).map(async (i) => {
+      let p = null; try { p = await buscarProdutoPorCodigo(i.codigo); } catch (e) { /* segue sem cadastro */ }
+      return {
+        descricao_produto: i.descricao || (p && p.descricao) || '', codigo_produto: i.codigo, quantidade: Number(i.quantidade) || 0,
+        unidade_medida: (p && p.unidade) || i.unidade || 'un', ncm: (p && p.ncm) || '', valor_unitario: Number(i.preco) || 0,
+      };
+    }));
+    const fmt = (v) => (Number(v) > 0 ? 'R$ ' + Number(v).toFixed(4).replace('.', ',') : '—');
+    const form = {
+      numero_pi: 'RASCUNHO-' + lote.numero + '-' + (ordem || 1), fornecedor: convite.fornecedor_nome || '', status: 'Aguardando documentos', moeda, itens: linhas,
+      observacoes: 'P.I. criada ao aprovar o lote ' + lote.numero + ' (Cotações de Varejo). Preços = o que o fornecedor cotou para a quantidade aprovada. '
+        + 'Dólar da cotação: ' + fmt(cambioLote) + ' · dólar na resposta do fornecedor: ' + fmt(cambioResposta) + '. '
+        + 'Confira os dados com a Proforma do fornecedor e troque o número provisório pelo da P.I. dele.',
+      producao: { rascunho_auto: true, origem_lote: lote.id, lote_numero: lote.numero, convite_id: convite.id },
+    };
+    /* T6: o convite já aponta para o cadastro do fornecedor — esse vínculo vale, sem adivinhar pelo nome. */
+    const row = { ..._payload(form), created_by: (window.__VP_USER || {}).email || null, fornecedor_id: convite.fornecedor_id || null };
+    const { data, error } = await c.from('pi_importacao').insert(row).select().single();
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'P.I.', acao: 'Criou P.I. em rascunho a partir do lote ' + lote.numero, alvo: data.numero_pi, alvo_id: data.id, detalhe: { fornecedor: convite.fornecedor_nome, itens: linhas.length } });
+    return data;
+  }
+
   window.PIStore = {
-    buscarProdutoPorCodigo, criarRascunhoAutomatico, sincronizarRascunhosAutomaticos, ehRascunhoAutomatico,
+    criarRascunhoDeLote, buscarProdutoPorCodigo, criarRascunhoAutomatico, sincronizarRascunhosAutomaticos, ehRascunhoAutomatico,
     listarTodas, obter, criar, atualizar, remover, vincularEmbarque,
     uploadAnexoProducao, removerAnexoProducao,
     calcItemTotal, calcTotalGeral, somaPagamentosAdicionais, fmtMoeda,

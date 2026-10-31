@@ -172,17 +172,71 @@ async function resolverCliente(doc: string, omie: OmieCliente, dados: { solicita
   });
 }
 
+/* Texto do Omie vem com entidades HTML (&quot; etc.) — decodifica só o que aparece. */
+function decodificar(t: unknown) {
+  return String(t ?? "")
+    .replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ").trim();
+}
+
+/* Catálogo para a página pública: máquinas de tração (VPMAC) e portas completas de cabina/pavimento.
+   Só código e descrição, do espelho do Omie (importacao_varejo_produtos). */
+async function catalogoPublico() {
+  const [macs, portas] = await Promise.all([
+    restGet("importacao_varejo_produtos?ativo=eq.true&codigo=ilike.VPMAC*&select=codigo,descricao&order=codigo&limit=200"),
+    restGet("importacao_varejo_produtos?ativo=eq.true&descricao=ilike.Porta*&select=codigo,descricao&order=codigo&limit=300"),
+  ]);
+  const item = (r: Record<string, unknown>) => ({ codigo: String(r.codigo), descricao: decodificar(r.descricao).slice(0, 160) });
+  const portasOk = portas.filter((r: Record<string, unknown>) => !/^(PRD|VPKIT)/i.test(String(r.codigo)) && !/^c[oó]pia/i.test(String(r.descricao)));
+  return {
+    maquinas: macs.map(item),
+    portas_cabina: portasOk.filter((r: Record<string, unknown>) => /cabina/i.test(String(r.descricao))).map(item),
+    portas_pavimento: portasOk.filter((r: Record<string, unknown>) => /pavimento/i.test(String(r.descricao))).map(item),
+  };
+}
+
+/* Logo enviada pela página: PNG/JPG/WebP até 2 MB (SVG fica de fora — pode carregar script). Vai pro bucket
+   público `engenharia`; devolve a URL ou null. Nunca derruba o envio. */
+async function guardarLogo(up: unknown): Promise<string | null> {
+  try {
+    if (!up || typeof up !== "object") return null;
+    const o = up as Record<string, unknown>;
+    const tipo = str(o.tipo, 40);
+    const ext = ({ "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" } as Record<string, string>)[tipo];
+    const b64 = String(o.dados || "");
+    if (!ext || !b64 || b64.length > 2_900_000 || !/^[A-Za-z0-9+/=]+$/.test(b64)) return null;
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    if (bytes.length > 2 * 1024 * 1024) return null;
+    const caminho = `quadro-comando-publico/logos/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
+    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/engenharia/${caminho}`, {
+      method: "POST",
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, "Content-Type": tipo, "x-upsert": "false" },
+      body: bytes,
+    });
+    if (!r.ok) { console.warn("[capturar-lead-quadro-comando] logo não gravada:", r.status); return null; }
+    return `${SUPABASE_URL}/storage/v1/object/public/engenharia/${caminho}`;
+  } catch (e) {
+    console.warn("[capturar-lead-quadro-comando] logo ignorada:", e);
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Método não permitido" }, 405);
 
   try {
     const ip = (req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || "desconhecido").split(",")[0].trim();
+    const payload = await req.json().catch(() => ({}));
+    const d = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
+    const ehCatalogo = d.acao === "catalogo";
     try {
       const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/api_rate_check`, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
-        body: JSON.stringify({ p_bucket: "capturar-lead-quadro-comando", p_ip: ip, p_max_ip: 20, p_max_global: 60, p_janela_s: 600 }),
+        body: JSON.stringify(ehCatalogo
+          ? { p_bucket: "quadro-comando-catalogo", p_ip: ip, p_max_ip: 60, p_max_global: 400, p_janela_s: 600 }
+          : { p_bucket: "capturar-lead-quadro-comando", p_ip: ip, p_max_ip: 20, p_max_global: 60, p_janela_s: 600 }),
       });
       const resultado = r.ok ? await r.json() : "ok";
       if (resultado !== "ok") return json({ error: "Muitas solicitações. Tente novamente em alguns minutos." }, 429);
@@ -190,8 +244,19 @@ Deno.serve(async (req) => {
       console.warn("[capturar-lead-quadro-comando] limite de taxa indisponível, seguindo sem ele:", e);
     }
 
-    const payload = await req.json().catch(() => ({}));
-    const d = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
+    if (ehCatalogo) {
+      try {
+        return json({ success: true, ...(await catalogoPublico()) });
+      } catch (e) {
+        console.warn("[capturar-lead-quadro-comando] catálogo indisponível:", e);
+        return json({ error: "Catálogo indisponível" }, 503);
+      }
+    }
+
+    // A logo (base64) sobe pro Storage e some do payload gravado — só a URL fica.
+    const logoUrl = await guardarLogo(d.logo_upload);
+    delete d.logo_upload;
+    if (logoUrl) d.logo_url = logoUrl;
 
     const solicitante = str(d.solicitante, 120);
     const empresa = str(d.empresa, 160);
@@ -270,7 +335,7 @@ Deno.serve(async (req) => {
         cop: "cop", lop: "lop", lip: "lip", resgate: "resgate_automatico", interfone: "interfone",
         insp_cabina: "botoeira_inspecao_cabina", insp_poco: "botoeira_inspecao_poco", stop_poco: "botao_stop_poco",
         gongo: "gongo", anuncio_voz: "anuncio_voz", sensor_foto: "sensor_fotoeletrico", barreira_luz: "barreira_luz",
-        pesador: "pesador_carga", camera: "camera",
+        pesador: "pesador_carga", camera: "camera", maquina_tracao: "maquina_tracao", portas: "portas",
       };
       const escopo: Record<string, unknown> = {
         quadro_comando: { decisao: "fornecer", detalhe: variante || undefined },
@@ -280,7 +345,26 @@ Deno.serve(async (req) => {
         if (chaveEscopo) escopo[chaveEscopo] = { decisao: "fornecer" };
       }
       const indCor = str(d.ind_cor, 40);
+      const marca = (k: string, extra: Record<string, unknown>) => {
+        if (escopo[k]) escopo[k] = { ...(escopo[k] as Record<string, unknown>), ...extra };
+      };
       if (escopo.lip && indCor) (escopo.lip as Record<string, unknown>).detalhe = `cor: ${indCor}`;
+      const comDisplay = (v: unknown) => str(v, 5) === "com";
+      if (escopo.cop) marca("cop", { detalhe: [comDisplay(d.cop_display) ? "com display" : "sem display", comDisplay(d.cop_display) && indCor ? `cor: ${indCor}` : ""].filter(Boolean).join(" · ") });
+      if (escopo.lop) {
+        const material = str(d.lop_material, 20) === "vidro" ? "espelho em vidro" : "aço escovado";
+        const lopBotoes = str(d.lop_botoes, 2) === "1" ? "1" : "2";
+        marca("lop", {
+          botoes_intermediarios: lopBotoes,
+          detalhe: [material, comDisplay(d.lop_display) ? "com display" : "sem display", comDisplay(d.lop_display) && indCor ? `cor: ${indCor}` : "", logoUrl ? "logo anexada" : ""].filter(Boolean).join(" · "),
+          ...(logoUrl ? { logo_url: logoUrl } : {}),
+        });
+      }
+      const codigoMaquina = str(d.maquina_codigo, 60);
+      if (escopo.maquina_tracao && codigoMaquina) marca("maquina_tracao", { codigo: codigoMaquina, origem_codigo: "cliente" });
+      const codPortaCab = str(d.porta_cabina_codigo, 60);
+      const codPortaPav = str(d.porta_pavimento_codigo, 60);
+      if (escopo.portas && (codPortaCab || codPortaPav)) marca("portas", { codigo: codPortaCab || undefined, codigo_pavimento: codPortaPav || undefined, origem_codigo: "cliente" });
 
       const casa = str(d.casa_maquinas, 20);
 
@@ -320,9 +404,10 @@ Deno.serve(async (req) => {
 
       await restInsert("quadros_comando_maquina", {
         quadro_comando_id: quadro.id,
-        potencia_kw: num(d.potencia_motor),
-        tensao_v: num(d.tensao_motor),
-        corrente_a: num(d.corrente_nominal),
+        // O modelo escolhido já define a potência; a tensão gravada é a da REDE do prédio (campo "Tensão da rede" do hub).
+        potencia_kw: num(variante.split("_")[0]),
+        tensao_v: num(d.tensao_rede === "outro" ? d.tensao_rede_outro : d.tensao_rede),
+        fases: "3", // elevador é sempre trifásico (regra da Engenharia)
         freio_tipo: str(d.tipo_freio, 40) || null,
         freio_tensao_acionamento: num(d.tensao_freio),
       });
@@ -348,17 +433,22 @@ Deno.serve(async (req) => {
         const nParadas = Math.min(Math.max(parseInt(str(d.num_paradas, 4), 10) || 0, 0), 64);
         const portaRotulo: Record<string, string> = { manual: "Manual", eixo_vertical: "Eixo vertical", simultanea: "Simultânea", pantografica: "Pantográfica" };
         const porta = portaRotulo[str(d.tipo_porta, 30)] || "";
+        const opostas = new Set<number>(
+          str(d.porta_oposta, 3) === "sim" && Array.isArray(d.porta_oposta_paradas)
+            ? (d.porta_oposta_paradas as unknown[]).map((x) => parseInt(String(x), 10)).filter((n) => n >= 1 && n <= nParadas)
+            : [],
+        );
         if (nParadas > 0) {
           const paradas = Array.from({ length: nParadas }, (_, i) => ({
             quadro_comando_id: quadro.id,
             ordem: i,
             identificacao: `Parada ${i + 1}`,
             abertura_frontal: true,
-            abertura_traseira: false,
+            abertura_traseira: opostas.has(i + 1),
             tipo_porta_pavimento: porta,
             tipo_porta_cabina: porta,
             qtd_lop_frontal: escopo.lop ? 1 : 0,
-            qtd_lop_traseira: 0,
+            qtd_lop_traseira: escopo.lop && opostas.has(i + 1) ? 1 : 0,
           }));
           await restInsert("quadros_comando_paradas", paradas);
         }
@@ -380,7 +470,7 @@ Deno.serve(async (req) => {
 
       // Aba Componentes: com acionamento VVVF o inversor tem a potência do motor informado.
       try {
-        const potenciaMotor = num(d.potencia_motor);
+        const potenciaMotor = num(variante.split("_")[0]);
         if (str(d.acionamento, 20) === "vf" && potenciaMotor != null) {
           await restInsert("quadros_comando_componentes", { quadro_comando_id: quadro.id, inversor_potencia_kw: potenciaMotor });
         }

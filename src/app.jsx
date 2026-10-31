@@ -43,6 +43,8 @@ const ROUTE_TITLE = {
   "dossier-obra": "Dossier da Obra",
   "status-obras": "Status de Obras",
   "formulario-elevador": "Formulário — Elevador",
+  "formulario-escada": "Formulário — Escada Rolante",
+  "formulario-esteira": "Formulário — Esteira Rolante",
   "formulario-quadro-comando": "Formulário — Quadro de Comando",
   "controle-cotacoes": "Controle de Cotações",
   "contratos-sociais": "Contratos Social",
@@ -52,12 +54,11 @@ const ROUTE_TITLE = {
   propostas: "Propostas Comerciais",
   "proposta-editor": "Editor de Proposta",
   engenharia: "Projetos de Engenharia",
-  "ncm-catalogo": "Catálogo de Produtos",
+  "ncm-catalogo": "Catálogo Siscomex",
   "ncm-kanban": "Solicitações NCM",
   "ncm-detail": "Detalhe da Solicitação NCM",
   "eng-projeto-elevadores": "Projeto de Elevadores",
   "eng-configurador": "Projeto de Equipamento",
-  "desenho-tecnico": "Desenho Técnico ER | ES",
   "ficha-tecnica": "Ficha Técnica",
   "solicitacoes-produto": "Solicitações de Produto",
   juridico: "Contratos & Minutas",
@@ -72,6 +73,7 @@ const ROUTE_TITLE = {
   cronograma: "Cronograma de Instalação",
   databook: "Data Book & Termo",
   handover: "Entrega Final",
+  "repositorio-documentos": "Repositório Documentos",
   "rh-homologacao": "Homologação de Instaladores",
   "cadastro-instaladores": "Empresas Instaladoras",
   "cadastro-custos": "Atualização de Custos",
@@ -152,7 +154,7 @@ function EmConstrucaoPage({ titulo, descricao }) {
    3. ASYNC_FETCH_ROUTES — subsel é o registro inteiro, sem suporte a id
       solto no componente; app.jsx busca no Supabase e só then popula
       subsel (renderPage mostra "Carregando…" enquanto isso). */
-const SYNC_PASSTHROUGH_ROUTES = new Set(["dossier-obra", "vistorias", "formulario-elevador", "formulario-quadro-comando", "central-documentos", "cadastro-custos", "ficha-tecnica", "solicitacoes-produto", "precificacao", "linha-do-tempo", "inbox"]);
+const SYNC_PASSTHROUGH_ROUTES = new Set(["dossier-obra", "vistorias", "formulario-elevador", "formulario-escada", "formulario-esteira", "formulario-quadro-comando", "central-documentos", "cadastro-custos", "ficha-tecnica", "solicitacoes-produto", "precificacao", "linha-do-tempo", "inbox"]);
 const WRAPPED_ID_KEY = { "proposta-editor": "__editId" };
 
 /* Cada fetcher recebe o id da URL e resolve pro registro (ou null se não
@@ -364,6 +366,8 @@ function App() {
       case "crm-analise": return <CRMAnalisePage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "formularios": return <FormulariosPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "formulario-elevador": return <FormularioElevadorPage setRoute={setRoute} subsel={subsel}/>;
+      case "formulario-escada": return <FormularioElevadorPage setRoute={setRoute} subsel={subsel} tipoPadrao="escada"/>;
+      case "formulario-esteira": return <FormularioElevadorPage setRoute={setRoute} subsel={subsel} tipoPadrao="esteira"/>;
       case "formulario-quadro-comando": return <QuadroComandoPage setRoute={setRoute} subsel={subsel}/>;
       case "controle-cotacoes": return <ControleCotacoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "contratos-sociais": return <ContratosSociaisPage/>;
@@ -382,22 +386,22 @@ function App() {
       case "ncm-detail": return <NcmDetailPage product={subsel?.ncmProduct} setRoute={setRoute}/>;
       case "eng-projeto-elevadores": return <window.ProjetoElevadorPage setRoute={setRoute}/>;
       case "eng-configurador": return <ConfiguradorPage setRoute={setRoute}/>;
-      case "desenho-tecnico": return <DesenhoTecnicoPage setRoute={setRoute}/>;
       case "ficha-tecnica": return <FichaTecnicaPage fichaId={subsel}/>; /* deep-link support: /nova-ficha-tecnica */
-      case "solicitacoes-produto": return <SolicitacoesProdutoPage solicitacaoId={subsel}/>; /* deep-link support */
+      case "solicitacoes-produto": return <SolicitacoesProdutoPage solicitacaoId={subsel} setRoute={setRoute} setSubsel={setSubsel}/>; /* deep-link support */
       case "juridico": return <JuridicoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "contrato-editor": return <ContratoEditorPage contrato={subsel} setRoute={setRoute} onSaved={() => {}} />;
       case "contrato-venda-equipamentos": return <ContratoVendaEquipamentosPage/>;
       case "contrato-instalador": return <ContratoInstaladorPage/>;
       case "vistorias-envio": return <VistoriasEnvio setRoute={setRoute}/>;
       case "vistorias": return <VistoriasObras obraId={subsel} setRoute={setRoute}/>;
-      case "instalacao": return <InstalacaoPage/>;
+      case "instalacao": return <InstalacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "mapa-obras": return <window.MapaObrasPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "central-documentos": return <window.CentralDocumentosPage setRoute={setRoute} setSubsel={setSubsel} subsel={subsel}/>;
-      case "art": return <ArtPage setRoute={setRoute}/>;
+      case "art": return <window.ObraArtPage/>;
       case "cronograma": return <CronogramaPage/>;
       case "databook": return <DataBookPage setRoute={setRoute}/>;
       case "handover": return <window.HandoverManutencaoPage/>;
+      case "repositorio-documentos": return <window.RepositorioDocumentosPage/>;
       case "importacao": return <ImportacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "importacao-detail": return <ImportacaoDetail embarque={subsel} setRoute={setRoute}/>;
       case "importacao-rastreamento": return <ImportacaoRastreamento setRoute={setRoute} setSubsel={setSubsel}/>;
@@ -407,7 +411,7 @@ function App() {
       case "aval-financeiro": return <window.AvalFinanceiroPage setRoute={setRoute}/>;
       case "aval-juridico": return <window.AvalJuridicoPage setRoute={setRoute}/>;
       case "comissoes": return <ComissoesPage/>;
-      case "pagamentos-instalador": return <PagamentosInstaladorPage/>;
+      case "pagamentos-instalador": return <PagamentosInstaladorPage setRoute={setRoute}/>;
       case "rh-homologacao": return <window.RHHomologacaoPage/>;
       case "cadastro-instaladores": return <window.CadastroInstaladoresPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "cadastro-custos": return <window.CadastroCustosPage setSubsel={setSubsel} subsel={subsel}/>;
@@ -505,10 +509,9 @@ function App() {
               { value: "propostas", label: "Propostas (wizard)" },
               { value: "proposta-editor", label: "📝 Editor de Proposta (3 eq.)" },
               { value: "engenharia", label: "Engenharia + Laudo" },
-              { value: "ncm-catalogo", label: "📋 Catálogo de Produtos" },
+              { value: "ncm-catalogo", label: "📋 Catálogo Siscomex" },
               { value: "eng-projeto-elevadores", label: "🛗 Projeto de Elevadores" },
               { value: "eng-configurador", label: "🛠 Projeto de Equipamento" },
-              { value: "desenho-tecnico", label: "📐 Desenho Técnico ER | ES" },
               { value: "ficha-tecnica", label: "📋 Ficha Técnica" },
               { value: "juridico", label: "Jurídico (✂️ redator)" },
               { value: "contrato-venda-equipamentos", label: "📄 Contrato Venda de Equipamentos" },
@@ -518,7 +521,8 @@ function App() {
               { value: "art", label: "ART de Instalação" },
               { value: "cronograma", label: "Cronograma de Instalação" },
               { value: "databook", label: "Data Book & Termo" },
-              { value: "handover", label: "📦 Handover & Pós-venda" },
+              { value: "repositorio-documentos", label: "📁 Repositório Documentos" },
+              { value: "handover", label: "📦 Entrega Final" },
               { value: "importacao", label: "Importação (lista)" },
               { value: "importacao-detail", label: "Detalhe de Embarque" },
               { value: "importacao-rastreamento", label: "🛰️ Mapa de Navios" },

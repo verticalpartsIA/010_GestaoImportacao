@@ -18,13 +18,21 @@ const DOSSIER_STATUS_COLOR = {
   'Manutenção preventiva': 'var(--vp-info)',
 };
 
+/* Nº da obra exibido: VPOB-<cotação> quando há cotação; senão o id interno (obra legada). Fonte única do cálculo neste arquivo. */
+function dossierObraNo(o) {
+  // Código oficial da obra = o gravado (dossier_obra.codigo_obra, base da ART); o cálculo antigo só como contingência.
+  if (o.codigo_obra) return o.codigo_obra;
+  return o.numero_cotacao != null ? window.MasterIdEngine.etapaId('obra', o.numero_cotacao) : o.id;
+}
+
 /* ---------- Status de Obras — visão consolidada de todos os Dossiês ---------- */
 function ObrasStatusPage({ setRoute, setSubsel }) {
   const [obras, setObras] = React.useState([]);
   const [equipPorObra, setEquipPorObra] = React.useState({}); // dossier_id -> [numero_serie,...]
   const [loading, setLoading] = React.useState(true);
-  const [statusFiltro, setStatusFiltro] = React.useState('Todos');
-  const [busca, setBusca] = React.useState('');
+  // Filtro e busca vivem na URL (?status=…&q=…): F5 e link direto reabrem a lista filtrada.
+  const [statusFiltro, setStatusFiltro] = window.useQueryParam('status', 'Todos');
+  const [busca, setBusca] = window.useQueryParam('q', '');
   const statusFlow = (window.__DOSSIER && window.__DOSSIER.STATUS_FLOW) || [];
   const statuses = ['Todos', ...statusFlow];
 
@@ -54,7 +62,7 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
   const rows = obras.filter((o) => {
     if (statusFiltro !== 'Todos' && o.status_master !== statusFiltro) return false;
     if (!q) return true;
-    const obraNo = o.numero_cotacao != null ? window.MasterIdEngine.etapaId('obra', o.numero_cotacao) : o.id;
+    const obraNo = dossierObraNo(o);
     const seriais = (equipPorObra[o.id] || []).join(' ');
     const alvo = [o.client_name, o.building_name, o.id, obraNo, o.parceiros_instaladores?.nome, seriais]
       .filter(Boolean).join(' ').toLowerCase();
@@ -66,8 +74,8 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Engenharia · Status de Obras</div>
-          <h1 className="page-head__title">Status de Obras</h1>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Obras & Instalação · Dossiês de Obras</div>
+          <h1 className="page-head__title">Dossiês de Obras</h1>
           <p className="page-head__sub">Visão consolidada de todas as obras em andamento — onde cada uma está parada e quem é o responsável.</p>
         </div>
       </div>
@@ -104,7 +112,7 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
             )}
             {rows.map((o) => (
               <tr key={o.id} onClick={() => abrirDossier(o)} style={{ cursor: 'pointer' }}>
-                <td><span className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{o.numero_cotacao != null ? window.MasterIdEngine.etapaId('obra', o.numero_cotacao) : o.id}</span></td>
+                <td><span className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{dossierObraNo(o)}</span></td>
                 <td className="cell-main">{o.building_name || '—'}</td>
                 <td>{o.client_name || '—'}</td>
                 <td style={{ textTransform: 'capitalize' }}>{o.equip_type || '—'}</td>
@@ -358,7 +366,7 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
             <div style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>{dossier.building_name}</div>
             {dossier.numero_cotacao != null && (
               <div className="mono" style={{ fontSize: 12, opacity: 0.85, marginBottom: 6 }}>
-                Obra Nº {window.MasterIdEngine.etapaId('obra', dossier.numero_cotacao)}
+                Obra Nº {dossierObraNo(dossier)}
               </div>
             )}
             <div style={{ fontSize: 14, opacity: 0.9 }}>
@@ -594,6 +602,35 @@ function CardContratoInstalador({ dossier, setRoute }) {
   );
 }
 
+/* Handover (Entrega Final): a coluna `handover` (jsonb) mora na mesma linha de dossier_obra e é editada na tela
+   "Entrega Final" (/engenharia/handover/<id>). Este card só LÊ e leva até lá, pra quem está no Dossiê enxergar o estado. */
+function CardHandover({ dossier }) {
+  const [h, setH] = React.useState(undefined); // undefined = carregando, null = sem handover
+  React.useEffect(() => {
+    let vivo = true;
+    const c = window.__VP_SB && window.__VP_SB.sb;
+    if (!c) { setH(null); return; }
+    c.from('dossier_obra').select('handover').eq('id', dossier.id).maybeSingle()
+      .then(({ data }) => { if (vivo) setH((data && data.handover) || null); });
+    return () => { vivo = false; };
+  }, [dossier.id]);
+  if (h === undefined) return null;
+  const estado = !h ? 'Aguardando handover' : h.escamax_transferido ? 'Transferido para a Escamax' : 'Handover registrado';
+  const fmt = (iso) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : null; };
+  const garantia = h && fmt(h.data_fim_garantia);
+  const abrir = () => { if (window.pcpIrParaUrl) window.pcpIrParaUrl('/engenharia/handover/' + encodeURIComponent(dossier.id)); };
+  return (
+    <div style={{ background: 'var(--vp-gray-100)', border: '1px solid var(--border)', borderRadius: 6, padding: 16 }}>
+      <div style={{ fontSize: 12, color: 'var(--fg2)', textTransform: 'uppercase', marginBottom: 8 }}>Entrega Final (Handover)</div>
+      <div style={{ fontSize: 13, fontWeight: 600 }}>{estado}</div>
+      {garantia && <div style={{ fontSize: 12, color: 'var(--fg2)', marginTop: 2 }}>Garantia até {garantia}</div>}
+      <div style={{ marginTop: 10 }}>
+        <Button variant="outline" size="small" onClick={abrir}>Abrir em Entrega Final →</Button>
+      </div>
+    </div>
+  );
+}
+
 function TabVisaoGeral({ dossier, setModalOpen, reload, setRoute }) {
   const pendenciasAtivas = dossier.pendencias?.filter(p => !p.resolved_at) || [];
   const pendenciaBloqueante = pendenciasAtivas.some(p => p.bloqueante);
@@ -701,6 +738,7 @@ function TabVisaoGeral({ dossier, setModalOpen, reload, setRoute }) {
       </div>
 
       <CardContratoInstalador dossier={dossier} setRoute={setRoute} />
+      <CardHandover dossier={dossier} />
 
       {/* PENDÊNCIAS */}
       <div style={{

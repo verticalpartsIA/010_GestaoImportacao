@@ -683,7 +683,7 @@ function ProjetoElevadorDesenhos({ abas }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Engenharia · Projeto de Elevadores</div>
           <h1 className="page-head__title">Projeto de Elevadores</h1>
-          <p className="page-head__sub">Repositório dos projetos e desenhos dos elevadores, para enviar aos clientes.</p>
+          <p className="page-head__sub">Repositório dos projetos e desenhos dos elevadores, por cotação, para enviar aos clientes. Documento de obra (ART, termos, Data Book) fica na Central de Documentos; arquivo solto, em Repositório Documentos.</p>
         </div>
         <div className="page-head__r row gap-2">
           <Button variant="outline" onClick={carregar} disabled={loading}>{loading ? "Atualizando…" : "Atualizar"}</Button>

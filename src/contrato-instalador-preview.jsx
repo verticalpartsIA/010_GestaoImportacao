@@ -41,7 +41,7 @@ function CI_fmtDataHora(iso) {
   return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-/* Assinatura da fila da VerticalParts (Contratante — CEO, Testemunha 1 e 2): nome, data/hora e hash, ou "aguardando assinatura". */
+/* Assinatura da fila da VerticalParts (Contratante — CEO, Testemunha 1 e 2): nome, data/hora, hash e token, ou "aguardando assinatura". */
 function CI_FilaSlot({ f }) {
   if (!f) return null;
   const au = f.audit || {};
@@ -51,6 +51,7 @@ function CI_FilaSlot({ f }) {
       {au.signatureData ? <img className="ci-doc-digital-img" src={au.signatureData} alt={'Assinatura de ' + (au.signerName || f.nome)} /> : <span className="ci-doc-digital-name">{au.signerName || f.nome}</span>}
       <span className="ci-doc-digital-meta">Assinado em {CI_fmtDataHora(au.signedAt)} (horário de Brasília)</span>
       <span className="ci-doc-digital-hash">Hash: {au.hash || ''}</span>
+      {f.token && <span className="ci-doc-digital-hash">Token: {f.token}</span>}
     </div>
   );
 }
@@ -71,7 +72,7 @@ function CIContractPreview({ doc, highlightConditional, assinaturas, fila }) {
 
       <h1 className="ci-doc-title">{doc.titulo}</h1>
 
-      <p className="ci-doc-p ci-doc-intro">Pelo presente contrato de prestação de serviços, as partes a seguir nomeadas:</p>
+      <p className="ci-doc-p ci-doc-intro">{doc.ehDistrato ? 'Pelo presente instrumento de distrato, as partes a seguir nomeadas:' : 'Pelo presente contrato de prestação de serviços, as partes a seguir nomeadas:'}</p>
 
       <p className="ci-doc-p">
         <b>{ct.razaoSocial}</b>, inscrita no CNPJ/MF sob o nº {ct.cnpj}, com sede à {ct.endereco}, neste ato representada por <b>{ct.representante}</b>, {ct.repNacionalidade}, {ct.repEstadoCivil}, {ct.repProfissao}, portador do RG: {ct.repRG} e do CPF: {ct.repCPF}, com escritório no endereço acima mencionado, doravante denominada simplesmente <b>CONTRATANTE</b>
@@ -81,7 +82,9 @@ function CIContractPreview({ doc, highlightConditional, assinaturas, fila }) {
         <b>{cd.razao}</b>, inscrita no CNPJ sob o nº {cd.cnpj}, com sede à {cd.endereco}, neste ato representada nos termos de seu ato constitutivo por <b>{cd.responsavel}</b>, {cd.nacionalidade}, {cd.estadoCivil}, {cd.profissao}, portador da cédula de identidade RG de nº {cd.rg}, inscrito no CPF nº {cd.cpf}, residente e domiciliado na {cd.enderecoResp}, doravante denominada <b>CONTRATADA</b>,
       </p>
 
-      <p className="ci-doc-p">As partes acima identificadas têm, entre si, justo e acertado o presente Contrato de Prestação de Serviços Técnicos de Profissional Autônomo, que se regerá pelas cláusulas seguintes e pelas condições de preço, forma e termo de pagamento descritas no presente.</p>
+      <p className="ci-doc-p">{doc.ehDistrato
+        ? 'As partes acima identificadas têm, entre si, justo e acertado o presente Termo de Distrato, que se regerá pelas cláusulas seguintes.'
+        : 'As partes acima identificadas têm, entre si, justo e acertado o presente Contrato de Prestação de Serviços Técnicos de Profissional Autônomo, que se regerá pelas cláusulas seguintes e pelas condições de preço, forma e termo de pagamento descritas no presente.'}</p>
 
       {doc.clauses.map((c) => (
         <section key={c.id} className={'ci-doc-clause' + (c.conditional && highlightConditional ? ' ci-doc-clause--cond' : '')}>
@@ -93,7 +96,9 @@ function CIContractPreview({ doc, highlightConditional, assinaturas, fila }) {
         </section>
       ))}
 
-      <p className="ci-doc-p ci-doc-closing">E por estarem assim justos e contratados, as partes firmam o presente em 02 (duas) vias de igual teor e forma, na presença das testemunhas abaixo.</p>
+      <p className="ci-doc-p ci-doc-closing">{doc.ehDistrato
+        ? 'E por estarem assim justos e acordados, as partes firmam o presente distrato em 02 (duas) vias de igual teor e forma, na presença das testemunhas abaixo.'
+        : 'E por estarem assim justos e contratados, as partes firmam o presente em 02 (duas) vias de igual teor e forma, na presença das testemunhas abaixo.'}</p>
 
       <p className="ci-doc-p ci-doc-local">{doc.cidadeAssinatura}, {doc.dataDia} de {doc.dataMes} de {doc.dataAno}.</p>
 
@@ -127,6 +132,7 @@ function CIContractPreview({ doc, highlightConditional, assinaturas, fila }) {
               <span className="ci-doc-digital-meta">Assinado em {CI_fmtDataHora(a.em)} (horário de Brasília) · {a.dispositivo || 'dispositivo não informado'}</span>
               <span className="ci-doc-digital-meta">IP: {a.ip || 'não informado'}</span>
               <span className="ci-doc-digital-hash">Hash: {a.hash || ''}</span>
+              {a.token && <span className="ci-doc-digital-hash">Token: {a.token}</span>}
             </div>
           ))}
         </div>

@@ -53,7 +53,7 @@
     return splitEmails(achado && achado.email);
   }
 
-  async function enviar({ cotacaoFornecedorId, numeroCotacao, mensagem, anexos, autor, emailFornecedor } = {}) {
+  async function enviar({ cotacaoFornecedorId, numeroCotacao, mensagem, anexos, autor, emailFornecedor, cc } = {}) {
     const c = sb(); if (!c) throw new Error('Sem conexão com o banco.');
     if (!cotacaoFornecedorId) throw new Error('Cotação a fornecedor não informada.');
     if (!mensagem?.trim() && !(anexos || []).length) throw new Error('Escreva uma mensagem ou anexe um arquivo.');
@@ -102,6 +102,7 @@
         const { data: r, error: emailError } = await c.functions.invoke('send-email', {
           body: {
             to: destinos.join(', '),
+            cc: window.EmailEnvioHelper ? window.EmailEnvioHelper.normalizarLista(cc) : undefined,
             subject: `Nova mensagem - Cotacao No ${numeroCotacao || ''} - VerticalParts`,
             text: texto,
             html: `<p>Você recebeu uma nova mensagem sobre a cotação${numeroCotacao ? ' Nº ' + numeroCotacao : ''}.</p>`

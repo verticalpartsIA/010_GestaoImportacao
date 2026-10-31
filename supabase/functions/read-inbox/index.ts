@@ -134,12 +134,37 @@ function quotedPrintableToBytes(s: string): Uint8Array {
 }
 function latin1ToBytes(s: string): Uint8Array { const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i) & 0xff; return a; }
 function decodeHeaderValue(v: string): string {
-  return v.replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (_m, charset, enc, data) => {
-    try {
-      const bytes = enc.toUpperCase() === "B" ? base64ToBytes(data) : quotedPrintableToBytes(data.replace(/_/g, " "));
-      return new TextDecoder(charset.toLowerCase()).decode(bytes);
-    } catch { return data; }
-  });
+  /* 30/10 — RFC 2047: o espaço entre palavras codificadas seguidas é ignorado e um caractere
+     multibyte pode vir partido entre duas palavras; por isso palavras vizinhas de mesmo charset/
+     codificação têm os bytes juntados ANTES de decodificar. */
+  const re = /=\?([^?\s]+)\?([BbQq])\?([^?\s]*)\?=/g;
+  let out = "", last = 0, m: RegExpExecArray | null;
+  let grupo: { charset: string; bytes: number[] } | null = null;
+  const fechar = () => {
+    if (!grupo) return;
+    try { out += new TextDecoder(grupo.charset).decode(new Uint8Array(grupo.bytes)); } catch { out += new TextDecoder("utf-8").decode(new Uint8Array(grupo.bytes)); }
+    grupo = null;
+  };
+  while ((m = re.exec(v)) !== null) {
+    const entre = v.slice(last, m.index);
+    if (grupo && entre.trim() === "") { /* ignora espaço entre palavras codificadas */ } else { fechar(); out += entre; }
+    const charset = m[1].replace(/\*.*$/, "").toLowerCase();
+    let bytes: Uint8Array;
+    try { bytes = m[2].toUpperCase() === "B" ? base64ToBytes(m[3]) : quotedPrintableToBytes(m[3].replace(/_/g, " ")); }
+    catch { fechar(); out += m[0]; last = m.index + m[0].length; continue; }
+    if (grupo && grupo.charset !== charset) fechar();
+    if (!grupo) grupo = { charset, bytes: [] };
+    for (const b of bytes) grupo.bytes.push(b);
+    last = m.index + m[0].length;
+  }
+  fechar();
+  out += v.slice(last);
+  return corrigirUtf8Cru(out);
+}
+/* Cabeçalho com UTF-8 "cru" (8bit), lido como latin1: se os bytes formam UTF-8 válido, reinterpreta. */
+function corrigirUtf8Cru(s: string): string {
+  if (!/[\u0080-\u00ff]/.test(s) || /[^\u0000-\u00ff]/.test(s)) return s;
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(latin1ToBytes(s)); } catch { return s; }
 }
 function decodeFilename(v: string): string {
   const m = v.match(/^[^']*'[^']*'(.+)$/);

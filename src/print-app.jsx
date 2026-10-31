@@ -15,7 +15,7 @@ const PRINT_SCREENS = [
   { id: "proposta-editor", title: "Editor de Proposta",        module: "Comercial",   role: "comercial",  sub: "3 abas · preview ao vivo · capas reais" },
   { id: "engenharia",     title: "Engenharia",                 module: "Operações",   role: "engenharia", sub: "laudo · BOM · vistoria técnica" },
   { id: "juridico",       title: "Jurídico & Contratos",       module: "Operações",   role: "admin",      sub: "redator ✂️ páginas confidenciais" },
-  { id: "instalacao",     title: "Instalação em Campo",        module: "Operações",   role: "admin",      sub: "equipes · checklist obra" },
+  { id: "instalacao",     title: "Instalação em Campo",        module: "Operações",   role: "admin",      sub: "clientes ativos · equipamentos por obra" },
   { id: "importacao",     title: "Rastreio Marítimo",           module: "Logística",   role: "admin",      sub: "embarques · BL · ETA tracking" },
   { id: "importacao-detail", title: "Embarque — Detalhe",      module: "Logística",   role: "admin",      sub: "navio · timeline · documentos" },
   { id: "importacao-rastreamento", title: "Mapa de Navios",    module: "Logística",   role: "admin",      sub: "MarineTraffic API · rota Shanghai → Santos" },
@@ -45,7 +45,7 @@ function renderPrintPage(scr) {
     case "proposta-editor": return <PropostaEditor setRoute={noop}/>;
     case "engenharia":     return <EngenhariaPage setRoute={noop}/>;
     case "juridico":       return <JuridicoPage setRoute={noop}/>;
-    case "instalacao":     return <InstalacaoPage/>;
+    case "instalacao":     return <InstalacaoPage setRoute={noop} setSubsel={noop}/>;
     case "importacao":     return <ImportacaoPage setRoute={noop} setSubsel={noop}/>;
     case "importacao-detail": return <ImportacaoDetail embarque={null} setRoute={noop}/>;
     case "importacao-rastreamento": return <ImportacaoRastreamento setRoute={noop} setSubsel={noop}/>;

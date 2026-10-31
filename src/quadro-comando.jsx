@@ -142,13 +142,62 @@ function QcCabosAcoCard({ escopo, onChange, disabled }) {
   );
 }
 
-function QcEscopoSecao({ escopo, onChange, disabled, paradasCount, lopPublico }) {
+/* Código do Omie por item do Escopo (lista suspensa + sugestão automática a partir das respostas do cliente). */
+function QcCodigoOmie({ chave, v, campo, catalogo, disabled, onPick, sugestao }) {
+  const K = window.QuadroComandoCodigos;
+  const opcoes = K ? K.opcoes(campo === 'codigo_pavimento' ? 'portas_pavimento' : chave, catalogo) : [];
+  if (!K || !K.ITENS[campo === 'codigo_pavimento' ? 'portas_pavimento' : chave]) return <span className="small muted">—</span>;
+  const atual = v[campo || 'codigo'] || '';
+  const ativo = v.decisao === 'fornecer';
+  return (
+    <div>
+      <QcSelect value={atual} disabled={disabled || !ativo} placeholder={opcoes.length ? 'Código do Omie…' : '(sem produto no Omie)'}
+        options={opcoes.map((o) => ({ value: o.codigo, label: `${o.codigo} — ${o.descricao.slice(0, 70)}` }))}
+        onChange={(val) => onPick(val)}/>
+      {ativo && !atual && sugestao && (
+        <div className="small" style={{ marginTop: 4 }}>Sugerido: <strong>{sugestao}</strong>{' '}
+          <a href="#" onClick={(e) => { e.preventDefault(); onPick(sugestao); }}>usar</a></div>
+      )}
+      {ativo && v.codigo_sugerido && atual && <div className="small muted" style={{ marginTop: 4 }}>código sugerido pelo sistema — confira</div>}
+    </div>
+  );
+}
+
+function QcEscopoSecao({ escopo, onChange, disabled, paradasCount, lopPublico, resp, paradasRows }) {
+  const K = window.QuadroComandoCodigos;
+  const [catalogo, setCatalogo] = React.useState([]);
+  React.useEffect(() => {
+    const sb = window.__VP_SB && window.__VP_SB.sb;
+    if (!K || !sb) return;
+    K.carregarCatalogo(sb).then(setCatalogo).catch(() => {});
+  }, []);
+  /* Sugestão automática (COP pelas paradas e display; LOP pela família/botões): preenche sozinha o que ainda está vazio,
+     marcado como "sugerido pelo sistema" — o vendedor confirma ou troca. */
+  React.useEffect(() => {
+    if (!K || disabled || !catalogo.length) return;
+    let novo = escopo; let mudou = false;
+    Object.keys(K.ITENS).forEach((chave) => {
+      if (chave === 'portas_pavimento') return;
+      const v = escopo[chave] || {};
+      if (v.decisao !== 'fornecer' || v.codigo) return;
+      const sug = K.sugerir(chave, { paradas: paradasCount, resp }, catalogo);
+      if (sug) { novo = { ...novo, [chave]: { ...(novo[chave] || {}), codigo: sug, codigo_sugerido: true } }; mudou = true; }
+    });
+    if (mudou) onChange(novo);
+    // eslint-disable-next-line
+  }, [catalogo, escopo, paradasCount]);
+  const pickCodigo = (chave, campo) => (val) => {
+    const v = escopo[chave] || {};
+    const { codigo_sugerido, ...resto } = v;
+    onChange({ ...escopo, [chave]: { ...resto, [campo || 'codigo']: val } });
+  };
+  const qtdPadrao = (chave) => (K ? K.quantidadePadrao(chave, paradasRows).qtd : 1);
   return (
     <>
       <Card title="Escopo do pedido" sub="Para cada item: fornecer / reutilizar existente / fornecido por terceiro / não se aplica.">
         <div className="table-wrap" style={{ border: 0 }}>
           <table className="t">
-            <thead><tr><th>Item</th><th>Decisão</th><th>Qtd/modelo</th></tr></thead>
+            <thead><tr><th>Item</th><th>Decisão</th><th>Código (Omie)</th><th>Qtd</th><th>Detalhe</th></tr></thead>
             <tbody>
               {QC_ESCOPO_ITENS.map((it) => {
                 const v = escopo[it.key] || {};
@@ -158,6 +207,26 @@ function QcEscopoSecao({ escopo, onChange, disabled, paradasCount, lopPublico })
                     <td style={{ maxWidth: 220 }}>
                       <QcSelect value={v.decisao} disabled={disabled} options={QC_ESCOPO_OPCOES}
                         onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, decisao: val } })}/>
+                    </td>
+                    <td style={{ minWidth: 240, maxWidth: 300 }}>
+                      {it.key === 'portas'
+                        ? <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <QcCodigoOmie chave="portas" v={v} campo="codigo" catalogo={catalogo} disabled={disabled} onPick={pickCodigo('portas', 'codigo')}/>
+                            <QcCodigoOmie chave="portas" v={v} campo="codigo_pavimento" catalogo={catalogo} disabled={disabled} onPick={pickCodigo('portas', 'codigo_pavimento')}/>
+                          </div>
+                        : K && K.ITENS[it.key]
+                          ? <QcCodigoOmie chave={it.key} v={v} catalogo={catalogo} disabled={disabled} onPick={pickCodigo(it.key)} sugestao={K.sugerir(it.key, { paradas: paradasCount, resp }, catalogo)}/>
+                          : <span className="small muted">—</span>}
+                    </td>
+                    <td style={{ width: 90 }}>
+                      {it.key === 'lop' || it.especial === 'variante' || it.especial === 'cabos_aco' || !(K && K.ITENS[it.key])
+                        ? <span className="small muted">{it.key === 'lop' ? 'calculada' : '—'}</span>
+                        : it.key === 'portas'
+                          ? <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              <QcInput type="number" value={v.quantidade} disabled={disabled || v.decisao !== 'fornecer'} placeholder={String(qtdPadrao('portas'))} onChange={(val) => onChange({ ...escopo, portas: { ...v, quantidade: val } })}/>
+                              <QcInput type="number" value={v.quantidade_pavimento} disabled={disabled || v.decisao !== 'fornecer'} placeholder={String(qtdPadrao('portas_pavimento'))} onChange={(val) => onChange({ ...escopo, portas: { ...v, quantidade_pavimento: val } })}/>
+                            </div>
+                          : <QcInput type="number" value={v.quantidade} disabled={disabled || v.decisao !== 'fornecer'} placeholder={String(qtdPadrao(it.key))} onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, quantidade: val } })}/>}
                     </td>
                     <td style={{ maxWidth: 220 }}>
                       {it.especial === 'variante'
@@ -180,7 +249,7 @@ function QcEscopoSecao({ escopo, onChange, disabled, paradasCount, lopPublico })
                         : it.especial === 'cabos_aco'
                           ? <span className="small muted">{v.decisao === 'fornecer' ? 'preencha o card abaixo' : '—'}</span>
                           : <QcInput value={v.detalhe} disabled={disabled || v.decisao === 'nao_aplica' || !v.decisao}
-                              placeholder={it.key === 'botoeira_inspecao_cabina' ? 'BST VPB-208 (B3)' : it.key === 'botoeira_inspecao_poco' ? 'BST VPB-380 (P5Y)' : 'qtd/modelo'} onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, detalhe: val } })}/>}
+                              placeholder={it.key === 'botoeira_inspecao_cabina' ? 'BST VPB-193 (Monarch)' : it.key === 'botoeira_inspecao_poco' ? 'BST VPB-209' : 'qtd/modelo'} onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, detalhe: val } })}/>}
                     </td>
                   </tr>
                 );
@@ -394,7 +463,7 @@ function QcMaquinaSecao({ maquina, onChange, disabled, varianteLabel, errosVisiv
             options={[{ value: '220', label: '220V' }, { value: '380', label: '380V' }]}
             style={{borderColor: errosVisiveis?.tensao_v ? '#d32f2f' : undefined}}
             onChange={(v) => set({ tensao_v: v ? Number(v) : null })}/></QcField>
-          <QcField label="Número de fases"><QcSelect value={maquina.fases} disabled={disabled} data-field="fases"
+          <QcField label="Número de fases"><QcSelect value={maquina.fases || '3'} disabled={disabled} data-field="fases"
             options={[{ value: '1', label: 'Monofásico (1Ø)' }, { value: '3', label: 'Trifásico (3Ø)' }]}
             style={{borderColor: errosVisiveis?.fases ? '#d32f2f' : undefined}}
             onChange={(v) => set({ fases: v })}/></QcField>
@@ -489,7 +558,7 @@ function QcGeometriaSecao({ geometria, intervalos, config, onGeom, onIntervalos,
 
   return (
     <>
-      <Card title="Geometria da caixa (medida em mm)" sub="Sempre a medida real da obra — os padrões comerciais de estimativa (poço 1500mm, intervalo 3000mm, K 4400mm) só entram se você marcar explicitamente 'estimado'.">
+      <Card title="Geometria da caixa (medida em mm)" sub="Sempre a medida real da obra — os padrões comerciais de estimativa (poço 1500mm, intervalo 3000mm, K 4500mm) só entram se você marcar explicitamente 'estimado'.">
         <div className="grid-3" style={{ gap: 12 }}>
           <QcField label="Profundidade do poço (S)">
             <QcInput type="number" value={geometria.poco_mm} disabled={disabled} onChange={(v) => set({ poco_mm: v })}/>
@@ -499,7 +568,7 @@ function QcGeometriaSecao({ geometria, intervalos, config, onGeom, onIntervalos,
           <QcField label="Última altura (K)">
             <QcInput type="number" value={geometria.ultima_altura_mm} disabled={disabled} onChange={(v) => set({ ultima_altura_mm: v })}/>
             <label className="small muted"><input type="checkbox" checked={geometria.ultima_altura_origem === 'estimado'} disabled={disabled}
-              onChange={(e) => set({ ultima_altura_origem: e.target.checked ? 'estimado' : 'medido' })}/> usar padrão comercial (4400mm)</label>
+              onChange={(e) => set({ ultima_altura_origem: e.target.checked ? 'estimado' : 'medido' })}/> usar padrão comercial (4500mm)</label>
           </QcField>
           <QcField label="Largura da caixa de corrida"><QcInput type="number" value={geometria.caixa_largura_mm} disabled={disabled} onChange={(v) => set({ caixa_largura_mm: v })}/></QcField>
           <QcField label="Profundidade da caixa de corrida"><QcInput type="number" value={geometria.caixa_profundidade_mm} disabled={disabled} onChange={(v) => set({ caixa_profundidade_mm: v })}/></QcField>
@@ -507,7 +576,7 @@ function QcGeometriaSecao({ geometria, intervalos, config, onGeom, onIntervalos,
         <div className="small muted" style={{ marginTop: 4 }}>Largura/profundidade/altura da cabina agora ficam na aba "Cabina".</div>
         <div className="small muted" style={{ marginTop: 6 }}>
           Percurso (soma dos intervalos): <b>{calc.percurso_mm} mm</b> · Altura total: <b>{calc.altura_total_mm} mm</b>
-          {calc.ultima_altura_fora_do_padrao && <span style={{ color: '#a11d1d', fontWeight: 600 }}> · fora do padrão (K &gt; 4400mm) — encaminhar pra análise da engenharia.</span>}
+          {calc.ultima_altura_fora_do_padrao && <span style={{ color: '#a11d1d', fontWeight: 600 }}> · fora do padrão (K &gt; 4500mm) — encaminhar pra análise da engenharia.</span>}
           {perimetro != null && <> · Perímetro da caixa: <b>{perimetro} mm</b> (referência de contorno, não lançar automaticamente num ramal específico)</>}
         </div>
       </Card>
@@ -560,18 +629,10 @@ function QcGeometriaSecao({ geometria, intervalos, config, onGeom, onIntervalos,
         </div>
       </Card>
 
-      <Card title="Cabo de manobra — seio e folga" sub="Definições ainda pendentes de confirmação da engenharia (ver instrução original) — sem confirmar, o corte fica travado como pendente.">
+      <Card title="Cabo de manobra — comprimento" sub="Comprimento = soma dos pisos + seio + subida até a caixa de inspeção (3 m) + pontas + saída do quadro até a caixa (10 m, fixo), mais a distância do quadro até a descida da laje quando há casa de máquinas (campo acima). Deixe em branco para usar o padrão.">
         <div className="grid-3" style={{ gap: 12 }}>
-          <QcField label="Seio do cabo (mm)"><QcInput type="number" value={geometria.seio_cabo_mm} disabled={disabled} onChange={(v) => set({ seio_cabo_mm: v })}/></QcField>
-          <QcField label="Definição do seio confirmada pela engenharia?">
-            <label className="small"><input type="checkbox" checked={!!geometria.seio_definicao_confirmada} disabled={disabled}
-              onChange={(e) => set({ seio_definicao_confirmada: e.target.checked })}/> Confirmado</label>
-          </QcField>
-          <QcField label="Folga (mm)"><QcInput type="number" value={geometria.folga_mm} disabled={disabled} onChange={(v) => set({ folga_mm: v })}/></QcField>
-          <QcField label="Regra de folga confirmada pela engenharia?">
-            <label className="small"><input type="checkbox" checked={!!geometria.folga_regra_confirmada} disabled={disabled}
-              onChange={(e) => set({ folga_regra_confirmada: e.target.checked })}/> Confirmado</label>
-          </QcField>
+          <QcField label="Seio / volta do cabo (mm) — padrão 3000"><QcInput type="number" value={geometria.seio_cabo_mm} disabled={disabled} onChange={(v) => set({ seio_cabo_mm: v })}/></QcField>
+          <QcField label="Pontas — soma das duas (mm) — padrão 4000"><QcInput type="number" value={geometria.folga_mm} disabled={disabled} onChange={(v) => set({ folga_mm: v })}/></QcField>
         </div>
       </Card>
     </>
@@ -603,7 +664,11 @@ function QcResultadoSecao({ quadroId, podeGerar, salvarAntes }) {
       if (salvarAntes && !(await salvarAntes())) return;
       const r = await window.QuadroComandoStore.gerarBomECortes(quadroId);
       if (r.erroVariante) window.toast?.(r.erroVariante, 'warning');
-      else window.toast?.('BOM e lista de corte gerados.', 'success');
+      else window.toast?.('BOM e lista de corte gerados' + (r.fonteBom ? ' — lista de materiais: ' + r.fonteBom : '') + '.', 'success');
+      if (r.pendentesCodigo && r.pendentesCodigo.length) {
+        const nomes = r.pendentesCodigo.map((k) => (QC_ESCOPO_ITENS.find((it) => it.key === k) || { label: k }).label);
+        window.toast?.('Faltam códigos do Omie no Escopo (não entraram no BOM): ' + nomes.join(', ') + '.', 'warning');
+      }
       reload();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setGerando(false); }
@@ -894,9 +959,9 @@ const QC_RESP_VALORES = {
 const QC_RESP_BLOCOS = [
   { titulo: 'Quem preencheu', campos: [['solicitante', 'Solicitante'], ['empresa', 'Empresa'], ['cnpj', 'CNPJ'], ['telefone', 'Telefone'], ['email', 'E-mail']] },
   { titulo: 'Obra', campos: [['tipo_servico', 'Tipo de serviço'], ['identificacao', 'Identificação da obra'], ['num_paradas', 'Nº de paradas']] },
-  { titulo: 'Quadro e motor', campos: [['variante_quadro', 'Modelo do quadro'], ['tensao_rede', 'Tensão da rede (V)'], ['tensao_rede_outro', 'Tensão da rede — outra'], ['potencia_motor', 'Potência do motor (kW)'], ['tensao_motor', 'Tensão do motor (V)'], ['corrente_nominal', 'Corrente nominal (A)'], ['aplicacao', 'Aplicação'], ['atendimento', 'Atendimento'], ['num_botoeiras', 'Nº de botoeiras']] },
+  { titulo: 'Quadro', campos: [['variante_quadro', 'Modelo do quadro'], ['tensao_rede', 'Tensão da rede (V)'], ['tensao_rede_outro', 'Tensão da rede — outra'], ['potencia_motor', 'Potência do motor (kW) — formulário antigo'], ['tensao_motor', 'Tensão do motor (V) — formulário antigo'], ['corrente_nominal', 'Corrente nominal (A) — formulário antigo'], ['aplicacao', 'Aplicação — formulário antigo'], ['atendimento', 'Atendimento — formulário antigo'], ['num_botoeiras', 'Nº de botoeiras — formulário antigo']] },
   { titulo: 'Porta e acionamento', campos: [['tipo_porta', 'Tipo de porta'], ['operador_porta', 'Operador de porta'], ['tipo_freio', 'Tipo de freio'], ['tensao_freio', 'Tensão do freio (V)'], ['acionamento', 'Acionamento'], ['encoder', 'Encoder'], ['engrenagem', 'Engrenagem'], ['casa_maquinas', 'Casa de máquinas']] },
-  { titulo: 'Acessórios', campos: [['acessorios', 'Acessórios solicitados'], ['lop_botoes', 'LOP — botões nos intermediários (1 ou 2)'], ['ind_cor', 'Cor do indicador'], ['observacoes', 'Observações']] },
+  { titulo: 'Acessórios', campos: [['acessorios', 'Acessórios solicitados'], ['cop_display', 'COP — display'], ['lop_material', 'LOP — material'], ['lop_botoes', 'LOP — botões nos intermediários (1 ou 2)'], ['lop_display', 'LOP — display'], ['total_lop', 'LOP — total de botoeiras'], ['logo_url', 'Logo para a botoeira (arquivo)'], ['porta_oposta', 'Porta oposta'], ['porta_oposta_paradas', 'Andares da porta oposta'], ['ind_cor', 'Cor do indicador'], ['maquina_codigo', 'Máquina de tração escolhida'], ['porta_cabina_codigo', 'Porta de cabina escolhida'], ['porta_pavimento_codigo', 'Porta de pavimento escolhida'], ['observacoes', 'Observações']] },
   { titulo: 'Fiação (metros)', campos: [['f_l1', 'L1'], ['f_ua', 'UA'], ['f_tr', 'TR'], ['f_bp', 'BP'], ['f_lim', 'LIM'], ['f_fp', 'FP'], ['obs_fiacao', 'Observações da fiação']] },
 ];
 
@@ -911,6 +976,11 @@ function QcRespostasPublico({ quadro }) {
       return d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : d;
     }
     if (k === 'variante_quadro') return String(v).replace('_', ' kW / ') + ' V';
+    if (k === 'cop_display' || k === 'lop_display') return v === 'com' ? 'Com display' : 'Sem display';
+    if (k === 'lop_material') return v === 'vidro' ? 'Espelho em vidro' : 'Aço escovado';
+    if (k === 'porta_oposta') return v === 'sim' ? 'Sim' : 'Não';
+    if (Array.isArray(v)) return v.length ? v.join(', ') : null;
+    if (k === 'logo_url') return String(v);
     return QC_RESP_VALORES[v] || String(v);
   };
   const dist = Array.isArray(r.dist) ? r.dist.filter((x) => x && x.m) : [];
@@ -980,7 +1050,6 @@ function QuadroComandoDetail({ quadroId, onClose }) {
     const errosMap = {};
     if (!quadro.maquina?.potencia_kw) errosMap.potencia_kw = 'Obrigatório';
     if (!quadro.maquina?.tensao_v) errosMap.tensao_v = 'Obrigatório';
-    if (!quadro.maquina?.fases) errosMap.fases = 'Obrigatório';
     if (!quadro.maquina?.frequencia_hz) errosMap.frequencia_hz = 'Obrigatório';
     if (!quadro.maquina?.freio_tipo) errosMap.freio_tipo = 'Obrigatório';
     return errosMap;
@@ -1076,7 +1145,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
             { key: 'resultado', label: 'BOM / lista de corte / checklist' },
           ]} active={tab} onChange={setTab}/>
           <div style={{ marginTop: 16 }}>
-            {tab === 'escopo' && <QcEscopoSecao lopPublico={(quadro.respostas_publico || {}).lop_botoes} paradasCount={(quadro.paradas || []).length || parseInt((quadro.respostas_publico || {}).num_paradas, 10) || 0} escopo={quadro.escopo_fornecimento || {}} onChange={(v) => setQuadro({ ...quadro, escopo_fornecimento: v })}/>}
+            {tab === 'escopo' && <QcEscopoSecao resp={quadro.respostas_publico || {}} paradasRows={quadro.paradas || []} lopPublico={(quadro.respostas_publico || {}).lop_botoes} paradasCount={(quadro.paradas || []).length || parseInt((quadro.respostas_publico || {}).num_paradas, 10) || 0} escopo={quadro.escopo_fornecimento || {}} onChange={(v) => setQuadro({ ...quadro, escopo_fornecimento: v })}/>}
             {tab === 'configuracao' && <QcConfiguracaoSecao config={quadro.configuracao || {}} paradas={quadro.paradas} onChange={(v) => setQuadro({ ...quadro, configuracao: v })}/>}
             {tab === 'cabina' && <QcCabinaSecao geometria={quadro.geometria} config={quadro.configuracao || {}}
               onGeom={(v) => setQuadro({ ...quadro, geometria: v })}/>}

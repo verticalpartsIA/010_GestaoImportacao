@@ -104,6 +104,13 @@ const STATUS_ALIASES = {
   /* Projeto de Instalação da Obra (Engenharia sobe o PDF, o representante do cliente assina) —
      linha própria em documento_signatarios, mesmo vocabulário de status. */
   projeto:    { signed: 'assinado', refused: 'recusado', expired: 'expirado' },
+  /* Distrato do Contrato do Instalador (30/10/2026) — token próprio da
+     Contratada em contratos_instalador_distratos, mesmo vocabulário. */
+  distrato_instalador: { signed: 'assinado', refused: 'recusado', expired: 'expirado' },
+  /* Fila de ciência da VerticalParts no Distrato (Diego/Juliana/Maurício — os
+     mesmos que assinaram o contrato original) — linha própria em
+     documento_signatarios, mesmo padrão de instalador_signatario. */
+  distrato_instalador_signatario: { signed: 'assinado', refused: 'recusado', expired: 'expirado' },
   proposta:   { signed: 'aprovada', refused: 'recusada', expired: 'expirada' },
 };
 
@@ -127,6 +134,24 @@ async function resolveSource(token) {
   if (window.CVStore) {
     const r = await window.CVStore.getByToken(token);
     if (r) return { kind: 'venda', rec: r, store: window.CVStore, Preview: window.CVContractPreview, engine: window.CV };
+  }
+  /* Distrato do Contrato do Instalador (30/10/2026) — token PRÓPRIO da
+     Contratada em contratos_instalador_distratos (não é um signatário de
+     documento_signatarios; é uma linha própria, igual a instalador/venda). */
+  if (window.CIDistratoStore) {
+    const d = await window.CIDistratoStore.getByToken(token);
+    if (d) {
+      const contrato = window.CIStore ? await window.CIStore.getById(d.contrato_id) : null;
+      const rec = {
+        ...(contrato || {}),
+        id: d.id, token: d.token, status: d.status, audit: d.audit || {}, doc: d.doc,
+        numero_documento: d.numero_documento,
+        sent_at: d.sent_at, viewed_at: d.viewed_at, signed_at: d.signed_at, expires_at: d.expires_at,
+        motivo: d.motivo, transferencia: d.transferencia,
+        contratoId: contrato ? contrato.id : null,
+      };
+      return { kind: 'distrato_instalador', rec, store: window.CIDistratoStore, Preview: window.CIContractPreview, engine: window.CI };
+    }
   }
   if (window.CVSignatarioStore) {
     const s = await window.CVSignatarioStore.getByToken(token);
@@ -182,6 +207,29 @@ async function resolveSource(token) {
           };
           return { kind: 'projeto', rec, store: window.DocumentoSignatariosStore, Preview: null, engine: null };
         }
+      }
+      if (s.documento_tipo === 'distrato_instalador') {
+        /* Fila de ciência do Distrato (Diego/Juliana/Maurício, os mesmos que
+           assinaram o contrato original) — fora do mapa genérico porque
+           precisa enriquecer com os dados do contrato-AVÔ (não só do
+           distrato, que já é ele próprio um "documento-pai"): __contratoPai
+           aqui é o DISTRATO (contratos_instalador_distratos), que por sua
+           vez aponta pro contrato original via contrato_id. */
+        const d = s.__contratoPai || (window.CIDistratoStore ? await window.CIDistratoStore.getById(s.documento_id) : null);
+        const contratoOriginal = d && d.contrato_id && window.CIStore ? await window.CIStore.getById(d.contrato_id) : null;
+        const rec = {
+          ...(contratoOriginal || {}),
+          ...(d || {}),
+          distratoToken: d ? d.token : null,
+          id: s.id, token: s.token, status: s.status, audit: s.audit || {},
+          sent_at: s.sent_at, viewed_at: s.viewed_at, signed_at: s.signed_at,
+          recipient: s.recipient, channel: s.channel,
+          signatarioPapel: s.papel, signatarioNome: s.nome,
+          distratoId: d ? d.id : null, distratoAudit: d ? d.audit : null, distratoStatus: d ? d.status : null, distratoSignedAt: d ? d.signed_at : null,
+        };
+        /* Mesma regra sequencial do instalador_signatario: só a linha da vez pode assinar. */
+        const aguardando = !s.liberada_em && s.status === 'pendente';
+        return { kind: 'distrato_instalador_signatario', rec, store: window.DocumentoSignatariosStore, Preview: window.CIContractPreview, engine: window.CI, aguardando };
       }
       const cfg = STORE_POR_TIPO[s.documento_tipo];
       if (cfg) {
@@ -249,6 +297,15 @@ function SgApp() {
     window.DocumentoSignatariosStore.filaInstalador(token).then((l) => { if (vivo) setFilaCI(l || []); });
     return () => { vivo = false; };
   }, [ehCIKind, phase, token]);
+  /* Distrato do Contrato do Instalador: mesma fila de ciência (Diego/Juliana/Maurício), token próprio. */
+  const [filaDistrato, setFilaDistrato] = _sgUS([]);
+  const ehDistratoKind = !!source && (source.kind === 'distrato_instalador' || source.kind === 'distrato_instalador_signatario');
+  _sgUE(() => {
+    if (!ehDistratoKind || !window.CIDistratoStore) return undefined;
+    let vivo = true;
+    window.CIDistratoStore.fila(token).then((l) => { if (vivo) setFilaDistrato(l || []); });
+    return () => { vivo = false; };
+  }, [ehDistratoKind, phase, token]);
   const propostaRender = (rec) => {
     const r = window.PropostaStore.conteudoRenderizavel(rec);
     const O = window.PropostaOpcoes;
@@ -313,6 +370,12 @@ function SgApp() {
          qualquer diferença. Fallback pro rebuild ao vivo só pra registro
          antigo/malformado sem doc persistido. */
       return (rec.doc && rec.doc.clauses) ? rec.doc : window.CI.buildContract(rec.form_state, rec.numero_documento);
+    }
+    if (source.kind === 'distrato_instalador' || source.kind === 'distrato_instalador_signatario') {
+      /* O distrato é gerado e enviado de dentro do painel (ci_distrato_enviar), que já
+         grava o `doc` montado (CI.buildDistratoContract) no envio — igual ao contrato
+         original, não reconstrói aqui. */
+      return (rec.doc && rec.doc.clauses) ? rec.doc : null;
     }
     // venda / venda_signatario (mesmo documento do representante)
     return window.CV.buildContract({
@@ -462,11 +525,11 @@ function SgApp() {
     if (!source) return;
     setPhase('processing');
     const rec = source.rec;
-    const defaultName = source.kind === 'instalador'
+    const defaultName = (source.kind === 'instalador' || source.kind === 'distrato_instalador')
       ? (rec.responsavel_nome || rec.contratada_nome)
       : source.kind === 'proposta'
       ? ((window.PropostaStore.conteudoRenderizavel(rec).data.cliente || {}).nome)
-      : (source.kind === 'venda_signatario' || source.kind === 'instalador_signatario' || source.kind === 'projeto')
+      : (source.kind === 'venda_signatario' || source.kind === 'instalador_signatario' || source.kind === 'projeto' || source.kind === 'distrato_instalador_signatario')
       ? rec.signatarioNome
       : (rec.responsavel_nome || rec.comprador_razao_social);
     const sig = sigMode === 'draw'
@@ -506,11 +569,11 @@ function SgApp() {
   const handleRefuse = () => {
     if (!source) return;
     const rec = source.rec;
-    const defaultName = source.kind === 'instalador'
+    const defaultName = (source.kind === 'instalador' || source.kind === 'distrato_instalador')
       ? (rec.responsavel_nome || rec.contratada_nome)
       : source.kind === 'proposta'
       ? ((window.PropostaStore.conteudoRenderizavel(rec).data.cliente || {}).nome)
-      : (source.kind === 'venda_signatario' || source.kind === 'instalador_signatario' || source.kind === 'projeto')
+      : (source.kind === 'venda_signatario' || source.kind === 'instalador_signatario' || source.kind === 'projeto' || source.kind === 'distrato_instalador_signatario')
       ? rec.signatarioNome
       : (rec.responsavel_nome || rec.comprador_razao_social);
     setNomeRecusa(defaultName || '');
@@ -586,6 +649,14 @@ function SgApp() {
   const assinaturasInstalador = auI.signedAt
     ? [{ papel: 'Contratada (instalador)', nome: auI.signerName || '', em: auI.signedAt, dispositivo: auI.signDevice, ip: auI.signIp, hash: auI.hash, imagem: /^data:image\//.test(auI.signatureData || '') ? auI.signatureData : null }]
     : [];
+  /* Distrato do Contrato do Instalador (30/10/2026): a página do Distrato mostra a assinatura
+     DO DISTRATO (não a do contrato original, que fica fixa no documento do próprio contrato). */
+  const ehDistrato = source.kind === 'distrato_instalador' || source.kind === 'distrato_instalador_signatario';
+  const auD = (source.kind === 'distrato_instalador' && rec.audit) || (source.kind === 'distrato_instalador_signatario' && rec.distratoAudit) || {};
+  const tokenDaContratadaNoDistrato = source.kind === 'distrato_instalador' ? rec.token : rec.distratoToken;
+  const assinaturasDistrato = auD.signedAt
+    ? [{ papel: 'Contratada (instalador)', nome: auD.signerName || '', em: auD.signedAt, dispositivo: auD.signDevice, ip: auD.signIp, hash: auD.hash, token: tokenDaContratadaNoDistrato, imagem: /^data:image\//.test(auD.signatureData || '') ? auD.signatureData : null }]
+    : [];
   const st = STATUS_ALIASES[source.kind];
 
   if (source.aguardando) {
@@ -636,7 +707,12 @@ function SgApp() {
        "contrato assinado" quando ainda falta gente. */
     const ehVendaOuSignatario = source.kind === 'venda' || source.kind === 'venda_signatario';
     const statusContrato = source.kind === 'venda_signatario' ? rec.contratoStatus : rec.status;
-    const aindaFaltamOutros = (ehVendaOuSignatario && statusContrato !== 'assinado') || source.kind === 'instalador_signatario';
+    /* Distrato: tanto a Contratada quanto cada membro da fila (Diego/Juliana/Maurício) têm
+       `assinaturas_completas_em` (coluna de contratos_instalador_distratos, mesclada no rec
+       dos dois kinds) — mais preciso que o atalho usado acima pra instalador_signatario, que
+       sempre assume "falta gente" (cosmético, documentado em CLAUDE.md, não copiado aqui). */
+    const aindaFaltamOutros = (ehVendaOuSignatario && statusContrato !== 'assinado') || source.kind === 'instalador_signatario'
+      || (ehDistrato && !rec.assinaturas_completas_em);
     return (
       <>
         <div className="ci-sign-status">
@@ -668,7 +744,7 @@ function SgApp() {
           <div className="ci-print-doc">
             {source.kind === 'proposta'
               ? <window.PEPreview {...propostaRender(rec)} bare/>
-              : <Preview doc={doc} highlightConditional={false} highlightInjected={false} assinaturas={assinaturasInstalador} fila={filaCI}/>}
+              : <Preview doc={doc} highlightConditional={false} highlightInjected={false} assinaturas={ehDistrato ? assinaturasDistrato : assinaturasInstalador} fila={ehDistrato ? filaDistrato : filaCI}/>}
           </div>
         )}
       </>
@@ -686,7 +762,7 @@ function SgApp() {
   }
 
   /* Resumo do card de topo varia por tipo */
-  const isInstalador = ehCI;
+  const isInstalador = ehCI || ehDistrato;
   const isProposta = source.kind === 'proposta';
   const isProjeto = source.kind === 'projeto';
   const djVigente = isProposta ? window.PropostaStore.conteudoRenderizavel(rec).data : {};
@@ -712,7 +788,7 @@ function SgApp() {
       </div>
     : isProposta
     ? <window.PEPreview {...propostaRender(rec)} bare/>
-    : <Preview doc={doc} highlightConditional={false} highlightInjected={false} assinaturas={assinaturasInstalador} fila={filaCI}/>;
+    : <Preview doc={doc} highlightConditional={false} highlightInjected={false} assinaturas={ehDistrato ? assinaturasDistrato : assinaturasInstalador} fila={ehDistrato ? filaDistrato : filaCI}/>;
 
   return (
     <div className="ci-sign-shell ci-sign-shell--split">
@@ -751,7 +827,7 @@ function SgApp() {
               <SgSumRow k={isProjeto ? 'Cliente' : counterpartyLabel} v={counterpartyName}/>
               <SgSumRow k={isProjeto ? 'Equipamento(s)' : 'Objeto'} v={objetoResumo}/>
               {!isProjeto && <SgSumRow k="Valor total" v={valorFmt}/>}
-              {(source.kind === 'venda_signatario' || source.kind === 'instalador_signatario' || isProjeto) && <SgSumRow k="Assinando como" v={`${rec.signatarioPapel} — ${rec.signatarioNome}`}/>}
+              {(source.kind === 'venda_signatario' || source.kind === 'instalador_signatario' || source.kind === 'distrato_instalador_signatario' || isProjeto) && <SgSumRow k="Assinando como" v={`${rec.signatarioPapel} — ${rec.signatarioNome}`}/>}
             </div>
           </div>
 

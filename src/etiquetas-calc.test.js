@@ -514,3 +514,20 @@ test('Chicotes da porta oposta (GS2, EDP2, DC2, DEN2) só com a opção marcada'
   });
   assert.equal(E.dadosChicote({ chicote: 'GS2', pedido: '1212', tipo_obra: 'novo' }).desc_txt, 'Contato de trinco da porta de cabina');
 });
+
+test('prateleira: posição D A 5, placa da rua e conjunto de 15 posições por lado', () => {
+  const d = E.dadosPosicaoPrateleira({ lado: 'd', coluna: 'a', nivel: 5 });
+  assert.equal(d.posicao_txt, 'D A 5');
+  assert.equal(d.qr, 'POS:DA5');
+  assert.equal(E.dadosPlacaRua({ rua: 13 }).rua_txt, 'R13');
+  assert.equal(E.dadosPlacaRua({ rua: 14 }).qr, 'RUA:R14');
+  const so_d = E.posicoesPrateleira(['D'], 3, 5);
+  assert.equal(so_d.length, 15);
+  assert.deepEqual(so_d.slice(0, 3).map((x) => x.coluna + x.nivel), ['A5', 'B5', 'C5']);
+  assert.equal(E.posicoesPrateleira(['D', 'E'], 3, 5).length, 30);
+  for (const id of ['PRATELEIRA_50x30', 'RUA_50x30']) {
+    const m = E.modeloPorId(id);
+    const dados = id === 'RUA_50x30' ? E.dadosPlacaRua({ rua: 1 }) : d;
+    assert.match(E.renderZPL(m, dados).zpl || E.renderZPL(m, dados), /\^XA/);
+  }
+});

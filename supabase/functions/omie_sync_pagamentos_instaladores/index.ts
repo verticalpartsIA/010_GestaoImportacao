@@ -91,6 +91,13 @@ function extraiNumeroSerie(numeroDocumento: string | null | undefined): string |
   return m ? m[1].trim() : null;
 }
 
+// Nº de série "nu" no Nº do documento (ex.: "500.0333", sem o texto "série:").
+// Só é usado se existir em equipamentos_obra (ver resolverSerie).
+function serieNua(numeroDocumento: string | null | undefined): string | null {
+  const m = /^\s*(\d{3}\.\d{4})\s*$/.exec(numeroDocumento || "");
+  return m ? m[1] : null;
+}
+
 function converteData(br: string | null | undefined): string | null {
   if (!br) return null;
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(br);
@@ -251,6 +258,15 @@ Deno.serve(async (req) => {
       if (serie && !equipPorSerie.has(serie)) equipPorSerie.set(serie, eq.dossier_id as string);
     }
 
+    // "série: X" (regra original) ou Nº de série nu que exista em equipamentos_obra.
+    // Série nua sem equipamento correspondente cai no caminho do nome do projeto.
+    function resolverSerie(numeroDocumento: string | null | undefined): string | null {
+      const explicita = extraiNumeroSerie(numeroDocumento);
+      if (explicita) return explicita;
+      const nua = serieNua(numeroDocumento);
+      return nua && equipPorSerie.has(normalizeSerie(nua)) ? nua : null;
+    }
+
     function matchPorNomeCliente(nomeProjeto: string | null): string | null {
       const alvo = normalize(nomeProjeto);
       if (!alvo) return null;
@@ -325,7 +341,7 @@ Deno.serve(async (req) => {
 
     const projetoNomeCache = new Map<number, string | null>();
     for (const b of brutosPagar) {
-      const serie = extraiNumeroSerie(b.m.detalhes.cNumTitulo as string);
+      const serie = resolverSerie(b.m.detalhes.cNumTitulo as string);
       if (serie) continue;
       const cod = b.m.detalhes.cCodProjeto as number;
       if (!cod || projetoNomeCache.has(cod)) continue;
@@ -360,7 +376,7 @@ Deno.serve(async (req) => {
         const det = m.detalhes;
         const res = m.resumo || {};
         const numeroDocumento = det.cNumTitulo as string;
-        const serie = extraiNumeroSerie(numeroDocumento);
+        const serie = resolverSerie(numeroDocumento);
         let dossierId: string | null = null;
         let projetoTexto: string | null = null;
         if (serie) {

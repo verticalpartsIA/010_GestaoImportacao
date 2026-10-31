@@ -48,6 +48,7 @@ function ListaFiosView({ setPai }) {
   const [colar, setColar] = React.useState('');
   const [msg, setMsg] = React.useState('');
   const [variante, setVariante] = React.useState('30_380');
+  const [chicotes, setChicotes] = React.useState(null);
 
   const carregar = React.useCallback(async () => {
     if (!sb) { setErro('Supabase indisponível.'); return; }
@@ -55,6 +56,9 @@ function ListaFiosView({ setPai }) {
       sb.from('fiacao_fios').select('*').order('ordem').limit(2000), sb.from('fiacao_bitola_variante').select('*'),
       sb.from('fiacao_depara').select('*').order('categoria').order('codigo'), sb.from('fiacao_conectores').select('*').order('nome')]);
     const e = f.error || b.error || p.error || c.error;
+    /* Lista dos chicotes da caixa de topo: tabela nova; se ainda não existe no banco, a aba avisa em vez de derrubar a tela. */
+    const ch = await sb.from('chicotes_caixa_topo').select('*');
+    setChicotes(ch.error ? { erro: ch.error.message, linhas: [] } : { linhas: ch.data || [] });
     if (e) setErro(e.message); else { setErro(null); setD({ fios: f.data || [], bitolas: b.data || [], depara: p.data || [], conectores: c.data || [] }); }
   }, [sb]);
   React.useEffect(() => { carregar(); }, [carregar]);
@@ -100,7 +104,7 @@ function ListaFiosView({ setPai }) {
     log('Apagou linha de cadastro da lista de fios', { tabela, [col]: val }); carregar();
   };
 
-  const abas = [['fios', 'Fios'], ['bitolas', 'Bitola por variante'], ['depara', 'Códigos (de-para)'], ['conectores', 'Conectores'], ['resultado', 'Resultado por variante']];
+  const abas = [['fios', 'Fios'], ['bitolas', 'Bitola por variante'], ['depara', 'Códigos (de-para)'], ['conectores', 'Conectores'], ['chicotes', 'Chicotes da caixa de topo'], ['resultado', 'Resultado por variante']];
   const th = { textAlign: 'left' };
   const ed = (f, campo, w) => podeEditar
     ? <input className="input" defaultValue={f[campo] ?? ''} style={{ width: w || 90 }} onBlur={e => { if (e.target.value !== String(f[campo] ?? '')) salvarFio(f, campo, e.target.value); }}/>
@@ -182,6 +186,23 @@ function ListaFiosView({ setPai }) {
           return usados.length ? <div style={{ marginTop: 10 }}><button className="btn btn--ghost" onClick={async () => { const r = await sb.from('fiacao_conectores').insert(usados.map(nome => ({ nome }))); if (r.error) aviso(r.error.message); else { log('Cadastrou conectores da lista', { n: usados.length }); carregar(); } }}>Cadastrar os {usados.length} conectores usados na lista (vias a preencher)</button></div> : null;
         })()}
       </>)}
+      {d && aba === 'chicotes' && (() => {
+        const E = window.QuadroComandoBomEngine;
+        const fixos = Object.keys(E.CHICOTES_VPEL).filter((k) => ['EDP1', 'FAN', 'GS1', 'SOS', 'SL'].includes(k)).map((k) => ({ chave: k, desc: E.CHICOTES_VPEL[k][1], fixo: E.CHICOTES_VPEL[k][0] }));
+        const linhas = [...fixos, ...E.CHICOTES_CAIXA_TOPO_NOVOS.map((c) => ({ chave: c.chave, desc: c.desc, cond: c.cond, mm: c.mm }))];
+        const cond = { portaOposta: 'só com porta oposta', celulaCarga: 'só com célula de carga', cob2: 'só com 2ª botoeira' };
+        const cod = (k) => ((chicotes && chicotes.linhas) || []).find((x) => x.chave === k)?.codigo || '';
+        return (
+          <div className="card table-wrap"><table className="t pcp-grid">
+            <thead><tr><th>Conector</th><th>Chicote</th><th>Entra</th><th>Comprimento</th><th>Código VPEL</th></tr></thead>
+            <tbody>{linhas.map((l) => (
+              <tr key={l.chave}><td>{l.chave}</td><td>{l.desc}</td><td>{l.cond ? cond[l.cond] : 'sempre (com a VPB-193)'}</td>
+                <td>{((l.mm || (l.chave === 'SOS' ? 3500 : 2400)) / 1000).toFixed(2).replace('.', ',')} m</td>
+                <td>{podeEditar ? <input className="input" style={{ width: 130 }} defaultValue={cod(l.chave) || l.fixo || ''} placeholder="a definir"
+                  onBlur={e => { const c = e.target.value.trim(); if (c !== (cod(l.chave) || l.fixo || '')) upsert('chicotes_caixa_topo', { chave: l.chave, codigo: c || null }, 'chave'); }}/> : (cod(l.chave) || l.fixo || <span style={{ color: 'var(--vp-danger)' }}>a definir</span>)}</td></tr>))}</tbody></table>
+            <div style={{ padding: 10, fontSize: 12, color: 'var(--fg3)' }}>Todo cabo é feito na VerticalParts: um chicote por conector da caixa de topo (VPB-193). Sem código, o chicote entra no BOM como "código a definir" (não some). Padrão 2,40 m; 3,50 m para o que desce até embaixo da cabine (SOS, célula de carga).{chicotes && chicotes.erro ? ' ⚠ Tabela ainda não criada no banco: ' + chicotes.erro : ''}</div>
+          </div>);
+      })()}
       {d && aba === 'resultado' && (<>
         <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <select className="input" value={variante} onChange={e => setVariante(e.target.value)}>{LF_VARIANTES.map(v => <option key={v} value={v}>{LF_ROT[v]}</option>)}</select>

@@ -829,19 +829,7 @@ function CIStepLogistica({ s, set, errors }) {
       {longa && (
         <div className="ci-field-group ci-field-group--cond">
           <h3 className="ci-group-title">Cláusula de logística e deslocamento</h3>
-          <label className="ci-mini-label">Forma de tratamento</label>
-          <CISegmented value={s.logModo} onChange={(v) => set('logModo', v)} options={[{ value: 'despesas', label: 'Despesas à parte' }, { value: 'prazo', label: 'Extensão de prazo' }]} />
-          {s.logModo === 'despesas' && (
-            <div style={{ marginTop: 16 }}>
-              <label className="ci-mini-label">Despesas por conta de</label>
-              <CISegmented value={s.logResponsavel} onChange={(v) => set('logResponsavel', v)} options={[{ value: 'contratada', label: 'Contratada' }, { value: 'contratante', label: 'Contratante' }]} />
-            </div>
-          )}
-          {s.logModo === 'prazo' && (
-            <div className="ci-grid" style={{ marginTop: 16 }}>
-              <CIField label="Dias adicionais de prazo" required width="narrow" mono value={s.logDiasExtra} onChange={(v) => set('logDiasExtra', v.replace(/\D/g, ''))} placeholder="10" error={errors.logDiasExtra} />
-            </div>
-          )}
+          <p className="ci-hint" style={{ margin: 0 }}>Texto padrão definido pelo Jurídico: a logística e o deslocamento ficam por conta da CONTRATADA e já estão incluídos no preço ajustado. Não há nada a escolher aqui.</p>
         </div>
       )}
     </div>
@@ -1451,7 +1439,6 @@ function ciValidateStep(idx, s) {
   if (idx === 3 && window.CI.isLongaDistancia(s)) {
     obrig('obraCidade', 'Informe a cidade da obra.');
     if (!/^[A-Za-z]{2}$/.test((s.obraEstado || '').trim())) e.obraEstado = 'UF com 2 letras.';
-    if (s.logModo === 'prazo') obrig('logDiasExtra', 'Informe os dias adicionais.');
   }
   if (idx === 4) {
     const total = Math.round(window.CI.moedaParaNumero(s.valorTotal) * 100);
@@ -1723,6 +1710,140 @@ async function ciReenviar(rec, abrir) {
   }
 }
 
+/* "Assinaturas digitais" (a Contratada/instalador, só a revisão ATUAL) + fila
+   da VerticalParts p/ renderizar o documento — mesma montagem que CIDocViewer
+   já faz pra "Visualizar documento", reaproveitada pro "Baixar contrato". */
+async function ciAssinaturasEFila(rec) {
+  const au = rec.audit || {};
+  const assinaturas = au.signedAt
+    ? [{ papel: 'Contratada (instalador)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, token: rec.token, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }]
+    : [];
+  let fila = [];
+  try { fila = (await window.DocumentoSignatariosStore.listarPorDocumento('contrato_instalador', rec.id) || []).filter((x) => x.status !== 'expirado'); }
+  catch (_) { fila = []; }
+  return { assinaturas, fila };
+}
+
+/* Botão "Baixar contrato" (download em PDF) — 30/10/2026.
+   Não há motor react-pdf pra este contrato (diferente de Contrato de Venda/
+   Proposta); reaproveita o MESMO renderizador (`CIContractPreview`) já usado
+   em "Visualizar documento"/impressão nativa, montado fora da tela com a
+   classe `.ci-print-doc` já existente (posição absoluta, não `display:none` —
+   precisa de layout de verdade pro html2canvas capturar, mesmo motivo
+   documentado no CSS pro print da página pública), e gera um PDF de verdade
+   com html2canvas + jsPDF, paginando por bloco atômico (cláusula, bloco de
+   assinatura, bloco de assinaturas digitais, testemunhas) — nunca corta um
+   desses ao meio entre 2 páginas. Mesmo algoritmo do "Salvar PDF" da Ficha
+   Técnica (`ficha-tecnica.jsx`), só com as classes do documento do Instalador.
+   Funciona em qualquer status (inclusive assinado, trazendo o bloco de
+   assinaturas digitais com IP/dispositivo/hash — REGRA TRAVADA, ver
+   CLAUDE.md) — nada aqui grava ou altera nada no banco. */
+async function ciBaixarPdf(recLeve) {
+  if (!window.html2canvas || !window.jspdf) {
+    window.toast ? window.toast('Biblioteca de PDF ainda carregando — tente de novo em instantes.', 'warning') : alert('Biblioteca de PDF ainda carregando — tente de novo em instantes.');
+    return;
+  }
+  let container = null;
+  let root = null;
+  try {
+    // o painel (lista) não carrega doc/form_state — busca o registro completo
+    let rec = recLeve;
+    if (!rec || !rec.doc) rec = await window.CIStore.getById(recLeve.id);
+    if (!rec || !rec.doc || !rec.doc.clauses) throw new Error('Documento ainda não disponível para este contrato.');
+
+    const { assinaturas, fila } = await ciAssinaturasEFila(rec);
+
+    container = document.createElement('div');
+    container.className = 'ci-print-doc';
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
+    await new Promise((resolve) => {
+      root.render(<window.CIContractPreview doc={rec.doc} assinaturas={assinaturas} fila={fila} />);
+      // 2 ticks de rAF pro React montar e o layout "de verdade" assentar antes
+      // do html2canvas capturar (mesmo cuidado do "Salvar PDF" da Ficha Técnica).
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
+
+    const sheetEl = container.querySelector('.ci-doc-sheet');
+    if (!sheetEl) throw new Error('Não foi possível montar o documento para exportação.');
+
+    // Contrato longo existe de verdade (já teve 1 de 16 páginas, ver o
+    // comentário de assinar-app.jsx sobre o "contrato de 16 páginas") —
+    // capturar tudo num canvas só, sempre em scale:2, passaria do limite real
+    // de altura de canvas do Chromium (~32.767 px) bem no contrato em que
+    // mais importa ter o PDF. Reduz a escala só o necessário pra nunca estourar
+    // esse teto; a paginação abaixo deriva tudo do canvas de verdade (pxPerMm/
+    // pageHeightPx), então se adapta sozinha a qualquer escala usada aqui.
+    const sheetBox = sheetEl.getBoundingClientRect();
+    const MAX_CANVAS_ALTURA_PX = 28000;
+    const scale = Math.min(2, MAX_CANVAS_ALTURA_PX / Math.max(1, sheetBox.height));
+    const canvas = await window.html2canvas(sheetEl, { scale, useCORS: true, backgroundColor: '#ffffff', logging: false });
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
+    const pw = pdf.internal.pageSize.getWidth();
+    const ph = pdf.internal.pageSize.getHeight();
+    const pxPerMm = canvas.width / pw;
+    const pageHeightPx = Math.round(ph * pxPerMm);
+
+    // blocos "atômicos" — nunca partidos ao meio entre 2 páginas
+    const cssToCanvas = canvas.width / sheetBox.width;
+    const atoms = Array.from(sheetEl.querySelectorAll('.ci-doc-clause, .ci-doc-sign-block, .ci-doc-digital, .ci-doc-witness'))
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        return { top: Math.round((r.top - sheetBox.top) * cssToCanvas), bottom: Math.round((r.bottom - sheetBox.top) * cssToCanvas) };
+      })
+      .filter((a) => a.bottom > 0)
+      .sort((a, b) => a.top - b.top);
+
+    const finalCuts = [0];
+    let pageStart = 0;
+    for (const atom of atoms) {
+      if (atom.bottom <= pageStart) continue;
+      if (atom.bottom - pageStart > pageHeightPx) {
+        if (atom.top > pageStart) { finalCuts.push(atom.top); pageStart = atom.top; }
+        while (atom.bottom - pageStart > pageHeightPx) { pageStart += pageHeightPx; finalCuts.push(pageStart); }
+      }
+    }
+    finalCuts.push(canvas.height);
+    if (finalCuts.length > 2) {
+      const lastH = finalCuts[finalCuts.length - 1] - finalCuts[finalCuts.length - 2];
+      if (lastH < pageHeightPx * 0.25) finalCuts.splice(finalCuts.length - 2, 1);
+    }
+
+    let first = true;
+    for (let i = 1; i < finalCuts.length; i++) {
+      const cursor = finalCuts[i - 1];
+      const cut = finalCuts[i];
+      const sliceH = cut - cursor;
+      if (sliceH <= 0) continue;
+      const sliceCanvas = document.createElement('canvas');
+      sliceCanvas.width = canvas.width;
+      sliceCanvas.height = sliceH;
+      const ctx = sliceCanvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+      ctx.drawImage(canvas, 0, cursor, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+      const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.97);
+      if (!first) pdf.addPage();
+      first = false;
+      const naturalH = sliceH / pxPerMm;
+      const drawH = Math.min(ph, naturalH);
+      const drawW = pw * (drawH / naturalH);
+      const offsetX = (pw - drawW) / 2;
+      pdf.addImage(sliceData, 'JPEG', offsetX, 0, drawW, drawH, undefined, 'FAST');
+    }
+
+    const nomeBase = (rec.numero_documento || 'Contrato').replace(/[\\/:*?"<>|]+/g, '-');
+    pdf.save(nomeBase + '-Contrato.pdf');
+  } catch (e) {
+    console.error('PDF do Contrato do Instalador falhou:', e);
+    window.toast ? window.toast('Não foi possível gerar o PDF: ' + (e.message || e), 'error') : alert('Não foi possível gerar o PDF: ' + (e.message || e));
+  } finally {
+    if (root) root.unmount();
+    if (container) container.remove();
+  }
+}
+
 /* Fila de assinaturas da VerticalParts depois que o Contratado assinou (16/10/2026): Diego → Juliana → Maurício. Só leitura + reenviar o aviso da vez. */
 function CIFilaAssinaturas({ rec, podeEditar }) {
   const [linhas, setLinhas] = _ciUS([]);
@@ -1755,9 +1876,236 @@ function CIFilaAssinaturas({ rec, podeEditar }) {
   );
 }
 
+/* Distrato de Contrato do Instalador (30/10/2026) — rescisão motivada e
+   bilateral de um contrato JÁ ASSINADO (com execução parcial, inclusive
+   parcela paga). Mesmo padrão visual/estrutural de CIFilaAssinaturas, só
+   trocando a fonte (contratos_instalador_distratos / CIDistratoStore). */
+function CIFilaDistrato({ distrato, podeEditar, onMsg }) {
+  const [linhas, setLinhas] = _ciUS([]);
+  _ciUE(() => {
+    let vivo = true;
+    window.CIDistratoStore.fila(distrato.token).then((l) => { if (vivo) setLinhas(l || []); });
+    return () => { vivo = false; };
+  }, [distrato.id, distrato.status]);
+  const ativas = linhas.filter((l) => l.status !== 'expirado');
+  if (!ativas.length) return null;
+  const situacao = (l) => l.status === 'assinado' ? '✅ assinado' : l.status === 'recusado' ? '❌ recusou' : l.liberada ? '⏳ é a vez' : 'aguardando';
+  const haVez = ativas.some((l) => l.liberada && ['enviado', 'visualizado'].includes(l.status));
+  const reenviar = async () => {
+    try { const r = await window.CIDistratoStore.reenviarAvisoVez(distrato.id); onMsg('Aviso reenviado para ' + r.para + '.'); }
+    catch (e) { onMsg(e.message || String(e)); }
+  };
+  return (
+    <div style={{ marginTop: 6, marginBottom: 6 }}>
+      <div className="ci-audit-rows">
+        <CIAuditRow k="1. Contratada (instalador)" v={distrato.status === 'assinado' || distrato.assinaturas_completas_em ? '✅ assinado' : '—'} />
+        {ativas.map((l) => (
+          <CIAuditRow key={l.ordem} k={(l.ordem + 1) + '. ' + l.papel + ' — ' + l.nome} v={situacao(l) + (l.signed_at ? ' em ' + window.CIDistratoStore.fmtDateTime(l.signed_at) : '')} />
+        ))}
+      </div>
+      {podeEditar && haVez && <button type="button" className="ci-mini-btn" onClick={reenviar}>Reenviar aviso da vez</button>}
+    </div>
+  );
+}
+
+/* Modal "Gerar Distrato": motivo obrigatório + transferência opcional do
+   valor já recebido pelo montador pra um contrato novo (troca de obra). */
+function ModalGerarDistrato({ rec, onClose, onGerado }) {
+  const [motivo, setMotivo] = _ciUS('');
+  const [transferir, setTransferir] = _ciUS(false);
+  const [buscaDestino, setBuscaDestino] = _ciUS('');
+  const [opcoesDestino, setOpcoesDestino] = _ciUS([]);
+  const [destino, setDestino] = _ciUS(null); // {id, numero_documento, contratada_nome}
+  const [valorTransfer, setValorTransfer] = _ciUS('');
+  const [enviando, setEnviando] = _ciUS(false);
+  const [erro, setErro] = _ciUS('');
+
+  /* Prefill do valor a transferir: soma das parcelas já PAGAS deste contrato
+     — "o valor que ele recebeu na obra A", como o usuário descreveu o caso. */
+  _ciUE(() => {
+    if (!transferir || valorTransfer) return undefined;
+    let vivo = true;
+    (async () => {
+      try {
+        const parcelas = window.ContratoInstaladorParcelasStore ? await window.ContratoInstaladorParcelasStore.listarParcelas(rec.id) : [];
+        if (!vivo) return;
+        const pago = (parcelas || []).filter((p) => p.status === 'paga').reduce((t, p) => t + (Number(p.valor) || 0), 0);
+        if (pago > 0) setValorTransfer(pago.toFixed(2).replace('.', ','));
+      } catch (_) { /* best-effort — a pessoa digita na mão se falhar */ }
+    })();
+    return () => { vivo = false; };
+  }, [transferir, rec.id]);
+
+  /* Busca do contrato de destino (nova obra do montador) entre os demais contratos do painel. */
+  _ciUE(() => {
+    if (!transferir) { setOpcoesDestino([]); return undefined; }
+    const q = buscaDestino.trim().toLowerCase();
+    if (q.length < 2) { setOpcoesDestino([]); return undefined; }
+    let vivo = true;
+    (async () => {
+      try {
+        const lista = await window.CIStore.listPainel();
+        if (!vivo) return;
+        const filtradas = (lista || [])
+          .filter((c) => c.id !== rec.id && c.status !== 'rascunho')
+          .filter((c) => (c.numero_documento || '').toLowerCase().includes(q) || (c.contratada_nome || '').toLowerCase().includes(q) || (c.objeto_resumo || '').toLowerCase().includes(q))
+          .slice(0, 8);
+        setOpcoesDestino(filtradas);
+      } catch (_) { setOpcoesDestino([]); }
+    })();
+    return () => { vivo = false; };
+  }, [transferir, buscaDestino]);
+
+  const podeEnviar = motivo.trim().length >= 10 && (!transferir || (!!destino && window.CI.moedaParaNumero(valorTransfer) > 0));
+
+  const confirmar = async () => {
+    if (!podeEnviar || enviando) return;
+    setEnviando(true);
+    setErro('');
+    try {
+      const transferencia = (transferir && destino)
+        ? { contrato_destino_id: destino.id, contrato_destino_numero: destino.numero_documento, valor: window.CI.moedaParaNumero(valorTransfer) }
+        : null;
+      const { id: distratoId, numero_documento: numeroDoc } = await window.CIDistratoStore.gerar(rec.id, motivo.trim(), transferencia);
+      // a lista do painel não carrega form_state — busca o registro completo se precisar (mesmo cuidado de ciBaixarPdf)
+      let contratoCompleto = rec;
+      if (!contratoCompleto || !contratoCompleto.form_state) contratoCompleto = (await window.CIStore.getById(rec.id)) || rec;
+      // Data da assinatura do DISTRATO é HOJE, não a data gravada no form_state do
+      // contrato original (essa é a data em que o contrato original foi assinado,
+      // sempre anterior — o distrato é um ato novo). Cidade mantém a do original.
+      const hoje = new Date();
+      const sDistrato = { ...(contratoCompleto.form_state || {}),
+        dataDia: window.CI.pad2(hoje.getDate()), dataMes: window.CI.MESES[hoje.getMonth()], dataAno: String(hoje.getFullYear()) };
+      const doc = window.CI.buildDistratoContract(sDistrato, {
+        motivo: motivo.trim(), transferencia,
+        valorTotal: rec.valor_total, numeroContrato: rec.numero_documento, objetoResumo: rec.objeto_resumo,
+      }, numeroDoc);
+      await window.CIDistratoStore.enviar(distratoId, doc);
+      onGerado();
+    } catch (e) {
+      setErro(e.message || String(e));
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <div className="ci-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget && !enviando) onClose(); }}>
+      <div className="ci-modal" style={{ maxWidth: 560, width: '92vw' }}>
+        <div className="ci-modal-head">
+          <div><h2>Gerar Distrato</h2><p>{rec.numero_documento} — {rec.contratada_nome}</p></div>
+          <button className="ci-modal-x" onClick={onClose} disabled={enviando}>✕</button>
+        </div>
+        <div className="ci-modal-body">
+          <div className="ci-cond-alert"><span className="ci-cond-dot"></span>
+            O Distrato é assinado primeiro pela Contratada (link próprio), seguido da ciência — na mesma sequência de hoje — de Diego (CEO), Juliana e Maurício. Quando todos assinarem, este contrato vira <b>Distratado</b>: as parcelas ainda pendentes são canceladas (as já pagas ficam quitadas, sem restituição) e novos lançamentos ficam bloqueados.
+          </div>
+          <div className="ci-field" style={{ marginTop: 10 }}>
+            <label>Justificativa / Motivo do distrato (obrigatório, mínimo 10 letras)</label>
+            <textarea className="ci-input" rows={3} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: o montador não pôde concluir a obra e foi substituído" />
+          </div>
+          <div className="ci-field" style={{ marginTop: 10 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 400 }}>
+              <input type="checkbox" checked={transferir} onChange={(e) => { setTransferir(e.target.checked); if (!e.target.checked) { setDestino(null); setValorTransfer(''); setBuscaDestino(''); } }} />
+              O montador trocou de obra: o valor já recebido aqui deve ser aproveitado em outro contrato
+            </label>
+          </div>
+          {transferir && (
+            <>
+              <div className="ci-field" style={{ marginTop: 10 }}>
+                <label>Contrato de destino (nova obra)</label>
+                {destino
+                  ? <div className="ci-legal-note">{destino.numero_documento} — {destino.contratada_nome} <button type="button" className="ci-mini-btn" onClick={() => setDestino(null)}>trocar</button></div>
+                  : (
+                    <>
+                      <input className="ci-input" value={buscaDestino} onChange={(e) => setBuscaDestino(e.target.value)} placeholder="Busque por nº do contrato, montador ou obra…" />
+                      {opcoesDestino.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+                          {opcoesDestino.map((c) => (
+                            <button key={c.id} type="button" className="ci-mini-btn" style={{ textAlign: 'left' }}
+                              onClick={() => { setDestino(c); setOpcoesDestino([]); setBuscaDestino(''); }}>
+                              {c.numero_documento} — {c.contratada_nome}{c.objeto_resumo ? ' · ' + c.objeto_resumo : ''}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+              </div>
+              <div className="ci-field" style={{ marginTop: 10 }}>
+                <label>Valor a transferir (R$)</label>
+                <input className="ci-input" value={valorTransfer} onChange={(e) => setValorTransfer(e.target.value)} placeholder="0,00" />
+              </div>
+            </>
+          )}
+          {erro && <div className="ci-legal-note" style={{ color: '#b00020' }}>{erro}</div>}
+        </div>
+        <div className="ci-modal-foot">
+          <button className="ci-btn ci-btn--ghost" onClick={onClose} disabled={enviando}>Cancelar</button>
+          <button className="ci-btn ci-btn--primary" onClick={confirmar} disabled={!podeEnviar || enviando}>{enviando ? 'Gerando…' : 'Gerar e enviar Distrato'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Seção "Distrato" do painel do contrato: mostra o(s) distrato(s) já gerados
+   (histórico — ver CIDistratoStore) e, sem nenhum ativo e o contrato
+   ASSINADO, o botão "Gerar Distrato". */
+function CIDistratoSection({ rec, podeEditar, onRefresh }) {
+  const [distratos, setDistratos] = _ciUS(null); // null = carregando
+  const [showModal, setShowModal] = _ciUS(false);
+  const [msg, setMsg] = _ciUS('');
+  const carregar = async () => {
+    if (!window.CIDistratoStore) { setDistratos([]); return; }
+    try { setDistratos(await window.CIDistratoStore.listarPorContrato(rec.id)); } catch (_) { setDistratos([]); }
+  };
+  _ciUE(() => { carregar(); }, [rec.id, rec.status]);
+  if (!window.CIDistratoStore) return null;
+  if (distratos === null) return null; // carregando — sem seção vazia piscando
+  const semAtivo = !distratos.some((d) => d.status !== 'recusado' && d.status !== 'expirado');
+  if (!distratos.length && rec.status !== 'assinado') return null; // nada a mostrar e nem sentido gerar ainda
+  return (
+    <div className="ci-drawer-sec">
+      <h3 className="ci-drawer-sec-title">Distrato</h3>
+      {!distratos.length && <p className="ci-legal-note">Nenhum distrato gerado para este contrato.</p>}
+      {distratos.map((d) => (
+        <div key={d.id} style={{ marginBottom: 12 }}>
+          <div className="ci-audit-rows">
+            <CIAuditRow k={d.numero_documento} v={(window.CIDistratoStore.STATUS[d.status] || {}).label} />
+            <CIAuditRow k="Motivo" v={d.motivo} />
+            {d.transferencia && d.transferencia.contrato_destino_numero && (
+              <CIAuditRow k="Transferência de valor" v={'R$ ' + window.CI.fmtMoeda(d.transferencia.valor) + ' para ' + d.transferencia.contrato_destino_numero} />
+            )}
+            {d.status === 'recusado' && d.audit && d.audit.refusedBy && <CIAuditRow k="Recusado por" v={d.audit.refusedBy + (d.audit.refusedReason ? ' — ' + d.audit.refusedReason : '')} />}
+          </div>
+          <CIFilaDistrato distrato={d} podeEditar={podeEditar} onMsg={setMsg} />
+          {d.status !== 'rascunho' && <a className="ci-mini-btn" href={window.CIDistratoStore.signUrl(d.token)} target="_blank" rel="noopener">Abrir link de assinatura (Contratada) ↗</a>}
+        </div>
+      ))}
+      {podeEditar && semAtivo && rec.status === 'assinado' && (
+        <div className="ci-drawer-actions" style={{ marginTop: 8 }}>
+          <button className="ci-btn ci-btn--ghost" onClick={() => setShowModal(true)}>Gerar Distrato</button>
+        </div>
+      )}
+      {msg && <div className="ci-legal-note">{msg}</div>}
+      {showModal && (
+        <ModalGerarDistrato rec={rec} onClose={() => setShowModal(false)}
+          onGerado={() => { setShowModal(false); carregar(); onRefresh && onRefresh(); }} />
+      )}
+    </div>
+  );
+}
+
 function CIAuditDrawer({ rec, onClose, onResend, onRefresh, onEditar }) {
   const a = rec.audit || {};
   const [ver, setVer] = _ciUS(undefined);   // undefined = fechado; null = revisão atual; número = revisão anterior
+  const [baixando, setBaixando] = _ciUS(false);
+  const baixarPdf = async () => {
+    if (baixando) return;
+    setBaixando(true);
+    try { await ciBaixarPdf(rec); } finally { setBaixando(false); }
+  };
   const del = async () => {
     if (!window.confirm('Excluir este rascunho? Esta ação não pode ser desfeita.')) return;
     try {
@@ -1852,10 +2200,12 @@ function CIAuditDrawer({ rec, onClose, onResend, onRefresh, onEditar }) {
             </div>
           )}
           <CIFilaAssinaturas rec={rec} podeEditar={podeAnular} />
+          <CIDistratoSection rec={rec} podeEditar={podeAnular} onRefresh={onRefresh} />
           <div className="ci-drawer-sec">
             <h3 className="ci-drawer-sec-title">Ações</h3>
             <div className="ci-drawer-actions">
               <button className="ci-btn ci-btn--ghost" onClick={() => setVer(null)}>Visualizar documento</button>
+              <button className="ci-btn ci-btn--ghost" onClick={baixarPdf} disabled={baixando}>{baixando ? 'Gerando PDF…' : '⬇ Baixar contrato'}</button>
               {podeAnular && onEditar && <button className="ci-btn ci-btn--ghost" onClick={() => onEditar(rec)}>Editar documento{rec.status === 'rascunho' ? '' : ' (cria nova revisão)'}</button>}
               {rec.status !== 'rascunho' && <a className="ci-btn ci-btn--ghost" href={signUrl} target="_blank" rel="noopener">Abrir link de assinatura ↗</a>}
               {(rec.status === 'enviado' || rec.status === 'visualizado' || rec.status === 'expirado' || rec.status === 'rascunho') &&
@@ -1889,7 +2239,7 @@ function CIDocViewer({ rec, revisao, onClose }) {
   const status = snap ? snap.status : rec.status;
   const st = window.CIStore.STATUS[status] || window.CIStore.STATUS.rascunho;
   const assinaturas = au.signedAt
-    ? [{ papel: 'Contratada (instalador)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }]
+    ? [{ papel: 'Contratada (instalador)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, token: snap ? snap.token : rec.token, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }]
     : [];
   return (
     <div className="ci-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -1947,6 +2297,12 @@ function CIDashboard() {
   }, []);
 
   const [editRec, setEditRec] = _ciUS(null);
+  const [baixandoId, setBaixandoId] = _ciUS(null);
+  const baixarPdfDaLinha = async (c) => {
+    if (baixandoId) return;
+    setBaixandoId(c.id);
+    try { await ciBaixarPdf(c); } finally { setBaixandoId(null); }
+  };
   const drawerRec = drawerId ? contracts.find(c => c.id === drawerId) : null;
   const [fullRec, setFullRec] = _ciUS(null);   // registro completo (doc, form_state, revisao, revisoes) — a lista do painel não carrega esses campos
   _ciUE(() => {
@@ -2031,6 +2387,7 @@ function CIDashboard() {
                   <td onClick={(e) => e.stopPropagation()}>
                     <div className="ci-cell-actions">
                       <button className="ci-icon-btn" title="Auditoria" onClick={() => setDrawerId(c.id)}>👁</button>
+                      <button className="ci-icon-btn" title="Baixar contrato (PDF)" disabled={baixandoId === c.id} onClick={() => baixarPdfDaLinha(c)}>{baixandoId === c.id ? '⏳' : '⬇'}</button>
                       {c.status !== 'rascunho' && <a className="ci-icon-btn" title="Abrir assinatura" href={window.CIStore.signUrl(c.token)} target="_blank" rel="noopener">🔗</a>}
                       {(c.status === 'enviado' || c.status === 'visualizado' || c.status === 'rascunho' || c.status === 'expirado') &&
                         <button className="ci-mini-btn" onClick={() => ciReenviar(c, (r) => { setSendRec(r); refresh(); })}>{c.status === 'rascunho' ? 'Enviar' : 'Reenviar'}</button>}

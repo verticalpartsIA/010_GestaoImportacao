@@ -37,6 +37,20 @@ function RHHomologacaoPage() {
     setColaboradores(list);
   };
 
+  /* A empresa aberta vive na URL (/rh/rh-homologacao/<id>): F5, link direto e Voltar/Avançar reabrem a empresa certa. */
+  const [idUrl] = window.useRotaId('rh-homologacao');
+  React.useEffect(() => {
+    if (!empresas) return;
+    if (!idUrl) {
+      if (selectedEmpresa) { setSelectedEmpresa(null); setSelectedColaborador(null); setColaboradores([]); setDocumentos([]); }
+      return;
+    }
+    if (selectedEmpresa && selectedEmpresa.id === idUrl) return;
+    const emp = empresas.find((e) => e.id === idUrl);
+    if (emp) selectEmpresa(emp);
+    else window.toast?.('Empresa instaladora não encontrada.', 'warning');
+  }, [empresas, idUrl]);
+
   const selectColaborador = async (col) => {
     setSelectedColaborador(col);
     const docs = await window.RHHomologacao.listarDocumentosColaborador(col.id);
@@ -95,7 +109,7 @@ function RHHomologacaoPage() {
                   background: selectedEmpresa?.id === e.id ? "var(--vp-gray-50)" : "#fff",
                   border: "1px solid " + (selectedEmpresa?.id === e.id ? "#000" : "var(--border)"),
                   padding: 12, cursor: "pointer", position: "relative",
-                }} onClick={() => selectEmpresa(e)}>
+                }} onClick={() => window.VpRouter.navigate('rh-homologacao', e.id)}>
                   <span style={{ position: "absolute", top: 0, left: 0, width: 20, height: 3, background: "var(--vp-yellow)" }} />
                   <div className="cell-main" style={{ fontSize: 13 }}>{e.nome}</div>
                   <div className="cell-sub" style={{ marginBottom: 6 }}>{e.id}</div>
@@ -220,10 +234,9 @@ function ModalNovoMontador({ initialData, isEdit, onClose, onSaved }) {
 
     setSaving(true);
     try {
-      await window.RHHomologacao.salvarMontador({
-        ...f,
-        certificacoes: f.certificacoes || {},
-      });
+      // `certificacoes` é campo obsoleto (homologação mora nos documentos por colaborador): nunca regravar, senão zera o valor antigo.
+      const { certificacoes: _obsoleto, ...resto } = f;
+      await window.RHHomologacao.salvarMontador(resto);
       window.toast(isEdit ? 'Dados atualizados com sucesso!' : 'Parceiro criado com sucesso!', 'success');
       onSaved?.();
       onClose();

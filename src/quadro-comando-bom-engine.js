@@ -205,6 +205,45 @@
     return VARIANTES[key] ? key : null;
   }
 
+  /* Chave de variante para a ESTRUTURA DO OMIE (pcp_quadro_variante): aceita também 30 kW,
+     que não tem lista fixa neste arquivo. Sem correspondência exata -> null. */
+  function chaveVarianteQuadro(potenciaKw, tensaoV) {
+    const kw = Number(potenciaKw), v = Number(tensaoV);
+    if (!kw || !v) return null;
+    const kwKey = Math.abs(kw - 7.5) < 0.6 ? '7.5' : Math.abs(kw - 15) < 0.6 ? '15' : Math.abs(kw - 30) < 1 ? '30' : null;
+    const vKey = Math.abs(v - 220) < 15 ? '220' : Math.abs(v - 380) < 15 ? '380' : null;
+    return kwKey && vKey ? `${kwKey}_${vKey}` : null;
+  }
+
+  /* ---------- BOM a partir da estrutura do produto no Omie (fonte da verdade) ----------
+     linhas: [{ codigo_filho, quantidade }] de pcp_estrutura do produto do quadro.
+     produtosPorCodigo: { [codigo]: { descricao, unidade } } (pcp_produtos).
+     Soma códigos repetidos; "Caixa para QC…" vai para o grupo caixa. */
+  function montarBomDaEstrutura(linhas, produtosPorCodigo, catalogoPorSku, rotulo) {
+    const prod = produtosPorCodigo || {}, cat = catalogoPorSku || {};
+    const soma = new Map();
+    (linhas || []).forEach((l) => {
+      const q = Number(l.quantidade);
+      if (!l.codigo_filho || !(q > 0)) return;
+      soma.set(l.codigo_filho, (soma.get(l.codigo_filho) || 0) + q);
+    });
+    const itens = [];
+    soma.forEach((quantidade, sku) => {
+      const p = prod[sku] || {}, c = cat[sku] || {};
+      const descricao = p.descricao || c.descricao || `(SKU ${sku} sem descrição no cadastro)`;
+      const caixa = c.categoria === 'caixa' || /^caixa para qc/i.test(descricao);
+      itens.push({
+        sku, descricao,
+        unidade: String(p.unidade || c.unidade || 'un').toLowerCase(),
+        grupo_separacao: caixa ? 'caixa' : 'componentes',
+        quantidade: Math.round(quantidade * 1e6) / 1e6,
+        origem: 'fixo_variante', confianca: 'confirmado',
+        memoria_calculo: `Estrutura do produto ${rotulo} no Omie (sincronizada no PCP).`,
+      });
+    });
+    return itens.sort((a, b) => a.sku.localeCompare(b.sku));
+  }
+
   function listarVariantes() {
     return Object.keys(VARIANTES).map((k) => ({ key: k, label: VARIANTES[k].label }));
   }
@@ -256,7 +295,7 @@
     const poco = Number(geometria.poco_mm) || 0;
     const ultimaAltura = Number(geometria.ultima_altura_mm) || 0;
     const total = poco + percurso + ultimaAltura;
-    const foraDoPadrao = ultimaAltura > 4400;
+    const foraDoPadrao = ultimaAltura > 4500;
     return { percurso_mm: percurso, altura_total_mm: total, ultima_altura_fora_do_padrao: foraDoPadrao };
   }
 
@@ -281,10 +320,18 @@
     };
   }
 
-  function montarTrechosFiacaoFixa(geometria) {
-    const trechos = [];
+  /* Sem casa de máquinas (MRL) o quadro fica no pavimento da última parada e a máquina/limitador na UA (≈4.500mm acima do piso;
+     o fio sai da base do quadro, ~440mm acima do piso): ≈5.000mm de percurso, 6.000mm com folga (regra da Engenharia, 28/10/2026).
+     Só vale quando a distância não foi medida; medida informada sempre vence. */
+  const MRL_FIO_UA_MM = 6000;
+  const ehMRL = (tipoAplicacao) => String(tipoAplicacao || '').toUpperCase() === 'MRL';
 
-    const distMaquina = Number(geometria.distancia_quadro_maquina_mm) || null;
+  function montarTrechosFiacaoFixa(geometria, tipoAplicacao) {
+    const trechos = [];
+    const mrl = ehMRL(tipoAplicacao);
+    const padraoMRL = `Padrão sem casa de máquinas (MRL): quadro no pavimento até a última altura (UA ≈4.500mm + ~440mm do piso à base do quadro ≈ 5.000mm) com folga = ${MRL_FIO_UA_MM}mm.`;
+
+    const distMaquina = Number(geometria.distancia_quadro_maquina_mm) || (mrl ? MRL_FIO_UA_MM : null);
     trechos.push(trechoBase({
       tipo_cabo: 'Fiação fixa — força/comando da máquina',
       endereco_referencia: 'U/V/W, MT (freio)',
@@ -292,13 +339,13 @@
       destino_fisico: 'Máquina de tração',
       comprimento_base_mm: distMaquina,
       comprimento_final_mm: distMaquina,
-      confianca: distMaquina ? 'confirmado' : 'pendente_engenharia',
+      confianca: distMaquina ? (Number(geometria.distancia_quadro_maquina_mm) ? 'confirmado' : 'estimado') : 'pendente_engenharia',
       formula: distMaquina
-        ? `comprimento_final = distancia_quadro_maquina_mm (medido) = ${distMaquina}mm`
+        ? (Number(geometria.distancia_quadro_maquina_mm) ? `comprimento_final = distancia_quadro_maquina_mm (medido) = ${distMaquina}mm` : padraoMRL)
         : 'distancia_quadro_maquina_mm não informada — não presumir os 10m de referência comercial sem confirmação explícita.',
     }));
 
-    const distLimitador = Number(geometria.distancia_quadro_limitador_mm) || null;
+    const distLimitador = Number(geometria.distancia_quadro_limitador_mm) || (mrl ? MRL_FIO_UA_MM : null);
     trechos.push(trechoBase({
       tipo_cabo: 'Fiação fixa — limitador de velocidade (OS)',
       endereco_referencia: 'OS',
@@ -306,11 +353,24 @@
       destino_fisico: 'Limitador de velocidade (guia solitária)',
       comprimento_base_mm: distLimitador,
       comprimento_final_mm: distLimitador,
-      confianca: distLimitador ? 'confirmado' : 'pendente_engenharia',
+      confianca: distLimitador ? (Number(geometria.distancia_quadro_limitador_mm) ? 'confirmado' : 'estimado') : 'pendente_engenharia',
       formula: distLimitador
-        ? `comprimento_final = distancia_quadro_limitador_mm (medido) = ${distLimitador}mm`
+        ? (Number(geometria.distancia_quadro_limitador_mm) ? `comprimento_final = distancia_quadro_limitador_mm (medido) = ${distLimitador}mm` : padraoMRL)
         : 'distancia_quadro_limitador_mm não informada — não presumir os 7,6m/10m de referência comercial sem confirmação explícita.',
     }));
+
+    if (mrl) {
+      trechos.push(trechoBase({
+        tipo_cabo: 'Fiação fixa — PAP do motor / volante de inércia (HW)',
+        endereco_referencia: 'HW',
+        origem_fisica: 'Quadro de comando',
+        destino_fisico: 'Máquina de tração (última altura)',
+        comprimento_base_mm: MRL_FIO_UA_MM,
+        comprimento_final_mm: MRL_FIO_UA_MM,
+        confianca: 'estimado',
+        formula: padraoMRL,
+      }));
+    }
 
     const distCaixa = Number(geometria.distancia_quadro_entrada_caixa_mm) || null;
     trechos.push(trechoBase({
@@ -329,45 +389,53 @@
     return trechos;
   }
 
-  function montarTrechoCaboManobra(geometria, intervalos) {
-    const { percurso_mm } = alturaTotalMm(geometria, intervalos);
-    const seioMm = Number(geometria.seio_cabo_mm) || null;
-    const seioConfirmado = !!geometria.seio_definicao_confirmada;
-    const folgaMm = Number(geometria.folga_mm) || 0;
-    const folgaConfirmada = !!geometria.folga_regra_confirmada;
+  /* Cabo de manobra (regra do Gelson, 29/10/2026, calibrada num cabo real: 10 paradas de 3 m, sem casa de máquinas = 47 m; 8 paradas = 41 m).
+     O quadro fica na última parada; o cabo desce fixo até a fixação do meio da caixa, continua pendurado até a fixação embaixo do carro
+     (a volta/seio fica no extremo inferior) e sobe pelo costado até a caixa de inspeção no teto. Fixo + pendurado = o curso inteiro,
+     então a parada escolhida como meio não muda o corte. Comprimento = soma dos pisos reais + reserva fixa
+     (seio 3 m + subida 3 m + pontas 2+2 m + 10 m calibrados no caso real, ainda sem nome) + distância do quadro até a descida da laje
+     (só com casa de máquinas; é o campo "Distância quadro → entrada da caixa"). Piso fora do padrão entra pelo valor real. */
+  const CABO_MANOBRA_SEIO_MM = 3000;
+  const CABO_MANOBRA_SUBIDA_MM = 3000;
+  const CABO_MANOBRA_PONTAS_MM = 4000;
+  const CABO_MANOBRA_RESERVA_CALIBRADA_MM = 10000;
 
-    if (!percurso_mm) {
-      return trechoBase({
-        tipo_cabo: 'Cabo de manobra (28 vias — 1 peça)',
-        origem_fisica: 'Fundo do quadro de comando',
-        destino_fisico: 'Caixa de inspeção no teto da cabina',
-        formula: 'Percurso (soma dos intervalos entre pisos) não informado — sem base pra calcular o comprimento do cabo de manobra.',
-      });
-    }
-
-    if (!seioConfirmado) {
-      return trechoBase({
-        tipo_cabo: 'Cabo de manobra (28 vias — 1 peça)',
-        origem_fisica: 'Fundo do quadro de comando',
-        destino_fisico: 'Caixa de inspeção no teto da cabina',
-        comprimento_base_mm: percurso_mm,
-        formula: `Percurso = ${percurso_mm}mm. Definição física do seio (comprimento adicional da curva) ainda não confirmada pela engenharia — comprimento final não liberado. Verificar com a cabina nos dois extremos de curso antes de cortar.`,
-      });
-    }
-
-    const folgaAplicada = folgaConfirmada ? folgaMm : 0;
-    const comprimentoFinal = percurso_mm + seioMm + folgaAplicada;
-    return trechoBase({
+  function montarTrechoCaboManobra(geometria, intervalos, tipoAplicacao) {
+    const geo = geometria || {};
+    const { percurso_mm } = alturaTotalMm(geo, intervalos);
+    const tipo = String(tipoAplicacao || '').trim().toUpperCase();
+    const comCasaMaquinas = tipo !== '' && tipo !== 'MRL';
+    const base = {
       tipo_cabo: 'Cabo de manobra (28 vias — 1 peça)',
       origem_fisica: 'Fundo do quadro de comando',
       destino_fisico: 'Caixa de inspeção no teto da cabina',
+    };
+
+    if (!percurso_mm) {
+      return trechoBase({ ...base, formula: 'Percurso (soma dos intervalos entre pisos) não informado — sem base pra calcular o comprimento do cabo de manobra.' });
+    }
+
+    const distLaje = Number(geo.distancia_quadro_entrada_caixa_mm) || 0;
+    if (comCasaMaquinas && !distLaje) {
+      return trechoBase({ ...base, comprimento_base_mm: percurso_mm,
+        formula: `Percurso = ${percurso_mm}mm. Com casa de máquinas o cliente informa a distância do quadro até a descida da laje (campo "Distância quadro → entrada da caixa") — sem ela o comprimento não é liberado.` });
+    }
+
+    const seio = Number(geo.seio_cabo_mm) > 0 ? Number(geo.seio_cabo_mm) : CABO_MANOBRA_SEIO_MM;
+    const pontas = Number(geo.folga_mm) > 0 ? Number(geo.folga_mm) : CABO_MANOBRA_PONTAS_MM;
+    const subida = CABO_MANOBRA_SUBIDA_MM;
+    const reserva = CABO_MANOBRA_RESERVA_CALIBRADA_MM;
+    const lajeMm = comCasaMaquinas ? distLaje : 0;
+    const folga = subida + pontas + reserva + lajeMm;
+    return trechoBase({
+      ...base,
       comprimento_base_mm: percurso_mm,
-      contornos_mm: seioMm,
-      folga_mm: folgaAplicada,
-      comprimento_final_mm: comprimentoFinal,
-      confianca: folgaConfirmada ? 'confirmado' : 'estimado',
-      formula: `comprimento_final = percurso (${percurso_mm}mm) + seio (${seioMm}mm)`
-        + (folgaConfirmada ? ` + folga (${folgaAplicada}mm)` : ' — folga NÃO aplicada (regra ainda não confirmada pela engenharia)')
+      contornos_mm: seio,
+      folga_mm: folga,
+      comprimento_final_mm: percurso_mm + seio + folga,
+      confianca: 'estimado',
+      formula: `comprimento_final = pisos (${percurso_mm}mm) + seio (${seio}mm) + subida até a caixa de inspeção (${subida}mm) + pontas (${pontas}mm)`
+        + ` + saída do quadro até a caixa (${reserva}mm)` + (comCasaMaquinas ? ` + distância quadro → descida da laje (${lajeMm}mm)` : '')
         + '. 28 vias = 1 peça só; não multiplicar o comprimento por 28.',
     });
   }
@@ -491,6 +559,15 @@
     },
   };
 
+  /* Modelos de LOP: os padrões BST (vidro) ou, se o vendedor escolheu outro código no hub, a família dele
+     (`familia` = { sobe, desce, dois } com os SKUs; a descrição vem do catálogo). */
+  function modelosLop(comDisplay, familia, catalogoPorSku) {
+    if (!familia) return LOP_MODELOS[comDisplay ? 'com' : 'sem'];
+    const cat = catalogoPorSku || {};
+    const m = (sku) => [sku, (cat[sku] && cat[sku].descricao) || ('Botoeira de Pavimento ' + sku)];
+    return { sobe: m(familia.sobe), desce: m(familia.desce), dois: m(familia.dois) };
+  }
+
   function calcularLop(numParadas, botoesIntermediarios) {
     const n = parseInt(numParadas, 10);
     if (!Number.isFinite(n) || n < 2) return null;
@@ -504,11 +581,11 @@
     };
   }
 
-  function montarItensLop(numParadas, botoesIntermediarios, catalogoPorSku, comDisplay) {
+  function montarItensLop(numParadas, botoesIntermediarios, catalogoPorSku, comDisplay, familia) {
     const r = calcularLop(numParadas, botoesIntermediarios);
     if (!r) return [];
     const cat = catalogoPorSku || {};
-    const m = LOP_MODELOS[comDisplay ? 'com' : 'sem'];
+    const m = modelosLop(comDisplay, familia, catalogoPorSku);
     const regra = `${r.paradas} paradas: térreo ▲ (Seta Subida), último ▼ (Seta Descida), ${r.doisBotoes ? 'intermediários com 2 botões (1 Sobe e 1 Desce)' : 'intermediários com 1 botão'}.`;
     const linha = (modelo, quantidade, confianca, extra) => ({
       sku: modelo[0], descricao: (cat[modelo[0]] && cat[modelo[0]].descricao) || modelo[1], unidade: 'un',
@@ -528,22 +605,127 @@
 
   /* ---------- Botoeiras de inspeção (cabina e poço) — 1 de cada, quando fornecemos ---------- */
   const INSPECAO_MODELOS = [
-    ['botoeira_inspecao_cabina', 'VPB-208', 'Botoeira de Inspeção sobre a Cabina de Elevador B3 - Ref.: BST | VPB-208'],
-    ['botoeira_inspecao_poco', 'VPB-380', 'Botoeira de Inspeção P5Y do Poço de Elevador - Ref.: BST | VPB-380'],
+    ['botoeira_inspecao_cabina', 'VPB-193', 'Caixa de Inspeção de Topo de Cabine de Elevador do Comando Monarch Ref.: BST | VPB-193'],
+    ['botoeira_inspecao_poco', 'VPB-209', 'Botoeira de Inspeção do Poço de Elevador - Ref.: BST | VPB-209'],
   ];
 
   function montarItensInspecao(escopo, catalogoPorSku) {
     const cat = catalogoPorSku || {};
-    return INSPECAO_MODELOS.filter(([chave]) => ((escopo || {})[chave] || {}).decisao === 'fornecer').map(([, sku, desc]) => ({
-      sku, descricao: (cat[sku] && cat[sku].descricao) || desc, unidade: 'un', grupo_separacao: 'componentes', quantidade: 1,
-      origem: 'calculado_geometria', confianca: 'confirmado', memoria_calculo: 'Escopo: fornecer. 1 botoeira por elevador.',
-    }));
+    return INSPECAO_MODELOS.filter(([chave]) => ((escopo || {})[chave] || {}).decisao === 'fornecer').map(([chave, skuPadrao, desc]) => {
+      const escolhido = String(((escopo || {})[chave] || {}).codigo || '').trim();
+      const sku = escolhido || skuPadrao;
+      return { sku, descricao: (cat[sku] && cat[sku].descricao) || (escolhido ? escolhido : desc), unidade: 'un', grupo_separacao: 'componentes', quantidade: 1,
+        origem: 'calculado_geometria', confianca: 'confirmado', memoria_calculo: 'Escopo: fornecer. 1 botoeira por elevador.' + (escolhido ? ' Código escolhido no hub.' : '') };
+    });
+  }
+
+  /* ---------- Chicotes que acompanham cada peça (28/10/2026, regra da Engenharia) ----------
+     Aparecem sempre que a peça entra no pedido, sem ninguém escolher: caixa do poço (VPB-209), caixa de topo de
+     cabine Monarch (VPB-193) e o próprio quadro de comando (HW, MT e OS saem direto dele para a última altura).
+     O mesmo chicote nunca entra duas vezes. */
+  const CHICOTES_VPEL = {
+    PT1: ['VPEL-732a', 'Chicote PT1 (Botão Stop de Acesso ao Poço) - Ref.: VerticalParts (A)'],
+    PT2: ['VPEL-733a', 'Chicote PT2 (Polia Tensora e Buffer) - Ref.: VerticalParts (A)'],
+    EDP1: ['VPEL-727a', 'Chicote EDP1 (Alimentação e Sinal de Barreira Eletrônica) - Ref.: VerticalParts (A)'],
+    FAN: ['VPEL-723a', 'Chicote FAN (Iluminação e Ventilação de Cabina) - Ref.: VerticalParts (A)'],
+    GS1: ['VPEL-721a', 'Chicote GS1 (Contato de Trinco da Porta de Cabina) - Ref.: VerticalParts (A)'],
+    SOS: ['VPEL-725a', 'Chicote SOS (Contato do Freio da Cunha da Cabina) - Ref.: VerticalParts (A)'],
+    SL: ['VPEL-728a', 'Chicote SL (LED e Sirene 24V) - Ref.: VerticalParts (A)'],
+    HW: ['VPEL-730a', 'Chicote HW (PAP do Motor / Contato Volante de Inércia) - Ref.: VerticalParts (A)'],
+    MT: ['VPEL-731a', 'Chicote MT (Alimentação e Monitoramento do Freio da Máquina) - Ref.: VerticalParts (A)'],
+    OS: ['VPEL-729a', 'Chicote OS (Contato Elétrico Limitador de Velocidade) - Ref.: VerticalParts (A)'],
+  };
+  /* Chicotes dos demais conectores da caixa de topo (VPB-193, placa MCTC-CTB-H5). Regra do Gelson (29/10/2026): todo cabo é feito na VerticalParts,
+     um chicote por conector. O código VPEL-7xx ainda não existe: a lista "Chicotes da caixa de topo" (tabela chicotes_caixa_topo) o recebe depois.
+     Sem código, o item entra no BOM como "código a definir". Comprimento padrão 2.400 mm; 3.500 mm para o que desce até a baixo da cabine (WT2, SOS). */
+  const CHICOTE_MM_PADRAO = 2400;
+  const CHICOTE_MM_BAIXO_CABINE = 3500;
+  const CHICOTES_CAIXA_TOPO_NOVOS = [
+    { chave: 'DC1', desc: 'Chicote DC1 (Alimentação do Operador de Porta)' },
+    { chave: 'DC2', desc: 'Chicote DC2 (Alimentação do Operador de Porta Oposta)', cond: 'portaOposta' },
+    { chave: 'DEN1', desc: 'Chicote DEN1 (Limites e Comandos do Operador de Porta)' },
+    { chave: 'DEN2', desc: 'Chicote DEN2 (Limites e Comandos do Operador de Porta Oposta)', cond: 'portaOposta' },
+    { chave: 'EDP2', desc: 'Chicote EDP2 (Barreira Eletrônica da Porta Oposta)', cond: 'portaOposta' },
+    { chave: 'DP', desc: 'Chicote DP (Térmica do Motor da Porta)' },
+    { chave: 'WT1', desc: 'Chicote WT1 (Sobrecarga / Carga Cheia)' },
+    { chave: 'WT2', desc: 'Chicote WT2 (Célula de Carga Analógica)', cond: 'celulaCarga', mm: CHICOTE_MM_BAIXO_CABINE },
+    { chave: 'RDZ', desc: 'Chicote RDZ (Zona de Porta)' },
+    { chave: 'DZ', desc: 'Chicote DZ (Nivelamento)' },
+    { chave: 'Y4', desc: 'Chicote Y4 (Botoeira de Inspeção / Pendant)' },
+    { chave: 'CB/TEL1', desc: 'Chicote CB/TEL1 (Interfone)' },
+    { chave: 'COB1', desc: 'Chicote COB1 (Botoeira de Cabine)' },
+    { chave: 'COB2', desc: 'Chicote COB2 (2ª Botoeira / Auxiliar de Cabine)', cond: 'cob2' },
+    { chave: 'Y1/Y2/S3', desc: 'Chicote Y1/Y2/S3 (Fonte Combinada e Luz de Topo de Cabine)' },
+    { chave: 'CA/CC', desc: 'Chicote CA/CC (Alimentação 220V e 24V/CAN)' },
+  ];
+  const MM_CHICOTE_EXISTENTE = { SOS: CHICOTE_MM_BAIXO_CABINE };
+  const CHICOTES_POR_PECA = [
+    { sku: 'VPB-209', nome: 'Botoeira de Inspeção do Poço (VPB-209)', chicotes: ['PT1', 'PT2'] },
+    { sku: 'VPB-193', nome: 'Caixa de Inspeção de Topo de Cabine Monarch (VPB-193)', chicotes: ['EDP1', 'FAN', 'GS1', 'SOS', 'SL', ...CHICOTES_CAIXA_TOPO_NOVOS.map((c) => c.chave)] },
+  ];
+  const CHICOTES_DO_QUADRO = ['HW', 'MT', 'OS'];
+
+  /* HW, MT e OS saem do quadro até a última altura: o comprimento é o do trecho de fiação fixa correspondente (medido, ou 6.000mm estimado em MRL).
+     Sem trecho/comprimento (ex.: casa de máquinas sem medida) o item fica "pendente de engenharia" — nunca se presume metragem. */
+  const CHICOTE_TRECHO = { MT: 'U/V/W, MT (freio)', OS: 'OS', HW: 'HW' };
+  const fmtMetros = (mm) => (mm / 1000).toFixed(2).replace('.', ',') + ' m';
+
+  function montarItensChicotes(bomItens, catalogoPorSku, trechosFixa, opcoes) {
+    const cat = catalogoPorSku || {};
+    const op = opcoes || {};
+    const codigos = op.codigos || {};
+    const skusBom = new Set((bomItens || []).map((i) => i.sku));
+    const vistos = new Set(skusBom);
+    const itens = [];
+    const caixaTopo = new Set(['EDP1', 'FAN', 'GS1', 'SOS', 'SL']);
+    const add = (chave, motivo) => {
+      const [skuPadrao, desc] = CHICOTES_VPEL[chave];
+      const sku = String(codigos[chave] || '').trim() || skuPadrao;
+      if (vistos.has(sku)) return;
+      vistos.add(sku);
+      const base = (cat[sku] && cat[sku].descricao) || desc;
+      const refTrecho = CHICOTE_TRECHO[chave];
+      if (!refTrecho) {
+        const mm = caixaTopo.has(chave) ? (MM_CHICOTE_EXISTENTE[chave] || CHICOTE_MM_PADRAO) : null;
+        itens.push({ sku, descricao: mm ? `${base} — ${fmtMetros(mm)}` : base, unidade: 'un', grupo_separacao: 'componentes', quantidade: 1,
+          origem: 'calculado_geometria', confianca: 'confirmado', memoria_calculo: `Chicote automático: ${motivo}. 1 por elevador.` + (mm ? ` Comprimento ${fmtMetros(mm)} (definido pela Engenharia).` : '') });
+        return;
+      }
+      const t = (trechosFixa || []).find((x) => x.endereco_referencia === refTrecho);
+      const mm = t && Number(t.comprimento_final_mm) > 0 ? Number(t.comprimento_final_mm) : null;
+      itens.push({ sku, descricao: mm ? `${base} — ${fmtMetros(mm)}` : `${base} — comprimento a definir`, unidade: 'un', grupo_separacao: 'componentes', quantidade: 1,
+        origem: 'calculado_geometria', confianca: mm ? (t.confianca === 'confirmado' ? 'confirmado' : 'estimado') : 'pendente_engenharia',
+        memoria_calculo: `Chicote automático: ${motivo}. 1 por elevador. ` + (mm ? `Comprimento ${fmtMetros(mm)} = trecho de fiação fixa (${t.confianca === 'confirmado' ? 'medido' : 'estimado'}).` : 'Comprimento não informado — preencher a distância na aba Geometria; nunca presumir metragem.') });
+    };
+    /* Chicotes novos da caixa de topo: sem código cadastrado entram como "código a definir" (nunca somem do BOM). */
+    const addNovo = (c, motivo) => {
+      const cod = String(codigos[c.chave] || '').trim();
+      const sku = cod || `A-DEFINIR-${c.chave.replace(/[^A-Z0-9]+/gi, '')}`;
+      if (vistos.has(sku)) return;
+      vistos.add(sku);
+      const mm = c.mm || CHICOTE_MM_PADRAO;
+      const base = (cod && cat[cod] && cat[cod].descricao) || c.desc;
+      itens.push({ sku, descricao: `${base} — ${fmtMetros(mm)}${cod ? '' : ' — código VPEL a definir'}`, unidade: 'un', grupo_separacao: 'componentes', quantidade: 1,
+        origem: 'calculado_geometria', confianca: cod ? 'confirmado' : 'pendente_engenharia',
+        memoria_calculo: `Chicote automático: ${motivo}. 1 por elevador. Feito na VerticalParts. Comprimento ${fmtMetros(mm)} (definido pela Engenharia).` + (cod ? '' : ' Código VPEL ainda não cadastrado na lista "Chicotes da caixa de topo".') });
+    };
+    CHICOTES_POR_PECA.forEach((peca) => {
+      if (!skusBom.has(peca.sku)) return;
+      peca.chicotes.forEach((c) => {
+        if (CHICOTES_VPEL[c]) { add(c, `acompanha ${peca.nome}`); return; }
+        const novo = CHICOTES_CAIXA_TOPO_NOVOS.find((x) => x.chave === c);
+        if (!novo || (novo.cond && !op[novo.cond])) return;
+        addNovo(novo, `acompanha ${peca.nome}`);
+      });
+    });
+    CHICOTES_DO_QUADRO.forEach((c) => add(c, 'saem direto do quadro de comando para a última altura (UA)'));
+    return itens;
   }
 
   /* LOP lendo a quantidade de cada parada (frontal e traseira). Cada face é uma
      sequência: 1ª parada com LOP = térreo (Seta Subida), última = Seta Descida,
      as do meio = 2 botões (ou 1 botão). A quantidade manual da parada multiplica. */
-  function montarItensLopParadas(paradas, botoesIntermediarios, catalogoPorSku, comDisplay) {
+  function montarItensLopParadas(paradas, botoesIntermediarios, catalogoPorSku, comDisplay, familia) {
     const qtdDe = (v, padrao) => { const t = String(v == null ? '' : v).trim(); if (t === '') return padrao; const n = Number(t.replace(',', '.')); return Number.isFinite(n) && n >= 0 ? n : padrao; };
     const faces = [
       (paradas || []).filter((p) => p.abertura_frontal !== false).map((p) => qtdDe(p.qtd_lop_frontal, 1)),
@@ -560,7 +742,7 @@
     });
     if (!nFaces) return [];
     const cat = catalogoPorSku || {};
-    const m = LOP_MODELOS[comDisplay ? 'com' : 'sem'];
+    const m = modelosLop(comDisplay, familia, catalogoPorSku);
     const regra = `${nFaces === 2 ? 'Frontal e traseira' : 'Uma face'}: primeira parada ▲ (Seta Subida), última ▼ (Seta Descida), ${dois ? 'intermediárias com 2 botões (1 Sobe e 1 Desce)' : 'intermediárias com 1 botão'}; usa as quantidades de LOP de cada parada.`;
     const linha = (modelo, quantidade, confianca, extra) => ({
       sku: modelo[0], descricao: (cat[modelo[0]] && cat[modelo[0]].descricao) || modelo[1], unidade: 'un',
@@ -576,10 +758,10 @@
   }
 
   window.QuadroComandoBomEngine = {
-    calcularLop, montarItensLop, montarItensLopParadas, LOP_MODELOS, montarItensInspecao, INSPECAO_MODELOS,
-    listarVariantes, chaveVariante, montarBomFixo,
+    calcularLop, montarItensLop, montarItensLopParadas, LOP_MODELOS, montarItensInspecao, INSPECAO_MODELOS, montarItensChicotes, CHICOTES_VPEL, CHICOTES_CAIXA_TOPO_NOVOS, MRL_FIO_UA_MM,
+    listarVariantes, chaveVariante, chaveVarianteQuadro, montarBomDaEstrutura, montarBomFixo,
     somaIntervalos, alturaTotalMm, perimetroCaixaMm,
-    montarTrechosFiacaoFixa, montarTrechoCaboManobra, montarChecklist,
+    montarTrechosFiacaoFixa, montarTrechoCaboManobra, CABO_MANOBRA_SEIO_MM, CABO_MANOBRA_SUBIDA_MM, CABO_MANOBRA_PONTAS_MM, CABO_MANOBRA_RESERVA_CALIBRADA_MM, montarChecklist,
     cabinaDentroDoPadrao, montarTrechosFiacaoCarro,
     grupoSeparacaoPorCategoria, classificarCruzamentoErp,
   };

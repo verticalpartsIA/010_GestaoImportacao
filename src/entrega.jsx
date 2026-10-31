@@ -3,48 +3,19 @@
    ART · Cronograma de pagamento da instalação · Data Book / Termo
    ============================================================ */
 
-function ArtPage({ setRoute }) {
-  const irObras = () => setRoute && setRoute('status-obras');
-  return (
-    <div className="page fade-in">
-      <div className="page-head">
-        <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Instalação &amp; Entrega · ART</div>
-          <h1 className="page-head__title">ART de Instalação</h1>
-          <p className="page-head__sub">As ARTs e demais documentos da obra são geridos por obra, na aba Documentos do Dossiê.</p>
-        </div>
-        <div className="page-head__r">
-          <Button variant="primary" icon="arrowRight" onClick={irObras}>Abrir obras</Button>
-        </div>
-      </div>
-      <div style={{ border: '1px solid var(--border)', background: 'var(--vp-gray-50)', padding: '32px', maxWidth: 760, margin: '8px auto 0' }}>
-        <p style={{ fontSize: 13, color: 'var(--fg1)', lineHeight: 1.8, margin: 0 }}>
-          Para guardar a ART de uma obra: emita a ART no site do CREA, baixe o PDF e anexe-o na aba
-          {' '}<b>Documentos</b> da <b>Dossiê da Obra</b> correspondente (VPEL-EL). No mesmo lugar ficam
-          {' '}Termo de Vistoria, DataBook, Alvará e Termo de Entrega Final — com checklist de prontidão por obra,
-          {' '}para quem precisar do documento só pegar e enviar.
-        </p>
-        <div style={{ marginTop: 16 }}>
-          <Button variant="outline" icon="briefcase" onClick={irObras}>Ir para a lista de obras</Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* Antes lia/gravava a tabela legada `projetos` (issue #274, desconectada
    da esteira real) — duplicava, pior, o que o Dossiê da Obra já faz: a
    aba Documentos já trata "DataBook" como um dos tipos de documento
    obrigatórios da obra (TIPOS_DOC_OBRA em dossier-obra.jsx), com
    checklist de prontidão. Vira redirect, mesmo padrão já usado por
-   ArtPage acima — achado "Importante" da auditoria de código. */
+   a antiga ArtPage — achado "Importante" da auditoria de código. */
 function DataBookPage({ setRoute }) {
   const irObras = () => setRoute && setRoute('status-obras');
   return (
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Instalação & Entrega · Encerramento</div>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Entrega & Documentação · Encerramento</div>
           <h1 className="page-head__title">Data Book & Termo de Conclusão</h1>
           <p className="page-head__sub">O Data Book de cada obra é gerido por obra, na aba Documentos do Dossiê.</p>
         </div>
@@ -85,6 +56,7 @@ function CronogramaPage() {
   const [loading, setLoading] = React.useState(true);
   const [showNovo, setShowNovo] = React.useState(false);
   const [sel, setSel] = React.useState(null);
+  const [excluindo, setExcluindo] = React.useState(null);
 
   const reload = () => {
     setLoading(true);
@@ -114,7 +86,7 @@ function CronogramaPage() {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Instalação & Entrega · Cronograma</div>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Parceiros & Instaladores · Cronograma</div>
           <h1 className="page-head__title">Cronograma de Pagamento da Instalação</h1>
           <p className="page-head__sub">Pagamento da mão de obra de instalação em 4 fases, liberadas por marco físico do equipamento.</p>
         </div>
@@ -161,7 +133,13 @@ function CronogramaPage() {
                     <div className="progress" style={{ marginBottom: 4 }}><span style={{ width: pct + '%' }}/></div>
                     <div className="mono small" style={{ color: 'var(--fg3)' }}>{pagas}/4 fases · {pct}%</div>
                   </td>
-                  <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
+                  <td>
+                    <div className="row gap-2" style={{ justifyContent: 'flex-end' }}>
+                      <Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir" onClick={(e) => { e.stopPropagation(); setSel(r); }}>Abrir</Button>
+                      <Button variant="ghost" size="sm" icon="trash" title="Excluir" aria-label="Excluir"
+                        onClick={(e) => { e.stopPropagation(); setExcluindo(r); }}/>
+                    </div>
+                  </td>
                 </tr>
               );
             })}
@@ -171,7 +149,8 @@ function CronogramaPage() {
 
       {sel ? (
         <Card title={`Fases de pagamento · ${sel.endereco}`}
-          sub={`${sel.montador || 'Montador não informado'} · ${sel.paradas ?? '—'} paradas · ${sel.carga_kg ? sel.carga_kg + 'kg' : '—'} · total ${fmtBRL(sel.valor_total)}`}>
+          sub={`${sel.montador || 'Montador não informado'} · ${sel.paradas ?? '—'} paradas · ${sel.carga_kg ? sel.carga_kg + 'kg' : '—'} · total ${fmtBRL(sel.valor_total)}`}
+          action={<Button variant="ghost" size="sm" icon="trash" onClick={() => setExcluindo(sel)}>Excluir</Button>}>
           <div className="stack" style={{ gap: 10 }}>
             {CRON_FASES.map((f) => {
               const status = sel[f.key + '_status'];
@@ -201,7 +180,76 @@ function CronogramaPage() {
       ) : null}
 
       {showNovo && <ModalNovoCronograma onClose={() => setShowNovo(false)} onSaved={reload}/>}
+      {excluindo && (
+        <ModalExcluirCronograma row={excluindo} onClose={() => setExcluindo(null)}
+          onDeleted={() => { setExcluindo(null); setSel(s => s?.id === excluindo.id ? null : s); reload(); }}/>
+      )}
     </div>
+  );
+}
+
+function ModalExcluirCronograma({ row, onClose, onDeleted }) {
+  const [motivo, setMotivo] = React.useState('');
+  const [excluindo, setExcluindo] = React.useState(false);
+  const motivoOk = motivo.trim().length >= 10;
+
+  const confirmar = async () => {
+    if (!motivoOk || excluindo) return;
+    setExcluindo(true);
+    const { error, data } = await window.__VP_SB.sb.from('instalacao_cronograma')
+      .delete().eq('id', row.id).select('id');
+    setExcluindo(false);
+    if (error) return window.toast('Erro ao excluir: ' + error.message, 'error');
+    if (!data || data.length === 0) return window.toast('Não foi possível excluir — sem permissão ou registro já removido.', 'error');
+    window.VPLog?.registrar({
+      modulo: 'Cronograma de Pagamento da Instalação',
+      acao: 'Excluiu o cronograma de pagamento',
+      alvo: row.endereco,
+      alvo_id: row.id,
+      detalhe: { motivo: motivo.trim(), endereco: row.endereco, montador: row.montador, valor_total: row.valor_total },
+    });
+    window.toast('Cronograma excluído.', 'success');
+    onDeleted?.();
+  };
+
+  return (
+    <Modal title="Excluir cronograma de pagamento" onClose={onClose} width={460}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="danger" onClick={confirmar} disabled={!motivoOk || excluindo}>
+          {excluindo ? 'Excluindo…' : 'Excluir'}
+        </Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <div className="alert danger">
+          <Icon.warning/>
+          <div>
+            <div className="alert__title">Esta ação não pode ser desfeita</div>
+            <div className="alert__sub">O registro ({row.endereco || row.id}) e as 4 fases de pagamento serão apagados.</div>
+          </div>
+        </div>
+        <div className="row sb" style={{ fontSize: 13 }}>
+          <span className="muted">Endereço</span>
+          <span style={{ fontWeight: 600 }}>{row.endereco || '—'}</span>
+        </div>
+        <div className="row sb" style={{ fontSize: 13 }}>
+          <span className="muted">Montador</span>
+          <span style={{ fontWeight: 600 }}>{row.montador || '—'}</span>
+        </div>
+        <div className="row sb" style={{ fontSize: 13 }}>
+          <span className="muted">Valor total</span>
+          <span style={{ fontWeight: 600 }}>{fmtBRL(row.valor_total)}</span>
+        </div>
+        <label className="stack" style={{ gap: 4 }}>
+          <span className="up-eyebrow muted">Motivo da exclusão * (fica no log de auditoria)</span>
+          <textarea className="input" rows={3} value={motivo} onChange={(e) => setMotivo(e.target.value)}
+            placeholder="Por que este cronograma está sendo excluído? (mín. 10 caracteres)" autoFocus/>
+          {!motivoOk && motivo.length > 0 && (
+            <span style={{ fontSize: 11, color: 'var(--vp-danger)' }}>Faltam {10 - motivo.trim().length} caracteres.</span>
+          )}
+        </label>
+      </div>
+    </Modal>
   );
 }
 
@@ -309,4 +357,4 @@ function ModalNovoCronograma({ onClose, onSaved }) {
   );
 }
 
-Object.assign(window, { ArtPage, CronogramaPage, DataBookPage });
+Object.assign(window, { CronogramaPage, DataBookPage });

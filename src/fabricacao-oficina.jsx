@@ -17,7 +17,41 @@ const FO_DESTINOS = {
 
 function foNorm(v) { return String(v == null ? '' : v).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
 
-function FOCard({ ordem, destino, podeDesmarcar, onRecarregar }) {
+// Depois do corte (só Fabricação Corte): cabo de aço → Expedição; cabo de manobra → Quadro de Comando. A pessoa escolhe; o sistema registra onde o item parou.
+function FOEncaminhar({ ordem, enviados, podeEnviar, onRecarregar }) {
+  const S = window.FabricacaoOficinaStore;
+  const [busy, setBusy] = React.useState(false);
+  const nomes = { expedicao: 'Expedição', quadro: 'Quadro de Comando' };
+  const feitos = (enviados || []).filter((e) => e.ordem_id === ordem.id);
+  const concluida = ordem.status === 'concluida';
+  const enviar = async (dest) => {
+    if (!window.confirm(`Enviar ${ordem.item_codigo} (${ordem.numero}) para ${nomes[dest]}?`)) return;
+    setBusy(true);
+    try {
+      await S.enviarDestino(ordem.pedido_codigo, ordem.item_codigo, dest, ordem.id);
+      window.VPLog?.registrar?.({ modulo: 'Fabricação Corte', acao: 'Encaminhou o item cortado para ' + nomes[dest], alvo: `${ordem.numero} — ${ordem.item_codigo}` });
+      window.toast?.('Enviado para ' + nomes[dest] + '.');
+      await onRecarregar();
+    } catch (e) { window.toast?.('Erro: ' + String(e.message || e).replace(/^destino: /, ''), 'error'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="fo-meta" style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+      <b>Depois do corte</b>{' '}
+      {['expedicao', 'quadro'].map((dest) => {
+        const ja = feitos.find((e) => e.destino === dest);
+        return (
+          <button key={dest} className="fo-btn" style={{ marginRight: 6 }} disabled={busy || !!ja || !concluida || !podeEnviar}
+            title={!podeEnviar ? 'Exige a alçada "Separação › Enviar para fabricação"' : !concluida ? 'Conclua as 3 etapas do corte primeiro' : dest === 'expedicao' ? 'Cabo de aço: segue para a Expedição' : 'Cabo de manobra: segue para a fabricação do Quadro de Comando'}
+            onClick={() => enviar(dest)}>{ja ? `✓ ${nomes[dest]}` : `Enviar para ${nomes[dest]}`}</button>
+        );
+      })}
+      {feitos.length ? <span> {feitos.map((e) => `${nomes[e.destino]} · ${String(e.por || '').split('@')[0]} · ${new Date(e.em).toLocaleDateString('pt-BR')}`).join(' | ')}</span> : null}
+    </div>
+  );
+}
+
+function FOCard({ ordem, destino, podeDesmarcar, onRecarregar, enviados, podeEnviar }) {
   const U = window.FabOficinaUI, C = window.FabOficinaCalc, S = window.FabricacaoOficinaStore;
   const [busy, setBusy] = React.useState(false);
   const [token, setToken] = React.useState(ordem.token);
@@ -55,7 +89,8 @@ function FOCard({ ordem, destino, podeDesmarcar, onRecarregar }) {
       <div className="fo-head">
         <div>
           <div className="fo-tit">{ordem.numero}{(ordem.numero_pedido_omie || ordem.numero_pedido) ? ` · Pedido Omie ${ordem.numero_pedido_omie || ordem.numero_pedido}` : ''}{un ? ` · unidade ${un.n}/${un.de}` : ''}</div>
-          <div className="fo-sub">{ordem.titulo}</div>
+          <div className="fo-sub">{destino === 'corte' && window.FabOficinaCalc.codigoDaOrdem(ordem) ? window.FabOficinaCalc.rotuloItemCorte(window.FabOficinaCalc.codigoDaOrdem(ordem), ordem.item_descricao) : ordem.titulo}</div>
+          {destino === 'corte' && window.FabOficinaCalc.codigoDaOrdem(ordem) && <div className="fo-meta">{window.FabOficinaCalc.CORTE_ROTULO[window.FabOficinaCalc.categoriaCorte(window.FabOficinaCalc.codigoDaOrdem(ordem), ordem.item_descricao || ordem.titulo)] || ''} · {ordem.titulo}</div>}
           <div className="fo-meta">{ordem.cliente || 'Cliente não informado'}{ordem.item_codigo ? ' · ' + ordem.item_codigo : ''}{ordem.prazo_entrega ? ' · entrega ' + U.fmtData(ordem.prazo_entrega) : ''}{destino === 'corte' && ordem.quantidade ? ' · qtd ' + ordem.quantidade : ''}</div>
           {pausado && <div className="fo-pausa">PAUSADA — falta de material</div>}
           {ordem.status === 'concluida' && <div className="fo-ok">✓ Concluída{ordem.data_finalizacao ? ' em ' + U.fmtData(ordem.data_finalizacao) : ''}</div>}
@@ -73,6 +108,9 @@ function FOCard({ ordem, destino, podeDesmarcar, onRecarregar }) {
       {destino === 'corte' && (
         <U.Sobra sobra={ordem.sobra} busy={busy} onSalvar={(q, obs) => comToken((t) => S.registrarSobra(t, q, obs), 'Sobra registrada.')} />
       )}
+      {destino === 'corte' && ordem.item_codigo && ordem.pedido_codigo != null && (
+        <FOEncaminhar ordem={ordem} enviados={enviados} podeEnviar={podeEnviar} onRecarregar={onRecarregar} />
+      )}
     </div>
   );
 }
@@ -85,25 +123,45 @@ function FabricacaoOficinaPage({ destino }) {
   const [busca, setBusca] = React.useState('');
   const [concluidas, setConcluidas] = React.useState(false);
   const [podeDesmarcar, setPodeDesmarcar] = React.useState(false);
+  const [podeEnviar, setPodeEnviar] = React.useState(false);
+  const [enviados, setEnviados] = React.useState([]);   // envios a Quadro/Expedição (separacao_destinos) — só usados no Corte
 
+  // No Corte as OPs concluídas entram sempre na carga: quem acabou de cortar ainda precisa encaminhar o item (a lista só as esconde na tela).
   const carregar = React.useCallback(async () => {
-    try { setDados(await S.listar(destino, { concluidas })); setErro(null); }
-    catch (e) { setErro(e.message || String(e)); }
+    try {
+      setDados(await S.listar(destino, { concluidas: destino === 'corte' ? true : concluidas }));
+      if (destino === 'corte') { try { const d = await S.listarDestinos(null); setEnviados(d.enviados || []); } catch (e) { /* complemento */ } }
+      setErro(null);
+    } catch (e) { setErro(e.message || String(e)); }
   }, [destino, concluidas]);
   React.useEffect(() => { setDados(null); carregar(); }, [carregar]);
   React.useEffect(() => { const t = setInterval(carregar, 60000); return () => clearInterval(t); }, [carregar]);
   React.useEffect(() => {
     let vivo = true;
     Promise.resolve(window.PropostaStore?.temCapacidade?.('fabricacao', 'editar_status_quadro')).then((v) => { if (vivo) setPodeDesmarcar(!!v); }).catch(() => {});
+    Promise.resolve(window.PropostaStore?.temCapacidade?.('separacao', 'enviar_fabricacao')).then((v) => { if (vivo) setPodeEnviar(!!v); }).catch(() => {});
     return () => { vivo = false; };
   }, []);
 
-  const ordens = dados ? dados.ordens : null;
+  const todasOrdens = dados ? dados.ordens : null;
+  // Concluída só aparece com "mostrar concluídas" — exceto no Corte, onde fica visível até ser encaminhada (Expedição ou Quadro).
+  const ordens = React.useMemo(() => {
+    if (!todasOrdens) return null;
+    if (destino === 'corte') {
+      // Escopo da tela: só Cabos de Aço, Cintas de Tração e Cabos de Manobra.
+      const CC = window.FabOficinaCalc;
+      const noEscopo = todasOrdens.filter((o) => CC.categoriaCorte(CC.codigoDaOrdem(o), o.item_descricao || o.titulo));
+      if (concluidas) return noEscopo;
+      return noEscopo.filter((o) => o.status !== 'concluida' || (o.item_codigo && o.pedido_codigo != null && !enviados.some((e) => e.ordem_id === o.id)));
+    }
+    if (concluidas) return todasOrdens;
+    return todasOrdens.filter((o) => o.status !== 'concluida' || (o.item_codigo && o.pedido_codigo != null && !enviados.some((e) => e.ordem_id === o.id)));
+  }, [todasOrdens, concluidas, destino, enviados]);
   const filtradas = React.useMemo(() => {
     if (!ordens) return null;
     const termos = foNorm(busca).split(/\s+/).filter(Boolean);
     if (!termos.length) return ordens;
-    return ordens.filter((o) => { const t = foNorm([o.numero, o.titulo, o.cliente, o.numero_pedido, o.pedido_codigo, o.item_codigo].join(' ')); return termos.every((x) => t.includes(x)); });
+    return ordens.filter((o) => { const t = foNorm([o.numero, o.titulo, o.cliente, o.numero_pedido, o.pedido_codigo, o.item_codigo, o.item_descricao, window.FabOficinaCalc.descricaoCorte(window.FabOficinaCalc.codigoDaOrdem(o), '')].join(' ')); return termos.every((x) => t.includes(x)); });
   }, [ordens, busca]);
 
   const grupos = React.useMemo(() => {
@@ -147,7 +205,7 @@ function FabricacaoOficinaPage({ destino }) {
       {grupos.map((g) => (
         <div key={g.k}>
           <div style={{ fontSize: 13, fontWeight: 700, margin: '14px 0 8px' }}>{g.k === 'sem' ? 'Sem pedido de venda' : `Pedido ${g.ped || g.k}`}{g.cliente ? ' — ' + g.cliente : ''} <span style={{ fontWeight: 400, color: 'var(--fg3)' }}>· {g.lista.length} OP(s)</span></div>
-          {g.lista.map((o) => <FOCard key={o.id} ordem={o} destino={destino} podeDesmarcar={podeDesmarcar} onRecarregar={carregar} />)}
+          {g.lista.map((o) => <FOCard key={o.id} ordem={o} destino={destino} podeDesmarcar={podeDesmarcar} onRecarregar={carregar} enviados={enviados} podeEnviar={podeEnviar} />)}
         </div>
       ))}
     </div>

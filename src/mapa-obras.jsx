@@ -17,6 +17,9 @@ const MO_MAP_STYLES = [
   { key: "satelite", label: "Satélite", url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attribution: "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics" },
 ];
 
+/* O navegador não deixa mudar o User-Agent; a política do Nominatim aceita um e-mail de contato no parâmetro `email`. */
+const NOMINATIM_CONTATO = "suporte%40vpsistema.com";
+
 const MO_GEO_CACHE_KEY = "vp_mapa_obras_geo_v1";
 
 function moLerCacheGeo() {
@@ -36,7 +39,7 @@ async function moGeocodificarCidades(cidades, onProgresso) {
     const c = faltam[i];
     try {
       const q = `${String(c.cidade).trim()}, ${String(c.uf || "").trim()}, Brasil`;
-      const r = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&q=" + encodeURIComponent(q));
+      const r = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&email=" + NOMINATIM_CONTATO + "&q=" + encodeURIComponent(q));
       if (r.ok) {
         const d = await r.json();
         cache[c.chave] = Array.isArray(d) && d.length ? { lat: Number(d[0].lat), lon: Number(d[0].lon) } : null;
@@ -57,7 +60,7 @@ async function moGeocodificarEndereco(o, centroCidade) {
     const c = consultas[i];
     try {
       if (i > 0) await new Promise((res) => setTimeout(res, 1100));
-      const r = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&q=" + encodeURIComponent(c.q));
+      const r = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&email=" + NOMINATIM_CONTATO + "&q=" + encodeURIComponent(c.q));
       if (!r.ok) continue;
       const d = await r.json();
       if (!Array.isArray(d) || !d.length) continue;
@@ -122,7 +125,16 @@ function MapaObrasPage({ setRoute, setSubsel }) {
   const [erro, setErro] = React.useState(null);
   const [geo, setGeo] = React.useState(() => moLerCacheGeo());
   const [geocodificando, setGeocodificando] = React.useState(false);
-  const [filtro, setFiltro] = React.useState({ andamento: true, concluida: true, aguardando: true });
+  // Grupos ocultos ficam na URL (?ocultar=concluida,aguardando): F5 e link direto mantêm o filtro.
+  const [ocultarQ, setOcultarQ] = window.useQueryParam("ocultar", "");
+  const filtro = React.useMemo(() => {
+    const ocultos = ocultarQ ? ocultarQ.split(",") : [];
+    return { andamento: !ocultos.includes("andamento"), concluida: !ocultos.includes("concluida"), aguardando: !ocultos.includes("aguardando") };
+  }, [ocultarQ]);
+  const setFiltro = (fnOuObj) => {
+    const prox = typeof fnOuObj === "function" ? fnOuObj(filtro) : fnOuObj;
+    setOcultarQ(["andamento", "concluida", "aguardando"].filter((k) => !prox[k]).join(","));
+  };
   const [recarregar, setRecarregar] = React.useState(0);
   const [aba, setAba] = window.useRouteTab("mapa-obras", "mapa", ["mapa", "evolucao"]);
   const [foco, setFoco] = React.useState(null);

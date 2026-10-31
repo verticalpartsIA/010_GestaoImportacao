@@ -163,7 +163,7 @@
       { modulo: 'cadastro-fornecedores', label: 'Fornecedores' },
       { modulo: 'cadastro-materias-primas', label: 'Matérias-Primas' },
       { modulo: 'cadastro-produtos', label: 'Produtos' },
-      { modulo: 'ncm-catalogo', label: 'Produtos' },
+      { modulo: 'ncm-catalogo', label: 'Catálogo Siscomex' },
       { modulo: 'cadastro-instaladores', label: 'Empresas Instaladoras' },
       { modulo: 'cadastro-custos', label: 'Atualização de Custos' },
     ]},
@@ -217,8 +217,8 @@
     { grupo: 'Engenharia', itens: [
       { modulo: 'engenharia', label: 'Engenharia' },
       { modulo: 'eng-projeto-elevadores', label: 'Projeto de Elevadores' },
+      { modulo: 'repositorio-documentos', label: 'Repositório Documentos' },
       { modulo: 'eng-configurador', label: 'Projeto de Equipamento' },
-      { modulo: 'desenho-tecnico', label: 'Projetos ER/Es' },
       { modulo: 'solicitacoes-produto', label: 'Solicitações de Produto' },
       { modulo: 'ficha-tecnica', label: 'Ficha Técnica', capacidades: [
         { chave: 'ver', label: 'Ver' },
@@ -240,8 +240,13 @@
       ]},
       { modulo: 'status-obras', label: 'Status de Obras' },
       { modulo: 'linha-do-tempo', label: 'Linha do Tempo da Cotação' },
-      { modulo: 'art', label: 'ART' },
+      { modulo: 'art', label: 'ART', capacidades: [
+        ...ACOES_PADRAO,
+        /* 30/10/2026: a Juliana (Financeiro) marca o boleto da ART como pago. */
+        { chave: 'confirmar_pagamento', label: 'Marca o boleto da ART como pago' },
+      ]},
       { modulo: 'cronograma', label: 'Cronograma' },
+      { modulo: 'central-documentos', label: 'Central de Documentos' },
       { modulo: 'databook', label: 'Data Book & Termo' },
       { modulo: 'handover', label: 'Entrega Final' },
     ]},
@@ -320,11 +325,14 @@
     'Comercial | Pré-venda': ['formularios', 'controle-cotacoes', 'cotacoes-fornecedor', 'propostas', 'contratos-sociais'],
     'Financeiro & Preços': ['cadastro-custos', 'precificacao', 'aval-financeiro', 'emissao-nf'],
     'Contratos & Jurídico': ['contrato-venda-equipamentos', 'aval-juridico', 'juridico'],
-    'Suprimentos & Importação': ['importacao', 'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos', 'compras', 'cotacoes-varejo', 'pedidos-acompanhamento'],
-    'Engenharia & Produto': ['engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'desenho-tecnico', 'solicitacoes-produto', 'ficha-tecnica', 'ncm-catalogo', 'linha-do-tempo'],
+    'Suprimentos & Importação': ['importacao', 'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos', 'ncm-catalogo', 'compras', 'cotacoes-varejo', 'pedidos-acompanhamento'],
+    'Engenharia & Produto': ['engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'solicitacoes-produto', 'ficha-tecnica', 'ncm-catalogo', 'linha-do-tempo'],
+    /* 29/10/2026: 'cronograma' mudou de lugar no menu (ver shell.jsx) — fica também aqui.
+       Mantido também em 'Obras & Instalação' de propósito, pra quem já tinha esse
+       grupo alocado não perder a alçada (mesmo padrão de Matérias-Primas/Produtos, 18/10). */
     'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'mapa-obras', 'cronograma', 'art'],
-    'Entrega & Documentação': ['databook', 'handover'],
-    'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador'],
+    'Entrega & Documentação': ['central-documentos', 'databook', 'handover', 'repositorio-documentos'],
+    'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador', 'cronograma'],
     'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'pcp', 'mes', 'mes-cadastros', 'relatorios-pcp', 'expedicao', 'separacao', 'etiquetas', 'fabricacao-corrimao', 'fabricacao-corte'],
     /* Fabricação saiu de Logística Interna (17/10/2026). Logística Interna mantém a lista completa de propósito: quem já tinha o grupo alocado não perde nada. */
     /* Matérias-Primas e Produtos passaram a morar aqui no menu (18/10/2026); continuam também em Cadastros Mestres acima, para ninguém perder a alçada já concedida. */

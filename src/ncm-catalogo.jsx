@@ -94,10 +94,6 @@ function SitBadge({ s }) {
   return <Badge variant={variant} dot>{label}</Badge>;
 }
 
-function nextCodigo(list) {
-  const max = list.reduce((m, x) => Math.max(m, parseInt(x.codigo, 10) || 0), 0);
-  return String(max + 1).padStart(10, "0");
-}
 function nextOpCodigo(list) {
   const max = list.reduce((m, x) => {
     const n = parseInt(String(x.codigo || "").replace(/\D/g, ""), 10) || 0;
@@ -106,111 +102,10 @@ function nextOpCodigo(list) {
   return "OPE_" + (max + 1);
 }
 
-/* ---------- MODAL: Novo Produto do Catálogo ---------- */
-function ModalProdutoCatalogo({ operadores, proximoCodigo, onClose, onSaved }) {
-  const [f, setF] = React.useState({
-    cpf_cnpj_raiz:"54123456", modalidade:"IMPORTACAO", ncm:"", ncm_descricao:"",
-    denominacao:"", detalhamento:"", unidade_medida:"UNIDADE", codigo_interno:"",
-  });
-  const [atributos, setAtributos] = React.useState([]);
-  const [fabricantes, setFabricantes] = React.useState([]);
-  const [saving, setSaving] = React.useState(false);
-  const set = (k, v) => setF(p => ({ ...p, [k]: v }));
-
-  const toggleFab = (cod) => setFabricantes(p => p.includes(cod) ? p.filter(x => x !== cod) : [...p, cod]);
-  const addAttr = () => setAtributos(p => [...p, { nome:"", valor:"" }]);
-  const setAttr = (i, k, v) => setAtributos(p => p.map((a, idx) => idx === i ? { ...a, [k]: v } : a));
-  const rmAttr = (i) => setAtributos(p => p.filter((_, idx) => idx !== i));
-
-  const save = async (ativar) => {
-    if (!f.ncm.trim()) return window.toast("NCM é obrigatória.", "warning");
-    if (!f.denominacao.trim()) return window.toast("Denominação do produto é obrigatória.", "warning");
-    setSaving(true);
-    const id = "CP-" + Date.now().toString().slice(-6);
-    const { error } = await window.__VP_SB.sb.from("catalogo_produtos").insert({
-      id, codigo: proximoCodigo, versao: 1,
-      situacao: ativar ? "ativado" : "rascunho",
-      cpf_cnpj_raiz: f.cpf_cnpj_raiz, modalidade: f.modalidade,
-      ncm: f.ncm.replace(/\D/g, ""), ncm_descricao: f.ncm_descricao || null,
-      denominacao: f.denominacao, detalhamento: f.detalhamento || null,
-      unidade_medida: f.unidade_medida || null, codigo_interno: f.codigo_interno || null,
-      atributos: atributos.filter(a => a.nome.trim()), fabricantes,
-    });
-    setSaving(false);
-    if (error) return window.toast("Erro: " + error.message, "error");
-    window.toast(ativar ? "Produto ativado no catálogo!" : "Rascunho salvo.", "success");
-    onSaved?.(); onClose();
-  };
-
-  const lbl = (t, req) => <label className="up-eyebrow muted">{t}{req ? " *" : ""}</label>;
-
-  return (
-    <Modal title="Novo Produto · Catálogo DUIMP" onClose={onClose} width={620}
-      footer={<>
-        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button variant="outline" onClick={() => save(false)} disabled={saving}>Salvar rascunho</Button>
-        <Button variant="primary" onClick={() => save(true)} disabled={saving}>{saving ? "Salvando…" : "Salvar e ativar"}</Button>
-      </>}>
-      <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-        <div className="up-eyebrow muted" style={{ fontSize:9, letterSpacing:".08em" }}>Dados não retificáveis</div>
-        <div className="grid-3" style={{ gap:12 }}>
-          <div className="stack" style={{ gap:4 }}>{lbl("CNPJ raiz", true)}
-            <input className="input" value={f.cpf_cnpj_raiz} onChange={e => set("cpf_cnpj_raiz", e.target.value)} placeholder="54123456"/></div>
-          <div className="stack" style={{ gap:4 }}>{lbl("Modalidade", true)}
-            <select className="input" value={f.modalidade} onChange={e => set("modalidade", e.target.value)}>
-              <option value="IMPORTACAO">Importação</option><option value="EXPORTACAO">Exportação</option></select></div>
-          <div className="stack" style={{ gap:4 }}>{lbl("NCM", true)}
-            <input className="input" value={f.ncm} onChange={e => set("ncm", e.target.value)} placeholder="8431.31.00"/></div>
-        </div>
-        <div className="stack" style={{ gap:4 }}>{lbl("Descrição da NCM")}
-          <input className="input" value={f.ncm_descricao} onChange={e => set("ncm_descricao", e.target.value)} placeholder="Partes de elevadores, monta-cargas ou escadas rolantes"/></div>
-
-        <div className="up-eyebrow muted" style={{ fontSize:9, letterSpacing:".08em", marginTop:4 }}>Descrição do produto</div>
-        <div className="stack" style={{ gap:4 }}>{lbl("Denominação do produto", true)}
-          <input className="input" maxLength={100} value={f.denominacao} onChange={e => set("denominacao", e.target.value)} placeholder="Identificação primária — em português, sem abreviações"/>
-          <span className="muted small mono">{f.denominacao.length}/100</span></div>
-        <div className="stack" style={{ gap:4 }}>{lbl("Detalhamento complementar")}
-          <textarea className="input" rows={4} maxLength={3700} value={f.detalhamento} onChange={e => set("detalhamento", e.target.value)} style={{ resize:"vertical", fontFamily:"inherit" }} placeholder="Informações adicionais necessárias à classificação fiscal (material, dimensões, norma técnica, aplicação…)"/>
-          <span className="muted small mono">{f.detalhamento.length}/3700</span></div>
-        <div className="grid-2" style={{ gap:12 }}>
-          <div className="stack" style={{ gap:4 }}>{lbl("Unidade de medida estatística")}
-            <input className="input" value={f.unidade_medida} onChange={e => set("unidade_medida", e.target.value)} placeholder="UNIDADE"/></div>
-          <div className="stack" style={{ gap:4 }}>{lbl("Código interno do produto")}
-            <input className="input" value={f.codigo_interno} onChange={e => set("codigo_interno", e.target.value)} placeholder="VPER-PRT-FER-800-CC"/></div>
-        </div>
-
-        <div className="up-eyebrow muted" style={{ fontSize:9, letterSpacing:".08em", marginTop:4 }}>Atributos da NCM</div>
-        {atributos.map((a, i) => (
-          <div key={i} className="row gap-2">
-            <input className="input" style={{ flex:1 }} value={a.nome} onChange={e => setAttr(i, "nome", e.target.value)} placeholder="Atributo (ex.: Material predominante)"/>
-            <input className="input" style={{ flex:1 }} value={a.valor} onChange={e => setAttr(i, "valor", e.target.value)} placeholder="Valor (ex.: Aço inoxidável)"/>
-            <Button variant="ghost" size="sm" icon="trash" onClick={() => rmAttr(i)}/>
-          </div>
-        ))}
-        <Button variant="outline" size="sm" icon="plus" onClick={addAttr}>Adicionar atributo</Button>
-
-        {operadores.length > 0 ? (
-          <>
-            <div className="up-eyebrow muted" style={{ fontSize:9, letterSpacing:".08em", marginTop:4 }}>Fabricantes / produtores vinculados</div>
-            <div className="stack" style={{ gap:6 }}>
-              {operadores.filter(o => o.situacao === "ativado").map(o => (
-                <label key={o.codigo} className="row gap-2" style={{ cursor:"pointer", fontSize:12 }}>
-                  <input type="checkbox" checked={fabricantes.includes(o.codigo)} onChange={() => toggleFab(o.codigo)}/>
-                  <span>{o.nome} <span className="muted mono">({paisNome(o.pais)} · {o.codigo})</span></span>
-                </label>
-              ))}
-            </div>
-          </>
-        ) : null}
-      </div>
-    </Modal>
-  );
-}
-
 /* ---------- MODAL: Novo Operador Estrangeiro ---------- */
 function ModalOperadorEstrangeiro({ onClose, onSaved }) {
   const [f, setF] = React.useState({
-    cpf_cnpj_raiz:"54123456", pais:"CN", nome:"", logradouro:"", cidade:"",
+    cpf_cnpj_raiz:"15822325", pais:"CN", nome:"", logradouro:"", cidade:"",
     tin:"", email:"", codigo_interno:"", codigo_postal:"", subdivisao:"",
   });
   const [saving, setSaving] = React.useState(false);
@@ -247,7 +142,7 @@ function ModalOperadorEstrangeiro({ onClose, onSaved }) {
       <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
         <div className="grid-2" style={{ gap:12 }}>
           <div className="stack" style={{ gap:4 }}>{lbl("CNPJ raiz", true)}
-            <input className="input" value={f.cpf_cnpj_raiz} onChange={e => set("cpf_cnpj_raiz", e.target.value)} placeholder="54123456"/></div>
+            <input className="input" value={f.cpf_cnpj_raiz} onChange={e => set("cpf_cnpj_raiz", e.target.value)} placeholder="15822325"/></div>
           <div className="stack" style={{ gap:4 }}>{lbl("País do operador", true)}
             <select className="input" value={f.pais} onChange={e => set("pais", e.target.value)}>
               {CAT_PAISES.map(p => <option key={p.c} value={p.c}>{p.n} ({p.c})</option>)}</select></div>
@@ -386,7 +281,6 @@ function NcmCatalogoPage({ setRoute }) {
   const [search, setSearch] = React.useState("");
   const [selProd, setSelProd] = React.useState(null);
   const [selOp, setSelOp] = React.useState(null);
-  const [showProd, setShowProd] = React.useState(false);
   const [showOp, setShowOp] = React.useState(false);
   const [sel, setSel] = React.useState(() => new Set());
   const [showBuilder, setShowBuilder] = React.useState(false);
@@ -504,8 +398,8 @@ function NcmCatalogoPage({ setRoute }) {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Cadastros · Produtos</div>
-          <h1 className="page-head__title">Catálogo de Produtos</h1>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Importação · Catálogo Siscomex</div>
+          <h1 className="page-head__title">Catálogo Siscomex</h1>
           <p className="page-head__sub">Catálogo do Portal Único Siscomex — produtos e operadores estrangeiros usados na DUIMP. Cadastro obrigatório antes do registro da declaração.</p>
         </div>
         <div className="page-head__r">
@@ -653,7 +547,6 @@ function NcmCatalogoPage({ setRoute }) {
         onClose={() => setPreviewPedido(null)}
         onSaved={() => {}}/>}
 
-      {showProd && <ModalProdutoCatalogo operadores={operadores} proximoCodigo={nextCodigo(produtos)} onClose={() => setShowProd(false)} onSaved={reload}/>}
       {showOp && <ModalOperadorEstrangeiro onClose={() => setShowOp(false)} onSaved={reload}/>}
       {delTarget && (
         <ModalConfirmarExclusao
@@ -698,7 +591,7 @@ function NcmKanbanPage({ setRoute, setSubsel }) {
     { key: "AGUARD_JURIDICO",  label: "Aguard. jurídico",  hint: "Aguarda validação do código NCM" },
     { key: "APROVADO",         label: "Aprovado jurídico", hint: "Pronto para exportar" },
     { key: "APROVADO_PRONTO",  label: "Pronto LogComex",   hint: "Em cadastro pelo time de importação" },
-    { key: "CADASTRADO",       label: "Cadastrado Siscomex", hint: "Produto ATIVO disponível para Duimp" },
+    { key: "CADASTRADO",       label: "Cadastrado Siscomex", hint: "Controle manual do processo: mover o card não cadastra nada no catálogo" },
   ];
 
   const byCol = {};
@@ -757,9 +650,10 @@ function NcmKanbanPage({ setRoute, setSubsel }) {
               onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(null); }}
               onDrop={(e) => { e.preventDefault(); handleDrop(c.key); }}>
               <div className={"kanban__col-head" + (byCol[c.key].length > 0 ? " is-active" : "")}>
-                <span className="kanban__col-title">{c.label}</span>
+                <span className="kanban__col-title" title={c.hint}>{c.label}</span>
                 <span className="kanban__col-count">{byCol[c.key].length}</span>
               </div>
+              {c.key === "CADASTRADO" && <div style={{ fontSize: 10, color: 'var(--fg3)', padding: '4px 8px' }}>{c.hint}</div>}
               <div className="kanban__col-body">
                 {byCol[c.key].map(s => (
                   <div key={s.id}

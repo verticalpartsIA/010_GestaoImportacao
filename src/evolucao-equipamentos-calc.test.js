@@ -82,7 +82,7 @@ test('ocorrências: rolagens do navio, canal vermelho, previsão vencida e extra
 
 test('ocorrências: canal verde e embarque sem rolagem não geram nada; porto parado vira logística', () => {
   assert.equal(C.ocorrencias({ canal_parametrizacao: 'Verde', etd_original: '2026-08-01', etd_atual: '2026-08-01' }, null, { hoje }).lista.length, 0);
-  const emb = { eta_santos: '2026-09-14', etd_atual: '2026-08-16' };
+  const emb = { eta_santos: '2026-09-14', presenca_carga: '2026-09-14', etd_atual: '2026-08-16' };
   const linha = C.montarLinha({ status_master: 'Importação' }, null, { hoje, embarque: emb });
   const r = C.ocorrencias(emb, linha, { hoje });
   assert.equal(r.porCategoria.logistica.length, 1);
@@ -98,4 +98,20 @@ test('ocorrências: rolagem com data suspeita é marcada para conferir', () => {
   assert.equal(r.lista.filter((o) => o.conferir).length, 2);
   assert.match(r.lista[0].detalhe, /conferir/);
   assert.equal(r.diasAtraso, 22);
+});
+
+test('porto: presença de carga é a chegada real e vence a estimativa (ETA)', () => {
+  const base = { etd_atual: '2026-09-01' };
+  const real = C.montarLinha({ status_master: 'Importação' }, null, { hoje, embarque: { ...base, eta_santos: '2026-10-25', presenca_carga: '2026-10-10' } });
+  assert.equal(est(real, 'porto'), 'feito');
+  assert.equal(real.passos.find((p) => p.key === 'porto').fonte, 'presenca');
+  const est1 = C.montarLinha({ status_master: 'Importação' }, null, { hoje, embarque: { ...base, eta_santos: '2026-11-05' } });
+  assert.equal(est(est1, 'porto'), 'previsto');
+  assert.equal(est1.passos.find((p) => p.key === 'porto').fonte, 'eta');
+});
+
+test('ocorrências: ETA passado sem presença de carga não gera "dias desde Santos"', () => {
+  const emb = { eta_santos: '2026-09-14', etd_atual: '2026-08-16' };
+  const linha = C.montarLinha({ status_master: 'Importação' }, null, { hoje, embarque: emb });
+  assert.equal(C.ocorrencias(emb, linha, { hoje }).porCategoria.logistica.length, 0);
 });

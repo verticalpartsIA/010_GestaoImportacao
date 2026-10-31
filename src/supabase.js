@@ -237,6 +237,15 @@
       sb.from('contratos_instalador').select('id, valor_total, proposta_id, ativos_indices, status'),
     ]);
 
+    /* #1216 A.1: o supabase-js não lança exceção em erro do PostgREST — sem isto, uma tabela que falha (RLS, rede)
+       virava lista vazia e o Dashboard mostrava zeros como se estivesse tudo certo. `erros` lista o que não carregou
+       (nome legível); a tela avisa. Os números seguem calculados com o que veio. */
+    const ROTULOS = ['leads', 'alertas', 'tarefas', 'embarques', 'contratos', 'comissões', 'etapas (gatilhos)', 'fichas técnicas',
+      'catálogo', 'propostas', 'avais financeiros', 'formulários', 'clientes', 'contratos de instalador'];
+    const erros = [lR, alertR, tarR, embR, ctR, comR, gatR, fichasR, catalogoR, propR, avaisR, formR, cliR, instR]
+      .map((r, i) => (r && r.error ? ROTULOS[i] : null)).filter(Boolean);
+    if (erros.length) console.warn('[Dashboard] consultas com erro:', erros);
+
     const leads     = lR.data    || [];
     const alertas   = (alertR.data || []).map(a => ({ ...a, time: timeAgo(a.created_at) }));
     const tarefas   = tarR.data  || [];
@@ -326,6 +335,7 @@
       kpis, pipelineStages: comercial.pipelineStages, originBars: comercial.originBars,
       alertasCriticos: admin.alertasCriticos.length,
       ganttToday: gantt.ganttToday, ganttProjetos: gantt.ganttProjetos,
+      erros,
     };
   }
 

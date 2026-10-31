@@ -101,7 +101,9 @@
     const passos = [{ key: 'aberta', estado: 'feito', data: paraData(d && d.created_at) }];
 
     const embarque = etapa('embarque', emb.etd_atual || emb.etd_original, null, hoje);
-    const porto = etapa('porto', emb.eta_santos, null, hoje);
+    /* Chegada REAL = presença de carga; sem ela vale a estimativa (ETA), marcada como estimada. */
+    const porto = etapa('porto', emb.presenca_carga || emb.eta_santos, null, hoje);
+    porto.fonte = emb.presenca_carga ? 'presenca' : (emb.eta_santos ? 'eta' : null);
     const obra = etapa('obra', e.chegada_real_material || (d && d.equipamento_entregue_em) || emb.data_entrega,
       e.previsao_chegada_material || emb.data_limite_entrega, hoje);
     if (obra.estado !== 'feito' && entregueNaObra) { obra.estado = 'feito'; obra.data = obra.data && obra.data <= hoje ? obra.data : null; }
@@ -208,7 +210,7 @@
         detalhe: `${nomeEmb ? nomeEmb + ': ' : ''}parametrização ${grave ? 'com conferência física/documental (costuma atrasar a liberação)' : 'com conferência documental'}` });
     }
     const passo = (k) => ((linha && linha.passos) || []).find((p) => p.key === k) || {};
-    const eta = paraData(e.eta_santos);
+    const eta = paraData(e.presenca_carga);
     if (eta && passo('porto').estado === 'feito' && passo('obra').estado !== 'feito' && passo('obra').estado !== 'pulado') {
       const n = dias(eta, hoje);
       if (n > DIAS_PORTO_SEM_ENTREGA) lista.push({ categoria: 'logistica', etapa: 'obra', origem: 'interna', data: eta, dias: n, gravidade: n > 30 ? 'alta' : 'media',

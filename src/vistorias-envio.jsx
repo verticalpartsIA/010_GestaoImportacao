@@ -11,9 +11,8 @@
    dossiê de engenharia reversa do Btime no README.md pro modelo de
    referência).
 
-   O link gerado no despacho ainda não abre nada (a página pública de
-   execução no celular é a Fase 3, não construída aqui) — o que existe
-   até aqui é só o registro da Atividade + o link/token pra ela.
+   O link gerado no despacho abre a página pública de execução no celular
+   (vistoria-execucao.html, rota /vistoria/:token).
    Fase 4: resultado alimentando src/vistorias-obras.jsx.
    ============================================================ */
 
@@ -21,7 +20,12 @@
    interno (obras legadas, sem cotação — ver resolverPorMasterId) senão. */
 function veVpobLabel(obra) {
   if (!obra) return '';
-  if (obra.numero_cotacao != null) return 'VPOB-' + String(obra.numero_cotacao).padStart(4, '0');
+  if (obra.codigo_obra) return obra.codigo_obra; // código oficial da obra (dossier_obra.codigo_obra)
+  if (obra.numero_cotacao != null) {
+    // Fonte única da fórmula (MasterIdEngine); a reimplementação só fica como contingência.
+    if (window.MasterIdEngine) return window.MasterIdEngine.etapaId('obra', obra.numero_cotacao);
+    return 'VPOB-' + String(obra.numero_cotacao).padStart(4, '0');
+  }
   return obra.id;
 }
 
@@ -546,7 +550,7 @@ function DespacharVistoria() {
     const sb = window.__VP_SB?.sb;
     if (!sb) return;
     Promise.all([
-      sb.from('dossier_obra').select('id, client_name, building_name, numero_cotacao').order('client_name'),
+      sb.from('dossier_obra').select('id, client_name, building_name, numero_cotacao, codigo_obra').order('client_name'),
       sb.from('equipamentos_obra').select('id, dossier_id, numero_serie'),
       Store.listarQuestionarios(),
       sb.from('colaboradores_vpsistema').select('id, nome').eq('is_active', true).order('nome'),
