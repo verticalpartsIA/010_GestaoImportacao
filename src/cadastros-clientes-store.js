@@ -295,8 +295,9 @@
       cliente = await criar({ razao_social: nome, contato: lead.contact || null, telefone: lead.phone || null, email: lead.email || null,
         contribuinte_icms: typeof lead.contribuinte_icms === 'boolean' ? lead.contribuinte_icms : null });
     }
-    const { error: errVinc } = await c.from('leads').update({ cliente_id: cliente.id }).eq('id', lead.id);
+    const { data: vincRows, error: errVinc } = await c.from('leads').update({ cliente_id: cliente.id }).eq('id', lead.id).select('id');
     if (errVinc) throw errVinc;
+    if (!(vincRows || []).length) throw new Error('o vínculo do cliente não foi gravado no lead (sem permissão ou lead não encontrado)');
     await vincularQuadrosDoLead(lead.id, cliente.id);
     return cliente.id;
   }

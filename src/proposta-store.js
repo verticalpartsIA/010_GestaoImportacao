@@ -422,8 +422,9 @@
       if (!form?.lead_id) return;
       const { data: leadRow } = await c.from('leads').select('id, building, contact, phone, email, cliente_id, contribuinte_icms').eq('id', form.lead_id).maybeSingle();
       if (!leadRow) return;
-      const { error: errLead } = await c.from('leads').update({ status: 'Convertido' }).eq('id', leadRow.id);
+      const { data: leadRows, error: errLead } = await c.from('leads').update({ status: 'Convertido' }).eq('id', leadRow.id).select('id');
       if (errLead) throw errLead;
+      if (!(leadRows || []).length) throw new Error('o lead não foi marcado como Convertido (sem permissão ou lead não encontrado)');
       /* Auditoria #843 B2: o cliente certo do negócio é o do Formulário (achado pelo CNPJ). Se o Lead ainda não tem cliente e o
          Formulário tem, grava ESTE no Lead antes de qualquer busca por nome — criarOuVincularDeLead casa pelo nome do prédio e,
          quando ele difere da razão social, criava um cliente duplicado. Lead que já tem cliente, ou Formulário sem cliente (ou
@@ -432,8 +433,9 @@
         const { data: cli, error: errCli } = await c.from('clientes').select('id').eq('id', form.cliente_id).maybeSingle();
         if (errCli) throw errCli;
         if (cli) {
-          const { error: errVinc } = await c.from('leads').update({ cliente_id: cli.id }).eq('id', leadRow.id);
+          const { data: vincRows, error: errVinc } = await c.from('leads').update({ cliente_id: cli.id }).eq('id', leadRow.id).select('id');
           if (errVinc) throw errVinc;
+          if (!(vincRows || []).length) throw new Error('o vínculo do cliente não foi gravado no lead (sem permissão ou lead não encontrado)');
           return;
         }
       }

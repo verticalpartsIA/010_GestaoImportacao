@@ -155,7 +155,7 @@ for (const [arquivo, chave, extra] of [['cadastros-clientes-store.js', 'Cadastro
 }
 
 /* T8 #1228 — lead com nome igual a vários clientes */
-function montarHomonimo(lista) {
+function montarHomonimo(lista, { zeroLinhas = false } = {}) {
   const vinc = {};
   const sb = {
     from(tab) {
@@ -165,7 +165,8 @@ function montarHomonimo(lista) {
         eq(col, val) { if (patch && tab === 'leads') vinc.cliente_id = patch.cliente_id; return q; },
         update(p) { patch = p; return q; },
         maybeSingle: async () => ({ data: { cliente_id: null }, error: null }),
-        then(res) { return Promise.resolve(tab === 'clientes' && !patch ? { data: lista, error: null } : { data: [], error: null }).then(res); },
+        // update de leads termina em .select('id'): devolve a linha alterada (ou nenhuma, simulando RLS barrando sem erro)
+        then(res) { return Promise.resolve(tab === 'clientes' && !patch ? { data: lista, error: null } : { data: (tab === 'leads' && patch && !zeroLinhas) ? [{ id: 'L1' }] : [], error: null }).then(res); },
       };
       return q;
     },
@@ -184,6 +185,14 @@ test('lead → cliente: desempata pelo telefone e prefere ativo', async () => {
   assert.strictEqual(await window.CadastrosClientesStore.criarOuVincularDeLead({ id: 'L1', building: 'ACME', phone: '+55 11 98888-7777' }), 'b');
   const s2 = montarHomonimo([{ id: 'a', ativo: false }, { id: 'b' }]);
   assert.strictEqual(await s2.window.CadastrosClientesStore.criarOuVincularDeLead({ id: 'L1', building: 'ACME' }), 'b');
+});
+
+test('lead → cliente: update de leads barrado (0 linhas, sem erro) não passa em silêncio', async () => {
+  const { window } = montarHomonimo([{ id: 'a', email: 'x@a.com' }], { zeroLinhas: true });
+  await assert.rejects(
+    () => window.CadastrosClientesStore.criarOuVincularDeLead({ id: 'L1', building: 'ACME', email: 'x@a.com' }),
+    /não foi gravado no lead/
+  );
 });
 
 /* T6 #1226 — vínculo do fornecedor pelo nome */
