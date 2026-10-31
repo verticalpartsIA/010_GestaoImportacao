@@ -13,7 +13,7 @@ const vm = require('node:vm');
 
 const src = fs.readFileSync(path.join(__dirname, 'proposta-store.js'), 'utf8');
 
-function montar({ form, lead, clientes = [], errCliente = null }) {
+function montar({ form, lead, clientes = [], errCliente = null, zeroLinhas = false }) {
   const updates = [];
   const vinculos = [];
   const sb = {
@@ -24,8 +24,15 @@ function montar({ form, lead, clientes = [], errCliente = null }) {
         eq(col, val) { filtros[col] = val; return q; },
         update(patch) {
           updates.push({ nome, patch, filtros });
-          const r = Promise.resolve({ error: null });
-          r.eq = (col, val) => { updates[updates.length - 1].filtros[col] = val; return Promise.resolve({ error: null }); };
+          // simula o PostgREST: update().eq().select('id') devolve as linhas alteradas; barrado por RLS = 0 linhas, sem erro
+          const resp = () => ({ error: null, data: zeroLinhas ? [] : [{ id: 'x' }] });
+          const r = Promise.resolve(resp());
+          r.eq = (col, val) => {
+            updates[updates.length - 1].filtros[col] = val;
+            const e = Promise.resolve(resp());
+            e.select = () => Promise.resolve(resp());
+            return e;
+          };
           return r;
         },
         maybeSingle: async () => {
@@ -93,6 +100,13 @@ test('erro ao consultar o cliente do formulário vira falha do passo (não é en
   const falhas = Array.from(await store.executarEfeitosAssinatura(proposta, {}));
   assert.ok(falhas.some((f) => f.startsWith('lead→cliente') && f.includes('boom')), JSON.stringify(falhas));
   assert.deepStrictEqual(vinculos, [], 'não deve cair no vínculo por nome quando a consulta falhou');
+});
+
+test('update de leads barrado (0 linhas, sem erro) vira falha do passo e não segue para o vínculo por nome', async () => {
+  const { store, vinculos } = montar({ form: { lead_id: 'LD-1', cliente_id: 'cli-form' }, lead: leadSemCliente, clientes: [{ id: 'cli-form' }], zeroLinhas: true });
+  const falhas = Array.from(await store.executarEfeitosAssinatura(proposta, {}));
+  assert.ok(falhas.some((f) => f.startsWith('lead→cliente') && f.includes('Convertido')), JSON.stringify(falhas));
+  assert.deepStrictEqual(vinculos, []);
 });
 
 test('formulário sem lead: o passo não faz nada', async () => {

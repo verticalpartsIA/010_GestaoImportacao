@@ -262,9 +262,14 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
 
     let error = null;
     try {
-      ({ error } = isEdit
-        ? await sb.from('leads').update(payload).eq('id', id)
-        : await sb.from('leads').insert({ id, ...payload, date: new Date().toISOString().slice(0, 10) }));
+      if (isEdit) {
+        // .select('id') confirma que a linha foi mesmo alterada: update barrado por RLS volta sem erro e sem linhas.
+        const r = await sb.from('leads').update(payload).eq('id', id).select('id');
+        error = r.error || ((r.data || []).length ? null : new Error('o lead não foi atualizado (sem permissão ou não encontrado)'));
+      } else {
+        // insert barrado por RLS já devolve erro explícito; não precisa do .select('id').
+        ({ error } = await sb.from('leads').insert({ id, ...payload, date: new Date().toISOString().slice(0, 10) }));
+      }
     } catch (e) {
       error = e;
     }
@@ -314,8 +319,9 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
           contribuinte_icms: f.contribuinteIcms === 'true',
         });
         if (cliente.id !== (isEdit ? lead.cliente_id : null)) {
-          const { error: vincErr } = await sb.from('leads').update({ cliente_id: cliente.id }).eq('id', id);
+          const { data: vincRows, error: vincErr } = await sb.from('leads').update({ cliente_id: cliente.id }).eq('id', id).select('id');
           if (vincErr) throw vincErr;
+          if (!(vincRows || []).length) throw new Error('o vínculo do cliente não foi gravado no lead (sem permissão ou lead não encontrado)');
         }
         clienteId = cliente.id;
         clienteAtualizado = cliente;
