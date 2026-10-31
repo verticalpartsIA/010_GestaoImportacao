@@ -47,3 +47,19 @@ test('A.4 — link de projeto inexistente avisa e limpa a URL', async ({ page })
   await expect(page.getByText('Este projeto não está mais entre os projetos em andamento.')).toBeVisible({ timeout: 45_000 });
   await expect(page).toHaveURL(/\/geral\/dashboard\/?$/);
 });
+
+test('B.1 — Gantt, Lista e Kanban têm URL própria e sobrevivem ao F5', async ({ page }) => {
+  await preparar(page, {});
+  await page.goto('/geral/dashboard');
+  await expect(page.getByRole('button', { name: 'Gantt' })).toHaveClass(/is-active/, { timeout: 45_000 });
+  await page.getByRole('button', { name: 'Lista' }).click();
+  await expect(page).toHaveURL(/\/geral\/dashboard\/lista$/);
+  await page.getByRole('button', { name: 'Kanban' }).click();
+  await expect(page).toHaveURL(/\/geral\/dashboard\/kanban$/);
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Kanban' })).toHaveClass(/is-active/, { timeout: 45_000 });
+  await page.goBack();
+  await expect(page.getByRole('button', { name: 'Lista' })).toHaveClass(/is-active/);
+  await page.getByRole('button', { name: 'Gantt' }).click();
+  await expect(page).toHaveURL(/\/geral\/dashboard\/?$/);
+});

@@ -175,15 +175,21 @@ function ModalNovaTask({ role, onClose, onSaved }) {
 function Dashboard({ role, setRoute, setSubsel }) {
   const [sbData, setSbData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
-  const [projectView, setProjectView] = React.useState('gantt');
+  // Visão dos Projetos em Andamento na URL: /geral/dashboard (Gantt, padrão), /geral/dashboard/lista, /geral/dashboard/kanban.
+  const VISOES = ['gantt', 'lista', 'kanban'];
+  const [projectView, setProjectView] = window.useRouteTab('dashboard', 'gantt', VISOES);
   const [period, setPeriod] = React.useState('Hoje');
   const [showTask, setShowTask] = React.useState(false);
   // Projeto aberto no modal de detalhe refletido na URL (/geral/dashboard/<id>) —
   // 3 pontos de entrada (Gantt/Lista/Kanban) abrem o MESMO modal; antes era só
   // useState, perdido no F5/Voltar e sem link direto pra um projeto específico.
-  const [rotaProjetoId] = window.useRotaId('dashboard');
-  const abrirProjeto = (p) => { if (window.VpRouter) window.VpRouter.navigate('dashboard', p && p.id != null ? String(p.id) : null); };
-  const fecharProjeto = () => { if (window.VpRouter) window.VpRouter.navigate('dashboard', null); };
+  // Projeto aberto: /geral/dashboard/<visão>/<id>. Link antigo /geral/dashboard/<id> (sem visão) continua valendo.
+  window.useRotaId('dashboard'); // só para re-renderizar quando a URL muda
+  const locDash = (window.VpRouter && window.VpRouter.parseLocation()) || {};
+  const rotaProjetoId = locDash.route === 'dashboard' && locDash.id
+    ? (VISOES.indexOf(locDash.id) !== -1 ? (locDash.tab || '') : locDash.id) : '';
+  const abrirProjeto = (p) => { if (window.VpRouter && p && p.id != null) window.VpRouter.navigate('dashboard', projectView, String(p.id)); };
+  const fecharProjeto = () => { if (window.VpRouter) window.VpRouter.navigate('dashboard', projectView === 'gantt' ? null : projectView); };
   const periods = ['Hoje','7 dias','30 dias','90 dias'];
   /* #1216 A.2: antes, passados 3 s sem resposta, a tela mostrava KPIs e alertas ZERADOS como se fossem o resultado
      real. Agora continua "carregando" e, depois de 3 s, só avisa que está demorando — nunca inventa zero.

@@ -200,7 +200,7 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | (LeadDetailView em comercial.jsx) | (acionado por um handler — ver o código) | `formulario-elevador` | `/comercial/formulario-elevador` | `comercial.jsx:1113` |
 | (LeadDetailView em comercial.jsx) | Voltar para Leads | `leads` | `/crm/leads` | `comercial.jsx:1215` |
 | (NcmDashboardWidget em ncm-catalogo.jsx) | Ver todas | `ncm-kanban` | `/engenharia/ncm-kanban` | `ncm-catalogo.jsx:885` |
-| (OndeParouWidget em dashboard.jsx) | Ver Prazos & Pendências | `financeiro` | `/adm-financeiro/financeiro` | `dashboard.jsx:479` |
+| (OndeParouWidget em dashboard.jsx) | Ver Prazos & Pendências | `financeiro` | `/adm-financeiro/financeiro` | `dashboard.jsx:485` |
 | (PrecificacaoDetail em precificacao.jsx) | Gerar proposta | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:298` |
 | (RPPainelProducao em painel-producao-pcp.jsx) | (acionado por um handler — ver o código) | `pcp` | `/logistica/pcp` | `painel-producao-pcp.jsx:100` |
 | (TabEquipamentos em dossier-obra.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `dossier-obra.jsx:1166` |
@@ -216,9 +216,9 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | cotacao-quadro-comando | Abrir | `formulario-quadro-comando` | `/comercial/formulario-quadro-comando` | `cotacao-quadro-comando.jsx:228` |
 | cotacoes-fornecedor | (acionado por um handler — ver o código) | `cotacao-fornecedor-detail` | `/comercial/cotacao-fornecedor-detail` | `cotacoes-fornecedor.jsx:231` |
 | crm-canais | (acionado por um handler — ver o código) | `lead-detail` | `/crm/lead-detail` | `crm.jsx:113` |
-| dashboard | Ir para Leads | `leads` | `/crm/leads` | `dashboard.jsx:282` |
-| dashboard | (acionado por um handler — ver o código) | `notificacoes` | `/geral/notificacoes` | `dashboard.jsx:265` |
-| dashboard | (acionado por um handler — ver o código) | `notificacoes` | `/geral/notificacoes` | `dashboard.jsx:298` |
+| dashboard | Ir para Leads | `leads` | `/crm/leads` | `dashboard.jsx:288` |
+| dashboard | (acionado por um handler — ver o código) | `notificacoes` | `/geral/notificacoes` | `dashboard.jsx:271` |
+| dashboard | (acionado por um handler — ver o código) | `notificacoes` | `/geral/notificacoes` | `dashboard.jsx:304` |
 | databook | (acionado por um handler — ver o código) | `status-obras` | `/engenharia/status-obras` | `entrega.jsx:13` |
 | emissao-nf | Expedição → | `expedicao` | `/logistica/expedicao` | `emissao-nf.jsx:215` |
 | emissao-nf | (acionado por um handler — ver o código) | `pcp` | `/logistica/pcp` | `emissao-nf.jsx:199` |
@@ -279,7 +279,7 @@ São abas de formulário/modal, filtros, modos de visualização e passos de ass
 | `lista-fios.jsx:46` | ListaFiosView | `aba` | `'fios'` | (modal/componente interno) |
 | `logistica.jsx:1912` | EmailInbox | `modoCompose` | `'responder'` | `inbox` |
 | `ncm-catalogo.jsx:574` | NcmKanbanPage | `view` | `"kanban"` | `ncm-kanban` |
-| `pi.jsx:445` | PIForm | `tab` | `'id'` | `pi-importacao` |
+| `pi.jsx:451` | PIForm | `tab` | `'id'` | `pi-importacao` |
 | `precificacao-elevador.jsx:484` | ModalAcrescentarEquipamento | `modo` | `grupos.length ? 'identico' : '` | (modal/componente interno) |
 | `precificacao-memoria.jsx:46` | PZMemoriaCalculo | `aba` | `'resumo'` | (modal/componente interno) |
 | `precificacao.jsx:20` | PrecificacaoPage | `modo` | `'elevador'` | `precificacao` |
