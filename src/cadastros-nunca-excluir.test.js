@@ -203,3 +203,27 @@ test('fornecedor: liga pelo nome só quando bate com UM cadastro', () => {
   assert.strictEqual(S.idPorNome(lista, 'Glarie', 'a1'), 'g', 'vínculo anterior que não casa mais é trocado');
   assert.strictEqual(S.idPorNome(lista, ''), null);
 });
+
+/* T5 #1225 — RFQ de importação liga o fornecedor ao cadastro */
+test('fornecedor: resolverPorNome devolve id e código VPFOR, ou nada', async () => {
+  const w = montarLeitura('cadastros-fornecedores-store.js', { paginas: [[
+    { id: 'g', codigo: 'VPFOR-0007', razao_social: 'GLARIE ELEVATOR CO.,LTD', nome_fantasia: 'Glarie' },
+    { id: 'a1', codigo: 'VPFOR-0008', razao_social: 'Agente', nome_fantasia: null },
+    { id: 'a2', codigo: 'VPFOR-0009', razao_social: 'agente', nome_fantasia: null },
+  ]] });
+  const S = w.CadastrosFornecedoresStore;
+  assert.strictEqual(JSON.stringify(await S.resolverPorNome('glarie')), JSON.stringify({ id: 'g', codigo: 'VPFOR-0007', nome: 'GLARIE ELEVATOR CO.,LTD' }));
+  assert.strictEqual(await S.resolverPorNome('Agente'), null);
+  assert.strictEqual(await S.resolverPorNome('Inexistente'), null);
+  assert.strictEqual(await S.resolverPorNome(''), null);
+});
+test('fornecedor: resolverPorNome avisa quando não consegue ler o cadastro', async () => {
+  const w = montarLeitura('cadastros-fornecedores-store.js', { paginas: [], erroNaPagina: 0 });
+  assert.strictEqual(JSON.stringify(await w.CadastrosFornecedoresStore.resolverPorNome('Glarie')), JSON.stringify({ erro: true }));
+});
+test('rfq.jsx: entrada ligada guarda cadastro_id/código; nome livre só com confirmação', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'rfq.jsx'), 'utf8');
+  assert.match(src, /cadastro_id: cad\.id, cadastro_codigo/);
+  assert.match(src, /nome_livre: true/);
+  assert.match(src, /window\.confirm\(/);
+});
