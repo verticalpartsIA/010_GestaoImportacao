@@ -51,14 +51,6 @@ function CRMBarra({ valor, total }) {
 }
 
 /* ---------- CANAIS ---------- */
-function waLink(phone, nome) {
-  const digits = String(phone || '').replace(/\D/g, '');
-  if (!digits) return null;
-  const numero = digits.length <= 11 ? '55' + digits : digits; // sem DDI informado -> assume Brasil
-  const msg = encodeURIComponent('Olá' + (nome ? ' ' + nome : '') + ', tudo bem? Aqui é da VerticalParts.');
-  return 'https://wa.me/' + numero + '?text=' + msg;
-}
-
 function CRMCanaisPage({ setRoute, setSubsel }) {
   const leads = useLeadsBase();
   if (leads === null) {
@@ -82,7 +74,7 @@ function CRMCanaisPage({ setRoute, setSubsel }) {
             {comContato.length === 0 ? (
               <tr><td colSpan={6} style={{ textAlign: "center", padding: "48px 0", color: "var(--fg3)", fontSize: 13 }}>Nenhum lead com telefone ou e-mail cadastrado ainda.</td></tr>
             ) : comContato.map((l) => {
-              const link = waLink(l.phone, l.contact);
+              const link = window.waLink(l.phone, l.contact); // helper único, exposto por comercial.jsx
               return (
                 <tr key={l.id} onClick={() => { setSubsel(l); setRoute("lead-detail"); }} style={{ cursor: "pointer" }}>
                   <td><div className="cell-main">{l.building}</div><div className="cell-sub">{l.id}</div></td>
