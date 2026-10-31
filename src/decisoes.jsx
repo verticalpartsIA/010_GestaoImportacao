@@ -191,8 +191,10 @@ function DecCard({ decisao, onReload, setRoute, setSubsel, modoAdmin, historico,
         setSubsel({ __editId: linkDocumento.propostaId });
       } else if (linkDocumento.propostaPorCotacao) {
         // Envio de proposta: abre a proposta da cotação; se ainda não existe, cai no formulário.
-        const { data: prop } = await window.__VP_SB.sb.from('propostas').select('id')
+        // #1215 C.3: erro na consulta não pode virar "não tem proposta" e cair no formulário em silêncio.
+        const { data: prop, error: erroProp } = await window.__VP_SB.sb.from('propostas').select('id')
           .eq('numero_cotacao', linkDocumento.numeroCotacao).order('updated_at', { ascending: false }).limit(1);
+        if (erroProp) { window.toast?.('Não foi possível localizar a proposta desta cotação agora. Tente de novo.', 'error'); return; }
         if (prop && prop[0]) {
           setSubsel({ __editId: prop[0].id });
         } else {
@@ -223,6 +225,9 @@ function DecCard({ decisao, onReload, setRoute, setSubsel, modoAdmin, historico,
           window.dispatchEvent(new PopStateEvent('popstate'));
         }, 0);
       }
+    } catch (e) {
+      // #1215 C.3: falha de rede/consulta avisa em vez de deixar o botão sem resposta.
+      window.toast?.('Não foi possível abrir o documento: ' + (e && e.message ? e.message : e), 'error');
     } finally {
       setAbrindo(false);
     }
@@ -326,6 +331,23 @@ function DecisoesPage({ setRoute, setSubsel }) {
     } catch (e) { setErro(true); setPendentes((p) => p || []); setDecididas((d) => d || []); }
   }, []);
   React.useEffect(() => { reload(); }, [reload]);
+  /* #1215 C.2: link /geral/decisoes/<id>/<modal> de decisão que não está em "Pendentes" (já decidida, ou que não é para
+     esta pessoa) não abria nada e não dizia nada. Decidida → vai para a aba "Decididas" e avisa; não encontrada → avisa.
+     Nos dois casos limpa o modal da URL (aprovar/reprovar só valem para decisão pendente). */
+  const avisouRota = React.useRef(null);
+  React.useEffect(() => {
+    if (!rotaId || pendentes === null || decididas === null || erro) return;
+    if ((pendentes || []).some((d) => String(d.id) === rotaId)) return;
+    if (avisouRota.current === rotaId) return;
+    avisouRota.current = rotaId;
+    if ((decididas || []).some((d) => String(d.id) === rotaId)) {
+      setAba('decididas');
+      window.toast?.('Esta decisão já foi decidida — veja em "Decididas".', 'info');
+    } else {
+      window.toast?.('Decisão não encontrada entre as suas (pode ter sido cancelada ou não é para você decidir).', 'warning');
+    }
+    fecharModalDecisao();
+  }, [rotaId, pendentes, decididas, erro]);
   /* Atualiza sozinha: a cada 60 s e ao voltar para a aba do navegador (decisão nova de outra pessoa aparece sem F5). */
   React.useEffect(() => {
     const t = setInterval(() => { if (!document.hidden) reload(); }, 60000);

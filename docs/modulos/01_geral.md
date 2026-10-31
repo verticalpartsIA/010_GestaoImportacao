@@ -154,3 +154,48 @@ Publicados em `TreinamentoVP/`: Dashboard, Notificações, Prazos & Pendências,
 ## 10. Referências cruzadas
 
 `CLAUDE.md` (seções: Sistema de E-mail/Inbox; Central de Decisões — Ver documento; Central de Notificações — análise e correções; Prazos & Pendências — revisão; Inbox fases 1–4C; Tratativas ⇄ Inbox; Aval Engenharia), `docs/MAPA_DE_ROTAS.md` (grupo "Geral"), `docs/superpowers/plans/2026-10-02-autenticacao-e-rls-571.md`.
+
+## 11. Debug do módulo — 31/10/2026 (epic #1218)
+
+Auditoria read-only seguida de correções, uma issue por tela. Cada correção tem teste de navegador em `e2e/` que falha no código antigo e passa no novo (Supabase simulado; o banco de produção nunca é tocado).
+
+| Tela | Issue | PR (squash) | Teste |
+|---|---|---|---|
+| Inbox | #1213 | #1220 (`e40c910`) | `e2e/inbox.spec.js` |
+| Prazos & Pendências | #1214 | #1229 (`d9aed86`) | `e2e/prazos.spec.js` |
+| Dashboard | #1216 | #1230 (`a7d6990`) | `e2e/dashboard.spec.js` |
+| Notificações | #1217 | #1232 (`e100fa3`) | `e2e/notificacoes.spec.js` |
+| Central de Decisões | #1215 | ver o PR desta entrega | `e2e/decisoes.spec.js`, `src/decisoes-store.test.js` |
+
+**Comportamentos que passaram a valer (não reintroduza o que eles evitam):**
+- **Inbox:**
+  - Clicar num e-mail **não troca a pasta**; o efeito "abrir por id" só atua no id que chega de fora (link, Voltar/Avançar, "Ver documento").
+  - Falha ao ler o dono dos e-mails (`useInboxMeta`, lotes de 100 ids) **mostra tudo com aviso**, nunca esconde.
+  - Excluir confere a gravação (`.select('id')`).
+  - Os excluídos são conferidos por id, sem o teto de 500.
+  - O Realtime agrupa os avisos de 3 s, e só a leitura mais recente do `read-inbox` vale.
+  - Falha ao ler Enviados avisa.
+  - O link de e-mail excluído avisa e limpa a URL.
+  - `send-email`/`read-inbox`/vínculo/soft-delete **não foram alterados**.
+  - Pendente: E.8 (comentário em `send-email`, no próximo deploy da função).
+- **Prazos & Pendências:**
+  - A carga tem `try/catch` e mostra aviso com "Tentar novamente" (nunca "Carregando…" eterno).
+  - Após "Dar Aval de Pagamento", a tela confere `AvalFinanceiroStore.podeIniciarCompra` e diz o que ainda falta. **As regras de avais não mudaram** (confirmado pelo Gelson): três avais (Pagamento, Jurídico, Projeto de Instalação assinado) + CEO se margem < 15%.
+  - D.4 (alçada no botão) aguarda a #571; D.5 (filtro/modais na URL) sem decisão.
+- **Dashboard:**
+  - `loadDashboardData` devolve `erros` (consultas que falharam) e a tela avisa.
+  - Não há mais "vazio aos 3 s": a tela segue carregando e avisa a demora.
+  - Só a carga mais recente vale.
+  - O link de projeto fora da esteira avisa e limpa a URL.
+  - Ao voltar para a aba, recarrega se a última carga tem mais de 5 min.
+- **Notificações:**
+  - O filtro de módulo volta para "Todos" quando o módulo some da aba.
+  - "Marcar todas como lidas" só mostra sucesso após gravar (`marcarTodasLidas` devolve `true/false`).
+  - Falha em propostas/contratos/avais marca a lista `incompleto`, sem montar avisos calculados com dados vazios.
+  - Recarrega a cada 5 min e ao voltar para a aba.
+- **Central de Decisões:**
+  - `listarDecididas` filtra por pessoa **no banco** (`decidido_por`, `solicitado_por`, `aprovadores_esperados cs`) antes do limite de 200.
+  - O link de decisão já decidida abre "Decididas" com aviso; o de decisão não encontrada avisa; nos dois casos o modal sai da URL.
+  - "Ver documento": erro na consulta da proposta e falha de rede avisam. **A navegação blindada (`setSubsel` + `setRoute`, resolução de `numero_cotacao` → id, `tabelaPagina`) não mudou**, e o teste confere que continua abrindo a proposta.
+  - `criarDecisaoSeNaoExiste` usa `.is` para cotação nula e pega a primeira existente.
+  - Falha ao ler as alçadas de decisão mantém os aprovadores gravados.

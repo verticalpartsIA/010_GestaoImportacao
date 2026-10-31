@@ -78,20 +78,28 @@
      código. Ex.: dar poder de CEO ao Gelson só pra teste, revogável, sem
      deploy. Só afeta decisões CRIADAS depois da concessão — o snapshot em
      aprovadores_esperados já gravado numa decisão pendente não muda sozinho. */
+  /* #1215 C.5: devolve null quando a leitura falha (antes ignorava o erro e devolvia [] — quem tinha a alçada concedida
+     sumia da lista de aprovadores). */
   async function extrasPorAlcada(papel) {
     const c = sb(); if (!c) return [];
-    const { data: concedidas } = await c.from('alcadas_capacidade').select('perfil_id')
+    const { data: concedidas, error: e1 } = await c.from('alcadas_capacidade').select('perfil_id')
       .eq('modulo', 'decisoes').eq('capacidade', papel);
+    if (e1) { console.warn('[DecisoesStore] alçadas de decisão indisponíveis', e1); return null; }
     if (!concedidas || !concedidas.length) return [];
-    const { data: perfis } = await c.from('perfis').select('email').in('id', concedidas.map((r) => r.perfil_id));
+    const { data: perfis, error: e2 } = await c.from('perfis').select('email').in('id', concedidas.map((r) => r.perfil_id));
+    if (e2) { console.warn('[DecisoesStore] perfis das alçadas indisponíveis', e2); return null; }
     return (perfis || []).map((p) => (p.email || '').trim().toLowerCase()).filter(Boolean);
   }
 
-  async function resolverAprovadores(papel) {
+  /* { lista, falhou } — `falhou` = não deu para ler os aprovadores por alçada (a lista tem só os fixos). */
+  async function resolverAprovadoresDetalhado(papel) {
     const fixos = EMAILS_FIXOS[papel] || [];
     const extras = await extrasPorAlcada(papel);
-    if (!fixos.length && !extras.length) return [];
-    return [...new Set([...fixos, ...extras])];
+    return { lista: [...new Set([...fixos, ...(extras || [])])], falhou: extras === null };
+  }
+
+  async function resolverAprovadores(papel) {
+    return (await resolverAprovadoresDetalhado(papel)).lista;
   }
 
   function souAprovador(decisao) {
@@ -108,9 +116,10 @@
     const out = [];
     for (const d of lista || []) {
       if (!['pendente', 'bloqueada_por_dependencia'].includes(d.status) || !d.papel_requerido) { out.push(d); continue; }
-      if (!(d.papel_requerido in cache)) cache[d.papel_requerido] = await resolverAprovadores(d.papel_requerido);
-      const atuais = cache[d.papel_requerido];
-      out.push(atuais.length ? { ...d, aprovadores_esperados: atuais } : d);
+      if (!(d.papel_requerido in cache)) cache[d.papel_requerido] = await resolverAprovadoresDetalhado(d.papel_requerido);
+      const { lista: atuais, falhou } = cache[d.papel_requerido];
+      // Leitura das alçadas falhou: mantém o retrato gravado (não tira ninguém da decisão por erro de leitura).
+      out.push(atuais.length && !falhou ? { ...d, aprovadores_esperados: atuais } : d);
     }
     return out;
   }
@@ -148,11 +157,15 @@
   }
 
   /* Idempotente por (tipo, numero_cotacao) — chamada de novo não duplica. */
+  /* #1215 C.4: `.eq(coluna, null)` não casa com nulo (o certo é `.is`), e `.maybeSingle()` dava erro com 2+ linhas e
+     criava mais uma — agora pega a primeira existente. */
   async function criarDecisaoSeNaoExiste(args) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const { data: existente } = await c.from('decisoes_gerenciais').select('id')
-      .eq('tipo', args.tipo).eq('numero_cotacao', args.numeroCotacao ?? null).maybeSingle();
-    if (existente) return existente;
+    let q = c.from('decisoes_gerenciais').select('id').eq('tipo', args.tipo);
+    q = args.numeroCotacao == null ? q.is('numero_cotacao', null) : q.eq('numero_cotacao', args.numeroCotacao);
+    const { data: existentes, error } = await q.order('criado_em', { ascending: true }).limit(1);
+    if (error) console.warn('[DecisoesStore] não foi possível conferir decisão existente', error);
+    if (existentes && existentes[0]) return existentes[0];
     return criarDecisao(args);
   }
 
@@ -169,15 +182,20 @@
 
   /* Histórico (aprovadas, reprovadas e canceladas). `todas` = visão de Administrador; senão só o que eu decidi,
      era aprovador ou solicitei. */
+  /* #1215 C.1: o filtro "o que é meu" agora vai ao banco ANTES do limite — antes buscava as 200 mais recentes do sistema
+     inteiro e só depois filtrava no navegador, então o histórico de quem decide pouco sumia com o volume. */
   async function listarDecididas({ todas = false, limite = 200 } = {}) {
     const c = sb(); if (!c) return [];
-    const { data, error } = await c.from('decisoes_gerenciais')
-      .select('*').in('status', ['aprovada', 'reprovada', 'cancelada'])
-      .order('decidido_em', { ascending: false, nullsFirst: false }).limit(limite);
+    const email = meuEmail();
+    if (!todas && !email) return [];
+    let q = c.from('decisoes_gerenciais').select('*').in('status', ['aprovada', 'reprovada', 'cancelada']);
+    if (!todas) {
+      const e = String(email).replace(/"/g, '');
+      q = q.or(`decidido_por.eq."${e}",solicitado_por.eq."${e}",aprovadores_esperados.cs.{"${e}"}`);
+    }
+    const { data, error } = await q.order('decidido_em', { ascending: false, nullsFirst: false }).limit(limite);
     if (error) { console.warn('[DecisoesStore] listarDecididas falhou', error); return []; }
     if (todas) return data || [];
-    const email = meuEmail();
-    if (!email) return [];
     return (data || []).filter((d) => souAprovador(d) || (d.decidido_por || '').toLowerCase() === email || (d.solicitado_por || '').toLowerCase() === email);
   }
 
