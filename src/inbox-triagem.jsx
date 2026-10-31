@@ -21,14 +21,30 @@ function useInboxMeta(emails) {
     if (!sb) { setMeta({ ia: {}, dono: {}, atribuido: {}, pronto: true }); return; }
     if (!chave) { setMeta({ ia: {}, dono: {}, atribuido: {}, pronto: (emails || []).length === 0 }); return; }
     let vivo = true;
-    sb.from('emails_projeto').select('id, ia_decisao, dono_email, atribuido_a, spam_em').in('id', chave.split(','))
-      .then(({ data }) => {
+    /* #1213 E.2: lotes de 100 ids (com a busca no histórico a lista passa de 200 UUIDs e a URL do `.in()` fica longa
+       demais) e o `error` do PostgREST é lido — o supabase-js não lança exceção, então antes a falha virava `dono = {}`
+       e todo e-mail parecia "sem responsável", sumindo para quem não faz triagem. Agora a falha volta `erro: true` e a
+       tela (logistica.jsx) mostra tudo com um aviso, em vez de esconder. */
+    const ids = chave.split(',');
+    const lotes = [];
+    for (let i = 0; i < ids.length; i += 100) lotes.push(ids.slice(i, i + 100));
+    Promise.all(lotes.map((lote) => sb.from('emails_projeto').select('id, ia_decisao, dono_email, atribuido_a, spam_em').in('id', lote)))
+      .then((resps) => {
         if (!vivo) return;
+        const falhou = resps.find((r) => r && r.error);
+        if (falhou) {
+          console.warn('[Inbox] não foi possível ler o responsável dos e-mails', falhou.error);
+          setMeta({ ia: {}, dono: {}, atribuido: {}, pronto: true, erro: true });
+          return;
+        }
         const ia = {}; const dono = {}; const atribuido = {}; const spam = {};
-        (data || []).forEach((r) => { if (r.ia_decisao) ia[r.id] = r.ia_decisao; dono[r.id] = r.dono_email || null; atribuido[r.id] = r.atribuido_a || null; spam[r.id] = r.spam_em || null; });
+        resps.forEach((r) => (r.data || []).forEach((row) => { if (row.ia_decisao) ia[row.id] = row.ia_decisao; dono[row.id] = row.dono_email || null; atribuido[row.id] = row.atribuido_a || null; spam[row.id] = row.spam_em || null; }));
         setMeta({ ia, dono, atribuido, spam, pronto: true });
       })
-      .catch(() => { if (vivo) setMeta({ ia: {}, dono: {}, atribuido: {}, pronto: true }); });   // sem metadados a tela funciona como sempre
+      .catch((e) => {
+        console.warn('[Inbox] não foi possível ler o responsável dos e-mails', e);
+        if (vivo) setMeta({ ia: {}, dono: {}, atribuido: {}, pronto: true, erro: true });
+      });
     return () => { vivo = false; };
   }, [chave, versao]);
   return { ...meta, recarregar: () => setVersao((v) => v + 1) };
