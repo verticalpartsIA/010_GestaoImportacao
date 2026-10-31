@@ -260,6 +260,22 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
     }
     if (error) { setSaving(false); return window.toast('Erro: ' + (error.message || error), 'error'); }
 
+    /* Auditoria (issue #1201): criação/edição entram no histórico do lead (vp_logs). Só nomes dos campos alterados e
+       status de→para — nunca telefone/e-mail/valores. registrar() é best-effort (não lança); o await garante que a linha
+       já existe quando a tela recarrega o histórico. */
+    if (window.VPLog) {
+      let detalhe = { status: payload.status };
+      if (isEdit) {
+        const campos = Object.keys(payload).filter((k) => String(lead[k] == null ? '' : lead[k]) !== String(payload[k] == null ? '' : payload[k]));
+        detalhe = { campos };
+        if (lead.status !== payload.status) detalhe.status = { de: lead.status, para: payload.status };
+      }
+      await window.VPLog.registrar({
+        modulo: 'Comercial', acao: isEdit ? 'Lead editado' : 'Lead criado',
+        alvo: f.building, alvo_id: id, detalhe,
+      });
+    }
+
     /* CNPJ/CPF informado (e não marcado como "será inserido depois") →
        resolve/cria o cliente (mesma dedup por documento do Formulário,
        window.FormularioElevadorStore.buscarOuCriarCliente) e já vincula
@@ -1093,16 +1109,20 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
     const hasTime = typeof ts === "string" && ts.includes("T");
     return hasTime ? dateStr + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : dateStr;
   };
+  const [histVersao, setHistVersao] = React.useState(0); // sobe depois de editar o lead: recarrega o histórico
+  const histLeadId = React.useRef(null);
   React.useEffect(() => {
     let alive = true;
-    setHistory(null); // E11: não mostra o histórico do lead anterior enquanto carrega
+    // E11: não mostra o histórico do lead anterior enquanto carrega — só zera ao TROCAR de lead (recarga após edição mantém a lista).
+    if (histLeadId.current !== lead.id) { setHistory(null); histLeadId.current = lead.id; }
     (async () => {
       const rows = [];
       if (lead.date) rows.push({ t: "Lead criado" + (lead.origin ? " via " + lead.origin : ""), who: lead.owner || "Sistema", ts: lead.date, icon: "plus" });
       try {
         const sb = comercialSb();
         if (sb && lead.id != null) {
-          const { data } = await sb.from("vp_logs").select("*").eq("alvo_id", String(lead.id)).order("criado_em", { ascending: false }).limit(50);
+          const { data, error } = await sb.from("vp_logs").select("*").eq("alvo_id", String(lead.id)).order("criado_em", { ascending: false }).limit(50);
+          if (error) console.warn("[comercial] histórico do lead não carregou:", error.message);
           (data || []).forEach((l) => rows.push({
             t: l.acao + (l.alvo ? " — " + l.alvo : ""),
             who: l.ator_nome + (l.ator_setor ? " · " + l.ator_setor : ""),
@@ -1115,7 +1135,7 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
       if (alive) setHistory(rows);
     })();
     return () => { alive = false; };
-  }, [lead.id]);
+  }, [lead.id, histVersao]);
 
   /* 14/09 — achado real (auditoria do tour.md): "Qualificar → Dossier"
      sempre criava um Dossier novo, nunca checava se este Lead já tinha
@@ -1306,6 +1326,7 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
           onClose={() => setShowEditLead(false)}
           onSaved={(updatedLead, clienteAtualizado) => {
             setSubsel?.(updatedLead);
+            setHistVersao((v) => v + 1);
             // lead.cliente_id pode não mudar (só os DADOS do cliente
             // mudaram, ex.: razão social) — o efeito acima só refaz a busca
             // quando o id muda, então atualiza aqui direto pra não deixar
