@@ -166,3 +166,22 @@ test('compute — devolve o shape completo esperado pelo Dashboard', () => {
   assert.ok(Array.isArray(out.pipelineStages) && out.pipelineStages.length === 4);
   assert.ok(Array.isArray(out.originBars));
 });
+
+test('"Propostas enviadas" respeita o período (data de envio, senão criação) e diz qual período', () => {
+  const propostas = [
+    { id: 'a', status: 'enviada', sent_at: '2026-10-25T10:00:00Z' },
+    { id: 'b', status: 'enviada', criado_em: '2026-10-20T10:00:00Z' },
+    { id: 'c', status: 'enviada', sent_at: '2026-08-01T10:00:00Z' },
+    { id: 'd', status: 'enviada' },
+    { id: 'e', status: 'rascunho', sent_at: '2026-10-28T10:00:00Z' },
+  ];
+  const desde = new Date('2026-10-01T00:00:00Z');
+  assert.deepEqual(M.propostasEnviadas(propostas, desde).map((p) => p.id), ['a', 'b']);
+  const kpi = M.compute({ leads: [], gatilhos: [], propostas, contratos: [], desde, periodoRotulo: 'últimos 30 dias' })
+    .kpis.find((k) => k.label === 'Propostas enviadas');
+  assert.equal(kpi.value, '2');
+  assert.equal(kpi.sub, 'últimos 30 dias');
+  const semPeriodo = M.compute({ leads: [], gatilhos: [], propostas, contratos: [] }).kpis.find((k) => k.label === 'Propostas enviadas');
+  assert.equal(semPeriodo.value, '4');
+  assert.equal(semPeriodo.sub, 'histórico inteiro');
+});

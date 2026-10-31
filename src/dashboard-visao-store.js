@@ -22,7 +22,7 @@
       ]);
       if (rd.error || ra.error) return { pronto: true, semDados: true };
       const caps = new Set((ra.data || []).map((a) => a.modulo + '.' + a.capacidade));
-      return { pronto: true, semDados: false, ehAdmin, departamento: ((rd.data || [])[0] || {}).departamento || '', caps };
+      return { pronto: true, semDados: false, ehAdmin, perfilId: rp.data.id, departamento: ((rd.data || [])[0] || {}).departamento || '', caps };
     } catch (e) { return { pronto: true, semDados: true }; }
   }
 

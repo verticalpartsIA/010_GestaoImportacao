@@ -1639,7 +1639,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
   /* Abrir um e-mail (clique na linha, na conversa, na faixa "precisa de você"…) também grava
      na URL (/geral/inbox/<id>) — antes só setActiveId, então o endereço na barra do navegador
      nunca refletia qual e-mail estava aberto. Fechar (null) volta pra /geral/inbox. */
-  /* Pasta, e-mail aberto e pesquisa na URL (01/11/2026; antes a pasta ia em ?pasta=, desde 31/10):
+  /* Pasta, e-mail aberto e pesquisa na URL (31/10/2026; antes a pasta ia em ?pasta=, desde 31/10):
        /geral/inbox                          Caixa de entrada (padrão)
        /geral/inbox/<pasta>                  starred, adiados, mine, triagem, sent, all, spam ou m:<marcador>
        /geral/inbox/<id do e-mail>           e-mail aberto na Caixa de entrada (forma antiga, continua valendo)

@@ -6,13 +6,13 @@ const V = require('./dashboard-visao-calc.js');
 const caps = (...l) => new Set(l);
 const kpi = (label) => ({ label });
 
-test('perfil — departamento escolhe o conjunto; sem perfil próprio mantém a visão completa', () => {
+test('perfil — departamento escolhe o conjunto; sem perfil próprio (Marketing, Gente & Gestão, vazio) mantém a visão completa', () => {
   assert.equal(V.perfilDoDepartamento('Comercial'), 'comercial');
   assert.equal(V.perfilDoDepartamento('Adm/Financeiro'), 'financeiro');
   assert.equal(V.perfilDoDepartamento('CEO'), 'admin');
-  assert.equal(V.perfilDoDepartamento('Logística/Almoxarifado/Produção'), null);
+  assert.equal(V.perfilDoDepartamento('Marketing'), null);
   assert.equal(V.perfilDoDepartamento(''), null);
-  assert.equal(V.perfilEfetivo({ ehAdmin: false, departamento: 'Logística/Almoxarifado/Produção', escolhido: 'comercial' }), 'admin');
+  assert.equal(V.perfilEfetivo({ ehAdmin: false, departamento: 'Marketing', escolhido: 'comercial' }), 'admin');
   assert.equal(V.perfilEfetivo({ ehAdmin: false, departamento: 'Engenharia', escolhido: 'admin' }), 'engenharia');
 });
 
@@ -56,6 +56,19 @@ test('limite — Onde Parou e Projetos em Andamento dependem de Prazos & Pendên
 });
 
 test('mapa — todo cartão das quatro visões tem alçada definida', () => {
-  const rotulos = ['Leads do mês', 'Cot. em China', 'Propostas enviadas', 'Conversão Lead→Proposta', 'Projetos abertos', 'Fichas técnicas', 'Catálogo (ativos)', 'Alertas engenharia', 'A receber', 'Comissões pendentes', 'Gatilhos próx. 7d', 'Contratos abertos', 'Projetos ativos', 'Embarques em trânsito', 'Alertas críticos', 'Faturamento (propostas assinadas)', 'Comissões (custo)'];
+  const rotulos = ['Leads novos', 'Cotações em preço', 'Propostas aguardando o cliente', 'Propostas assinadas', 'Sinais a confirmar', 'Avais de pagamento pendentes', 'Etapas com prazo vencido', 'Parcelas de instalador liberadas', 'Instalação: contratado vs previsto', 'Projetos aguardando assinatura', 'Equipamentos com dado a conferir', 'Obras em instalação', 'Solicitações de produto em aberto', 'Pedidos a separar', 'OPs atrasadas', 'Prontos para expedir', 'Ajustes de estoque pendentes', 'Chegadas em 30 dias', 'Cotações de varejo em aberto', 'Avais jurídicos pendentes', 'Itens com Dia D vencido', 'Leads do mês', 'Cot. em China', 'Propostas enviadas', 'Conversão Lead→Proposta', 'Projetos abertos', 'Fichas técnicas', 'Catálogo (ativos)', 'Alertas engenharia', 'A receber', 'Comissões pendentes', 'Gatilhos próx. 7d', 'Contratos abertos', 'Projetos ativos', 'Embarques em trânsito', 'Alertas críticos', 'Faturamento (propostas assinadas)', 'Comissões (custo)'];
   for (const r of rotulos) assert.ok(V.MODULO_DO_CARTAO[r], r);
+});
+
+test('Logística e Importação ganham perfil próprio pelo departamento', () => {
+  assert.equal(V.perfilDoDepartamento('Logística/Almoxarifado/Produção'), 'logistica');
+  assert.equal(V.perfilDoDepartamento('Jurídico/Importação/Suprimentos'), 'importacao');
+  assert.equal(V.perfilEfetivo({ ehAdmin: false, departamento: 'Logística/Almoxarifado/Produção', escolhido: 'admin' }), 'logistica');
+});
+
+test('"Decisões aguardando você" não tem módulo: sempre aparece para quem está limitado', () => {
+  const v = V.visao({ ehAdmin: false, semDados: false, caps: new Set(['separacao.ver']) });
+  assert.equal(v.limitado, true);
+  const r = V.filtrarCartoes([{ label: 'Pedidos a separar' }, { label: 'OPs atrasadas' }, { label: 'Decisões aguardando você' }], v);
+  assert.deepEqual(r.visiveis.map((k) => k.label), ['Pedidos a separar', 'Decisões aguardando você']);
 });

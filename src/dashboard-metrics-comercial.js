@@ -45,8 +45,15 @@
      `propostas` corretamente; o KPI de topo contava outra coisa com o
      mesmo rótulo). Fonte única agora: qualquer status além de rascunho
      já saiu de "ainda não enviada". */
-  function propostasEnviadas(propostas) {
-    return (propostas || []).filter((p) => p.status !== 'rascunho');
+  function propostasEnviadas(propostas, desde) {
+    const enviadas = (propostas || []).filter((p) => p.status !== 'rascunho');
+    if (!desde) return enviadas;
+    return enviadas.filter((p) => {
+      /* Data de envio; propostas antigas não a têm gravada (conferido em 31/10/2026: 0 de 301 "enviada" com sent_at),
+         então cai para a data de criação — suposição, é o que existe. */
+      const d = p.sent_at || p.enviada_em || p.criado_em;
+      return d && new Date(d) >= desde;
+    });
   }
 
   function leadsConvertidos(leads) {
@@ -86,11 +93,11 @@
     return new Set((contratos || []).map((c) => c.proposta_id).filter(Boolean));
   }
 
-  function kpis({ leads, gatilhos, propEnviadas, convPct }) {
+  function kpis({ leads, gatilhos, propEnviadas, convPct, periodoRotulo }) {
     return [
       { label: 'Leads do mês', value: String(leadsDoMes(leads).length), unit: '', delta: leadsDoMes(leads).length > 0 ? `+${leadsDoMes(leads).length}` : '0', deltaDir: 'up', sub: 'vs. mês anterior' },
       { label: 'Cot. em China', value: String(cotacoesAbertas(gatilhos).length), unit: '', delta: `${cotacoesAbertas(gatilhos).length}`, deltaDir: 'up', sub: 'abertas' },
-      { label: 'Propostas enviadas', value: String((propEnviadas || []).length), unit: '', delta: '', deltaDir: 'up', sub: 'no período' },
+      { label: 'Propostas enviadas', value: String((propEnviadas || []).length), unit: '', delta: '', deltaDir: 'up', sub: periodoRotulo || 'histórico inteiro' },
       { label: 'Conversão Lead→Proposta', value: String(convPct), unit: '%', delta: '', deltaDir: convPct >= 25 ? 'up' : 'down', sub: 'meta 25%' },
     ];
   }
@@ -120,11 +127,12 @@
       .sort((a, b) => b.v - a.v);
   }
 
-  function compute({ leads, gatilhos, propostas, contratos }) {
-    const propEnviadas = propostasEnviadas(propostas);
-    const convPct = conversaoLeadProposta(leads, propEnviadas);
+  function compute({ leads, gatilhos, propostas, contratos, desde, periodoRotulo }) {
+    /* A conversão e o funil seguem com todo o histórico (populações que se comparam entre si); só o cartão
+       "Propostas enviadas" respeita o período. */
+    const convPct = conversaoLeadProposta(leads, propostasEnviadas(propostas));
     return {
-      kpis: kpis({ leads, gatilhos, propEnviadas, convPct }),
+      kpis: kpis({ leads, gatilhos, propEnviadas: propostasEnviadas(propostas, desde), convPct, periodoRotulo }),
       pipelineStages: pipeline({ leads, propostas, contratos }),
       originBars: origemBars(leads),
     };

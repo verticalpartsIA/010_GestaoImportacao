@@ -1,6 +1,6 @@
 /* ============================================================
    dashboard-saudacao.js — nome da pessoa na saudação do Dashboard (função pura, sem rede).
-   Regra (decisão do Gelson, 31/10/2026 e 01/11/2026): a pessoa é chamada pelo que vem ANTES do "@" do e-mail do login,
+   Regra (decisão do Gelson, 31/10/2026): a pessoa é chamada pelo que vem ANTES do "@" do e-mail do login,
    cada parte separada por "." "_" ou "-" vira uma palavra com inicial maiúscula:
      bianca@verticalparts.com.br        → "Bianca"
      almoxarifado@verticalparts.com.br  → "Almoxarifado"
