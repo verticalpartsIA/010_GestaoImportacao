@@ -667,11 +667,12 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
 }
 
 /* ---------- Card da lista ---------- */
-function EICard({ e, pis, onEdit, onDelete, onArchive }) {
+function EICard({ e, pis, onEdit, onDelete, onArchive, ativo }) {
   const store = window.EmbarquesImportacaoStore;
   const resumo = store.resumoPIs(pis);
   return (
-    <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 6, padding: '14px 18px' }}>
+    <div aria-current={ativo ? 'true' : undefined} style={{ background: ativo ? 'var(--vp-yellow-50, #fffbea)' : '#fff', border: ativo ? '2px solid var(--vp-yellow, #f5c400)' : '1px solid var(--border)', borderRadius: 6, padding: ativo ? '13px 17px' : '14px 18px' }}>
+      {ativo && <div className="small" style={{ fontWeight: 700, marginBottom: 6 }}>✎ Em edição no formulário acima</div>}
       <div className="row sb" style={{ alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ flex: 1, minWidth: 260 }}>
           {e.nome_embarque && <div style={{ fontWeight: 800, fontSize: 15 }}>{e.nome_embarque}</div>}
@@ -706,6 +707,12 @@ function EmbarquesImportacaoPage() {
   const [pisByEmbarque, setPisByEmbarque] = React.useState({});
   const [showForm, setShowForm] = React.useState(false);
   const [editing, setEditing] = React.useState(null);
+  // Leva a tela até o formulário ao abrir (Novo ou Editar): sem isso, quem clica num cartão
+  // lá embaixo da lista não vê o formulário abrir no topo (spec 2026-10-31-embarques-edicao-visivel).
+  const formRef = React.useRef(null);
+  React.useEffect(() => {
+    if (showForm && formRef.current) formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [showForm, editing]);
   const [search, setSearch] = React.useState('');
   const [filterStatus, setFilterStatus] = React.useState('Todos');
   const [showArchived, setShowArchived] = React.useState(false);
@@ -770,7 +777,7 @@ function EmbarquesImportacaoPage() {
       </div>
 
       {showForm && (
-        <div style={{ marginBottom: 20 }}>
+        <div ref={formRef} style={{ marginBottom: 20, scrollMarginTop: 16 }}>
           <EmbarqueImportacaoForm initialData={editing} isEdit={!!editing} pis={editing ? (pisByEmbarque[editing.id] || []) : []} saving={saving}
             onSubmit={salvar} onCancel={() => { setShowForm(false); setEditing(null); window.VpRouter.navigate('embarques-importacao'); }}/>
         </div>
@@ -793,7 +800,7 @@ function EmbarquesImportacaoPage() {
 
       <div className="stack" style={{ gap: 10 }}>
         {filtered.map((e) => (
-          <EICard key={e.id} e={e} pis={pisByEmbarque[e.id] || []} onEdit={() => { setEditing(e); setShowForm(true); }} onDelete={() => excluir(e)} onArchive={(v) => arquivar(e, v)}/>
+          <EICard key={e.id} e={e} pis={pisByEmbarque[e.id] || []} ativo={showForm && editing?.id === e.id} onEdit={() => { setEditing(e); setShowForm(true); }} onDelete={() => excluir(e)} onArchive={(v) => arquivar(e, v)}/>
         ))}
       </div>
     </div>
