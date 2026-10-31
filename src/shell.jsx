@@ -467,7 +467,7 @@ const MODULE_HOME = {
 const HELP_TOPICS = {
   "mapa-obras": "Duas abas. Mapa: amarelo = em andamento, verde = concluída, azul = aguardando os equipamentos; passe o mouse sobre um ponto para ver a obra (em andamento: status e quem está instalando) e clique para abrir o Dossiê. A posição vem do endereço da obra no Dossiê (sem endereço, centro da cidade). Evolução dos equipamentos: uma linha do tempo por equipamento (obra aberta, saída da fábrica, chegada ao Brasil e na obra, início, 50%, 75%, conclusão e entrega), com datas reais, previstas e a etapa atual; \"Ver no mapa\" leva ao ponto da obra.",
   "mes-cadastros": "A base do chão de fábrica (MES). Frentes: as linhas de produção (quadro, fiação, botoeiras, cabos de aço…). Postos: as bancadas e máquinas de cada frente (são os mesmos recursos da Carga Máquina, agora ligados a uma frente). Etapas modelo: as etapas que toda OP nova herda, com tipo (produção ou inspeção) e nº de operadores. Jornada: o horário normal da fábrica. Operadores: o posto onde cada colaborador costuma trabalhar. Nada é apagado: itens saem de uso ao serem desativados.",
-  dashboard: "Visão geral do dia: KPIs, tarefas de hoje, projetos em andamento (Gantt/Lista/Kanban) e alertas críticos.",
+  dashboard: "Visão geral do dia: KPIs, tarefas de hoje, projetos em andamento (Gantt/Lista/Kanban) e alertas críticos. Os cartões seguem o seu departamento e o que a sua alçada permite; se algum não aparece, peça ao administrador em Administração › Alçadas.",
   notificacoes: "Seu painel de avisos: o sistema escreve aqui quando algo importante acontece (proposta aprovada, decisão esperando por você, prazo vencido, resposta por e-mail). Um aviso só informa: para agir, clique em Abrir origem e resolva na tela certa. Marcar como lida e Arquivar valem só para você; em Arquivadas fica o que você guardou; Preferências escolhe o que aparece para você aqui e no sino. Os avisos somem sozinhos (informativos em 14 dias, os demais em 45).",
   decisoes: "Pedidos de aprovação que vêm de outras telas (envio de proposta, desconto, compra, montador). Em Pendentes está o que espera por você: leia o cartão, use Ver documento para conferir e depois Aprovar ou Reprovar (a reprovação pede o motivo). Em Decididas fica o histórico. “Bloqueada” quer dizer que depende de outra decisão ser aprovada antes.",
   leads: "O pipeline de possíveis clientes, na lista ou no quadro Kanban. O lead guarda só a identificação do cliente (prédio, contato, telefone, e-mail, CNPJ/CPF); o equipamento é escolhido depois, no Formulário, que o lead abre com os dados já preenchidos. Ao digitar o CNPJ, o sistema consulta o Omie (só leitura) e mostra se o cliente já existe. Use Qualificar → Dossier para criar o Dossiê da obra (um só por lead). O lead vira Convertido quando a proposta é assinada (ou quando você muda o status) e passa a entrar nos indicadores.",
@@ -699,6 +699,8 @@ function SinoNotificacoes({ onClick }) {
 
 function Header({ route, role, setRole, onSearch, onNavigate }) {
   const bc = BREADCRUMB_MAP[route] || BREADCRUMB_MAP.dashboard;
+  const dadosVisao = window.DashboardVisaoStore ? window.DashboardVisaoStore.useVisao() : null;
+  const podeTrocarVisao = !dadosVisao || dadosVisao.semDados || dadosVisao.ehAdmin;
   const moduleHome = MODULE_HOME[bc.module];
   return (
     <header className="header">
@@ -714,7 +716,8 @@ function Header({ route, role, setRole, onSearch, onNavigate }) {
         <span className="cur">{bc.page}</span>
       </div>
       <GlobalSearch onNavigate={onNavigate}/>
-      <RoleSwitch role={role} setRole={setRole}/>
+      {/* Só o Administrador escolhe a visão; os demais seguem o departamento (docs/modulos/01_geral.md 1.1.3). Sem dados (carregando ou falha de leitura) o seletor continua como antes. */}
+      {podeTrocarVisao ? <RoleSwitch role={role} setRole={setRole}/> : null}
       <SinoNotificacoes onClick={() => onSearch?.("notificacoes")}/>
       {window.AjudaSuporte ? <window.AjudaSuporte route={route} telaNome={nomeDaTela(route, bc)} ajudaTexto={HELP_TOPICS[route]} tutorial={TUTORIAIS[route]}/> : null}
     </header>

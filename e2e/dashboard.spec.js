@@ -72,3 +72,64 @@ test('C.1 — a saudação usa o nome tirado do e-mail do login', async ({ page 
   await page.goto('/geral/dashboard');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(/^(Bom dia|Boa tarde|Boa noite), Gelson Simões\.$/, { timeout: 45_000 });
 });
+
+/* Visão por departamento + alçada (docs/modulos/01_geral.md 1.1.10). Supabase simulado: perfis, colaboradores_vpsistema e
+   alcadas_capacidade respondem como o teste mandar; o resto segue vazio. */
+const EMAIL_VISAO = 'visao.teste@verticalparts.com.br';
+async function prepararVisao(page, { nivel = 'Comum', departamento = 'Comercial', caps = [], erroAlcadas = false } = {}) {
+  await page.addInitScript((email) => {
+    sessionStorage.setItem('vpprd_sso_ok', '1');
+    sessionStorage.setItem('vpprd_user', JSON.stringify({ nome: 'Visao Teste', email, iniciais: 'VT', id: 't' }));
+  }, EMAIL_VISAO);
+  await page.route('**/*.supabase.co/rest/v1/**', async (route) => {
+    const req = route.request();
+    const tabela = new URL(req.url()).pathname.replace('/rest/v1/', '');
+    if (req.method() !== 'GET') return route.fallback();
+    const objeto = (req.headers()['accept'] || '').includes('vnd.pgrst.object');
+    const json = (corpo, status = 200) => route.fulfill({ status, contentType: 'application/json', headers: { 'content-range': '*/1' }, body: JSON.stringify(corpo) });
+    if (tabela === 'perfis') return objeto ? json({ id: 'p-visao', nivel }) : json([{ id: 'p-visao', nivel }]);
+    if (tabela === 'colaboradores_vpsistema') return json([{ departamento }]);
+    if (tabela === 'alcadas_capacidade') {
+      if (erroAlcadas) return json({ message: 'falha simulada' }, 500);
+      return json(caps.map((c) => ({ modulo: c.split('.')[0], capacidade: c.split('.')[1] })));
+    }
+    return route.fallback();
+  });
+}
+const titulo = (page, texto) => page.getByText(texto, { exact: false });
+
+test('D.1 — comercial com alçada só de Leads vê os cartões de Leads e não vê Propostas, Onde Parou nem Projetos', async ({ page }) => {
+  await prepararVisao(page, { caps: ['leads.ver', 'notificacoes.ver'] });
+  await page.goto('/geral/dashboard');
+  await expect(titulo(page, 'Leads do mês').first()).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByTestId('dash-ocultos')).toBeVisible();
+  await expect(titulo(page, 'Propostas enviadas')).toHaveCount(0);
+  await expect(titulo(page, 'Onde Parou')).toHaveCount(0);
+  await expect(titulo(page, 'Projetos em Andamento')).toHaveCount(0);
+  await expect(titulo(page, 'Tarefas de Hoje').first()).toBeVisible();
+  // não-administrador não escolhe a visão
+  await expect(page.getByText('Visualizando como')).toHaveCount(0);
+});
+
+test('D.2 — sem nenhuma alçada de cartão a pessoa vê o Dashboard completo', async ({ page }) => {
+  await prepararVisao(page, { departamento: 'Logística/Almoxarifado/Produção', caps: ['notificacoes.ver'] });
+  await page.goto('/geral/dashboard');
+  await expect(titulo(page, 'Onde Parou').first()).toBeVisible({ timeout: 45_000 });
+  await expect(titulo(page, 'Projetos em Andamento').first()).toBeVisible();
+  await expect(page.getByTestId('dash-ocultos')).toHaveCount(0);
+});
+
+test('D.3 — falha ao ler as alçadas mostra tudo, nunca esconde', async ({ page }) => {
+  await prepararVisao(page, { caps: ['leads.ver'], erroAlcadas: true });
+  await page.goto('/geral/dashboard');
+  await expect(titulo(page, 'Onde Parou').first()).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByTestId('dash-ocultos')).toHaveCount(0);
+});
+
+test('D.4 — administrador vê tudo e continua escolhendo a visão', async ({ page }) => {
+  await prepararVisao(page, { nivel: 'Administrador', caps: [] });
+  await page.goto('/geral/dashboard');
+  await expect(titulo(page, 'Onde Parou').first()).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByText('Visualizando como')).toBeVisible();
+  await expect(page.getByTestId('dash-ocultos')).toHaveCount(0);
+});
