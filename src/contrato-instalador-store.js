@@ -676,7 +676,7 @@
     if (cur) await lancarCustoReal(cur);
   }
 
-  /* 21/10 — "Enviar" de um rascunho = pedir o aval do Diego. Grava o WhatsApp do montador (contrato continua em rascunho) e, se o
+  /* 21/10 — "Enviar" de um rascunho = pedir o aval da Juliana. Grava o WhatsApp do montador (contrato continua em rascunho) e, se o
      aval já estava aprovado, o banco dispara os avisos na hora. Devolve { estado: 'aguardando_aval' | 'enviado' }. */
   async function pedirEnvio(id, nome, contato) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
@@ -691,7 +691,7 @@
 
   /* 22/10 (Jurídico, Task 11) — editar o documento. Rascunho: edita no próprio lugar (com controle de concorrência).
      Já enviado/assinado: NOVA REVISÃO — a anterior (documento, dados, assinatura e hash) fica em `revisoes`, o contrato volta a
-     rascunho com link novo, a fila de assinaturas e as parcelas pendentes saem e o aval do Diego é reaberto. Nada é sobrescrito. */
+     rascunho com link novo, a fila de assinaturas e as parcelas pendentes saem e o aval da Juliana é reaberto. Nada é sobrescrito. */
   async function salvarEdicao(id, formState, opts) {
     opts = opts || {};
     const c = sb(); if (!c) throw new Error('Supabase indisponível');
