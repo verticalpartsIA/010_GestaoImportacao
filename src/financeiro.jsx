@@ -984,13 +984,29 @@ function NotificacoesPage({ setRoute }) {
   // uma não deve refazer a outra (candidato 2 da revisão de arquitetura —
   // antes o estado "lido" vinha do localStorage embutido na própria busca
   // de alertas, e reabria a query toda vez que uma notificação era marcada).
-  React.useEffect(() => {
-    setLoading(true);
-    // A leitura (globais + dirigidos ao e-mail + sintéticos do Dashboard) fica no store, a MESMA que o sino do cabeçalho usa.
-    LidasStore.carregarAlertas()
-      .then((lista) => { setAlertasRaw(lista); setLoading(false); })
-      .catch((err) => { window.toast('Erro ao carregar notificações: ' + (err.message || err), 'error'); setAlertasRaw([]); setLoading(false); });
+  /* A leitura (globais + dirigidos ao e-mail + sintéticos do Dashboard) fica no store, a MESMA que o sino do cabeçalho usa.
+     #1217 B.4: antes carregava só ao abrir a tela; agora também a cada 5 min (com a aba visível, mesmo intervalo do
+     sino) e ao voltar para a aba depois de 1 min. Falha numa recarga mantém a lista que já estava na tela.
+     #1217 B.3: `incompleto` = os avisos calculados não puderam ser montados (a tela avisa). */
+  const [incompleto, setIncompleto] = React.useState(false);
+  const carregadoEm = React.useRef(0);
+  const carregarAlertasTela = React.useCallback((primeira) => {
+    if (primeira) setLoading(true);
+    return LidasStore.carregarAlertas()
+      .then((lista) => { setAlertasRaw(lista); setIncompleto(!!lista.incompleto); carregadoEm.current = Date.now(); })
+      .catch((err) => {
+        window.toast('Erro ao carregar notificações: ' + (err.message || err), 'error');
+        if (primeira) setAlertasRaw([]);
+      })
+      .finally(() => { if (primeira) setLoading(false); });
   }, []);
+  React.useEffect(() => { carregarAlertasTela(true); }, [carregarAlertasTela]);
+  React.useEffect(() => {
+    const t = setInterval(() => { if (!document.hidden) carregarAlertasTela(false); }, 300000);
+    const vis = () => { if (!document.hidden && Date.now() - carregadoEm.current > 60000) carregarAlertasTela(false); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
+  }, [carregarAlertasTela]);
 
   React.useEffect(() => { LidasStore.carregarEstado().then((e) => { setReadIds(e.lidas); setArchivedIds(e.arquivadas); }); }, []);
 
@@ -1007,11 +1023,15 @@ function NotificacoesPage({ setRoute }) {
     setReadIds((prev) => [...prev, idStr]);
     LidasStore.marcarLida(id);
   };
-  const markAllRead = () => {
+  /* #1217 B.2: o aviso de sucesso só sai depois de o banco confirmar; se falhar, as notificações voltam a "não lidas"
+     (o store já mostra o erro). */
+  const markAllRead = async () => {
     const ids = notificationsVisiveis.map((n) => String(n.id));
+    const antes = readIds;
     setReadIds((prev) => Array.from(new Set([...prev, ...ids])));
-    LidasStore.marcarTodasLidas(ids);
-    window.toast("Notificações marcadas como lidas", "success");
+    const ok = await LidasStore.marcarTodasLidas(ids);
+    if (ok) window.toast("Notificações marcadas como lidas", "success");
+    else setReadIds(antes);
   };
   // Arquivar/restaurar é POR PESSOA (some só da lista de quem arquivou). Arquivar também conta como lida.
   const archive = async (ids) => {
@@ -1038,6 +1058,10 @@ function NotificacoesPage({ setRoute }) {
   // Avisa o sino do cabeçalho na hora (sem esperar o intervalo de 5 min).
   React.useEffect(() => { if (!loading) LidasStore.avisar({ naoLidas: naoLidasCount }); }, [naoLidasCount, loading]);
   const modules = ["Todos", ...Array.from(new Set(notifications.map(n => n.module))).sort()];
+  /* #1217 B.1: o filtro de módulo ficava preso — ao trocar de aba (Todas / Não lidas / Arquivadas) o módulo escolhido
+     podia não existir na aba nova; o select mostrava "Todos" e a lista ficava vazia. Volta para "Todos" nesse caso. */
+  const moduloSumiu = !loading && moduleFilter !== "Todos" && !modules.includes(moduleFilter);
+  React.useEffect(() => { if (moduloSumiu) setModuleFilter("Todos"); }, [moduloSumiu]);
   const rows = notifications.filter(n => {
     if (filter === "Não lidas" && !n.unread) return false;
     if (moduleFilter !== "Todos" && n.module !== moduleFilter) return false;
@@ -1073,6 +1097,12 @@ function NotificacoesPage({ setRoute }) {
         </div>
       </div>
 
+      {incompleto && (
+        <div className="small" style={{ padding: '10px 14px', marginBottom: 12, border: '1px solid var(--vp-warning, #b26a00)', borderRadius: 6, background: 'rgba(245,158,11,.08)' }}>
+          Alguns avisos automáticos (proposta aprovada sem contrato, sinal pago etc.) não puderam ser calculados agora — a lista pode estar incompleta.{' '}
+          <Button variant="outline" size="sm" onClick={() => carregarAlertasTela(false)}>Tentar novamente</Button>
+        </div>
+      )}
       <div className="tbar">
         <div className="seg">
           {filters.map(f => <button key={f} className={filter === f ? "is-active" : ""} onClick={() => setFilter(f)}>{f}</button>)}
