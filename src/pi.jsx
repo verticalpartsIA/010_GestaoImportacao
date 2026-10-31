@@ -415,7 +415,13 @@ function piInstrucaoStatus(pi, embarque) {
       if ((pi.producao || {}).status !== 'Concluída') prox.push('• Produção ainda não concluída');
       return 'Em andamento.' + (prox.length ? '\nPendente:\n' + prox.join('\n') : '\nTudo em dia — conclua a P.I. quando o embarque chegar.');
     }
-    case 'Concluída': return 'Concluída: pagamento, produção e embarque finalizados.';
+    case 'Concluída': {
+      const aberto = [];
+      if (quitado < 100) aberto.push(`• Pagamento: só ${Math.round(quitado)}% pago`);
+      if ((pi.producao || {}).status !== 'Concluída') aberto.push('• Produção não marcada como concluída');
+      if (!embarque) aberto.push('• Sem embarque vinculado');
+      return aberto.length ? 'Marcada como Concluída, mas confira:\n' + aberto.join('\n') : 'Concluída: pagamento e produção em dia; embarque vinculado (a etapa do embarque não é conferida aqui).';
+    }
     case 'Cancelada': return 'Cancelada: esta P.I. não segue mais no fluxo.';
     default: return pi.status || '';
   }
