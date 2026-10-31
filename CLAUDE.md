@@ -122,7 +122,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 
 ### Índice deste arquivo
 - **A. Leis e travas permanentes:** a **Constituição** (Títulos I a IX, 50 artigos),  áreas blindadas (Cadastros Mestres, E-mail/Inbox, Ver documento, Containers, Mão de obra, Assinatura digital, PDF assinado), trava por "Confirmo" (Atualização de Custos).
-- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres e Comercial | Pré-venda).
+- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda e Financeiro & Preços).
 - **C. Procedimentos:** acessos, cache-busting, stack e testes, `pdf-bundle/`, fluxo de trabalho, método (SDD), pendências.
 - **D. Resíduo por módulo:** seções de entregas ainda não absorvidas pelo documento do seu módulo (ver marcas "→ módulo N").
 - **E. Research Base (hyperresearch).**
@@ -150,7 +150,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 | 2 | CRM (Leads, Canais, Conversão, Automação, Análise) | `docs/modulos/02_crm.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta |
 | 3 | Cadastros Mestres (Clientes, Fornecedores) | `docs/modulos/03_cadastros_mestres.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta; a área blindada de exclusão (lei) continua aqui |
 | 4 | Comercial \| Pré-venda (Formulários, Controle de Cotações, Cotações a Fornecedor, Cotação Quadro de Comando, Propostas, Contratos Social) | `docs/modulos/04_comercial_pre_venda.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta |
-| 5 | Financeiro & Preços | `05_financeiro_precos.md` | A criar (hoje: Precificação, Atualização de Custos, Avais) |
+| 5 | Financeiro & Preços (Atualização de Custos, Precificação, Aval Financeiro, Emissão de NF, Comissões) | `docs/modulos/05_financeiro_precos.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta; as áreas blindadas e a trava por "Confirmo" ficam aqui |
 | 6 | Contratos & Jurídico | `06_contratos_juridico.md` | A criar (hoje: Contrato de Venda, assinatura digital) |
 | 7 | Suprimentos & Importação | `07_suprimentos_importacao.md` | A criar (hoje: P.I., Embarques, Cotações de Varejo, Importação Varejo) |
 | 8 | Engenharia & Produto | `08_engenharia_produto.md` | A criar (hoje: Ficha Técnica, Solicitações de Produto, Quadro de Comando) |
@@ -195,6 +195,13 @@ O **WhatsApp**, o **gi-avisos** (o serviço que envia os avisos) e o **Copiloto 
 - **4.1 Formulários** (hub, Formulário de Equipamento, Quadro de Comando e páginas públicas) · **4.2 Controle de Cotações** · **4.3 Cotações a Fornecedor** (detalhe, Tratativas, Imagens, Documentos e portal do fornecedor) · **4.4 Cotação Quadro de Comando** · **4.5 Propostas** (lista, editor e envio) · **4.6 Contratos Social** · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, como nasce uma cotação, RFQ, trava e revisões, regras de preço, segurança, gatilhos, tabelas, tutoriais, documentos concatenados e benefícios trocados).
 - Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
 - Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (cada uma ganhou uma nota "→ parte já migrada") até o Gelson aprovar o documento; as seções **mistas** (outros módulos) nunca se apagam. As áreas blindadas de E-mail/Inbox, Assinatura digital e "Ver documento" continuam valendo e **não** são afetadas. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
+
+## Módulo 5 — Financeiro & Preços → `docs/modulos/05_financeiro_precos.md` (fonte da verdade; aprovado em 31/10/2026)
+
+**Aqui não se escreve mais nada sobre Financeiro & Preços.** Quem for trabalhar nele **lê, entende e atende** o documento do módulo:
+- **5.1 Atualização de Custos** · **5.2 Precificação** · **5.3 Aval Financeiro** · **5.4 Emissão de NF** · **5.5 Comissões** · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, como o preço se forma, os avais e a liberação da compra, as três "comissões", ICMS/DIFAL/margem, segurança, gatilhos, tabelas, tutoriais, documentos concatenados e benefícios trocados).
+- Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
+- Ficam **neste arquivo**: as **áreas blindadas** (Preço de Containers; Mão de obra × quantidade) e a **trava por "Confirmo" da Atualização de Custos**, que são lei e continuam valendo (ganharam uma nota de detalhe); as seções antigas do módulo (com nota "→ parte já migrada"), até o Gelson decidir retirá-las; e as seções **mistas**, que nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
 
 ## 🔒 ÁREA BLINDADA — Cadastros Mestres: cliente/fornecedor com transação NUNCA é excluído (31/10/2026, regra do Gelson)
 
@@ -288,6 +295,8 @@ Corrigido, revisado e confirmado em produção. Quem for "mexer, melhorar, simpl
 
 ## 🔒 ÁREA BLINDADA — Preço (R$) de Containers: câmbio + herança na Precificação (28/09/2026)
 
+> **→ Detalhe em Financeiro & Preços.** Esta seção é **lei** e continua valendo aqui; a descrição da tela está em `docs/modulos/05_financeiro_precos.md` (5.1 e 5.2).
+
 Corrigido em 2 rodadas (PR #435 e o fix de retrocompatibilidade PR #444, squash `d22a6d1`) e **confirmado funcionando pelo usuário em produção** ("Deu muito certo"). Se você (Claude Code, em qualquer sessão futura, mesmo concorrente) foi chamado pra "mexer", "melhorar", "simplificar" ou "refazer" qualquer parte disto — **PARE antes de editar**. Informe ao usuário o que já existe e funciona (resumido abaixo) e pergunte explicitamente se ele tem certeza do que está pedindo, incluindo o risco de quebrar algo já validado ao vivo. Só prossiga depois de confirmação explícita.
 
 **Arquivos/peças cobertos por este aviso:**
@@ -304,6 +313,8 @@ Corrigido em 2 rodadas (PR #435 e o fix de retrocompatibilidade PR #444, squash 
 - **(01/10/2026) Capatazia + container como Despesa Operacional + cards 120d/90d [o card de 90d foi RETIRADO em 10/10/2026 — ver seção "Precificação — método da planilha é o ÚNICO método"] (decisões do Financeiro, ao aposentar a planilha "JA - Cotação 961"):** `custos_containers` ganhou `capatazia_usd`/`capatazia_rs` **e `gri_usd`/`gri_rs` (GRI — General Rate Increase, mesma mecânica; migration `20261001210000`; entra no AFRMM e no rateio como a capatazia)** (colunas no cadastro; operador atualiza, a próxima precificação herda — mesma regra do preço: só preenche linha vazia, nunca sobrescreve). Container e capatazia são **Despesa Operacional** (não entram na base de II/PIS/COFINS/ICMS — decisão confirmada ciente de que o preço fica ~9% abaixo do cenário "container dentro do frete"); só o **AFRMM** (8%) incide sobre container + capatazia. Campo "Frete + Seguro + Capatazia — 90d" saiu; o de 120d só aparece se já tiver valor (frete informado pelo fornecedor/precificação antiga). Cards: **1 equipamento → 2 cards** (90d = container inteiro, markup próprio `mark_up_pct_expresso`; 120d = container + capatazia ÷ **2 fixo**, sem campo na tela — um container comporta no máximo 2 elevadores, então o equipamento sozinho em 120d viaja com outro; **não reintroduzir campo editável: confunde o operador**; as colunas `containers_compartilhados_120d` e `frete_seguro_capatazia_usd_expresso` foram **removidas do banco** em 01/10/2026, migration `20261001190000`); **2+ → 1 card** "Preço de venda" (container pago uma vez, sem rateio). Motor oficial continua o **V2** (nunca vai bater com a planilha: ~3% acima, ver `precificacao-elevador-engine.js`). Aviso (não bloqueia) quando container/capatazia divergem do cadastro (`divergenciasContainerComCadastro`). **Não mover container/frete de volta pra base aduaneira sem decisão do Financeiro.** `precificacao-elevador-engine.js` v6, `-store.js` v31, `.jsx` v46, `cadastro-custos.jsx` v11. **Markup padrão de novas precificações (01/10):** 40,5% (120d, `parametros_fiscais_elevador.mark_up_padrao_pct`) e 38,1% (90d, coluna nova `mark_up_padrao_expresso_pct` → `mark_up_pct_expresso` no `montarRascunho`); precificações existentes não mudam. **IRPJ adicional e comissão de consultoria padrão = 0** (como na planilha; antes 0,8% e 5%) — migration `20261001200000`; o operador digita se precisar; precificações já criadas guardam o snapshot antigo.
 
 ## 🔒🔒 TRAVA POR "CONFIRMO" — Atualização de Custos, TODAS as tabelas (13/10/2026, pedido do usuário)
+
+> **→ Detalhe em Financeiro & Preços.** Esta seção é **lei** e continua valendo aqui; a descrição da tela está em `docs/modulos/05_financeiro_precos.md` (5.1 e 5.2).
 
 Decisão do usuário (13/10/2026): as tabelas de **Cadastros › Atualização de Custos** só podem ser alteradas por uma sessão do Claude **depois de ele escrever "Confirmo"** no chat. Vale para **qualquer sessão, inclusive concorrente na mesma pasta**. Esta trava é **mais forte** que as áreas blindadas acima: não basta ele ter pedido a mudança — a sessão precisa dizer o que vai mudar e esperar o "Confirmo".
 
@@ -323,6 +334,8 @@ Decisão do usuário (13/10/2026): as tabelas de **Cadastros › Atualização d
 **Limite honesto:** é uma regra de conduta documentada, **não um bloqueio técnico** (nada no CI ou no banco impede o commit). Se ele quiser trava de verdade, o caminho é `CODEOWNERS` + proteção do branch exigindo a revisão dele nesses arquivos, e RLS/permissão de escrita nas 6 tabelas (hoje abertas à chave pública, issue #571).
 
 ## 🔒 ÁREA BLINDADA — Mão de obra × quantidade > 1 + Trocar/Remover/Acrescentar equipamento (28/09/2026)
+
+> **→ Detalhe em Financeiro & Preços.** Esta seção é **lei** e continua valendo aqui; a descrição da tela está em `docs/modulos/05_financeiro_precos.md` (5.1 e 5.2).
 
 Corrigido em 4 rodadas (PR #432, #438, #441, #457 — squash `26ff590`, `4ea3308`, `46f240c`, `0a8df62`) e **confirmado funcionando pelo usuário em produção** ("Agora sim, deu certo"). Se você (Claude Code, em qualquer sessão futura, mesmo concorrente) foi chamado pra "mexer", "melhorar", "simplificar" ou "refazer" qualquer parte disto — **PARE antes de editar**. Informe ao usuário o que já existe e funciona (resumido abaixo) e pergunte explicitamente se ele tem certeza do que está pedindo, incluindo o risco de quebrar algo já validado ao vivo. Só prossiga depois de confirmação explícita.
 
@@ -541,6 +554,8 @@ Resultado final, confirmado via `ListarCaractProduto` real e o toast da própria
 - Não testado com clique real no navegador nesta sessão — CDNs instáveis no sandbox (ver seção "Playwright" em Stack/como testar localmente); validado por transform via `@babel/standalone` (sem erro de sintaxe) e migration confirmada aplicada em produção via `information_schema.columns`.
 
 ## Alçadas — Envio de Proposta: CEO só decide quando a margem sai da regra de 15% (28/09/2026, PR #473, squash `b4bf0de`, issue fechada #474) [gate já em 01_geral.md · regra → módulo 4]
+
+> **→ Parte já migrada para Financeiro & Preços.** O trecho do módulo 5 desta seção está em `docs/modulos/05_financeiro_precos.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 > **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
@@ -827,6 +842,8 @@ Pedido do usuário: investigar o clique em "Criar contrato" (fila "Propostas ass
 
 ## Avais Financeiro e Jurídico — processo real: manuais, depois do sinal; disparam a compra (29/09/2026) [gates já em 01_geral.md · regra → módulos 5 e 6]
 
+> **→ Parte já migrada para Financeiro & Preços.** O trecho do módulo 5 desta seção está em `docs/modulos/05_financeiro_precos.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
+
 > **→ Parte já migrada.** Os gates aparecem em `docs/modulos/01_geral.md` §1.3.8 e §1.4.8. A regra dos avais será absorvida nos módulos 5 e 6.
 > **[SUPERADO em parte em 29/09 e 08/10/2026.]** A ordem do gate descrita abaixo (CEO, responsável, sinal, contrato, Jurídico, Engenharia) foi substituída: ver "Avais — 2ª rodada" e "Aval Engenharia". Mantém-se aqui só o histórico.
 
@@ -843,6 +860,8 @@ Usuário corrigiu a leitura do fluxo: **"O Aval Financeiro é um evento à parte
 - `index.html`: aval-financeiro-store 9→10, aval-financeiro.jsx 2→3, financeiro.jsx 36→37, gatilhos-engine 12→13, dashboard-metrics-gantt +1, contrato-venda-store +1. `assinar.html`: gatilhos-engine 11→12, contrato-venda-store +1.
 
 ## Avais — 2ª rodada: abrem juntos na Proposta, compra = 2 avais, CEO só < 15%, notificações (29/09/2026) [gates já em 01_geral.md · regra → módulos 5 e 6]
+
+> **→ Parte já migrada para Financeiro & Preços.** O trecho do módulo 5 desta seção está em `docs/modulos/05_financeiro_precos.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 > **→ Parte já migrada.** Os gates aparecem em `docs/modulos/01_geral.md` §1.3.8 e §1.4.8. A regra dos avais será absorvida nos módulos 5 e 6.
 > **[SUPERADO em 08/10/2026 quanto ao número de avais.]** A compra deixou de depender de 2 avais: o gate (`AvalFinanceiroStore.podeIniciarCompra`) exige **3** (Aval de Pagamento, Aval Jurídico e o Projeto de Instalação assinado pelo cliente) e o CEO só entra com margem abaixo de 15% ou desconhecida. Ver a seção "Aval Engenharia" e `docs/modulos/01_geral.md` §1.3.8 e §1.4.8.
@@ -1059,6 +1078,8 @@ Pedido do usuário: o vendedor que cria um formulário (mesmo rascunho) é dono 
 
 ## PCP — Planejamento e Controle da Produção (Logística Interna) — módulo completo (02–03/10/2026)
 
+> **→ Parte já migrada para Financeiro & Preços.** O trecho do módulo 5 desta seção está em `docs/modulos/05_financeiro_precos.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
+
 Construído em ~uma semana de sessões, só local até 03/10/2026, quando o usuário pediu "commit e merge tudo". Modelo: frePPLe (pastas `25_PCPfrepple*`, só leitura) + **"Planilha de PCP 7.0"** (Vizual; transcrição do vídeo em `Downloads/manual_da_planilha_de_pcp_7_0.md`). **A planilha é de uma gráfica de etiquetas — nada nela é nosso negócio**; usamos só a estrutura. O PCP serve a: **Quadros de Comando, Corrimãos, cabos de aço e cabos de manobra** (itens cortados sob medida). Almoxarifado = estoque do PCP, inclusive todos os componentes do quadro.
 
 **Telas (rotas, menu Logística Interna):** `almoxarifado` (`almoxarifado.jsx`: abas Estoque/Estrutura/Pedidos) · `carga-maquina` · `montagem-produto` · `simulacao-producao` · `pcp` (`pcp.jsx`: abas Ordens de Produção, Pedidos de Quadro, Planejamento, Controle) · `relatorios-pcp` (Pedidos, Lista de Preços, Produção, Perdas, Estoque, Fluxo de Caixa, Clientes). Em Cadastros Mestres: `cadastro-materias-primas`, `cadastro-produtos` (`cadastro-itens.jsx`, leitura de `pcp_produtos`). Estilo de tabela compartilhado: `styles/pcp-tabelas.css` (`table.t.pcp-grid`, Poppins fina, hover amarelo) — **use sempre `Card` + `table-wrap` + `t pcp-grid`** (a 1ª versão usou `.card/.table` e ficou feia). Navegação entre telas: `window.pcpIrPara(nav, rota, chaveSessionStorage, valor)` (guarda o filtro na sessão e faz `setSubsel(null)+setRoute`, mesmo padrão da Central de Decisões — **nunca** `VpRouter.navigate` sozinho).
@@ -1132,6 +1153,8 @@ Pedido do usuário: submódulo **MES** abaixo de PCP (Logística Interna, rota `
 
 ## Precificação — preço de venda declarado por equipamento (08/10/2026, PR #784, squash `5c655f0`)
 
+> **→ Parte já migrada para Financeiro & Preços.** O conteúdo desta seção está concatenado em `docs/modulos/05_financeiro_precos.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário (cotação 985: 3 equipamentos, o `VPEL-EL0985-3` custa US$ 17.670 no fornecedor contra US$ 16.830 dos outros dois): o card "Preço de venda" mostrava só "R$ x × 3" e a soma, o que sugere valores iguais. Regra dele: **a partir de agora toda exibição de preço de venda é por equipamento** (`VPEL-EL0985-1 = valor`, `-2 = valor`, `-3 = valor`), nunca só média × N.
 - **Tela (`precificacao-elevador.jsx` v48):** componente `PZPrecoPorEquipamento({ modelos, moLookup, precoTotal })` nos dois cards (120 d e 90 d). Lista uma linha por equipamento; Unidade com `quantidade > 1` expande pelas linhas de `mo_lookup` (mesmo `unidadeId`, `identificador` físico) quando a contagem bate com a quantidade, senão mostra o identificador da Unidade com "cada · × N". A linha de soma virou "Total da cotação — soma dos equipamentos acima" (1 equipamento: "Preço de venda total"). **Calcula na hora** a partir do preço do card, então funciona em precificação salva antes desta entrega, sem recalcular. O bloco do motor antigo (V1, "Comparação técnica") não foi mexido.
 - **Motor (`precificacao-elevador-engine.js` v7):** nova `ratearPorModelo(modelos, precoVendaTotal)` (exportada) — rateia o preço pelo custo do fornecedor (`valorUnitarioUsd × quantidade`); `valorUnitarioRs` já é por equipamento (÷ quantidade); sem custo USD em nenhuma unidade divide por quantidade. **`calcularV2` agora devolve `modelos` rateados sobre o preço do PRÓPRIO V2.**
@@ -1141,6 +1164,8 @@ Pedido do usuário (cotação 985: 3 equipamentos, o `VPEL-EL0985-3` custa US$ 1
 - `precificacao-elevador.jsx` também é peça das áreas blindadas de Containers e Mão de obra, mas só foi mexida a região dos cards de preço de venda (`carregar()`, `setContainer()`, MO e modais ficaram intactos). O motor (`-engine.js`) não está na lista blindada.
 
 ## Precificação — método da planilha é o ÚNICO método; passageiros = kg ÷ 75 (10/10/2026)
+
+> **→ Parte já migrada para Financeiro & Preços.** O trecho do módulo 5 desta seção está em `docs/modulos/05_financeiro_precos.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 A planilha do Financeiro ("JA - COTAÇÃO N° 963 - 27 EL", aba FIN-ELEVADOR) é a **fonte da verdade** do cálculo. O motor `calcularPlanilha` (`precificacao-elevador-engine.js` v10) a reproduz ao centavo (teste golden 963: preço R$ 8.961.402,51, lucro R$ 2.629.480,45); a 963 no site fecha em R$ 8.961.402,72 / R$ 2.629.480,53 (a diferença de centavos é o DIFAL calculado sobre o preço).
 - **Único método**: preço = custo da nota (sem créditos) ÷ (1 − impostos da venda − MARK-UP), MARK-UP = margem sobre o **preço** (53% na 963). Container+capatazia+GRI entram no CIF (pagam II/PIS/COFINS/ICMS/AFRMM); despachante, ad-valorem, frete interno, armazenagem e instalação só abatem do **lucro**. `calcularEsalvar` grava sempre `modo_formacao_preco = 'planilha'` (precificação antiga é convertida ao recalcular; o mark-up antigo "sobre o custo" precisa ser trocado). Saíram da tela: seletor de modo, comparação "motor antigo (V1)", coluna "Oficial salvo" e campo de mark-up próprio da Memória de cálculo. Os motores V1/V2 continuam no código (testes), só não aparecem.
@@ -1155,6 +1180,8 @@ A planilha do Financeiro ("JA - COTAÇÃO N° 963 - 27 EL", aba FIN-ELEVADOR) é
 - Não testado com clique real: Formulário com o campo de passageiros/Carga e Proposta no editor.
 
 ## AFRMM em Containers + Resumo de Custos (13/10/2026, PR #873, squash `df3e409`)
+
+> **→ Parte já migrada para Financeiro & Preços.** O conteúdo desta seção está concatenado em `docs/modulos/05_financeiro_precos.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do usuário: mostrar o AFRMM (Adicional ao Frete para Renovação da Marinha Mercante) ao lado de Preço/Capatazia/GRI.
 - **Atualização de Custos › Containers** (`cadastro-custos.jsx` v15): colunas **AFRMM (USD)** e **AFRMM (R$)**, **automáticas, sempre 8%** de Preço + Capatazia + GRI (`CC_AFRMM_PCT`), cinza, sem edição e **sem coluna no banco** (calculado na renderização). R$ = 8% da soma das colunas em R$ (não recalcula pelo câmbio na hora). Hoje: 20HC US$ 588,00 / R$ 3.063,45; 40HC US$ 702,47 / R$ 3.668,44. Decisão do usuário: "Automático sempre 8%" — não virar campo editável sem pedir.
@@ -1735,6 +1762,8 @@ Na aba Necessidade, tabela "A produzir": caixas de seleção + botão **Gerar OP
 
 ## Segurança real (#571) — andamento (04/10/2026, local, não commitado) [resumo já em 01_geral.md · detalhe → módulo 14]
 
+> **→ Parte já migrada para Financeiro & Preços.** O trecho do módulo 5 desta seção está em `docs/modulos/05_financeiro_precos.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
+
 > **→ Parte já migrada para Comercial | Pré-venda.** O trecho do Formulário/Proposta/Cotação desta seção está em `docs/modulos/04_comercial_pre_venda.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 > **→ Parte já migrada.** Resumo em `docs/modulos/01_geral.md` PC-3 e PC-6. O detalhe técnico será absorvido no módulo 14 (Administração).
@@ -1836,6 +1865,8 @@ Em `/comercial/controle-cotacoes` cada cotação do Formulário digital (origem 
 
 ## Aval Engenharia — terceiro aval da compra: assinatura do Projeto de Instalação, por cotação (08/10/2026) [nó já em 01_geral.md · regra → módulos 5 e 9]
 
+> **→ Parte já migrada para Financeiro & Preços.** O trecho do módulo 5 desta seção está em `docs/modulos/05_financeiro_precos.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
+
 > **→ Parte já migrada.** O nó do motor aparece em `docs/modulos/01_geral.md` §1.4.8. A regra do aval será absorvida nos módulos 5 e 9.
 
 **Mergeado em `main`: PR #750, squash `07c22c5`.** Cache: quem estava com o sistema aberto precisa de Ctrl+F5. A 955 segue bloqueada até o representante assinar o projeto; cotações sem Projeto de Instalação salvo também ficam bloqueadas na compra até a Engenharia salvar o projeto com o Nº da cotação.
@@ -1905,6 +1936,8 @@ Validado por `npm test` (411/411 em cada um dos 7 commits) e `node scripts/check
 - `index.html`: `gatilhos-engine.js` v16→18, `decisoes.jsx` v6→8, `dashboard.jsx` v22→23, `cadastros.jsx` v9→10, `colaboradores-admin.jsx` v5→6, `vistorias-obras.jsx` v15→17, `logistica.jsx` v68→70, `vistorias-envio.jsx` v16→18, `vistorias-questionarios-store.js` v15→16, `almoxarifado.jsx` v28→29, `engenharia-elevador.jsx` v9→10, `emissao-nf.jsx` v4→5, `expedicao.jsx` v3→4, `importacao-varejo.jsx` v8→9, `financeiro.jsx` v43→44, `controle-cotacoes.jsx` v9→10, `quadro-comando.jsx` v22→24. `assinar.html`: `gatilhos-engine.js` v16→17. `cotacao-elevador-fornecedor.html`/`formulario-cliente.html`: `gatilhos-engine.js` v11→18. `vistoria-execucao.html`: `vistorias-questionarios-store.js` v14→16.
 
 ## Auditoria de amarrações entre telas — correções 1 a 3 (11/10/2026) [roteador já em 01_geral.md · resto → módulos 4, 7, 9 e 12]
+
+> **→ Parte já migrada para Financeiro & Preços.** O trecho do módulo 5 desta seção está em `docs/modulos/05_financeiro_precos.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 > **→ Parte já migrada para Comercial | Pré-venda.** O trecho do Formulário/Proposta/Cotação desta seção está em `docs/modulos/04_comercial_pre_venda.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
@@ -2027,6 +2060,8 @@ Decisão do Financeiro: o preço de venda da Precificação (R$ 8.961.402,72 na 
 - `index.html`: proposta-opcoes v11, proposta-form v18, proposta-heranca v22, proposta-preview v30, bundle v25; `assinar.html`: opcoes v11, preview v26, bundle v24.
 
 ## Regras de ICMS na venda por UF de destino — SP→SP importado = 12% (15/10/2026, autorizado com "Confirmo")
+
+> **→ Parte já migrada para Financeiro & Preços.** O conteúdo desta seção está concatenado em `docs/modulos/05_financeiro_precos.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Precificação VPPC-0983: o "ICMS na venda" era o `icms_venda_pct` global de 4% (alíquota interestadual de importado, Res. Senado 13/2012), igual para qualquer cliente. Venda dentro de SP é 12% (decisão do Financeiro; pesquisa indica NCM 8428.10 a 12% na tabela interna de SP — **conferir com o contador o RICMS/SP vigente**; a redução a 5,6% do Convênio 52/91 é só para elevador de carga industrial).
 - **Tabela nova `regras_icms_venda`** (migration `20261015130000`, aplicada; uf_origem, uf_destino, origem_mercadoria, ncm opcional, aliquota_pct, fundamento, ativo; RLS aberta como o resto). Seed: SP→SP, Estrangeira, 8428.10, 12%. Não é uma das 6 tabelas travadas, mas a aba nova mora em Atualização de Custos (`CCIcmsTab`, "Regras de ICMS", slug `regras-icms`) — a trava do "Confirmo" vale para ela também.

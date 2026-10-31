@@ -29,7 +29,7 @@
    &nbsp;&nbsp;&nbsp;4.6.1 O que é · 4.6.2 Rota e arquivos · 4.6.3 Perfil e acesso · 4.6.4 O que a tela mostra · 4.6.5 Botões e controles · 4.6.6 Comportamento · 4.6.7 Dados (lê/grava) · 4.6.8 Regras e armadilhas · 4.6.9 Testes · 4.6.10 Pendências e decisões · 4.6.11 Histórico
    Parte comum de Comercial | Pré-venda (sem número de tela)
    &nbsp;&nbsp;&nbsp;PC-1 Mapa de ligações · PC-2 Como nasce uma cotação (Nº, dono e linha do tempo) · PC-3 RFQ ao fornecedor: idiomas, letra de revisão e e-mail · PC-4 Trava, destrave e revisões comerciais · PC-5 Regras de preço que atravessam as telas (margem, DIFAL, Master ID) · PC-6 Identidade, alçadas e segurança · PC-7 Gatilhos e rotinas · PC-8 Tabelas · PC-9 Navegação, cache e testes · PC-10 Menu "?" e tutoriais · PC-11 Documentos soltos e destino do que foi concatenado · PC-12 Benefícios trocados com os outros módulos
-5. Financeiro & Preços → `05_financeiro_precos.md` (a criar)
+5. Financeiro & Preços → `05_financeiro_precos.md` (REAL)
 
 ## Glossário (módulo Comercial | Pré-venda)
 Termos gerais (soft-delete, alerta, alçada, Nº da cotação) estão no glossário de `01_geral.md`; **Convertido** e **Contribuinte de ICMS** no de `02_crm.md`; **Código humano**, **Documento único** e **Omie primeiro** no de `03_cadastros_mestres.md`. Não se repetem aqui.
@@ -207,6 +207,7 @@ Todos são **achados, sem correção** (Art. 45), salvo onde dito.
 10. **A spec do DIFAL no Formulário (15/10/2026)** previa quadro de aviso do DIFAL, Inscrição Estadual e bloqueio na Precificação. Hoje o formulário **exige** Finalidade e Contribuinte (Conferido) e o Lead tem os campos; o **quadro de aviso do DIFAL no formulário não existe** (nenhuma chamada a `DifalEngine` em `formulario-elevador.jsx`). Estado da Precificação: módulo 5.
 11. **Página pública do orçamento de quadro fora do teste de fumaça:** `PAGINAS_PUBLICAS` em `e2e/smoke.spec.js` não lista `formulario-quadro-comando-publico.html` (Art. 33). **Conferido.**
 12. **Tutorial desatualizado** (PC-10) e **sem ajuda "?" para `formulario-quadro-comando`**.
+13. **A "Origem da venda" do formulário alimenta a comissão paga (5.5):** de 61 formulários, 8 estão sem origem e a origem "Site VerticalParts" (2) **não tem regra** em `regras_comissionamento`; gerar comissão dessas propostas dá erro explicativo. **Conferido** (SELECT, 31/10/2026). **Achado, sem correção**; decisão do Gelson em `05_financeiro_precos.md` 5.5.10 item 3.
 
 ### 4.1.11 Histórico
 - Passou a existir um só Formulário para elevador, escada e esteira (15/08/2026), cada tipo com seus campos. As três URLs e a planilha técnica de escada e esteira vieram em 29/10/2026.
@@ -601,7 +602,7 @@ Criada em 30/09/2026 (o item novo do menu abria o Dashboard por causa do cache d
 - **Eventos de fluxo emitidos pelo módulo** (**Conferido** no código): `FORMULARIO_PREENCHIDO`, `COTACAO_ENVIADA_FORNECEDOR`, `FORNECEDOR_RESPONDEU`, `COMPRA_FORNECEDOR_INICIADA`, `COMPRA_FORNECEDOR_CONFIRMADA`, `PROPOSTA_ELABORADA`, `PROPOSTA_ENVIADA`, `PROPOSTA_REENVIADA`, `CLIENTE_RESPONDEU_PROPOSTA`, `VERTICALPARTS_ACEITOU_REVISAO`, `VERTICALPARTS_RECUSOU_REVISAO`. Cada um cria ou fecha etapas da cadeia da cotação (motor do módulo 1, `01_geral.md` PC-1).
 - **Fila `fluxo_pendentes`:** a cascata depois da assinatura da proposta roda no sistema interno (🔒; `01_geral.md` PC-9).
 - **Rotinas agendadas:** nenhuma específica do módulo (a busca em `cron.job` só achou `decisoes-expirar-orfas-diario`, do módulo 1).
-- **Realtime:** `propostas` (lista e editor escutam) e `cotacoes_elevador_fornecedor` (publicada; nenhuma tela **deste módulo** escuta; a Precificação, do módulo 5, **não foi conferida**).
+- **Realtime:** `propostas` (lista e editor escutam) e `cotacoes_elevador_fornecedor` (publicada; nenhuma tela **deste módulo** escuta; a Precificação (módulo 5) também está publicada e a tela **não escuta**, **Conferido** em 31/10/2026: `05_financeiro_precos.md` 5.2.10 item 8).
 
 ## PC-8 Tabelas
 **Conferido** (31/10/2026; linhas = contagem exata nas já consultadas).

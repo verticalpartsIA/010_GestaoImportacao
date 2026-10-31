@@ -167,6 +167,7 @@ Tela inicial do sistema ("Visão Geral"). Mostra, para um perfil, indicadores (K
 4. **Meta de 25%** da conversão está fixa no código.
 5. A tabela `comissoes` está vazia (0 linhas): os dois KPIs de comissão mostram zero.
 6. ~~A saudação mostrava o nome do perfil~~ — corrigido em 31/10/2026 (1.1.3).
+7. **Vocabulário de status das comissões não bate:** o KPI de comissões pendentes conta só `status === 'Aguardando'` (e fala em "Paga"), mas o motor e a tela de Comissões (módulo 5) gravam "Aguardando aprovação", "Aguardando aprovação diretoria", "Aprovado" e "Pago". Comissões geradas pelo motor **não entram** nesse KPI; hoje não há linhas, então sem efeito. **Conferido** no código, 31/10/2026; texto completo em `05_financeiro_precos.md` 5.5.10 item 1. **Achado, sem correção.**
 
 **Proposta, aguardando aprovação:** manter poucos KPIs por perfil, cada um com nome, definição única, fonte e período explícitos; tirar a meta do código; corrigir 1 e 2 antes de qualquer outra mudança.
 
@@ -754,6 +755,10 @@ Esta tabela lista os 6 jobs **das telas de Geral**. Em 31/10/2026 o banco tinha 
   - **Identidade protegida por gatilho do banco:** o Formulário fixa `id`, Nº, data, dono e vendedor num gatilho `BEFORE UPDATE` (`fn_formularios_elevador_protege`), não só pela tela. Vale para toda tabela cujo código/`id` "nunca muda".
   - **Trava com destrave por motivo:** ação travada por regra de negócio; destrave só por alçada de Líder, motivo obrigatório de 10 letras ou mais, aviso ao dono e registro em `vp_logs` (Formulário e Proposta).
   - **Lista cortada em silêncio:** a lista de Propostas pede 300 linhas e o banco tem 340. Ler em páginas de 1.000 e avisar quando a lista veio incompleta.
+- **Benefícios vindos de Financeiro & Preços (doados em 31/10/2026, Art. 49; texto completo em `05_financeiro_precos.md` PC-12). Selo: Conferido em 31/10/2026 no código:**
+  - **Vocabulário único de status:** o mesmo conceito com três grafias ("Aguardando", "Aguardando aprovação", "Paga"/"Pago") quebra KPI que compara texto (1.1.10 item 7). Antes de comparar status por texto, conferir o que o gravador realmente escreve.
+  - **Botão de aprovação sem conferir quem aprova:** "Aprovar (diretoria)", "Dar Aval" e "Aprovar" são regras do navegador; a alçada existe no catálogo e a tela não a confere. Vale para qualquer tela de Geral com decisão (1.3).
+  - **Botão que parece ação e só muda status:** "Pagar" não paga e "Reprovar" não bloqueia; o rótulo deve dizer o que o botão realmente faz.
 
 ### PC-10 Menu "?" (Ajuda, Treinamento, Enviar feedback)
 *(Migrado do CLAUDE.md em 31/10/2026; arquivos conferidos agora, regras vindas do CLAUDE.md.)*
