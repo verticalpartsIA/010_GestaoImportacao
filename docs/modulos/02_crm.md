@@ -399,7 +399,7 @@ Duas Edge Functions criam lead sem ninguém digitar. **Selo:** Conferido 31/10/2
 
 ### PC-7 Gatilhos e rotinas
 O CRM **não tem rotina agendada** (nenhum job de `pg_cron` cita leads — Conferido, banco). O que roda:
-- **Gatilho `trg_evfluxo_lead_cadastrado`** (depois de inserir lead; migração `20261023122207_eventos_fluxo_lead_cliente_cadastrado`, **registrada como aplicada no banco e o gatilho existe lá** — Conferido em 31/10/2026; **o arquivo da migração NÃO está em `supabase/migrations/`**, pendência contra o Art. 31): grava o evento "Lead cadastrado" (módulo Comercial) em `eventos_fluxo` quando o lead não está excluído; engole erros. **Ainda nunca disparou:** o gatilho é de 23/10/2026 e o último lead criado é de 11/10/2026 (0 eventos "Lead cadastrado" no banco).
+- **Gatilho `trg_evfluxo_lead_cadastrado`** (depois de inserir lead; migração `20261023122207_eventos_fluxo_lead_cliente_cadastrado`, **registrada como aplicada no banco e o gatilho existe lá** — Conferido em 31/10/2026; o arquivo da migração, que faltava no repositório, foi **recriado em 31/10/2026** a partir do histórico do banco; é idempotente e também recria o gatilho de Clientes): grava o evento "Lead cadastrado" (módulo Comercial) em `eventos_fluxo` quando o lead não está excluído; engole erros. **Ainda nunca disparou:** o gatilho é de 23/10/2026 e o último lead criado é de 11/10/2026 (0 eventos "Lead cadastrado" no banco).
 - **Gatilho `trg_leads_vincular_quadros`** (PC-3).
 - **Verificação do Omie em segundo plano** (PC-4): roda no navegador de quem abre a lista, não no servidor.
 
@@ -413,7 +413,7 @@ O CRM **não tem rotina agendada** (nenhum job de `pg_cron` cita leads — Confe
 | `dossier_obra.lead_id` | 1 com lead (sem chave estrangeira) | Dossiê |
 | `quadros_comando.lead_id` | 0 com lead (sem chave estrangeira) | Quadro de Comando |
 | `cotacoes.lead_id` | — (chave estrangeira sem ação) | cotações |
-Chaves estrangeiras que **apontam para** `leads`: só `cotacoes` e `formularios_elevador` (Conferido, banco). Migrações do CRM: `20260818140000_leads_cliente_id`, `20260828130000_leads_clientes_documento_pendente`, `20260926160000_leads_soft_delete`, `20261004180000_leads_comissao_pct`, `20261007160000_leads_especificacao_tecnica`, `20261014130000_leads_vincular_quadros_ao_converter`, `20261016160000_leads_contribuinte_icms` e `20261023122207_eventos_fluxo_lead_cliente_cadastrado` (esta só no banco; o arquivo falta no repositório, ver PC-7).
+Chaves estrangeiras que **apontam para** `leads`: só `cotacoes` e `formularios_elevador` (Conferido, banco). Migrações do CRM: `20260818140000_leads_cliente_id`, `20260828130000_leads_clientes_documento_pendente`, `20260926160000_leads_soft_delete`, `20261004180000_leads_comissao_pct`, `20261007160000_leads_especificacao_tecnica`, `20261014130000_leads_vincular_quadros_ao_converter`, `20261016160000_leads_contribuinte_icms` e `20261023122207_eventos_fluxo_lead_cliente_cadastrado` (arquivo recriado em 31/10/2026; ver PC-7).
 
 ### PC-9 Navegação, cache e testes
 - **Padrões gerais** (navegar por `setSubsel` + `setRoute`, estado na URL, cache-busting `?v=`, mapa de rotas, testes e CI): `01_geral.md` PC-9. **Específico do CRM:** `comercial.jsx` está em `?v=45` e `crm.jsx` em `?v=3` no `index.html` (Conferido); `crm.jsx` carrega **depois** de `comercial.jsx`: `LEAD_STATUSES`, `comercialSb` e `waLink` só existem em `window` depois que `comercial.jsx` carrega, então qualquer tela nova de CRM tem de carregar depois dele.
