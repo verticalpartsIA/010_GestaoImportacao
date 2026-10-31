@@ -238,8 +238,8 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | importacao-detail | Voltar para Importação | `importacao` | `/gestao-importacao/importacao` | `logistica.jsx:661` |
 | importacao-rastreamento | Voltar para Importação | `importacao` | `/gestao-importacao/importacao` | `logistica.jsx:1066` |
 | importacao-rastreamento | Abrir embarque | `importacao-detail` | `/gestao-importacao/importacao-detail` | `logistica.jsx:1178` |
-| inbox | Voltar | `dashboard` | `/geral/dashboard` | `logistica.jsx:2324` |
-| inbox | (acionado por um handler — ver o código) | `linha-do-tempo` | `/engenharia/linha-do-tempo` | `logistica.jsx:2042` |
+| inbox | Voltar | `dashboard` | `/geral/dashboard` | `logistica.jsx:2386` |
+| inbox | (acionado por um handler — ver o código) | `linha-do-tempo` | `/engenharia/linha-do-tempo` | `logistica.jsx:2094` |
 | instalacao | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `operacoes.jsx:850` |
 | juridico | (acionado por um handler — ver o código) | `contrato-editor` | `/juridico/contrato-editor` | `operacoes.jsx:361` |
 | juridico | (acionado por um handler — ver o código) | `contrato-venda-equipamentos` | `/juridico/contrato-venda-equipamentos` | `operacoes.jsx:359` |
@@ -277,7 +277,7 @@ São abas de formulário/modal, filtros, modos de visualização e passos de ass
 | `ims.jsx:75` | IMSForm | `tab` | `'identificacao'` | `ims-importacao` |
 | `ims.jsx:342` | IMSPage | `activeTab` | `'todos'` | `ims-importacao` |
 | `lista-fios.jsx:46` | ListaFiosView | `aba` | `'fios'` | (modal/componente interno) |
-| `logistica.jsx:1860` | EmailInbox | `modoCompose` | `'responder'` | `inbox` |
+| `logistica.jsx:1912` | EmailInbox | `modoCompose` | `'responder'` | `inbox` |
 | `ncm-catalogo.jsx:574` | NcmKanbanPage | `view` | `"kanban"` | `ncm-kanban` |
 | `pi.jsx:445` | PIForm | `tab` | `'id'` | `pi-importacao` |
 | `precificacao-elevador.jsx:484` | ModalAcrescentarEquipamento | `modo` | `grupos.length ? 'identico' : '` | (modal/componente interno) |
