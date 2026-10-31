@@ -182,7 +182,7 @@ Auditoria read-only seguida de correções, uma issue por tela. Cada correção 
   - A carga tem `try/catch` e mostra aviso com "Tentar novamente" (nunca "Carregando…" eterno).
   - Após "Dar Aval de Pagamento", a tela confere `AvalFinanceiroStore.podeIniciarCompra` e diz o que ainda falta. **As regras de avais não mudaram** (confirmado pelo Gelson): três avais (Pagamento, Jurídico, Projeto de Instalação assinado) + CEO se margem < 15%.
   - D.5 (31/10/2026, decisão do Gelson: opções a + b): o filtro das cadeias e a cotação aberta ficam na URL (`/adm-financeiro/financeiro/<filtro>/<Nº>`). F5, link compartilhado e Voltar/Avançar mantêm a tela. **Só uma cotação aberta por vez** (a do link). Link com filtro que não é o da cotação abre no filtro dela (troca sem criar entrada no Voltar); cotação sem cadeia avisa e volta à lista. **Busca e janelas de confirmação ficam fora da URL de propósito** (reabrir uma confirmação no F5 arriscaria confirmar duas vezes). Filtro novo = incluir em `FILTROS_CADEIA`. O modal de cadeia do Controle de Cotações (mesmo componente, sem `onAlternar`) continua abrindo/fechando só na tela.
-  - D.4 (alçada no botão) aguarda a #571.
+  - D.4 (alçada no botão) saiu da #1214 e virou a issue #1239, que depende da #571. A #1214 e o epic #1218 foram fechados.
 - **Dashboard:**
   - `loadDashboardData` devolve `erros` (consultas que falharam) e a tela avisa.
   - Não há mais "vazio aos 3 s": a tela segue carregando e avisa a demora.
