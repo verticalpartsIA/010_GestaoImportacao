@@ -387,3 +387,4 @@ Números: 1.239 clientes (134 com vínculo por id; 1.050 com código do Omie; 1 
 - Stores: `vinculos(id)` e `inativar(id)`; `remover` recusa com transação ou falha ao conferir (sem a função no banco, nenhuma exclusão passa).
 - Tela: a lixeira mostra as transações e oferece Inativar; sem transação, pede confirmação e exclui.
 - Testes: `src/cadastros-nunca-excluir.test.js` (8).
+- **Migration aplicada em produção em 31/10/2026** (com o "Confirmo" do Gelson). Conferido no banco: os 2 gatilhos existem; as 3 FKs estão em `RESTRICT`; `cadastro_vinculos` é executável pela tela e a função da trava não é. Exemplos: AKAI (Formulário 1, cadastrado no Omie, 5 e-mails), Glarie (11 P.I., 37 cotações, 85 unidades, 63 e-mails). Hoje **99 de 1.239 clientes** e **59 de 82 fornecedores** não têm nenhuma transação (só esses podem ser excluídos). A tentativa real de DELETE barrada pela trava **não foi testada** (exigiria comando destrutivo no banco).
