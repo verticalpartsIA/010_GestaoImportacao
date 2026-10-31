@@ -28,8 +28,8 @@ Regra comum: o roteador (`router.js`) usa só o 2º segmento como rota; 3º/4º 
 - Modal de detalhe do projeto reflete a URL: `window.useRotaId('dashboard')` (`dashboard.jsx:184`) — deep-link, F5 e Voltar/Avançar funcionam.
 - Alertas do Dashboard (`supabase.js`) filtram por destinatário como a Central; leads com `excluido_em` não contam.
 
-### 2.2 Notificações — `/geral/notificacoes`
-- `NotificacoesPage({ setRoute })` (`financeiro.jsx:935`), `app.jsx:418`. Abas internas (`Tabs`): ativas e **Arquivadas** (arquivar é **por pessoa**, `notificacoes_lidas.arquivada`).
+### 2.2 Notificações — `/geral/notificacoes[/<aba>[/<id do aviso>]][?modulo=<módulo>]`
+- `NotificacoesPage({ setRoute })` (`financeiro.jsx`), `app.jsx:418`. Abas Todas / Não lidas / Arquivadas (arquivar é **por pessoa**, `notificacoes_lidas.arquivada`). Desde 31/10/2026 a aba (`nao-lidas`, `arquivadas`; Todas deixa a URL limpa), o aviso aberto e o filtro de módulo ficam na URL.
 - Fonte única de leitura: `NotificacoesLidasStore.carregarAlertas()/visiveis()/useNaoLidas()` (`notificacoes-lidas-store.js`) — usada também pelo sino do cabeçalho (`SinoNotificacoes`, `shell.jsx`; atualiza a cada 5 min e no evento `vp:notificacoes`). **Não duplicar essa leitura.**
 - Regras puras em `notificacoes-processamento.js`: `categoriaDe`, `visivelPorPreferencia` (Financeiro/Operações/Comercial ocultáveis; **Jurídico e Central de Decisões nunca somem**), `urlSegura(rota, isKnownRoute)` (só aceita caminho relativo de rota conhecida — recusa `https://`, `//`, `javascript:`).
 - "Abrir origem" navega pelo campo `alertas.rota` (preenchido pelo produtor ou, na falta, pelo trigger `trg_alertas_rota_padrao`/`alertas_rota_por_id` pelo prefixo do id). **Novo produtor de alerta com prefixo de id novo → acrescentar em `alertas_rota_por_id`.** Módulos sem rota própria caem em `ROTA_POR_MODULO`.
@@ -194,6 +194,7 @@ Auditoria read-only seguida de correções, uma issue por tela. Cada correção 
   - "Marcar todas como lidas" só mostra sucesso após gravar (`marcarTodasLidas` devolve `true/false`).
   - Falha em propostas/contratos/avais marca a lista `incompleto`, sem montar avisos calculados com dados vazios.
   - Recarrega a cada 5 min e ao voltar para a aba.
+  - (31/10/2026, item 3 do prompt de debug: F5 e link) Aba, aviso aberto e módulo ficam na URL (`/geral/notificacoes/<aba>/<id>?modulo=`). **Abrir pelo link não marca como lida nem arquiva.** Aviso que não existe mais (resolvido, expirado, de outra pessoa ou oculto pelas Preferências) avisa e volta à lista; aviso arquivado aberto fora de "Arquivadas" (ou o contrário) troca de aba sem criar entrada no Voltar. Preferências fora da URL de propósito. Aba nova = incluir em `NOTIF_ABAS`.
 - **Central de Decisões:**
   - `listarDecididas` filtra por pessoa **no banco** (`decidido_por`, `solicitado_por`, `aprovadores_esperados cs`) antes do limite de 200.
   - O link de decisão já decidida abre "Decididas" com aviso; o de decisão não encontrada avisa; nos dois casos o modal sai da URL.

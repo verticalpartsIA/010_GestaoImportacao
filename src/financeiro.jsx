@@ -999,13 +999,34 @@ function ComissoesPage() {
 }
 
 /* ---------- NOTIFICAÇÕES ---------- */
+const NOTIF_ABAS = { todas: 'Todas', 'nao-lidas': 'Não lidas', arquivadas: 'Arquivadas' };
 function NotificacoesPage({ setRoute }) {
   const [alertasRaw, setAlertasRaw] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
-  const [filter, setFilter] = React.useState("Todas");
-  const [moduleFilter, setModuleFilter] = React.useState("Todos");
+  /* Aba, notificação aberta e filtro de módulo moram na URL: /geral/notificacoes/<aba>/<id do aviso>?modulo=<módulo>.
+     F5, link compartilhado e Voltar/Avançar mantêm a tela. "Todas" deixa a URL limpa. Abrir pelo link NÃO marca como
+     lida nem arquiva (só os botões fazem isso). A janela Preferências fica fora da URL de propósito. */
+  const [abaUrl] = window.useRotaId ? window.useRotaId('notificacoes') : [''];
+  const locNotif = (window.VpRouter && window.VpRouter.parseLocation()) || {};
+  const abaKey = NOTIF_ABAS[abaUrl] ? abaUrl : 'todas';
+  const filter = NOTIF_ABAS[abaKey];
+  const detalheId = locNotif.route === 'notificacoes' && NOTIF_ABAS[abaUrl] ? String(locNotif.tab || '') : '';
+  const [moduleFilter, setModuleFilterQ] = window.useQueryParam ? window.useQueryParam('modulo', 'Todos') : React.useState('Todos');
+  const moduloRef = React.useRef(moduleFilter);
+  moduloRef.current = moduleFilter;
+  // navigate() troca só o caminho: devolve o ?modulo= escolhido depois de cada troca.
+  const irNotif = (aba, id, opts) => {
+    if (!window.VpRouter) return;
+    window.VpRouter.navigate('notificacoes', aba === 'todas' && !id ? null : aba, id || null, opts);
+    const m = moduloRef.current;
+    if (m && m !== 'Todos') {
+      try { const u = new URL(window.location.href); u.searchParams.set('modulo', m); window.history.replaceState(window.history.state, '', u.pathname + u.search + u.hash); } catch (_) { /* segue sem o filtro na URL */ }
+    }
+  };
+  const setFilter = (rotulo) => { const k = Object.keys(NOTIF_ABAS).find((x) => NOTIF_ABAS[x] === rotulo) || 'todas'; irNotif(k, null); };
+  const setModuleFilter = (m) => setModuleFilterQ(m || 'Todos');   // 'Todos' = padrão, sai da URL
+  const [estadoCarregado, setEstadoCarregado] = React.useState(false);
   const [prefsOpen, setPrefsOpen] = React.useState(false);
-  const [details, setDetails] = React.useState(null);
   const [readIds, setReadIds] = React.useState([]);
   const [archivedIds, setArchivedIds] = React.useState([]);
   const [prefs, setPrefs] = React.useState(() => window.NotificacoesLidasStore.lerPreferencias());
@@ -1041,7 +1062,7 @@ function NotificacoesPage({ setRoute }) {
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
   }, [carregarAlertasTela]);
 
-  React.useEffect(() => { LidasStore.carregarEstado().then((e) => { setReadIds(e.lidas); setArchivedIds(e.arquivadas); }); }, []);
+  React.useEffect(() => { LidasStore.carregarEstado().then((e) => { setReadIds(e.lidas); setArchivedIds(e.arquivadas); }).finally(() => setEstadoCarregado(true)); }, []);
 
   // Preferências mudadas no modal (ou em outra aba do app) refletem aqui sem recarregar.
   React.useEffect(() => {
@@ -1100,6 +1121,21 @@ function NotificacoesPage({ setRoute }) {
     if (moduleFilter !== "Todos" && n.module !== moduleFilter) return false;
     return true;
   });
+  /* Notificação aberta = a do link. Link de aviso que não existe mais (resolvido, expirado, de outra pessoa ou oculto
+     pelas Preferências) avisa e volta à lista; aviso arquivado aberto fora da aba Arquivadas (ou o contrário) troca de aba. */
+  const details = detalheId ? notificationsPref.find((n) => String(n.id) === detalheId) || null : null;
+  const setDetails = (n) => irNotif(abaKey, n ? n.id : null);
+  React.useEffect(() => {
+    if (loading || !estadoCarregado || !detalheId) return;
+    if (!details) {
+      window.toast?.('Esta notificação não está mais disponível (resolvida, arquivada há tempo ou oculta pelas Preferências).', 'warning');
+      irNotif(abaKey, null, { replace: true });
+      return;
+    }
+    const arquivada = archivedIds.includes(String(details.id));
+    if (arquivada && abaKey !== 'arquivadas') irNotif('arquivadas', detalheId, { replace: true });
+    else if (!arquivada && abaKey === 'arquivadas') irNotif('todas', detalheId, { replace: true });
+  }, [loading, estadoCarregado, detalheId, !!details, abaKey]);
   const archiveReadVisible = () => archive(notificationsVisiveis.filter((n) => !n.unread).map((n) => n.id));
   const groups = NP.agruparPorPeriodo(rows);
   const openNotification = (n) => {
