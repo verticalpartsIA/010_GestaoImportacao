@@ -145,3 +145,48 @@ test('E.7 — link direto de e-mail excluído avisa e limpa a URL', async ({ pag
   await expect(page.getByText('Este e-mail foi excluído da lista do site.')).toBeVisible({ timeout: 45_000 });
   await expect(page).toHaveURL(/\/geral\/inbox\/?$/);
 });
+
+const pasta = (page, nome) => page.locator('.inbox__folder', { hasText: nome });
+const pesquisa = (page) => page.getByPlaceholder('Pesquisar e-mail  (ex.: de:kimmy tem:anexo)');
+
+test('URL — pasta e pesquisa sobrevivem ao F5, ao abrir e-mail e ao Voltar', async ({ page }) => {
+  const erros = coletarErros(page);
+  await preparar(page, { admin: true });
+  await page.goto('/geral/inbox');
+  await expect(page.locator('.inbox__row', { hasText: 'Assunto dois' })).toBeVisible({ timeout: 45_000 });
+
+  await pasta(page, 'Todos os e-mails').click();
+  await expect(page).toHaveURL(/\/geral\/inbox\?pasta=all$/);
+  await page.locator('.inbox__row', { hasText: 'Assunto dois' }).click();
+  await expect(page).toHaveURL(new RegExp('/geral/inbox/' + ID2 + '\\?pasta=all$'));
+
+  await page.reload();
+  await expect(page.locator('.inbox__row.is-active')).toContainText('Assunto dois', { timeout: 45_000 });
+  await expect(pastaAtiva(page)).toContainText('Todos os e-mails');
+
+  await pesquisa(page).fill('Assunto um');
+  await expect(page).toHaveURL(/q=Assunto\+um/);
+  await page.reload();
+  await expect(pesquisa(page)).toHaveValue('Assunto um', { timeout: 45_000 });
+  await pesquisa(page).fill('');
+  await expect(page).not.toHaveURL(/q=/);
+
+  await pasta(page, 'Caixa de entrada').click();
+  await expect(page).toHaveURL(/\/geral\/inbox\/?$/);
+  await page.goBack();
+  await expect(pastaAtiva(page)).toContainText('Todos os e-mails');
+  await expect(page).toHaveURL(/pasta=all/);
+  expect(erros).toEqual([]);
+});
+
+test('URL — pasta que a pessoa não pode ver (ou marcador inexistente) avisa e volta à Caixa de entrada', async ({ page }) => {
+  await preparar(page, { admin: false, caps: ['ver', 'criar', 'editar', 'excluir'] });
+  await page.goto('/geral/inbox?pasta=triagem');
+  await expect(page.getByText(/Esta pasta não está disponível para você/)).toBeVisible({ timeout: 45_000 });
+  await expect(pastaAtiva(page)).toContainText('Caixa de entrada');
+  await expect(page).toHaveURL(/\/geral\/inbox\/?$/);
+
+  await page.goto('/geral/inbox?pasta=m:nao-existe');
+  await expect(page.getByText(/Esta pasta não está disponível para você/)).toBeVisible({ timeout: 45_000 });
+  await expect(page).toHaveURL(/\/geral\/inbox\/?$/);
+});

@@ -48,8 +48,8 @@ Regra comum: o roteador (`router.js`) usa só o 2º segmento como rota; 3º/4º 
 - Ações do Financeiro: **"Dar Aval de Pagamento"** (`ModalConfirmarAvalPagamento` → evento `AVAL_PAGAMENTO_CONFIRMADO`), "Confirmar Boleto Pago", gatilhos avulsos (card só aparece se houver), "Exportar fluxo" (todas as etapas).
 - Motor: `gatilhos-engine.js` (ver seção 4).
 
-### 2.5 Inbox — `/geral/inbox[/<id do e-mail>]`
-- `EmailInbox({ setRoute, setSubsel, subsel })` (`logistica.jsx:1632`), `app.jsx:360`; `inbox` está em `SYNC_PASSTHROUGH_ROUTES` (`app.jsx:157`), então o `subsel` **é** o id do e-mail (link direto abre o e-mail; se não estiver carregado, pesquisa o assunto no histórico). Abertura centralizada no helper `abrirEmail`.
+### 2.5 Inbox — `/geral/inbox[/<id do e-mail>][?pasta=&q=]`
+- `EmailInbox({ setRoute, setSubsel, subsel })` (`logistica.jsx:1632`), `app.jsx:360`; `inbox` está em `SYNC_PASSTHROUGH_ROUTES` (`app.jsx:157`), então o `subsel` **é** o id do e-mail (link direto abre o e-mail; se não estiver carregado, pesquisa o assunto no histórico). Abertura centralizada no helper `abrirEmail`. Desde 31/10/2026 a pasta (`?pasta=`, Caixa de entrada deixa limpo) e a pesquisa (`?q=`) também ficam na URL.
 - Camadas (todas sobre o transporte blindado):
   - **Triagem por regras** (`inbox-triagem-calc.js`, `inbox-triagem.jsx`): classifica entrada em assunto/departamento/urgência/reclamação (`emails_projeto.ia_*`, função SQL `inbox_classificar`, regras em `inbox_regras`); faixa "Precisa de você", automáticos ocultos (confiança ≥ 0,75; nunca apaga).
   - **Dono e visibilidade** (`inbox-visibilidade.js`): `dono_email`, `atribuido_a`, alçadas do módulo `inbox` (`ver`, `criar`, `editar`, `excluir`, `ver_todos`, `ver_equipe`, `ver_departamento`, `ver_area_*`, `triagem`, `excluir_de_outros`). Falha ao carregar = mostra tudo (fail-open).
@@ -178,6 +178,7 @@ Auditoria read-only seguida de correções, uma issue por tela. Cada correção 
   - O link de e-mail excluído avisa e limpa a URL.
   - `send-email`/`read-inbox`/vínculo/soft-delete **não foram alterados**.
   - E.8 (comentário errado em `send-email`) saiu do Inbox e virou a issue #1237: corrigir no próximo deploy da função. A #1213 foi fechada.
+  - (31/10/2026, item 3 do prompt de debug: F5 e link; área blindada, autorizado pelo Gelson) Pasta e pesquisa na URL (`/geral/inbox[/<id>]?pasta=&q=`). O caminho continua do App (`setSubsel`); a query é da tela e é devolvida a cada `vp:navigate` (o `VpRouter.navigate` troca só o caminho). Trocar de pasta cria entrada no Voltar; digitar na pesquisa só substitui. Pasta que a pessoa não vê (marcador apagado, "Sem responsável" sem `triagem`/`ver_todos`) avisa e volta à Caixa de entrada. **Corrigido junto:** fechar o e-mail (ex.: trocar de pasta) deixava o id antigo no endereço e o F5 reabria o e-mail — `abrirEmail(null)` agora limpa. Janelas de ação (Escrever, Atribuir, Pedir decisão, Extrair preço, Suspender) ficam fora de propósito. **`send-email`/`read-inbox`/vínculo/soft-delete/dono/triagem não mudaram.**
 - **Prazos & Pendências:**
   - A carga tem `try/catch` e mostra aviso com "Tentar novamente" (nunca "Carregando…" eterno).
   - Após "Dar Aval de Pagamento", a tela confere `AvalFinanceiroStore.podeIniciarCompra` e diz o que ainda falta. **As regras de avais não mudaram** (confirmado pelo Gelson): três avais (Pagamento, Jurídico, Projeto de Instalação assinado) + CEO se margem < 15%.

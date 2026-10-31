@@ -1639,14 +1639,66 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
   /* Abrir um e-mail (clique na linha, na conversa, na faixa "precisa de você"…) também grava
      na URL (/geral/inbox/<id>) — antes só setActiveId, então o endereço na barra do navegador
      nunca refletia qual e-mail estava aberto. Fechar (null) volta pra /geral/inbox. */
-  const abrirEmail = (id) => { setActiveId(id); if (setSubsel) setSubsel(id); };
-  const [folder, setFolder] = React.useState("inbox");
+  const abrirEmail = (id, opts) => {
+    setActiveId(id); if (setSubsel) setSubsel(id);
+    // Fechar: com subsel nulo o App preservaria o id antigo no endereço (o F5 reabria o e-mail) — limpa aqui (31/10/2026).
+    if (!id && window.VpRouter) { const loc = window.VpRouter.parseLocation(); if (loc && loc.route === 'inbox' && loc.id) window.VpRouter.navigate('inbox', null, null, opts); }
+  };
+  /* Pasta e pesquisa na URL (31/10/2026, F5 e link): /geral/inbox[/<id do e-mail>]?pasta=<pasta>&q=<pesquisa>.
+     O caminho continua do App (id do e-mail via setSubsel); a query é desta tela. VpRouter.navigate (usado pelo App)
+     troca só o caminho, então devolvemos a query depois de cada navegação (evento vp:navigate). Trocar de pasta cria
+     entrada no Voltar/Avançar; digitar na pesquisa só substitui (sem uma entrada por tecla). Caixa de entrada e pesquisa
+     vazia deixam a URL limpa. Janelas de ação (Escrever, Atribuir, Pedir decisão, Extrair preço…) ficam fora de propósito.
+     Nada aqui toca send-email/read-inbox/vínculo/soft-delete (área blindada). */
+  const lerQueryInbox = () => {
+    try { const u = new URLSearchParams(window.location.search); return { pasta: u.get('pasta') || 'inbox', q: u.get('q') || '' }; }
+    catch (_) { return { pasta: 'inbox', q: '' }; }
+  };
+  const urlComQuery = (pasta, q) => {
+    const u = new URL(window.location.href);
+    if (pasta && pasta !== 'inbox') u.searchParams.set('pasta', pasta); else u.searchParams.delete('pasta');
+    if (q) u.searchParams.set('q', q); else u.searchParams.delete('q');
+    return u.pathname + u.search + u.hash;
+  };
+  const urlAtual = () => window.location.pathname + window.location.search + window.location.hash;
+  const naRotaInbox = () => { const loc = window.VpRouter && window.VpRouter.parseLocation(); return !!(loc && loc.route === 'inbox'); };
+  const [folder, setFolderState] = React.useState(() => lerQueryInbox().pasta);
+  const queryRef = React.useRef({ folder: 'inbox', busca: '' });
+  const setFolder = (pasta, opts) => {
+    setFolderState(pasta);
+    queryRef.current = { ...queryRef.current, folder: pasta };
+    if (!naRotaInbox()) return;
+    const url = urlComQuery(pasta, queryRef.current.busca);
+    if (url === urlAtual()) return;
+    try { if (opts && opts.replace) window.history.replaceState(window.history.state, '', url); else window.history.pushState(window.history.state, '', url); } catch (_) { /* segue só na tela */ }
+  };
   const [enviadosBase, setEnviados] = React.useState([]);
   const [carregandoEnviados, setCarregandoEnviados] = React.useState(false);
   const [limiteEnv, setLimiteEnv] = React.useState(50);               // fase 4B: "Carregar mais" nos Enviados
   /* Fase 4B (04/10): a pesquisa também olha o HISTÓRICO COMPLETO no banco (inbox-historico.jsx). As linhas achadas entram
      na lista junto das carregadas (sem duplicar); tudo mais (pastas, permissões, marcadores) trata como e-mail comum. */
-  const [busca, setBusca] = React.useState('');
+  const [busca, setBusca] = React.useState(() => lerQueryInbox().q);
+  queryRef.current = { folder, busca };
+  React.useEffect(() => {
+    if (!naRotaInbox()) return;
+    const url = urlComQuery(folder, busca);
+    if (url !== urlAtual()) { try { window.history.replaceState(window.history.state, '', url); } catch (_) { /* segue só na tela */ } }
+  }, [busca]);
+  React.useEffect(() => {
+    const reaplicar = () => {   // o App trocou o caminho (abrir/fechar e-mail): devolve ?pasta=&q=
+      if (!naRotaInbox()) return;
+      const url = urlComQuery(queryRef.current.folder, queryRef.current.busca);
+      if (url !== urlAtual()) { try { window.history.replaceState(window.history.state, '', url); } catch (_) { /* segue só na tela */ } }
+    };
+    const voltar = () => {      // Voltar/Avançar: a pasta e a pesquisa vêm da URL
+      if (!naRotaInbox()) return;
+      const q = lerQueryInbox();
+      setFolderState(q.pasta); setBusca(q.q);
+    };
+    window.addEventListener('vp:navigate', reaplicar);
+    window.addEventListener('popstate', voltar);
+    return () => { window.removeEventListener('vp:navigate', reaplicar); window.removeEventListener('popstate', voltar); };
+  }, []);
   const consulta = window.InboxBusca ? window.InboxBusca.parseConsulta(busca) : null;
   const buscando = !!(consulta && !window.InboxBusca.vazia(consulta));
   const hist = (window.useInboxHistorico || (() => ({ entrada: [], saida: [], carregando: false, truncado: false })))(consulta, buscando);
@@ -1810,7 +1862,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
        chega de fora (link direto, Voltar/Avançar, "Ver documento" da Central). */
     if (idParaAbrir === activeId) return;
     if (todasLinhas.some((m) => m.id === idParaAbrir)) {
-      if (!listaFiltrada.some((m) => m.id === idParaAbrir)) setFolder('all');   // só troca de pasta se a atual não mostra o e-mail
+      if (!listaFiltrada.some((m) => m.id === idParaAbrir)) setFolder('all', { replace: true });   // só troca de pasta se a atual não mostra o e-mail
       setActiveId(idParaAbrir); if (setSubsel) setSubsel(null); return;
     }
     if (buscouParaAbrir.current === idParaAbrir) return;
@@ -2292,7 +2344,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
     if (!window.confirm(`Apagar o marcador “${mc.nome}”?\n\nOs e-mails não são apagados — só perdem este marcador.`)) return;
     const err = await mk.apagar(mc.id);
     if (err) { window.toast?.(err, 'error'); return; }
-    if (folder === 'm:' + mc.id) setFolder('inbox');
+    if (folder === 'm:' + mc.id) setFolder('inbox', { replace: true });
     window.toast?.('Marcador apagado.', 'success');
   };
   const contaPasta = (pasta, soNaoLidas) => (O ? todasLinhas.filter((m) => O.visivelNaPasta(m, pasta, ctxPasta) && (!soNaoLidas || naoLida(m))).length : 0);
@@ -2308,6 +2360,16 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
     { id: "all", label: "Todos os e-mails", icon: "layers" },
     { id: "spam", label: "Spam", icon: "warning", count: contaPasta('spam', true) },
   ];
+  /* Pasta vinda do link que não existe para esta pessoa (marcador apagado ou que ela não vê, "Sem responsável" sem a
+     alçada de triagem, nome inventado): avisa e volta à Caixa de entrada. Espera alçadas e marcadores carregarem. */
+  const pastaValida = folders.some((f) => f.id === folder)
+    || (String(folder).startsWith('m:') && (mk.marcadores || []).some((x) => 'm:' + x.id === folder));
+  const podeConferirPasta = perm !== undefined && mk.pronto !== false;   // perm undefined = carregando; null = falhou (mostra tudo)
+  React.useEffect(() => {
+    if (!podeConferirPasta || pastaValida) return;
+    window.toast?.('Esta pasta não está disponível para você (marcador apagado ou sem permissão) — mostrando a Caixa de entrada.', 'warning');
+    setFolder('inbox', { replace: true });
+  }, [podeConferirPasta, pastaValida, folder]);
 
   if (perm && !pode('ver')) {
     return (
@@ -2368,7 +2430,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
           {folders.map((f) => {
             const I = Icon[f.icon] || Icon.mail;
             return (
-              <div key={f.id} className={"inbox__folder " + (folder === f.id && !buscando ? "is-active" : "")} onClick={() => { setBusca(''); setFolder(f.id); abrirEmail(null); }}>
+              <div key={f.id} className={"inbox__folder " + (folder === f.id && !buscando ? "is-active" : "")} onClick={() => { abrirEmail(null, { replace: true }); setBusca(''); setFolder(f.id); }}>
                 <I size={14}/>
                 <span>{f.label}</span>
                 {f.count ? <span className="count">{f.count}</span> : null}
@@ -2377,7 +2439,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
           })}
           {window.InboxSecaoMarcadores && O && (
             <window.InboxSecaoMarcadores arvore={mkArvore} pasta={folder}
-              onAbrir={(id) => { setBusca(''); setFolder(id); abrirEmail(null); }} onNovo={() => setModalMarcador(true)}
+              onAbrir={(id) => { abrirEmail(null, { replace: true }); setBusca(''); setFolder(id); }} onNovo={() => setModalMarcador(true)}
               contagem={(id) => todasLinhas.filter((m) => (mk.porEmail[m.id] || []).includes(id) && naoLida(m) && !spamDe(m)).length}
               podeGerir={(m) => O.podeGerirMarcador(m, eu, capsOrg)} onApagar={apagarMarcador}/>
           )}
