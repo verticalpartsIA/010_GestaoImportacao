@@ -388,3 +388,11 @@ Números: 1.239 clientes (134 com vínculo por id; 1.050 com código do Omie; 1 
 - Tela: a lixeira mostra as transações e oferece Inativar; sem transação, pede confirmação e exclui.
 - Testes: `src/cadastros-nunca-excluir.test.js` (8).
 - **Migration aplicada em produção em 31/10/2026** (com o "Confirmo" do Gelson). Conferido no banco: os 2 gatilhos existem; as 3 FKs estão em `RESTRICT`; `cadastro_vinculos` é executável pela tela e a função da trava não é. Exemplos: AKAI (Formulário 1, cadastrado no Omie, 5 e-mails), Glarie (11 P.I., 37 cotações, 85 unidades, 63 e-mails). Hoje **99 de 1.239 clientes** e **59 de 82 fornecedores** não têm nenhuma transação (só esses podem ser excluídos). A tentativa real de DELETE barrada pela trava **não foi testada** (exigiria comando destrutivo no banco).
+
+## 11. T4 (#1224) e T3 (#1223) — leitura completa e código VPFOR do banco (31/10/2026)
+
+**T4 — feito no código.** `listarTodosDetalhado()` nas duas stores devolve `{ itens, erro }`; Fornecedores passou a ler de 1000 em 1000 (lista e médias de avaliação), como Clientes já fazia. A tela mostra o cartão "Lista incompleta… Tentar de novo" quando a leitura falha no meio, em vez de exibir a lista parcial como inteira. `listarTodos()` continua devolvendo só a lista (contrato dos outros módulos). **`listarAtivos` não foi mexido de propósito** (é peça da Área Blindada do E-mail/RFQ; com 82 fornecedores está longe do teto de 1000).
+
+**T3 — feito; migration aplicada em produção em 31/10/2026 com o "Confirmo" do Gelson (sequência em 82, o próximo é VPFOR-0083; só a função usa a sequência).** `gerarCodigo()` de Fornecedores chama a RPC `gerar_codigo_fornecedor` (sequência `seq_fornecedores_codigo`, começa depois do maior código existente, hoje VPFOR-0082) e falha com erro claro, sem o antigo `VPFOR-0001` fixo. Migration `20261031130000_gerar_codigo_fornecedor.sql`. **O código só pode ir para a `main` depois da migration aplicada**: sem a função no banco, ninguém consegue cadastrar fornecedor novo.
+
+Testes: +5 em `src/cadastros-nunca-excluir.test.js` (1.005 linhas, falha no meio, média com 2 páginas, código do banco e falha sem chute). Suíte 886/886.

@@ -44,19 +44,23 @@
      1000 linhas por select() sem .range(), e ninguém tinha notado porque
      a tabela nunca tinha passado disso antes. Pagina em blocos de 1000
      até a página vir incompleta (sinal de que chegou ao fim). */
-  async function listarTodos() {
-    const c = sb(); if (!c) return [];
+  /* T4 #1224 (31/10/2026): devolve também o erro — antes uma página que falhasse no meio deixava a lista
+     PARCIAL em silêncio. `listarTodos` continua devolvendo só a lista (contrato dos outros módulos). */
+  async function listarTodosDetalhado() {
+    const c = sb(); if (!c) return { itens: [], erro: 'Banco de dados indisponível — recarregue a página.' };
     const PAGE = 1000;
     let todos = [];
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await c.from('clientes').select('*')
         .order('criado_em', { ascending: false }).range(from, from + PAGE - 1);
-      if (error) { console.warn('[CadastrosClientesStore] listarTodos falhou', error); return todos; }
+      if (error) { console.warn('[CadastrosClientesStore] listarTodos falhou', error); return { itens: todos, erro: error.message || 'falha ao ler os clientes' }; }
       todos = todos.concat(data || []);
       if (!data || data.length < PAGE) break;
     }
-    return todos;
+    return { itens: todos, erro: null };
   }
+
+  async function listarTodos() { return (await listarTodosDetalhado()).itens; }
 
   async function obter(id) {
     const c = sb(); if (!c) return null;
@@ -254,5 +258,5 @@
     return cliente.id;
   }
 
-  window.CadastrosClientesStore = { gerarCodigo, listarTodos, obter, criar, atualizar, remover, vinculos, inativar, criarOuVincularDeLead, vincularQuadrosDoLead, historicoCliente };
+  window.CadastrosClientesStore = { gerarCodigo, listarTodos, listarTodosDetalhado, obter, criar, atualizar, remover, vinculos, inativar, criarOuVincularDeLead, vincularQuadrosDoLead, historicoCliente };
 }());
