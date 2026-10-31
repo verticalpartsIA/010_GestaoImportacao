@@ -342,3 +342,49 @@ Varredura read-only. Fontes citadas: `docs/MAPA_DE_ROTAS.md` (linhas 49–50: ro
 
 - **Cliente/fornecedor com transação nunca é excluído** — pode ser editado; `id` e o código `VPCLI`/`VPFOR` ("ID-Tag") ficam sempre os mesmos; para tirar de circulação, inativar. Registrado como Área Blindada no `CLAUDE.md`. Implementação: issue #1221 (hoje `remover` ainda faz DELETE físico sem conferir vínculos — ver 5.5 e 8.3).
 - **Onde ficam os passos do método:** Specify, Clarify, Plan, Tasks e Analyze deste módulo (inclusive T5 #1225 e T6 #1226) são escritos **neste documento**, nunca no `CLAUDE.md`, que é a Constituição (blindada desde o cabeçalho).
+
+## 10. T1 (#1221) — nunca excluir cadastro com transação: Specify e levantamento no banco (31/10/2026)
+
+**Specify.** Regra blindada: cliente/fornecedor com transação pode ser editado (o `id` e o código VPCLI/VPFOR não mudam) e nunca é excluído; tirar de circulação = `ativo = false`. Exclusão física só sem nenhum vínculo, conferido antes; falha ao conferir = não apaga.
+
+**Levantamento (só leitura, projeto `jxtqwzmpgofwctqajewt`).**
+
+FKs que apontam para os cadastros (`pg_constraint`):
+
+| Tabela → alvo | Coluna | ON DELETE | Efeito de apagar hoje |
+| :--- | :--- | :--- | :--- |
+| `leads` → `clientes` | `cliente_id` | NO ACTION | banco recusa (protegido) |
+| `formularios_elevador` → `clientes` | `cliente_id` | NO ACTION | banco recusa |
+| `dossier_obra` → `clientes` | `cliente_id` | NO ACTION | banco recusa |
+| `contratos_sociais` → `clientes` | `cliente_id` | NO ACTION | banco recusa |
+| `propostas` → `clientes` | `cliente_id` | **SET NULL** | **apaga em silêncio o vínculo da proposta** |
+| `quadros_comando` → `clientes` | `cliente_id` | **SET NULL** | **apaga em silêncio o vínculo do pedido de quadro** |
+| `fornecedores_avaliacoes` → `fornecedores` | `fornecedor_id` | **CASCADE** | **apaga junto o histórico de avaliações** |
+
+Vínculos **sem FK** (o banco não protege nada):
+- Clientes: `projetos_elevador_desenhos.cliente_id`, `propostas_vigentes.cliente_id`; `pcp_pedidos.codigo_cliente` (código do Omie, casa com `clientes.codigo_cliente_omie` — 12 clientes com pedido).
+- Fornecedores: `iv_cotacao_convites.fornecedor_id` (8 fornecedores), `embarques_importacao.cotacoes_frete[].fornecedor_id` (7, jsonb); por **nome** em `pi_importacao.fornecedor`, `embarques_importacao.agente_carga`/`empresa_desembaraco`, `cotacoes_elevador_fornecedor.fornecedor`, `formularios_elevador_unidades.fornecedor`, `pcp_expedicoes.transportadora` (14 fornecedores casam por nome); jsonb `ims_importacao.fornecedores`, `rfq_importacao.fornecedores` (ids próprios, ver T5), `pedidos_fornecedor.fornecedor`.
+
+Políticas: `clientes` tem `ALL` liberado para `anon` e `authenticated`; `fornecedores` e `fornecedores_avaliacoes` têm DELETE liberado para `public`. **Qualquer pessoa com a chave pública consegue apagar** (segurança real = #571).
+
+Números: 1.239 clientes (134 com vínculo por id; 1.050 com código do Omie; 1 inativo); 82 fornecedores (nenhum inativo; 0 avaliações em `fornecedores_avaliacoes` e 0 no NPS hoje).
+
+**Plan proposto (aguarda Clarify do Gelson — ver perguntas abaixo).**
+1. Store: `vinculos(id)` conta todas as fontes acima; `remover` recusa com qualquer vínculo ou erro de leitura.
+2. Tela: a lixeira abre um aviso com a lista de vínculos e o botão **Inativar**; sem vínculo, pede confirmação e apaga.
+3. Banco (migration, só com CONFIRMO): trocar `propostas`/`quadros_comando` de SET NULL e `fornecedores_avaliacoes` de CASCADE para `RESTRICT`; gatilho `BEFORE DELETE` em `clientes` e `fornecedores` conferindo também os vínculos sem FK, para valer mesmo fora da tela.
+4. Testes unitários da regra + `?v=` bumpado.
+
+**Perguntas (Clarify).**
+- (a) Cliente que **veio do Omie** (tem `codigo_cliente_omie`) conta como "com transação" mesmo sem vínculo no site?
+- (b) Fornecedor citado **só por nome** (P.I., embarque, cotação) conta como transação?
+- (c) Aplicar a trava também no banco (passo 3), além da tela?
+
+**Clarify — respostas do Gelson (31/10/2026).** (a) Cliente vindo do Omie conta como transação. (b) Fornecedor citado só pelo nome conta como transação — principalmente se houve troca de e-mails, o que também trava a saída. (c) Travar também no banco.
+
+**Implementação (branch `claude/confident-einstein-nqzyq4`).**
+- Banco: migration `20261031120000_cadastros_nunca_excluir_com_transacao.sql` — função `cadastro_vinculos(tipo, id)` (fonte única das transações, inclui Omie, nome aproximado e e-mails em `emails_projeto`, para clientes e fornecedores), gatilho `BEFORE DELETE` em `clientes` e `fornecedores`, e FKs `propostas`/`quadros_comando`/`fornecedores_avaliacoes` trocadas para `RESTRICT`. **Aplicada só com o "CONFIRMO" do Gelson.**
+- Stores: `vinculos(id)` e `inativar(id)`; `remover` recusa com transação ou falha ao conferir (sem a função no banco, nenhuma exclusão passa).
+- Tela: a lixeira mostra as transações e oferece Inativar; sem transação, pede confirmação e exclui.
+- Testes: `src/cadastros-nunca-excluir.test.js` (8).
+- **Migration aplicada em produção em 31/10/2026** (com o "Confirmo" do Gelson). Conferido no banco: os 2 gatilhos existem; as 3 FKs estão em `RESTRICT`; `cadastro_vinculos` é executável pela tela e a função da trava não é. Exemplos: AKAI (Formulário 1, cadastrado no Omie, 5 e-mails), Glarie (11 P.I., 37 cotações, 85 unidades, 63 e-mails). Hoje **99 de 1.239 clientes** e **59 de 82 fornecedores** não têm nenhuma transação (só esses podem ser excluídos). A tentativa real de DELETE barrada pela trava **não foi testada** (exigiria comando destrutivo no banco).

@@ -29,6 +29,29 @@ function CadEnderecoFields({ form, set }) {
   );
 }
 
+/* 🔒 ÁREA BLINDADA (CLAUDE.md, 31/10/2026): cadastro com transação nunca é excluído — a lixeira confere as
+   transações no banco e, se houver alguma, oferece INATIVAR. Falha ao conferir = não apaga nada. */
+async function cadExcluirOuInativar(store, item, rotulo, reload) {
+  let lista;
+  try { lista = await store.vinculos(item.id); }
+  catch (e) { window.toast?.(e.message, 'error'); return; }
+  const nome = item.razao_social || item.nome_fantasia || item.codigo || '';
+  if (lista.length > 0) {
+    const txt = lista.map((v) => `• ${v.fonte} (${v.qtd})`).join('\n');
+    if (item.ativo === false) {
+      window.alert(`O ${rotulo} "${nome}" tem transações e não pode ser excluído (regra da empresa). Ele já está inativo.\n\n${txt}`);
+      return;
+    }
+    if (!window.confirm(`O ${rotulo} "${nome}" tem transações e NÃO pode ser excluído (regra da empresa):\n\n${txt}\n\nDeseja INATIVAR o cadastro? Ele sai das listas de escolha, mas o histórico e o código continuam.`)) return;
+    try { await store.inativar(item.id); window.toast?.(`${rotulo[0].toUpperCase()}${rotulo.slice(1)} inativado.`, 'success'); reload(); }
+    catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    return;
+  }
+  if (!window.confirm(`O ${rotulo} "${nome}" não tem nenhuma transação. Excluir definitivamente?`)) return;
+  try { await store.remover(item.id); window.toast?.(`${rotulo[0].toUpperCase()}${rotulo.slice(1)} excluído.`, 'success'); reload(); }
+  catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+}
+
 /* ============================================================
    CLIENTES
    ============================================================ */
@@ -194,11 +217,7 @@ function CadastroClientesPage() {
     finally { setSaving(false); }
   };
 
-  const excluir = async (cli) => {
-    if (!window.confirm(`Excluir o cliente "${cli.razao_social}"? Isso pode afetar formulários/propostas já vinculados.`)) return;
-    try { await window.CadastrosClientesStore.remover(cli.id); window.toast?.('Cliente excluído.', 'success'); reload(); }
-    catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
-  };
+  const excluir = (cli) => cadExcluirOuInativar(window.CadastrosClientesStore, cli, 'cliente', reload);
 
   if (items === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
@@ -563,11 +582,7 @@ function CadastroFornecedoresPage() {
     finally { setSaving(false); }
   };
 
-  const excluir = async (f) => {
-    if (!window.confirm(`Excluir o fornecedor "${f.razao_social}"?`)) return;
-    try { await window.CadastrosFornecedoresStore.remover(f.id); window.toast?.('Fornecedor excluído.', 'success'); reload(); }
-    catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
-  };
+  const excluir = (f) => cadExcluirOuInativar(window.CadastrosFornecedoresStore, f, 'fornecedor', reload);
 
   if (items === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
