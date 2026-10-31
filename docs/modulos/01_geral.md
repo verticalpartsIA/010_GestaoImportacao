@@ -177,7 +177,7 @@ Auditoria read-only seguida de correções, uma issue por tela. Cada correção 
   - Falha ao ler Enviados avisa.
   - O link de e-mail excluído avisa e limpa a URL.
   - `send-email`/`read-inbox`/vínculo/soft-delete **não foram alterados**.
-  - Pendente: E.8 (comentário em `send-email`, no próximo deploy da função).
+  - E.8 (comentário errado em `send-email`) saiu do Inbox e virou a issue #1237: corrigir no próximo deploy da função. A #1213 foi fechada.
 - **Prazos & Pendências:**
   - A carga tem `try/catch` e mostra aviso com "Tentar novamente" (nunca "Carregando…" eterno).
   - Após "Dar Aval de Pagamento", a tela confere `AvalFinanceiroStore.podeIniciarCompra` e diz o que ainda falta. **As regras de avais não mudaram** (confirmado pelo Gelson): três avais (Pagamento, Jurídico, Projeto de Instalação assinado) + CEO se margem < 15%.
