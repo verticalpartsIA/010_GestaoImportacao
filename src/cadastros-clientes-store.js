@@ -254,6 +254,23 @@
     await c.from('clientes').update({ contribuinte_icms: valor }).eq('id', clienteId).is('contribuinte_icms', null);
   }
 
+  function escolherHomonimo(lista, lead) {
+    if (lista.length <= 1) return lista[0] || null;
+    const dig = (v) => String(v || '').replace(/\D/g, '');
+    const email = String(lead.email || '').trim().toLowerCase();
+    const tel = dig(lead.phone).slice(-8);
+    const pontos = (cl) => {
+      let p = 0;
+      if (email && String(cl.email || '').toLowerCase().split(/[,;\s]+/).includes(email)) p += 4;
+      if (tel.length === 8 && dig(cl.telefone).includes(tel)) p += 2;
+      if (cl.ativo !== false) p += 1;
+      return p;
+    };
+    const ordenados = lista.map((cl, i) => ({ cl, i, p: pontos(cl) })).sort((a, b) => b.p - a.p || a.i - b.i);
+    if (ordenados[0].p < 2) console.warn('[CadastrosClientesStore] lead com nome igual a', lista.length, 'clientes; sem e-mail/telefone para desempatar — vinculado ao primeiro.');
+    return ordenados[0].cl;
+  }
+
   async function criarOuVincularDeLead(lead) {
     const c = sb(); if (!c || !lead) return null;
     const { data: leadRow } = await c.from('leads').select('cliente_id').eq('id', lead.id).maybeSingle();
@@ -266,9 +283,11 @@
     /* Auditoria 12/10: `.maybeSingle()` dava erro com 2+ clientes de mesmo nome (o erro era ignorado → criava
        mais um duplicado) e `%`/`_` no nome viravam curinga do ilike. Agora escapa os curingas e usa limit(1). */
     const nomeLike = nome.replace(/[\\%_]/g, (m) => '\\' + m);
-    const { data: achados, error: errBusca } = await c.from('clientes').select('id').ilike('razao_social', nomeLike).limit(1);
+    /* T8 #1228 (31/10/2026): com 2+ clientes de mesmo nome (filiais, cadastro antigo), desempata pelo e-mail
+       e depois pelo telefone do lead, preferindo o ativo; sem desempate fica o primeiro (como antes) e avisa no console. */
+    const { data: achados, error: errBusca } = await c.from('clientes').select('id, email, telefone, ativo').ilike('razao_social', nomeLike).limit(20);
     if (errBusca) throw errBusca;
-    const existente = achados && achados[0];
+    const existente = escolherHomonimo(achados || [], lead);
     if (existente) {
       cliente = existente;
       await completarContribuinte(existente.id, lead.contribuinte_icms);
