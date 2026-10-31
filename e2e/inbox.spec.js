@@ -156,9 +156,9 @@ test('URL — pasta e pesquisa sobrevivem ao F5, ao abrir e-mail e ao Voltar', a
   await expect(page.locator('.inbox__row', { hasText: 'Assunto dois' })).toBeVisible({ timeout: 45_000 });
 
   await pasta(page, 'Todos os e-mails').click();
-  await expect(page).toHaveURL(/\/geral\/inbox\?pasta=all$/);
+  await expect(page).toHaveURL(/\/geral\/inbox\/all$/);
   await page.locator('.inbox__row', { hasText: 'Assunto dois' }).click();
-  await expect(page).toHaveURL(new RegExp('/geral/inbox/' + ID2 + '\\?pasta=all$'));
+  await expect(page).toHaveURL(new RegExp('/geral/inbox/all/' + ID2 + '$'));
 
   await page.reload();
   await expect(page.locator('.inbox__row.is-active')).toContainText('Assunto dois', { timeout: 45_000 });
@@ -175,18 +175,58 @@ test('URL — pasta e pesquisa sobrevivem ao F5, ao abrir e-mail e ao Voltar', a
   await expect(page).toHaveURL(/\/geral\/inbox\/?$/);
   await page.goBack();
   await expect(pastaAtiva(page)).toContainText('Todos os e-mails');
-  await expect(page).toHaveURL(/pasta=all/);
+  await expect(page).toHaveURL(/\/geral\/inbox\/all\/?$/);
   expect(erros).toEqual([]);
 });
 
 test('URL — pasta que a pessoa não pode ver (ou marcador inexistente) avisa e volta à Caixa de entrada', async ({ page }) => {
   await preparar(page, { admin: false, caps: ['ver', 'criar', 'editar', 'excluir'] });
-  await page.goto('/geral/inbox?pasta=triagem');
+  await page.goto('/geral/inbox/triagem');
   await expect(page.getByText(/Esta pasta não está disponível para você/)).toBeVisible({ timeout: 45_000 });
   await expect(pastaAtiva(page)).toContainText('Caixa de entrada');
   await expect(page).toHaveURL(/\/geral\/inbox\/?$/);
 
-  await page.goto('/geral/inbox?pasta=m:nao-existe');
+  await page.goto('/geral/inbox/m:nao-existe');
   await expect(page.getByText(/Esta pasta não está disponível para você/)).toBeVisible({ timeout: 45_000 });
   await expect(page).toHaveURL(/\/geral\/inbox\/?$/);
+});
+
+test('URL — cada pasta do menu tem o seu endereço e sobrevive ao F5', async ({ page }) => {
+  const erros = coletarErros(page);
+  await preparar(page, { admin: true });
+  await page.goto('/geral/inbox');
+  await expect(page.locator('.inbox__row', { hasText: 'Assunto dois' })).toBeVisible({ timeout: 45_000 });
+  const pastas = [
+    ['Com estrela', 'starred'], ['Adiados', 'adiados'], ['Atribuídos a mim', 'mine'],
+    ['Sem responsável', 'triagem'], ['Enviados', 'sent'], ['Todos os e-mails', 'all'], ['Spam', 'spam'],
+  ];
+  for (const [rotulo, id] of pastas) {
+    await pasta(page, rotulo).click();
+    await expect(page).toHaveURL(new RegExp('/geral/inbox/' + id + '$'));
+    await expect(pastaAtiva(page)).toContainText(rotulo);
+  }
+  await page.reload();
+  await expect(pastaAtiva(page)).toContainText('Spam', { timeout: 45_000 });
+  await pasta(page, 'Caixa de entrada').click();
+  await expect(page).toHaveURL(/\/geral\/inbox\/?$/);
+  expect(erros).toEqual([]);
+});
+
+test('URL — link antigo com ?pasta= continua abrindo e vira o endereço novo', async ({ page }) => {
+  await preparar(page, { admin: true });
+  await page.goto('/geral/inbox?pasta=starred');
+  await expect(pastaAtiva(page)).toContainText('Com estrela', { timeout: 45_000 });
+  await expect(page).toHaveURL(/\/geral\/inbox\/starred$/);
+  await page.goto('/geral/inbox/' + ID2 + '?pasta=all');
+  await expect(page.locator('.inbox__row.is-active')).toContainText('Assunto dois', { timeout: 45_000 });
+  await expect(pastaAtiva(page)).toContainText('Todos os e-mails');
+  await expect(page).toHaveURL(new RegExp('/geral/inbox/all/' + ID2 + '$'));
+});
+
+test('URL — link direto /geral/inbox/<pasta>/<id> abre o e-mail na pasta', async ({ page }) => {
+  await preparar(page, { admin: true });
+  await page.goto('/geral/inbox/all/' + ID1);
+  await expect(page.locator('.inbox__row.is-active')).toContainText('Assunto um', { timeout: 45_000 });
+  await expect(pastaAtiva(page)).toContainText('Todos os e-mails');
+  await expect(page).toHaveURL(new RegExp('/geral/inbox/all/' + ID1 + '$'));
 });

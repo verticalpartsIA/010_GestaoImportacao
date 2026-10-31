@@ -1639,61 +1639,77 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
   /* Abrir um e-mail (clique na linha, na conversa, na faixa "precisa de você"…) também grava
      na URL (/geral/inbox/<id>) — antes só setActiveId, então o endereço na barra do navegador
      nunca refletia qual e-mail estava aberto. Fechar (null) volta pra /geral/inbox. */
-  const abrirEmail = (id, opts) => {
-    setActiveId(id); if (setSubsel) setSubsel(id);
-    // Fechar: com subsel nulo o App preservaria o id antigo no endereço (o F5 reabria o e-mail) — limpa aqui (31/10/2026).
-    if (!id && window.VpRouter) { const loc = window.VpRouter.parseLocation(); if (loc && loc.route === 'inbox' && loc.id) window.VpRouter.navigate('inbox', null, null, opts); }
-  };
-  /* Pasta e pesquisa na URL (31/10/2026, F5 e link): /geral/inbox[/<id do e-mail>]?pasta=<pasta>&q=<pesquisa>.
-     O caminho continua do App (id do e-mail via setSubsel); a query é desta tela. VpRouter.navigate (usado pelo App)
-     troca só o caminho, então devolvemos a query depois de cada navegação (evento vp:navigate). Trocar de pasta cria
-     entrada no Voltar/Avançar; digitar na pesquisa só substitui (sem uma entrada por tecla). Caixa de entrada e pesquisa
-     vazia deixam a URL limpa. Janelas de ação (Escrever, Atribuir, Pedir decisão, Extrair preço…) ficam fora de propósito.
+  /* Pasta, e-mail aberto e pesquisa na URL (01/11/2026; antes a pasta ia em ?pasta=, desde 31/10):
+       /geral/inbox                          Caixa de entrada (padrão)
+       /geral/inbox/<pasta>                  starred, adiados, mine, triagem, sent, all, spam ou m:<marcador>
+       /geral/inbox/<id do e-mail>           e-mail aberto na Caixa de entrada (forma antiga, continua valendo)
+       /geral/inbox/<pasta>/<id do e-mail>   e-mail aberto em outra pasta
+     + ?q=<pesquisa> (só a pesquisa fica na query). Link antigo com ?pasta= abre e é regravado no formato novo.
+     O App entrega o 2º segmento como `subsel`; esta tela mantém o `subsel` igual ao 2º segmento (setSubsel) para o App
+     nunca reescrever o endereço, e escreve o 3º segmento por conta própria (o App o preserva).
+     Trocar de pasta ou abrir e-mail cria entrada no Voltar/Avançar; digitar na pesquisa só substitui.
+     Janelas de ação (Escrever, Atribuir, Pedir decisão, Extrair preço…) ficam fora de propósito.
      Nada aqui toca send-email/read-inbox/vínculo/soft-delete (área blindada). */
-  const lerQueryInbox = () => {
-    try { const u = new URLSearchParams(window.location.search); return { pasta: u.get('pasta') || 'inbox', q: u.get('q') || '' }; }
-    catch (_) { return { pasta: 'inbox', q: '' }; }
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const locInbox = () => { const l = window.VpRouter && window.VpRouter.parseLocation(); return l && l.route === 'inbox' ? l : null; };
+  const emailDaUrl = () => { const l = locInbox(); if (!l) return null; if (UUID_RE.test(l.id || '')) return l.id; if (UUID_RE.test(l.tab || '')) return l.tab; return null; };
+  const lerUrlInbox = () => {
+    const l = locInbox();
+    let q = '', pastaQuery = '';
+    try { const u = new URLSearchParams(window.location.search); q = u.get('q') || ''; pastaQuery = u.get('pasta') || ''; } catch (_) { /* sem query */ }
+    const pasta = (l && l.id && !UUID_RE.test(l.id)) ? l.id : (pastaQuery || 'inbox');
+    return { pasta, q, email: emailDaUrl() };
   };
-  const urlComQuery = (pasta, q) => {
-    const u = new URL(window.location.href);
-    if (pasta && pasta !== 'inbox') u.searchParams.set('pasta', pasta); else u.searchParams.delete('pasta');
-    if (q) u.searchParams.set('q', q); else u.searchParams.delete('q');
-    return u.pathname + u.search + u.hash;
+  const segmentosInbox = (pasta, email) => (email && pasta === 'inbox') ? [email, null] : (pasta && pasta !== 'inbox') ? [pasta, email || null] : [null, null];
+  const urlInbox = (pasta, email, q) => {
+    const [a, b] = segmentosInbox(pasta, email);
+    const path = window.VpRouter.buildPath('inbox', a, b);
+    return path + (q ? '?q=' + encodeURIComponent(q).replace(/%20/g, '+') : '');
   };
   const urlAtual = () => window.location.pathname + window.location.search + window.location.hash;
-  const naRotaInbox = () => { const loc = window.VpRouter && window.VpRouter.parseLocation(); return !!(loc && loc.route === 'inbox'); };
-  const [folder, setFolderState] = React.useState(() => lerQueryInbox().pasta);
-  const queryRef = React.useRef({ folder: 'inbox', busca: '' });
-  const setFolder = (pasta, opts) => {
-    setFolderState(pasta);
-    queryRef.current = { ...queryRef.current, folder: pasta };
-    if (!naRotaInbox()) return;
-    const url = urlComQuery(pasta, queryRef.current.busca);
-    if (url === urlAtual()) return;
-    try { if (opts && opts.replace) window.history.replaceState(window.history.state, '', url); else window.history.pushState(window.history.state, '', url); } catch (_) { /* segue só na tela */ }
+  const naRotaInbox = () => !!locInbox();
+  const [folder, setFolderState] = React.useState(() => lerUrlInbox().pasta);
+  const queryRef = React.useRef({ folder: 'inbox', busca: '', email: null });
+  const [, setUrlTick] = React.useState(0);
+  const irPara = (pasta, email, opts) => {
+    setFolderState(pasta); setActiveId(email || null);
+    queryRef.current = { ...queryRef.current, folder: pasta, email: email || null };
+    if (!naRotaInbox()) { if (setSubsel) setSubsel(email || null); return; }
+    const url = urlInbox(pasta, email, queryRef.current.busca);
+    if (url !== urlAtual()) {
+      try { if (opts && opts.replace) window.history.replaceState(window.history.state, '', url); else window.history.pushState(window.history.state, '', url); } catch (_) { /* segue só na tela */ }
+    }
+    if (setSubsel) setSubsel(segmentosInbox(pasta, email)[0]);
   };
+  const abrirEmail = (id, opts) => irPara(queryRef.current.folder, id || null, opts);
+  const setFolder = (pasta, opts) => irPara(pasta, null, opts);
   const [enviadosBase, setEnviados] = React.useState([]);
   const [carregandoEnviados, setCarregandoEnviados] = React.useState(false);
   const [limiteEnv, setLimiteEnv] = React.useState(50);               // fase 4B: "Carregar mais" nos Enviados
   /* Fase 4B (04/10): a pesquisa também olha o HISTÓRICO COMPLETO no banco (inbox-historico.jsx). As linhas achadas entram
      na lista junto das carregadas (sem duplicar); tudo mais (pastas, permissões, marcadores) trata como e-mail comum. */
-  const [busca, setBusca] = React.useState(() => lerQueryInbox().q);
-  queryRef.current = { folder, busca };
+  const [busca, setBusca] = React.useState(() => lerUrlInbox().q);
+  queryRef.current = { folder, busca, email: activeId };
   React.useEffect(() => {
     if (!naRotaInbox()) return;
-    const url = urlComQuery(folder, busca);
+    const url = urlInbox(folder, emailDaUrl() || activeId, busca);
     if (url !== urlAtual()) { try { window.history.replaceState(window.history.state, '', url); } catch (_) { /* segue só na tela */ } }
+    if (setSubsel) setSubsel(segmentosInbox(folder, emailDaUrl() || activeId)[0]);
   }, [busca]);
   React.useEffect(() => {
-    const reaplicar = () => {   // o App trocou o caminho (abrir/fechar e-mail): devolve ?pasta=&q=
+    const reaplicar = () => {   // o App trocou o caminho (navigate): devolve só o ?q= e tira o ?pasta= antigo
       if (!naRotaInbox()) return;
-      const url = urlComQuery(queryRef.current.folder, queryRef.current.busca);
+      const q = queryRef.current.busca;
+      const url = window.location.pathname + (q ? '?q=' + encodeURIComponent(q).replace(/%20/g, '+') : '') + window.location.hash;
       if (url !== urlAtual()) { try { window.history.replaceState(window.history.state, '', url); } catch (_) { /* segue só na tela */ } }
     };
-    const voltar = () => {      // Voltar/Avançar: a pasta e a pesquisa vêm da URL
+    const voltar = () => {      // Voltar/Avançar: pasta, e-mail e pesquisa vêm da URL
       if (!naRotaInbox()) return;
-      const q = lerQueryInbox();
-      setFolderState(q.pasta); setBusca(q.q);
+      const u = lerUrlInbox();
+      setFolderState(u.pasta); setBusca(u.q);
+      queryRef.current = { ...queryRef.current, folder: u.pasta, busca: u.q };
+      if (!u.email) setActiveId(null);   // e-mail novo é aberto pelo efeito de idParaAbrir (acha no histórico se preciso)
+      setUrlTick((n) => n + 1);
     };
     window.addEventListener('vp:navigate', reaplicar);
     window.addEventListener('popstate', voltar);
@@ -1853,7 +1869,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
   const [precoEmailAberto, setPrecoEmailAberto] = React.useState(false);   // "Extrair preço" (04/10): propõe preço/condições do e-mail do fornecedor; só grava após conferência
   const [tickDecisao, setTickDecisao] = React.useState(0);
   const decisoesDoEmail = (window.useDecisoesDoEmail || (() => []))(active ? active.id : null, tickDecisao);
-  const idParaAbrir = typeof subsel === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(subsel) ? subsel : null;
+  const idParaAbrir = emailDaUrl() || (typeof subsel === 'string' && UUID_RE.test(subsel) ? subsel : null);
   const buscouParaAbrir = React.useRef(null);
   React.useEffect(() => {
     if (!idParaAbrir || perm === undefined || loading) return;
@@ -1862,8 +1878,8 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
        chega de fora (link direto, Voltar/Avançar, "Ver documento" da Central). */
     if (idParaAbrir === activeId) return;
     if (todasLinhas.some((m) => m.id === idParaAbrir)) {
-      if (!listaFiltrada.some((m) => m.id === idParaAbrir)) setFolder('all', { replace: true });   // só troca de pasta se a atual não mostra o e-mail
-      setActiveId(idParaAbrir); if (setSubsel) setSubsel(null); return;
+      // só troca de pasta se a atual não mostra o e-mail
+      irPara(listaFiltrada.some((m) => m.id === idParaAbrir) ? queryRef.current.folder : 'all', idParaAbrir, { replace: true }); return;
     }
     if (buscouParaAbrir.current === idParaAbrir) return;
     buscouParaAbrir.current = idParaAbrir;
@@ -1871,8 +1887,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
        preservaria o id antigo no endereço). */
     const largarLink = (msg) => {
       window.toast?.(msg, 'warning');
-      if (setSubsel) setSubsel(null);
-      if (window.VpRouter) window.VpRouter.navigate('inbox', null);
+      irPara(queryRef.current.folder, null, { replace: true });
     };
     window.__VP_SB.sb.from('emails_projeto').select('assunto, excluido_em').eq('id', idParaAbrir).maybeSingle().then(({ data, error }) => {
       if (error) return largarLink('Não foi possível abrir este e-mail agora.');
