@@ -93,14 +93,37 @@
     };
   }
 
+  /* T2 #1222 (31/10/2026): o mesmo CNPJ/CPF não pode ter dois cadastros (o banco também recusa, por índice
+     único). Confere antes de gravar para dizer QUAL cadastro já usa o documento; falha ao conferir = não grava. */
+  async function garantirDocumentoUnico(c, row, idAtual) {
+    const campo = row.cnpj ? 'cnpj' : (row.cpf ? 'cpf' : null);
+    if (!campo) return;
+    let q = c.from('fornecedores').select('id, codigo, razao_social, ativo').eq(campo, row[campo]).limit(1);
+    if (idAtual) q = q.neq('id', idAtual);
+    const { data, error } = await q;
+    if (error) throw new Error('Não foi possível conferir se o ' + campo.toUpperCase() + ' já está cadastrado — nada foi gravado. (' + (error.message || 'erro') + ')');
+    const ja = data && data[0];
+    if (ja) throw new Error('Este ' + campo.toUpperCase() + ' já está cadastrado em ' + (ja.codigo || 'outro fornecedor') + ' — ' + (ja.razao_social || '') + (ja.ativo === false ? ' (inativo: reative esse cadastro em vez de criar outro)' : '') + '.');
+  }
+
+  /* Se o banco recusar pelo índice único (duas pessoas ao mesmo tempo), mostra a mesma mensagem clara. */
+  function erroGravacao(error) {
+    if (error && error.code === '23505' && /cnpj|cpf/i.test(String(error.message || '') + String(error.details || ''))) {
+      return new Error('Este CNPJ/CPF já está cadastrado em outro fornecedor. Procure-o na lista (ele pode estar inativo).');
+    }
+    return error;
+  }
+
   async function criar(form) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     if (!form.razao_social || !form.razao_social.trim()) throw new Error('Informe a razão social / nome.');
     if (!form.categorias || form.categorias.length === 0) throw new Error('Selecione ao menos uma categoria.');
+    const base = _payload(form);
+    await garantirDocumentoUnico(c, base, null);
     const codigo = await gerarCodigo();
-    const row = { ..._payload(form), codigo, criado_por: (window.__VP_USER || {}).email || null };
+    const row = { ...base, codigo, criado_por: (window.__VP_USER || {}).email || null };
     const { data, error } = await c.from('fornecedores').insert(row).select().single();
-    if (error) throw error;
+    if (error) throw erroGravacao(error);
     if (window.VPLog) window.VPLog.registrar({
       modulo: 'Cadastros', acao: 'Criou fornecedor', alvo: data.razao_social, alvo_id: data.id,
     });
@@ -110,8 +133,9 @@
   async function atualizar(id, form) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const row = { ..._payload(form), atualizado_em: new Date().toISOString() };
+    await garantirDocumentoUnico(c, row, id);
     const { data, error } = await c.from('fornecedores').update(row).eq('id', id).select().single();
-    if (error) throw error;
+    if (error) throw erroGravacao(error);
     if (window.VPLog) window.VPLog.registrar({
       modulo: 'Cadastros', acao: 'Editou fornecedor', alvo: data.razao_social, alvo_id: id,
     });
