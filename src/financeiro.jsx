@@ -74,6 +74,7 @@ function FinanceiroPage({ setRoute, setSubsel }) {
   const [alertas, setAlertas] = React.useState([]);
   const [filtroCadeia, setFiltroCadeia] = React.useState(null);   // null = escolhe sozinho (atrasadas, se houver)
   const [buscaCadeia, setBuscaCadeia] = React.useState('');
+  const [erroCarga, setErroCarga] = React.useState(null);   // #1214 D.1/D.2: falha de leitura vira aviso, nunca "Carregando…" eterno nem lista vazia muda
 
   const fecharLembrete = async (id) => {
     if (window.GatilhosEngine) await window.GatilhosEngine.fecharLembrete(id);
@@ -123,35 +124,46 @@ function FinanceiroPage({ setRoute, setSubsel }) {
 
   const reloadGatilhos = async () => {
     setLoading(true);
-    const { data } = await window.__VP_SB.sb.from('gatilhos').select('*').order('numero_cotacao').order('nascido_em');
-    let rows = data || [];
-    /* Sem cron neste projeto — verifica lembretes/revisão de prazo toda vez
-       que a tela é aberta (ver instrucaocompra.md). */
-    if (window.GatilhosEngine) {
-      const mudou = await window.GatilhosEngine.verificarPrazos(rows);
-      if (mudou) {
-        const { data: data2 } = await window.__VP_SB.sb.from('gatilhos').select('*').order('numero_cotacao').order('nascido_em');
-        rows = data2 || rows;
+    try {
+      const { data, error } = await window.__VP_SB.sb.from('gatilhos').select('*').order('numero_cotacao').order('nascido_em');
+      if (error) throw error;
+      let rows = data || [];
+      /* Sem cron neste projeto — verifica lembretes/revisão de prazo toda vez
+         que a tela é aberta (ver instrucaocompra.md). Falha aqui não impede de mostrar as cadeias já lidas. */
+      if (window.GatilhosEngine) {
+        let mudou = false;
+        try { mudou = await window.GatilhosEngine.verificarPrazos(rows); }
+        catch (e) { console.warn('[Prazos] verificarPrazos falhou', e); }
+        if (mudou) {
+          const { data: data2, error: e2 } = await window.__VP_SB.sb.from('gatilhos').select('*').order('numero_cotacao').order('nascido_em');
+          if (!e2 && data2) rows = data2;
+        }
       }
+      /* Vistorias não agendadas dentro do prazo (23/08) — mesmo padrão sem
+         cron, roda toda vez que a tela abre. Não altera `rows`, só gera
+         alertas em `alertas` (recarregados por reloadAlertas logo abaixo). */
+      if (window.InstalacaoObraStore) window.InstalacaoObraStore.verificarPrazoVistorias().then(() => reloadAlertas())
+        .catch((e) => console.warn('[Prazos] verificarPrazoVistorias falhou', e));
+      /* Gatilhos manuais gravam days_left como número fixo na criação
+         (ver ModalNovoGatilho.save) e nada recalculava depois — "vence em
+         Xd"/"atrasado há Xd" e os KPIs de 7d/atrasados ficavam desatualizados
+         com o passar do tempo. Recalcula aqui, a cada carregamento da tela,
+         a partir de due_date — mesmo padrão que os gatilhos automáticos já
+         usam (recalculam via GanttBarMini/labelPrazo a cada render). Não
+         grava de volta no banco: é só a leitura que passa a ser fresca. */
+      rows = rows.map((g) => (
+        g.origem !== 'automatico' && g.due_date
+          ? { ...g, days_left: Math.round((new Date(g.due_date) - new Date()) / 86400000) }
+          : g
+      ));
+      setGatilhos(rows);
+      setErroCarga(null);
+    } catch (e) {
+      console.warn('[Prazos] falha ao carregar as etapas', e);
+      setErroCarga('Não foi possível carregar as etapas agora' + (e && e.message ? ' (' + e.message + ')' : '') + '.');
+    } finally {
+      setLoading(false);
     }
-    /* Vistorias não agendadas dentro do prazo (23/08) — mesmo padrão sem
-       cron, roda toda vez que a tela abre. Não altera `rows`, só gera
-       alertas em `alertas` (recarregados por reloadAlertas logo abaixo). */
-    if (window.InstalacaoObraStore) window.InstalacaoObraStore.verificarPrazoVistorias().then(() => reloadAlertas());
-    /* Gatilhos manuais gravam days_left como número fixo na criação
-       (ver ModalNovoGatilho.save) e nada recalculava depois — "vence em
-       Xd"/"atrasado há Xd" e os KPIs de 7d/atrasados ficavam desatualizados
-       com o passar do tempo. Recalcula aqui, a cada carregamento da tela,
-       a partir de due_date — mesmo padrão que os gatilhos automáticos já
-       usam (recalculam via GanttBarMini/labelPrazo a cada render). Não
-       grava de volta no banco: é só a leitura que passa a ser fresca. */
-    rows = rows.map((g) => (
-      g.origem !== 'automatico' && g.due_date
-        ? { ...g, days_left: Math.round((new Date(g.due_date) - new Date()) / 86400000) }
-        : g
-    ));
-    setGatilhos(rows);
-    setLoading(false);
   };
   const reloadAlertas = () => {
     // Mesma regra de destinatário da Central de Notificações: alerta dirigido a uma pessoa não aparece para as outras.
@@ -159,7 +171,11 @@ function FinanceiroPage({ setRoute, setSubsel }) {
     const baseAlertas = window.__VP_SB.sb.from('alertas').select('*').eq('resolved', false);
     (emailAlertas ? baseAlertas.or(`destinatario_email.is.null,destinatario_email.eq.${emailAlertas}`) : baseAlertas.is('destinatario_email', null))
       .order('created_at', { ascending: false })
-      .then(({ data }) => setAlertas((data || []).map(a => ({ ...a, time: window.__VP_SB.timeAgo(a.created_at) }))));
+      .then(({ data, error }) => {
+        if (error) { console.warn('[Prazos] falha ao carregar alertas', error); return; }   // mantém os que já estavam na tela
+        setAlertas((data || []).map(a => ({ ...a, time: window.__VP_SB.timeAgo(a.created_at) })));
+      })
+      .catch((e) => console.warn('[Prazos] falha ao carregar alertas', e));
   };
   React.useEffect(() => { reloadGatilhos(); reloadAlertas(); }, []);
 
@@ -245,6 +261,12 @@ function FinanceiroPage({ setRoute, setSubsel }) {
         </div>
       </div>
 
+      {erroCarga && (
+        <div className="small" style={{ padding: '10px 14px', marginBottom: 16, border: '1px solid var(--vp-danger, #c62828)', borderRadius: 6, background: 'rgba(198,40,40,.06)' }}>
+          {erroCarga} Os números abaixo podem estar incompletos.{' '}
+          <Button variant="outline" size="sm" onClick={reloadGatilhos}>Tentar novamente</Button>
+        </div>
+      )}
       <div className="grid-4" style={{ marginBottom: 20 }}>
         <KPI label="Cotações em andamento" value={(contagem.andamento || 0) + (contagem.atrasada || 0)} sub="já passaram do formulário, não encerradas" delta="—" deltaDir="up" icon="zap"/>
         <KPI label="Com prazo estourado" value={contagem.atrasada || 0} sub={`${etapasAtrasadas} etapa(s) atrasada(s)`} delta="—" deltaDir="down" icon="warning"/>
@@ -547,7 +569,7 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
                   )}
                   {podeConfirmarAval && (
                     <Button size="sm" variant="primary" icon="check"
-                      title="Libera a compra ao fornecedor (junto com o Aval Jurídico). Não é o aval de venda/score." onClick={(e) => { e.stopPropagation(); onConfirmarAval(g); }}>Dar Aval de Pagamento</Button>
+                      title="Um dos três avais que liberam a compra ao fornecedor (com o Aval Jurídico e a assinatura do Projeto de Instalação). Não é o aval de venda/score." onClick={(e) => { e.stopPropagation(); onConfirmarAval(g); }}>Dar Aval de Pagamento</Button>
                   )}
                 </div>
                 {cemiterio && (
@@ -630,7 +652,18 @@ function ModalConfirmarAvalPagamento({ g, onClose, onSaved }) {
       const av = await window.AvalFinanceiroStore.getByNumeroCotacao(g.numero_cotacao);
       if (!av) throw new Error('Registro de Aval Financeiro não encontrado para essa cotação.');
       await window.AvalFinanceiroStore.confirmarAvalPagamento(av.id, observacoes);
-      window.toast('Aval de Pagamento confirmado — Compra ao Fornecedor liberada.', 'success');
+      /* #1214 D.3: o Aval de Pagamento sozinho não libera a compra — antes o aviso dizia "liberada" sempre. Confere o
+         mesmo gate do botão "Decidir comprar" e diz o que ainda falta. */
+      let gate = null;
+      try { gate = await window.AvalFinanceiroStore.podeIniciarCompra(g.numero_cotacao); } catch (e) { console.warn('[Prazos] conferência do gate da compra falhou', e); }
+      if (gate && gate.ok) {
+        window.toast('Aval de Pagamento confirmado — compra ao fornecedor liberada.', 'success');
+      } else {
+        const faltam = ((gate && gate.checagens) || []).filter((ck) => !ck.ok).map((ck) => ck.rotulo);
+        window.toast('Aval de Pagamento confirmado. ' + (faltam.length
+          ? 'Para liberar a compra ainda falta: ' + faltam.join(', ') + '.'
+          : 'Confira em "Aval Financeiro" o que ainda falta para liberar a compra.'), 'warning');
+      }
       onSaved?.(); onClose();
     } catch (e) {
       window.toast('Erro: ' + e.message, 'error');
@@ -647,8 +680,9 @@ function ModalConfirmarAvalPagamento({ g, onClose, onSaved }) {
       </>}>
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
         <p className="muted" style={{ fontSize: 13 }}>
-          Checkpoint manual do Financeiro depois do sinal pago. Junto com o Aval Jurídico
-          (manual) e o contrato assinado, libera a compra ao Fornecedor.
+          Checkpoint manual do Financeiro depois do sinal pago. A compra ao fornecedor só é liberada com os
+          três avais: este Aval de Pagamento, o Aval Jurídico e a assinatura do Projeto de Instalação pelo
+          cliente — e, se a margem ficar abaixo de 15%, também a aprovação do CEO.
         </p>
         <div className="stack" style={{ gap: 4 }}>
           <label className="up-eyebrow muted">Observações (opcional)</label>

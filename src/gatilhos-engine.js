@@ -1,6 +1,6 @@
 /* ============================================================
    gatilhos-engine.js
-   Motor de "Gatilhos & Prazo" — cada nó nasce automaticamente quando
+   Motor de "Prazos & Pendências" (antiga "Gatilhos & Prazo") — cada nó nasce automaticamente quando
    o evento anterior da cadeia acontece (EventosFluxo), e fecha quando
    o próprio evento dele acontece. Cadeia de tarefas por Nº da Cotação,
    igual dependência de tarefas em ProjectLibre/MS Project — hoje só
@@ -148,9 +148,10 @@
 
   /* Lembretes de cobrança — nascem como um gatilho-filho (evento_key
      'LEMBRETE__<chaveDoPai>') quando o nó pai passa de X horas sem
-     fechar. Verificados sob demanda em verificarPrazos() — não há
-     cron neste projeto, então só atualiza quando alguém abre a tela
-     "Gatilhos & Prazo" (ver instrucaocompra.md). */
+     fechar. Verificados sob demanda em verificarPrazos() — nenhum cron
+     cria lembretes (o cron gatilhos-alerta-prazos-diario só avisa na
+     Central de Notificações), então só atualiza quando alguém abre a tela
+     "Prazos & Pendências" (ver instrucaocompra.md). */
   const LEMBRETES = {
     AGUARDA_CLIENTE:     { apósHoras: 7 * 24,  label: 'Cobrar cliente sobre a Proposta' },
     AGUARDA_ASSINATURA:  { apósHoras: 3 * 24,  label: 'Cobrar cliente sobre a assinatura do Contrato' },
@@ -842,12 +843,12 @@
     return { rota: node.rota, subsel };
   }
 
-  /* verificarPrazos(rows) — chamado ao carregar a tela "Gatilhos & Prazo"
-     (não há cron neste projeto). Recebe os gatilhos automáticos já
+  /* verificarPrazos(rows) — chamado ao carregar a tela "Prazos & Pendências"
+     (nenhum cron faz isto; ver LEMBRETES acima). Recebe os gatilhos automáticos já
      carregados em memória, nasce lembretes de cobrança quando o prazo
      do nó pai já passou do limite parcial (LEMBRETES), e marca
-     AGUARDA_CLIENTE como "revisao_necessaria" quando estourar os 15
-     dias sem fechar. Retorna true se algo mudou (chamador deve
+     AGUARDA_CLIENTE como "revisao_necessaria" quando estourar o SLA
+     (SLA_HORAS.AGUARDA_CLIENTE = 10 dias corridos) sem fechar. Retorna true se algo mudou (chamador deve
      recarregar). */
   async function verificarPrazos(rows) {
     const c = sb(); if (!c) return false;
