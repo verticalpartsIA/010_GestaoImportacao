@@ -190,7 +190,39 @@
     return new Date(agora.getTime() - dias * 24 * 60 * 60 * 1000);
   }
 
-  async function loadDashboardData(role, period) {
+  /* Consultas extras dos KPIs novos — só o que o perfil aberto precisa. Falha numa consulta = null naquele cartão
+     ("—"), nunca zero (supabase-js não lança em erro de PostgREST, então confere `.error`). */
+  async function carregarExtrasPerfil(role) {
+    const ok = (r) => (r && !r.error ? r.data : null);
+    const out = {};
+    const tarefas = [];
+    const q = (chave, p) => tarefas.push(Promise.resolve(p).then((r) => { out[chave] = ok(r); }).catch(() => { out[chave] = null; }));
+    if (role === 'comercial') q('metaConversao', sb.from('dashboard_metas').select('valor').eq('chave', 'conversao_lead_proposta').maybeSingle().then((r) => ({ data: r && r.data ? r.data.valor : null, error: null })));
+    if (role === 'financeiro') q('parcelas', sb.from('contrato_instalador_parcelas').select('id, contrato_id, status, liberada, valor').eq('liberada', true).neq('status', 'paga'));
+    if (role === 'engenharia') {
+      q('projetosAguardando', window.AvalEngenhariaStore ? window.AvalEngenhariaStore.resumoTodas().then((m) => ({ data: Object.values(m || {}).filter((x) => x && x.estado !== 'ok').length, error: null })) : { data: null });
+      q('achados', sb.rpc('evolucao_conferir_achados'));
+      q('obras', sb.from('dossier_obra').select('id, status_master'));
+      q('solicitacoes', sb.from('solicitacoes_produto').select('id, status, excluido_em').is('excluido_em', null));
+    }
+    if (role === 'logistica') {
+      q('filaSeparacao', sb.rpc('separacao_hub', { p_acao: 'fila', p_args: {} }));
+      q('ops', sb.from('pcp_ordens').select('id, produto, status, prazo_entrega').not('produto', 'is', null).not('status', 'in', '(concluida,cancelada)'));
+      q('expedicoes', sb.from('pcp_expedicoes').select('id, status').eq('status', 'aguardando'));
+      q('ajustes', sb.from('estoque_movimentos').select('id').eq('status_omie', 'pendente_confirmacao'));
+    }
+    if (role === 'importacao') {
+      q('embarquesImp', sb.from('embarques_importacao').select('id, eta_atual, eta_santos, arquivado'));
+      q('lotes', sb.from('iv_cotacao_lotes').select('id, status').eq('status', 'em_cotacao'));
+      q('avaisJuridicos', sb.from('avais_juridicos').select('id, status').eq('status', 'pendente'));
+      q('diaD', sb.rpc('iv_alertar_dia_d', { simular: true }).then((r) => ({ data: r && !r.error && r.data ? Number(r.data.atrasados) : null, error: null })));
+    }
+    if (role === 'admin') q('decisoes', sb.from('decisoes_gerenciais').select('id, status, aprovador_esperado_email, aprovadores_esperados').eq('status', 'pendente'));
+    await Promise.all(tarefas);
+    return out;
+  }
+
+  async function loadDashboardData(role, period, opts) {
     const [
       lR, alertR,
       tarR, embR, ctR,
@@ -205,7 +237,7 @@
         const em = (window.__VP_USER || {}).email || null;
         return (em ? q.or(`destinatario_email.is.null,destinatario_email.eq.${em}`) : q.is('destinatario_email', null)).order('created_at', { ascending: false });
       })(),
-      sb.from('tarefas').select('*').eq('role', role).eq('done', false).order('id'),
+      sb.from('tarefas').select('*').eq('role', (role === 'logistica' || role === 'importacao') ? 'admin' : role).eq('done', false).order('id'),
       sb.from('embarques').select('*').eq('teste', false).order('eta'),
       sb.from('contratos_venda_equipamentos').select('*').or('status.is.null,status.neq.em_preenchimento').order('issued_date', { ascending: false }),
       sb.from('comissoes').select('*').order('id'),
@@ -222,7 +254,7 @@
       // só pra comparar custo de instalação no Dashboard).
       // cliente_id: usado por ComercialMetrics.conversaoLeadProposta() pra
       // casar lead → proposta pelo cliente (propostas não tem lead_id).
-      sb.from('propostas').select('id, status, valor_total, numero_cotacao, aprovada_em, cliente_id, ativos:data_json->ativos'),
+      sb.from('propostas').select('id, status, valor_total, numero_cotacao, aprovada_em, sent_at, enviada_em, criado_em, vendedor_id, cliente_id, ativos:data_json->ativos'),
       sb.from('avais_financeiros').select('id, numero_cotacao, status, sinal_pago, contrato_venda_id'),
       // Issue #274 (23/08): "Projetos em Andamento" (Gantt/Kanban/Lista) lia
       // só a tabela `projetos`, legada e sempre vazia em produção. cliente/
@@ -275,7 +307,8 @@
     // dashboard-metrics-comercial.test.js. Os outros perfis ainda são
     // calculados aqui embaixo — extração incremental, um módulo por vez. ----
     const CM = window.ComercialMetrics;
-    const comercial = CM.compute({ leads, gatilhos, propostas, contratos });
+    const desde = periodoParaData(period);
+    const comercial = CM.compute({ leads, gatilhos, propostas, contratos, desde, periodoRotulo: desde ? (period === 'Hoje' ? 'hoje' : 'últimos ' + period) : null });
 
     // ---- Engenharia (dashboard-metrics-engenharia.js) — 2º módulo
     // extraído. Achado real (03/10): "Projetos abertos" lia a tabela legada
@@ -294,7 +327,6 @@
     // extraído. Único que COMPÕE outro módulo (ComercialMetrics), em vez
     // de refiltrar do zero — ver comentário no próprio arquivo. ----
     const AM = window.AdminMetrics;
-    const desde = periodoParaData(period);
     const projetosPeriodo = desde ? AM.projetosAtivosNoPeriodo(projetosReais, desde) : undefined;
     const propostasPeriodo = desde ? propostas.filter(p => p.aprovada_em && new Date(p.aprovada_em) >= desde) : undefined;
     const comissoesPeriodo = desde ? comissoes.filter(c => c.created_at && new Date(c.created_at) >= desde) : undefined;
@@ -309,12 +341,39 @@
       module: t.module,
     }));
 
-    // ---- KPIs por perfil ----
+    // ---- KPIs novos por perfil (Fase 2 e 3, 31/10/2026) — consultas extras só do perfil aberto ----
+    const PM = window.PerfisMetrics;
+    const extras = await carregarExtrasPerfil(role);
+    const periodoRotulo = desde ? (period === 'Hoje' ? 'hoje' : 'últimos ' + period) : null;
+    const convPct = CM.conversaoLeadProposta(leads, CM.propostasEnviadas(propostas));
+    const cNovos = PM.comercial({ leads, propostas, desde, periodoRotulo, convPct, metaConversao: extras.metaConversao });
+    const fNovos = PM.financeiro({ propostas, avais, gatilhos, parcelas: extras.parcelas || [], contratosInstalador, comissoes });
+    const eNovos = PM.engenharia({ aguardandoProjeto: extras.projetosAguardando, achados: extras.achados, obras: extras.obras, solicitacoes: extras.solicitacoes });
+    const lNovos = PM.logistica({ fila: extras.filaSeparacao, ops: extras.ops, expedicoes: extras.expedicoes, ajustes: extras.ajustes });
+    const iNovos = PM.importacao({ embarquesImp: extras.embarquesImp, lotes: extras.lotes, avaisJuridicos: extras.avaisJuridicos, diaD: extras.diaD });
+    const decisoesVoce = PM.decisoesDoUsuario(extras.decisoes, (window.__VP_USER || {}).email);
+    const embTransito = admin.kpis.find((k) => k.label === 'Embarques em trânsito');
+    /* Sem a alçada propostas.ver_todas a pessoa não vê o total da empresa; em vez de sumir, o cartão vira "Minhas propostas"
+       (as do próprio perfil, por vendedor_id). Proposta sem vendedor gravado (133 de 333 em 31/10/2026) não conta como de ninguém. */
+    let cartoesMinhas = [];
+    if (opts && opts.propostasDoPerfil) {
+      const minhas = propostas.filter((p) => p.vendedor_id === opts.propostasDoPerfil);
+      const c = PM.comercial({ leads, propostas: minhas, desde, periodoRotulo, convPct, metaConversao: extras.metaConversao });
+      cartoesMinhas = [
+        { ...c.aguardando, label: 'Minhas propostas aguardando o cliente' },
+        { label: 'Minhas propostas enviadas', value: String(CM.propostasEnviadas(minhas, desde).length), unit: '', delta: '', deltaDir: 'up', sub: periodoRotulo || 'histórico inteiro' },
+        { ...c.assinadas, label: 'Minhas propostas assinadas' },
+      ];
+    }
     const kpis = {
-      comercial: comercial.kpis,
-      engenharia: engenharia.kpis,
-      financeiro: financeiro.kpis,
-      admin: admin.kpis,
+      comercial: [cNovos.leadsNovos, comercial.kpis.find((k) => k.label === 'Cot. em China') && { ...comercial.kpis.find((k) => k.label === 'Cot. em China'), label: 'Cotações em preço' },
+        cNovos.aguardando, comercial.kpis.find((k) => k.label === 'Propostas enviadas'), cNovos.assinadas, cNovos.conversao, ...cartoesMinhas].filter(Boolean),
+      engenharia: [...engenharia.kpis, eNovos.projetosAguardando, eNovos.conferir, eNovos.obrasInstalacao, eNovos.solicitacoes],
+      financeiro: [fNovos.sinais, fNovos.avaisPagamento, fNovos.vencidas, fNovos.parcelasInstalador, fNovos.comissoes,
+        ...financeiro.kpis.filter((k) => ['A receber', 'Contratos abertos', 'Instalação: contratado vs previsto'].includes(k.label))].filter(Boolean),
+      admin: [...(decisoesVoce == null ? [] : [{ label: 'Decisões aguardando você', value: String(decisoesVoce), unit: '', delta: '', deltaDir: decisoesVoce > 0 ? 'down' : 'up', sub: 'agora' }]), ...admin.kpis],
+      logistica: [lNovos.pedidosASeparar, lNovos.opsAtrasadas, lNovos.prontosExpedir, lNovos.ajustes],
+      importacao: [embTransito, iNovos.chegadas, iNovos.lotes, iNovos.avaisJuridicos, iNovos.diaD].filter(Boolean),
     };
 
     // Achado real (03/10): até aqui o Dashboard ainda consultava `estoque`

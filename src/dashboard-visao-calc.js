@@ -14,13 +14,18 @@
 
   const semAcento = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 
-  const PERFIL_POR_DEPARTAMENTO = { 'comercial': 'comercial', 'engenharia': 'engenharia', 'adm/financeiro': 'financeiro', 'ceo': 'admin' };
+  const PERFIL_POR_DEPARTAMENTO = {
+    'comercial': 'comercial', 'engenharia': 'engenharia', 'adm/financeiro': 'financeiro', 'ceo': 'admin',
+    'logistica/almoxarifado/producao': 'logistica', 'juridico/importacao/suprimentos': 'importacao',
+  };
 
   // modulo → ações que liberam. `propostas` usa ver_todas porque a ação `ver` não existe nesse módulo.
   const LIBERA = {
     leads: ['ver'], propostas: ['ver_todas'], 'cotacoes-fornecedor': ['ver'], financeiro: ['ver'], importacao: ['ver'],
     'eng-projeto-elevadores': ['ver'], 'ficha-tecnica': ['ver'], 'ncm-catalogo': ['ver'], 'contrato-venda-equipamentos': ['ver'],
     notificacoes: ['ver'],
+    'mapa-obras': ['ver'], 'solicitacoes-produto': ['ver'], separacao: ['ver'], pcp: ['ver'], expedicao: ['ver'], almoxarifado: ['ver'],
+    'cotacoes-varejo': ['ver'], 'aval-juridico': ['ver'], compras: ['ver'],
   };
   // Alçadas que contam para a regra "nenhuma alçada de cartão = visão completa" (notificações fica de fora: quase todos a têm).
   const DE_REFERENCIA = Object.keys(LIBERA).filter((m) => m !== 'notificacoes');
@@ -30,6 +35,14 @@
     'Projetos abertos': 'eng-projeto-elevadores', 'Fichas técnicas': 'ficha-tecnica', 'Catálogo (ativos)': 'ncm-catalogo', 'Alertas engenharia': 'notificacoes',
     'A receber': 'contrato-venda-equipamentos', 'Contratos abertos': 'contrato-venda-equipamentos', 'Comissões pendentes': 'financeiro', 'Gatilhos próx. 7d': 'financeiro',
     'Projetos ativos': 'financeiro', 'Embarques em trânsito': 'importacao', 'Alertas críticos': 'notificacoes', 'Faturamento (propostas assinadas)': 'propostas', 'Comissões (custo)': 'financeiro',
+    // Fase 2 e 3 (31/10/2026)
+    'Leads novos': 'leads', 'Cotações em preço': 'cotacoes-fornecedor', 'Propostas aguardando o cliente': 'propostas', 'Propostas assinadas': 'propostas',
+    'Sinais a confirmar': 'financeiro', 'Avais de pagamento pendentes': 'financeiro', 'Etapas com prazo vencido': 'financeiro', 'Parcelas de instalador liberadas': 'financeiro',
+    'Instalação: contratado vs previsto': 'financeiro',
+    'Projetos aguardando assinatura': 'eng-projeto-elevadores', 'Equipamentos com dado a conferir': 'mapa-obras', 'Obras em instalação': 'mapa-obras', 'Solicitações de produto em aberto': 'solicitacoes-produto',
+    'Pedidos a separar': 'separacao', 'OPs atrasadas': 'pcp', 'Prontos para expedir': 'expedicao', 'Ajustes de estoque pendentes': 'almoxarifado',
+    'Chegadas em 30 dias': 'importacao', 'Cotações de varejo em aberto': 'cotacoes-varejo', 'Avais jurídicos pendentes': 'aval-juridico', 'Itens com Dia D vencido': 'compras',
+    // 'Decisões aguardando você' fica sem módulo de propósito: são as decisões da própria pessoa, sempre visíveis.
   };
   const MODULO_DO_BLOCO = {
     pipeline: 'propostas', origem: 'leads', ondeParou: 'financeiro', projetos: 'financeiro',

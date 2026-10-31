@@ -67,3 +67,20 @@ test('compute — devolve 4 KPIs', () => {
   const out = M.compute({ contratos: [], comissoes: [], gatilhos: [] });
   assert.equal(out.kpis.length, 4);
 });
+
+test('contratosAbertos — "assinado" minúsculo (como o banco grava), recusado, expirado e rascunho do assistente não são abertos', () => {
+  const contratos = [
+    { status: 'assinado' }, { status: 'recusado' }, { status: 'expirado' }, { status: 'em_preenchimento' },
+    { status: 'enviado' }, { status: 'visualizado' }, { status: 'aguardando_signatarios' }, { status: 'rascunho' },
+  ];
+  assert.deepEqual(M.contratosAbertos(contratos).map((c) => c.status), ['enviado', 'visualizado', 'aguardando_signatarios', 'rascunho']);
+});
+
+test('aReceber — usa valor_total_num (o que a edição atualiza) e cai para value quando não há', () => {
+  const contratos = [
+    { status: 'enviado', valor_total_num: 1500.5, value: 999 },
+    { status: 'enviado', value: 2000 },
+    { status: 'assinado', valor_total_num: 8000 },
+  ];
+  assert.equal(M.aReceber(contratos), 3500.5);
+});

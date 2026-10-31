@@ -23,12 +23,24 @@
     return 'R$ ' + n;
   }
 
+  /* Contrato "aberto" = ainda não fechado: nem assinado, nem recusado, nem expirado, nem rascunho do assistente.
+     Antes comparava com 'Assinado' (A maiúsculo) e o banco grava 'assinado' — o contrato já assinado contava como
+     aberto. Comparação sem diferença de maiúscula (31/10/2026, Fase 0 do Dashboard). */
+  const FECHADOS = ['assinado', 'recusado', 'expirado', 'em_preenchimento'];
   function contratosAbertos(contratos) {
-    return (contratos || []).filter((c) => c.status !== 'Assinado');
+    return (contratos || []).filter((c) => !FECHADOS.includes(String(c.status || '').toLowerCase()));
+  }
+
+  /* Valor do contrato: `valor_total_num` é o que a edição atualiza; `value` (bigint) é a coluna legada, gravada só na
+     criação. Usa a primeira que tiver número. */
+  function valorDoContrato(c) {
+    const n = Number(c.valor_total_num);
+    if (Number.isFinite(n) && n > 0) return n;
+    return Number(c.value) || 0;
   }
 
   function aReceber(contratos) {
-    return contratosAbertos(contratos).reduce((s, c) => s + (c.value || 0), 0);
+    return contratosAbertos(contratos).reduce((s, c) => s + valorDoContrato(c), 0);
   }
 
   function comissoesPendentes(comissoes) {
@@ -91,10 +103,10 @@
     const gatProx7 = gatilhosProximos(gatilhos, 7, agora);
     const div = divergenciaInstalacao(contratosInstalador, propostas);
     const kpisBase = [
-      { label: 'A receber', value: fmtBRL(aReceber(contratos)), unit: '', delta: '', deltaDir: 'up', sub: 'contratos abertos' },
+      { label: 'A receber', value: fmtBRL(aReceber(contratos)), unit: '', delta: '', deltaDir: 'up', sub: 'contratos em aberto' },
       { label: 'Comissões pendentes', value: fmtBRL(comissoesPendentesValor(comissoes)), unit: '', delta: '', deltaDir: 'up', sub: 'aguardando pagamento' },
       { label: 'Gatilhos próx. 7d', value: String(gatProx7.length), unit: '', delta: '', deltaDir: gatProx7.length > 3 ? 'down' : 'up', sub: 'atenção' },
-      { label: 'Contratos abertos', value: String(contratosAbertos(contratos).length), unit: '', delta: '', deltaDir: 'up', sub: 'em andamento' },
+      { label: 'Contratos abertos', value: String(contratosAbertos(contratos).length), unit: '', delta: '', deltaDir: 'up', sub: 'ainda sem assinatura final' },
     ];
     /* Só aparece quando há pelo menos 1 contrato instalador comparável —
        sem isso, é ruído (0 x 0) pra quem ainda não usa Master ID nos
@@ -115,7 +127,7 @@
   }
 
   window.FinanceiroMetrics = {
-    contratosAbertos, aReceber, comissoesPendentes, comissoesPendentesValor, diasRestantes, gatilhosProximos,
+    contratosAbertos, valorDoContrato, aReceber, comissoesPendentes, comissoesPendentesValor, diasRestantes, gatilhosProximos,
     custoInstalacaoPrevisto, divergenciaInstalacao, kpis, compute,
   };
 }());

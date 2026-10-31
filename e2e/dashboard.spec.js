@@ -101,9 +101,11 @@ const titulo = (page, texto) => page.getByText(texto, { exact: false });
 test('D.1 — comercial com alçada só de Leads vê os cartões de Leads e não vê Propostas, Onde Parou nem Projetos', async ({ page }) => {
   await prepararVisao(page, { caps: ['leads.ver', 'notificacoes.ver'] });
   await page.goto('/geral/dashboard');
-  await expect(titulo(page, 'Leads do mês').first()).toBeVisible({ timeout: 45_000 });
+  await expect(titulo(page, 'Leads novos').first()).toBeVisible({ timeout: 45_000 });
   await expect(page.getByTestId('dash-ocultos')).toBeVisible();
-  await expect(titulo(page, 'Propostas enviadas')).toHaveCount(0);
+  await expect(titulo(page, 'Propostas enviadas').filter({ hasNotText: 'Minhas' })).toHaveCount(0);
+  // sem propostas.ver_todas o total da empresa some, mas a pessoa vê as dela
+  await expect(titulo(page, 'Minhas propostas enviadas').first()).toBeVisible();
   await expect(titulo(page, 'Onde Parou')).toHaveCount(0);
   await expect(titulo(page, 'Projetos em Andamento')).toHaveCount(0);
   await expect(titulo(page, 'Tarefas de Hoje').first()).toBeVisible();
@@ -132,4 +134,20 @@ test('D.4 — administrador vê tudo e continua escolhendo a visão', async ({ p
   await expect(titulo(page, 'Onde Parou').first()).toBeVisible({ timeout: 45_000 });
   await expect(page.getByText('Visualizando como')).toBeVisible();
   await expect(page.getByTestId('dash-ocultos')).toHaveCount(0);
+});
+
+test('D.5 — Logística tem perfil próprio: cartões de logística e nada de comercial', async ({ page }) => {
+  await prepararVisao(page, { departamento: 'Logística/Almoxarifado/Produção', caps: ['separacao.ver', 'pcp.ver', 'notificacoes.ver'] });
+  await page.goto('/geral/dashboard');
+  await expect(titulo(page, 'OPs atrasadas').first()).toBeVisible({ timeout: 45_000 });
+  await expect(titulo(page, 'Leads novos')).toHaveCount(0);
+  await expect(titulo(page, 'Prontos para expedir')).toHaveCount(0); // sem a alçada de Expedição
+});
+
+test('D.6 — Importação tem perfil próprio: chegadas, lotes e avais jurídicos', async ({ page }) => {
+  await prepararVisao(page, { departamento: 'Jurídico/Importação/Suprimentos', caps: ['importacao.ver', 'cotacoes-varejo.ver', 'aval-juridico.ver'] });
+  await page.goto('/geral/dashboard');
+  await expect(titulo(page, 'Chegadas em 30 dias').first()).toBeVisible({ timeout: 45_000 });
+  await expect(titulo(page, 'Cotações de varejo em aberto').first()).toBeVisible();
+  await expect(titulo(page, 'Avais jurídicos pendentes').first()).toBeVisible();
 });

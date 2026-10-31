@@ -188,7 +188,7 @@ function Dashboard({ role: roleEscolhido, setRoute, setSubsel }) {
   // Visão dos Projetos em Andamento na URL: /geral/dashboard (Gantt, padrão), /geral/dashboard/lista, /geral/dashboard/kanban.
   const VISOES = ['gantt', 'lista', 'kanban'];
   const [projectView, setProjectView] = window.useRouteTab('dashboard', 'gantt', VISOES);
-  const [period, setPeriod] = React.useState('Hoje');
+  const [period, setPeriod] = React.useState('30 dias');
   const [showTask, setShowTask] = React.useState(false);
   // Projeto aberto no modal de detalhe refletido na URL (/geral/dashboard/<id>) —
   // 3 pontos de entrada (Gantt/Lista/Kanban) abrem o MESMO modal; antes era só
@@ -216,7 +216,7 @@ function Dashboard({ role: roleEscolhido, setRoute, setSubsel }) {
     const atual = () => minha === cargaRef.current;
     setLoading(true); setDemorando(false);
     const timeoutId = setTimeout(() => { if (atual()) setDemorando(true); }, 3000);
-    return window.__VP_SB.loadDashboardData(role, period)
+    return window.__VP_SB.loadDashboardData(role, period, (visao && visao.limitado && !visao.pode('propostas') && dadosVisao && dadosVisao.perfilId) ? { propostasDoPerfil: dadosVisao.perfilId } : undefined)
       .then((data) => { if (!atual()) return; setSbData(data); setFalhou(false); carregadoEm.current = Date.now(); })
       .catch((err) => {
         if (!atual()) return;
@@ -224,7 +224,7 @@ function Dashboard({ role: roleEscolhido, setRoute, setSubsel }) {
         window.toast?.('Erro ao atualizar dashboard: ' + (err && err.message ? err.message : err), 'error');
       })
       .finally(() => { clearTimeout(timeoutId); if (atual()) { setLoading(false); setDemorando(false); } });
-  }, [role, period]);
+  }, [role, period, dadosVisao]);
 
   React.useEffect(() => {
     reloadDashboard();
@@ -275,7 +275,7 @@ function Dashboard({ role: roleEscolhido, setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow">
             <span className="vp-rule" style={{ display: "inline-block", width: 24, height: 3, background: "var(--vp-yellow)" }}/>
-            Dashboard {role}
+            Dashboard {({ logistica: 'logística', importacao: 'importação' })[role] || role}
           </div>
           <h1 className="page-head__title">{greet}, {nomeSaudacao}.</h1>
           <p className="page-head__sub">
@@ -374,7 +374,7 @@ function Dashboard({ role: roleEscolhido, setRoute, setSubsel }) {
         </Card>
       </div>
 
-      {showTask && <ModalNovaTask role={role} onClose={() => setShowTask(false)} onSaved={reloadDashboard}/>}
+      {showTask && <ModalNovaTask role={(role === 'logistica' || role === 'importacao') ? 'admin' : role} onClose={() => setShowTask(false)} onSaved={reloadDashboard}/>}
       {detalheProjeto && (
         <Modal title={detalheProjeto.name || 'Projeto'} onClose={fecharProjeto} width={420}
           footer={<Button variant="ghost" onClick={fecharProjeto}>Fechar</Button>}>
