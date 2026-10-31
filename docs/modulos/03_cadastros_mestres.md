@@ -337,3 +337,8 @@ Varredura read-only. Fontes citadas: `docs/MAPA_DE_ROTAS.md` (linhas 49–50: ro
 - **[Fio em curto]** `cadastros-clientes-store.js:216`: dedup Lead→Cliente por razão social exata; homônimos reaproveitam o primeiro.
 - **[Fio em curto]** `cadastros.jsx:205–209`: busca por CNPJ/CPF não ignora pontuação.
 - **Estado/F5:** abrir/editar/histórico refletem a URL (`useRotaId`/`useRotaItem`); id inexistente na URL abre formulário "Novo" sem aviso (`cadastros.jsx:173`).
+
+## 9. Regras do Gelson (31/10/2026)
+
+- **Cliente/fornecedor com transação nunca é excluído** — pode ser editado; `id` e o código `VPCLI`/`VPFOR` ("ID-Tag") ficam sempre os mesmos; para tirar de circulação, inativar. Registrado como Área Blindada no `CLAUDE.md`. Implementação: issue #1221 (hoje `remover` ainda faz DELETE físico sem conferir vínculos — ver 5.5 e 8.3).
+- **Onde ficam os passos do método:** Specify, Clarify, Plan, Tasks e Analyze deste módulo (inclusive T5 #1225 e T6 #1226) são escritos **neste documento**, nunca no `CLAUDE.md`, que é a Constituição (blindada desde o cabeçalho).

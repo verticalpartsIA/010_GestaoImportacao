@@ -1,6 +1,20 @@
 # CLAUDE.md — contexto para retomar este projeto
 
+> ## 🔒🔒 ÁREA BLINDADA — ESTE ARQUIVO É A CONSTITUIÇÃO DO SITE (31/10/2026, regra do Gelson)
+> - O `CLAUDE.md` inteiro, **a partir deste cabeçalho**, é área blindada. Aqui ficam só regras permanentes, limites e áreas blindadas.
+> - **Não é lugar de Specify / Clarify / Plan / Tasks / Analyze / diagnóstico.** Esses passos vão no documento do módulo em `docs/modulos/<nn>_<modulo>.md` (ex.: `docs/modulos/03_cadastros_mestres.md`); assunto sem documento de módulo vai em `docs/superpowers/specs/<data>-<assunto>.md`.
+> - Qualquer sessão do Claude (inclusive concorrente) só altera este arquivo com **pedido explícito do Gelson para alterar o CLAUDE.md**. Antes, diga o que vai mudar e espere a confirmação. Pedido de trabalho comum **não** autoriza mexer aqui.
+> - Nunca apague nem reescreva seção existente para "limpar" ou "resumir"; acréscimos só no ponto certo e com data.
+
 Notas operacionais para uma sessão futura do Claude Code neste repo. O README.md tem a visão de produto/telas; este arquivo é sobre "como trabalhar aqui".
+
+## 🔒 ÁREA BLINDADA — Cadastros Mestres: cliente/fornecedor com transação NUNCA é excluído (31/10/2026, regra do Gelson)
+
+- **Cliente ou fornecedor que tem qualquer transação** (lead, formulário/cotação, proposta, contrato, dossiê de obra, contrato social, pedido de quadro, P.I., embarque, RFQ, cotação, avaliação etc.) **pode ser editado, mas nunca excluído** — nem pela tela, nem por store, nem por SQL/MCP.
+- Na edição, a identidade **não muda**: `id` e o código humano (`VPCLI-xxxx` / `VPFOR-xxxx`, a "ID-Tag" do cadastro) são mantidos sempre. Retirar de circulação = `ativo = false` (inativar).
+- Exclusão física só é admitida para cadastro **sem nenhum vínculo**, conferido antes de apagar. Falha ao conferir os vínculos = não apaga.
+- Arquivos cobertos: `src/cadastros.jsx`, `src/cadastros-clientes-store.js`, `src/cadastros-fornecedores-store.js` e as tabelas `clientes` / `fornecedores`. Implementação acompanhada na issue #1221; detalhes técnicos em `docs/modulos/03_cadastros_mestres.md`.
+- Se pedirem para "limpar", "unificar" ou "apagar" cadastros: **PARE**, informe esta regra e peça confirmação explícita antes de qualquer ação.
 
 ## E-mail — CC em todos os envios + correção de acentos (30/10/2026, PR #1187, squash `b40b53e`)
 
