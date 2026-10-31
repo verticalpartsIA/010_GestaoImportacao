@@ -414,3 +414,12 @@ Testes: +10 em `src/cadastros-nunca-excluir.test.js`.
 - **Lead → Cliente com nome repetido:** `criarOuVincularDeLead` agora busca até 20 clientes com a mesma razão social e escolhe pelo **e-mail** do lead, depois pelos **8 últimos dígitos do telefone**, depois o **ativo**; sem desempate fica o primeiro, como antes, com aviso no console. Nunca cria um cliente a mais quando já existe o nome.
 - **Contrato de Venda (investigação, só leitura):** o Contrato **não lê `clientes`**. Ele herda o comprador do snapshot da Proposta (`propostas.data_json.cliente`, em `aplicarProposta` de `contrato-venda.jsx`). Ou seja, editar o cadastro do cliente depois de a Proposta existir **não** muda o Contrato. Não foi alterado (seria decisão do Jurídico).
 - Testes: +2 (desempate de homônimo). `cadastros.jsx` v17, `cadastros-clientes-store.js` v19.
+
+## 14. T6 (#1226) — P.I. e Embarque guardam o id do fornecedor (31/10/2026)
+
+Decisão do Gelson: **coluna nova** (não trocar o campo de texto).
+- **Banco** (migration `20261031150000_fornecedor_id_pi_embarque.sql`): `pi_importacao.fornecedor_id`, `embarques_importacao.agente_carga_id` e `embarques_importacao.empresa_desembaraco_id` (uuid → `fornecedores(id)`, `on delete restrict`). Os campos de texto continuam existindo e sendo o que a tela mostra.
+- `cadastro_vinculos` passa a contar a P.I./embarque pelo id **ou** pelo nome (o nome continua valendo para o histórico antigo).
+- **Como o id é preenchido** (`CadastrosFornecedoresStore.resolverIdPorNome`): o nome digitado tem de bater exatamente (sem acento/maiúscula/espaços extras) com a razão social ou o nome fantasia de **um único** cadastro; dois cadastros com o mesmo nome ou nome parcial = sem id (nunca chuta). Vínculo anterior que ainda bate é mantido. Falha ao ler o cadastro = mantém o id que já havia.
+- P.I. criada pelo lote de Cotações de Varejo herda o `fornecedor_id` do convite. No embarque, o agente de carga vem da cotação de frete vencedora quando há.
+- **Limite:** P.I./embarques antigos ficam sem id até serem salvos de novo (não houve carga retroativa); a tela não mostra o vínculo.

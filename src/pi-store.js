@@ -77,6 +77,15 @@
     return data || null;
   }
 
+  /* T6 #1226 (31/10/2026): grava o vínculo com o cadastro de Fornecedores ao lado do nome (fornecedor_id).
+     Só liga quando o nome bate com UM cadastro; senão fica sem vínculo (o nome continua valendo). */
+  async function _comFornecedorId(row, idAtual) {
+    const S = window.CadastrosFornecedoresStore;
+    if (!S || !S.resolverIdPorNome) return row;
+    try { return { ...row, fornecedor_id: await S.resolverIdPorNome(row.fornecedor, idAtual || null) }; }
+    catch (e) { console.warn('[PIStore] vínculo do fornecedor não resolvido', e); return row; }
+  }
+
   function _payload(form) {
     const itens = (form.itens || []).map((i) => {
       const q = parseFloat(i.quantidade) || 0;
@@ -119,7 +128,7 @@
   async function criar(form) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     if (!form.numero_pi || !form.numero_pi.trim()) throw new Error('Informe o número da P.I.');
-    const row = { ..._payload(form), created_by: (window.__VP_USER || {}).email || null };
+    const row = await _comFornecedorId({ ..._payload(form), created_by: (window.__VP_USER || {}).email || null }, form.fornecedor_id);
     const { data, error } = await c.from('pi_importacao').insert(row).select().single();
     if (error) throw error;
     if (window.EventosFluxo) window.EventosFluxo.registrar({
@@ -158,7 +167,7 @@
         observacoes: 'P.I. criada automaticamente quando a compra foi liberada (3 avais OK). Confira os dados e troque o número pelo da P.I. do fornecedor.',
         producao: { rascunho_auto: true },
       };
-      const row = { ..._payload(form), created_by: 'automático (compra liberada)' };
+      const row = await _comFornecedorId({ ..._payload(form), created_by: 'automático (compra liberada)' }, form.fornecedor_id);
       const { data, error } = await c.from('pi_importacao').insert(row).select().single();
       if (error) throw error;
       if (window.VPLog) window.VPLog.registrar({ modulo: 'P.I.', acao: 'Criou P.I. automática', alvo: data.numero_pi, alvo_id: data.id, detalhe: { numero_cotacao: n } });
@@ -181,7 +190,7 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { data: antes, error: errAntes } = await c.from('pi_importacao').select('numero_cotacao, embarque_id, numero_pi, producao').eq('id', id).maybeSingle();
     if (errAntes) throw errAntes;
-    const row = { ..._payload(form), updated_at: new Date().toISOString() };
+    const row = await _comFornecedorId({ ..._payload(form), updated_at: new Date().toISOString() }, form.fornecedor_id);
     /* Rascunho automático confirmado: o usuário trocou o número provisório pelo da P.I. real. */
     const confirmouRascunho = ehRascunhoAutomatico(antes) && row.numero_pi && !String(row.numero_pi).startsWith(PREFIXO_RASCUNHO);
     if (confirmouRascunho) row.producao = { ...(row.producao || {}), rascunho_auto: false };
@@ -319,7 +328,8 @@
         + 'Confira os dados com a Proforma do fornecedor e troque o número provisório pelo da P.I. dele.',
       producao: { rascunho_auto: true, origem_lote: lote.id, lote_numero: lote.numero, convite_id: convite.id },
     };
-    const row = { ..._payload(form), created_by: (window.__VP_USER || {}).email || null };
+    /* T6: o convite já aponta para o cadastro do fornecedor — esse vínculo vale, sem adivinhar pelo nome. */
+    const row = { ..._payload(form), created_by: (window.__VP_USER || {}).email || null, fornecedor_id: convite.fornecedor_id || null };
     const { data, error } = await c.from('pi_importacao').insert(row).select().single();
     if (error) throw error;
     if (window.VPLog) window.VPLog.registrar({ modulo: 'P.I.', acao: 'Criou P.I. em rascunho a partir do lote ' + lote.numero, alvo: data.numero_pi, alvo_id: data.id, detalhe: { fornecedor: convite.fornecedor_nome, itens: linhas.length } });

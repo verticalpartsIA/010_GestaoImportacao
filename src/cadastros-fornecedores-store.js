@@ -49,6 +49,35 @@
     return r;
   }
 
+  /* T6 #1226 (31/10/2026): acha o cadastro de um fornecedor citado pelo nome (P.I., Embarque), para gravar o
+     vínculo ao lado do nome. Regra: se já havia um vínculo e o nome ainda é o desse cadastro, mantém; senão,
+     só liga quando o nome bate EXATAMENTE (sem acento/maiúscula) com UM cadastro (razão social ou fantasia).
+     Nome que não bate ou bate com 2+ cadastros = sem vínculo (null) — nunca adivinha. Falha de leitura = null. */
+  let _cacheNomes = null, _cacheEm = 0;
+  function _norm(v) { return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase(); }
+  async function _todosParaVinculo() {
+    if (_cacheNomes && Date.now() - _cacheEm < 60000) return _cacheNomes;
+    const c = sb(); if (!c) return null;
+    const r = await lerPaginado(() => c.from('fornecedores').select('id, razao_social, nome_fantasia').order('id'));
+    if (r.erro) return null;
+    _cacheNomes = r.itens; _cacheEm = Date.now();
+    return _cacheNomes;
+  }
+  function idPorNome(lista, nome, idAtual) {
+    const n = _norm(nome);
+    if (!n || !Array.isArray(lista)) return null;
+    const casa = (f) => _norm(f.razao_social) === n || (f.nome_fantasia && _norm(f.nome_fantasia) === n);
+    if (idAtual) { const atual = lista.find((f) => f.id === idAtual); if (atual && casa(atual)) return idAtual; }
+    const achados = lista.filter(casa);
+    return achados.length === 1 ? achados[0].id : null;
+  }
+  async function resolverIdPorNome(nome, idAtual) {
+    if (!_norm(nome)) return null;
+    const lista = await _todosParaVinculo();
+    if (!lista) return idAtual || null;
+    return idPorNome(lista, nome, idAtual);
+  }
+
   async function listarTodos() { return (await listarTodosDetalhado()).itens; }
 
   async function obter(id) {
@@ -222,7 +251,7 @@
   }
 
   window.CadastrosFornecedoresStore = {
-    CATEGORIAS, gerarCodigo, listarTodos, listarTodosDetalhado, listarAtivos, obter, criar, atualizar, remover, vinculos, inativar,
+    CATEGORIAS, gerarCodigo, listarTodos, listarTodosDetalhado, listarAtivos, idPorNome, resolverIdPorNome, obter, criar, atualizar, remover, vinculos, inativar,
     listarAvaliacoes, avaliar, removerAvaliacao, mediasAvaliacoes,
   };
 }());

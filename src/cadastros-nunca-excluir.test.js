@@ -185,3 +185,21 @@ test('lead → cliente: desempata pelo telefone e prefere ativo', async () => {
   const s2 = montarHomonimo([{ id: 'a', ativo: false }, { id: 'b' }]);
   assert.strictEqual(await s2.window.CadastrosClientesStore.criarOuVincularDeLead({ id: 'L1', building: 'ACME' }), 'b');
 });
+
+/* T6 #1226 — vínculo do fornecedor pelo nome */
+test('fornecedor: liga pelo nome só quando bate com UM cadastro', () => {
+  const w = montarLeitura('cadastros-fornecedores-store.js', { paginas: [] });
+  const S = w.CadastrosFornecedoresStore;
+  const lista = [
+    { id: 'g', razao_social: 'GLARIE ELEVATOR CO.,LTD', nome_fantasia: 'Glarie' },
+    { id: 'a1', razao_social: 'Agente Ágil', nome_fantasia: null },
+    { id: 'a2', razao_social: 'Outra Razão', nome_fantasia: 'agente agil' },
+  ];
+  assert.strictEqual(S.idPorNome(lista, ' glarie '), 'g');
+  assert.strictEqual(S.idPorNome(lista, 'GLARIE ELEVATOR CO.,LTD'), 'g');
+  assert.strictEqual(S.idPorNome(lista, 'Agente Agil'), null, 'dois cadastros com o mesmo nome = sem vínculo');
+  assert.strictEqual(S.idPorNome(lista, 'Agente Agil', 'a2'), 'a2', 'vínculo anterior que ainda casa é mantido');
+  assert.strictEqual(S.idPorNome(lista, 'Glar'), null, 'nome parcial não liga');
+  assert.strictEqual(S.idPorNome(lista, 'Glarie', 'a1'), 'g', 'vínculo anterior que não casa mais é trocado');
+  assert.strictEqual(S.idPorNome(lista, ''), null);
+});

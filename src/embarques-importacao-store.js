@@ -163,11 +163,26 @@
     }
   }
 
+  /* T6 #1226 (31/10/2026): agente de carga e empresa de desembaraço ganham o vínculo com o cadastro de
+     Fornecedores ao lado do nome. Agente da cotação de frete vencedora usa o fornecedor da própria cotação;
+     nos demais casos só liga quando o nome bate com UM cadastro (senão fica sem vínculo, o nome continua). */
+  async function _comFornecedoresIds(row, form) {
+    const S = window.CadastrosFornecedoresStore;
+    if (!S || !S.resolverIdPorNome) return row;
+    try {
+      const EF = window.EmbFreteCalc;
+      const venc = EF ? EF.vencedor(EF.normalizar(form.cotacoes_frete)) : null;
+      const agenteId = venc && venc.fornecedor_id ? venc.fornecedor_id : await S.resolverIdPorNome(row.agente_carga, form.agente_carga_id);
+      const despId = await S.resolverIdPorNome(row.empresa_desembaraco, form.empresa_desembaraco_id);
+      return { ...row, agente_carga_id: row.agente_carga ? (agenteId || null) : null, empresa_desembaraco_id: row.empresa_desembaraco ? (despId || null) : null };
+    } catch (e) { console.warn('[EmbarquesImportacaoStore] vínculo de fornecedor não resolvido', e); return row; }
+  }
+
   async function criar(form, pis) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const user = window.__VP_USER || {};
     const historico = [{ data: new Date().toISOString(), descricao: 'Embarque criado', usuario: user.nome || user.email || 'Sistema' }];
-    const row = { ..._payload({ ...form, historico }, pis), created_by: user.email || null };
+    const row = await _comFornecedoresIds({ ..._payload({ ...form, historico }, pis), created_by: user.email || null }, form);
     const { data, error } = await c.from('embarques_importacao').insert(row).select().single();
     if (error) throw error;
     if (window.EventosFluxo) window.EventosFluxo.registrar({
@@ -189,7 +204,7 @@
     const antes = await obter(id);
     const user = window.__VP_USER || {};
     const historico = [...(form.historico || []), { data: new Date().toISOString(), descricao: 'Embarque atualizado', usuario: user.nome || user.email || 'Sistema' }];
-    const row = { ..._payload({ ...form, historico }, pis), updated_at: new Date().toISOString() };
+    const row = await _comFornecedoresIds({ ..._payload({ ...form, historico }, pis), updated_at: new Date().toISOString() }, form);
     const { data, error } = await c.from('embarques_importacao').update(row).eq('id', id).select().single();
     if (error) throw error;
     if (window.EventosFluxo) {
