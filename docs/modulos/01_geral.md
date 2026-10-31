@@ -105,9 +105,6 @@ Se você (Claude Code, em qualquer sessão, inclusive concorrente) foi chamado p
 - Deploy: antes de redeployar `send-email`, testar numa cópia; publicar com CLI com bundle (a ferramenta MCP de arquivo único dá `BOOT_ERROR`); comparar produção × repo antes de publicar.
 - Mudança que as camadas do Inbox (triagem, dono, organização, conversas, Pedir decisão, Extrair preço) fizeram **só no front e em tabelas/gatilhos próprios** — `send-email`, `read-inbox`, vínculo/matching e soft-delete ficaram intactos (exceto as alterações explicitamente autorizadas e documentadas no `CLAUDE.md`).
 
-### 5.3 Trava "CONFIRMO" (transversal, relevante para a Central)
-Tabelas de Atualização de Custos só mudam depois que o usuário escrever "Confirmo" no chat; a Central de Decisões e o Dashboard **leem** essas informações de forma indireta (Precificação) e não podem "corrigir" valores dessas tabelas.
-
 ## 6. Tabelas do Supabase e migrations
 
 | Tabela | Uso no módulo | Pontos de atenção |
