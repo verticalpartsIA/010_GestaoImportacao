@@ -153,3 +153,35 @@ for (const [arquivo, chave, extra] of [['cadastros-clientes-store.js', 'Cadastro
     assert.strictEqual(chamadas.insert, 1);
   });
 }
+
+/* T8 #1228 — lead com nome igual a vários clientes */
+function montarHomonimo(lista) {
+  const vinc = {};
+  const sb = {
+    from(tab) {
+      let patch = null;
+      const q = {
+        select() { return q; }, ilike() { return q; }, limit() { return q; }, is() { return q; },
+        eq(col, val) { if (patch && tab === 'leads') vinc.cliente_id = patch.cliente_id; return q; },
+        update(p) { patch = p; return q; },
+        maybeSingle: async () => ({ data: { cliente_id: null }, error: null }),
+        then(res) { return Promise.resolve(tab === 'clientes' && !patch ? { data: lista, error: null } : { data: [], error: null }).then(res); },
+      };
+      return q;
+    },
+  };
+  const window = { __VP_SB: { sb }, VPLog: { registrar() {} } };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'cadastros-clientes-store.js'), 'utf8'), { window, console: { warn() {}, error() {}, log() {} } });
+  return { window, vinc };
+}
+test('lead → cliente: desempata homônimo pelo e-mail', async () => {
+  const { window } = montarHomonimo([{ id: 'a', email: 'x@a.com' }, { id: 'b', email: 'compras@b.com' }]);
+  const id = await window.CadastrosClientesStore.criarOuVincularDeLead({ id: 'L1', building: 'ACME', email: 'compras@b.com' });
+  assert.strictEqual(id, 'b');
+});
+test('lead → cliente: desempata pelo telefone e prefere ativo', async () => {
+  const { window } = montarHomonimo([{ id: 'a', telefone: '(11) 9999-0000', ativo: false }, { id: 'b', telefone: '11 98888-7777' }, { id: 'c', telefone: '' }]);
+  assert.strictEqual(await window.CadastrosClientesStore.criarOuVincularDeLead({ id: 'L1', building: 'ACME', phone: '+55 11 98888-7777' }), 'b');
+  const s2 = montarHomonimo([{ id: 'a', ativo: false }, { id: 'b' }]);
+  assert.strictEqual(await s2.window.CadastrosClientesStore.criarOuVincularDeLead({ id: 'L1', building: 'ACME' }), 'b');
+});

@@ -406,3 +406,11 @@ Testes: +5 em `src/cadastros-nunca-excluir.test.js` (1.005 linhas, falha no meio
 **Banco (aplicado em produção em 31/10/2026 com o "Confirmo" do Gelson; os 4 índices conferidos como únicos e válidos):** migration `20261031140000_cadastros_documento_unico.sql` — 4 índices únicos parciais (`cnpj`/`cpf` de `clientes` e `fornecedores`, só quando o documento está preenchido). Garante a regra mesmo com dois cadastros ao mesmo tempo ou gravação fora da tela; a recusa do índice (código `23505`) vira a mesma mensagem clara. **Cadastro inativo também conta.** O código pode ir para a `main` antes ou depois dos índices (a conferência da tela funciona sozinha).
 
 Testes: +10 em `src/cadastros-nunca-excluir.test.js`.
+
+## 13. T8 (#1228) — ajustes de robustez (31/10/2026)
+
+- **Busca por CNPJ/CPF com pontuação:** digitar `12.345.678/0001-90` agora acha o cadastro (o banco grava só dígitos; a busca compara também os dígitos do termo, com 3+ dígitos). `cadCasaDocumento` em `cadastros.jsx`.
+- **Link para cadastro inexistente** (`/cadastro-clientes/<id>` ou `/cadastro-fornecedores/<id>` de cadastro excluído ou link antigo): mostra o aviso amarelo "não encontrado" com "Voltar à lista", em vez de abrir o formulário como "Novo". Se a lista também estiver incompleta, o aviso diz isso.
+- **Lead → Cliente com nome repetido:** `criarOuVincularDeLead` agora busca até 20 clientes com a mesma razão social e escolhe pelo **e-mail** do lead, depois pelos **8 últimos dígitos do telefone**, depois o **ativo**; sem desempate fica o primeiro, como antes, com aviso no console. Nunca cria um cliente a mais quando já existe o nome.
+- **Contrato de Venda (investigação, só leitura):** o Contrato **não lê `clientes`**. Ele herda o comprador do snapshot da Proposta (`propostas.data_json.cliente`, em `aplicarProposta` de `contrato-venda.jsx`). Ou seja, editar o cadastro do cliente depois de a Proposta existir **não** muda o Contrato. Não foi alterado (seria decisão do Jurídico).
+- Testes: +2 (desempate de homônimo). `cadastros.jsx` v17, `cadastros-clientes-store.js` v19.

@@ -52,6 +52,29 @@ async function cadExcluirOuInativar(store, item, rotulo, reload) {
   catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
 }
 
+/* T8 #1228 (31/10/2026): busca por CNPJ/CPF aceita o número com pontuação ("12.345.678/0001-90"):
+   o banco grava só dígitos, então compara também os dígitos do que foi digitado. */
+function cadCasaDocumento(item, q) {
+  const qd = String(q || '').replace(/\D/g, '');
+  if ((item.cnpj || '').includes(q) || (item.cpf || '').includes(q)) return true;
+  return qd.length >= 3 && ((item.cnpj || '').includes(qd) || (item.cpf || '').includes(qd));
+}
+
+/* T8 #1228: link para um cadastro que não está na lista (excluído, link antigo ou lista incompleta) —
+   antes abria o formulário como se fosse "Novo", sem aviso. */
+function CadNaoEncontrado({ rotulo, listaIncompleta, onVoltar }) {
+  return (
+    <div className="card" style={{ border: '1px solid var(--vp-yellow, #ffd400)', background: '#fffbe6', padding: 12, marginBottom: 14 }}>
+      <div className="row sb" style={{ alignItems: 'center', gap: 12 }}>
+        <div className="small">
+          <b>{rotulo} não encontrado.</b> O link pode ser antigo ou o cadastro foi excluído{listaIncompleta ? ' — ou a lista não carregou inteira (veja o aviso abaixo)' : ''}.
+        </div>
+        <Button variant="outline" size="sm" onClick={onVoltar}>Voltar à lista</Button>
+      </div>
+    </div>
+  );
+}
+
 /* T4 #1224 (31/10/2026): leitura falhou no meio = aviso visível, nunca lista parcial calada. */
 function CadAvisoLeitura({ erro, qtd, rotulo, onRetry }) {
   if (!erro) return null;
@@ -208,7 +231,8 @@ function CadastroClientesPage() {
      /cadastros-mestres/cadastro-clientes/<id>/historico → modal de histórico */
   const [rotaId] = window.useRotaId('cadastro-clientes');
   const [sub] = window.useRotaItem('cadastro-clientes', rotaId);
-  const showForm = rotaId === 'novo' || (!!rotaId && sub !== 'historico');
+  const naoEncontrado = !!(items && rotaId && rotaId !== 'novo' && !items.some((c) => c.id === rotaId));
+  const showForm = rotaId === 'novo' || (!!rotaId && sub !== 'historico' && !naoEncontrado);
   const editing = (items && rotaId && rotaId !== 'novo' && sub !== 'historico') ? (items.find((c) => c.id === rotaId) || null) : null;
   const historicoDe = (items && rotaId && sub === 'historico') ? (items.find((c) => c.id === rotaId) || null) : null;
   const abrirNovo = () => { if (window.VpRouter) window.VpRouter.navigate('cadastro-clientes', 'novo'); };
@@ -244,7 +268,7 @@ function CadastroClientesPage() {
   const filtered = items.filter((c) => {
     const q = search.toLowerCase();
     return !q || (c.razao_social || '').toLowerCase().includes(q) || (c.nome_fantasia || '').toLowerCase().includes(q)
-      || (c.codigo || '').toLowerCase().includes(q) || (c.cnpj || '').includes(q) || (c.cpf || '').includes(q);
+      || (c.codigo || '').toLowerCase().includes(q) || cadCasaDocumento(c, q);
   });
   const ordenados = ord.aplicar(filtered, {
     codigo: (c) => c.codigo, razaoSocial: (c) => c.razao_social, doc: (c) => c.cnpj || c.cpf,
@@ -265,6 +289,7 @@ function CadastroClientesPage() {
         </div>
       </div>
 
+      {naoEncontrado && <CadNaoEncontrado rotulo="Cliente" listaIncompleta={!!erroLeitura} onVoltar={fecharModal}/>}
       {showForm && (
         <div ref={formRef} style={{ marginBottom: 20, scrollMarginTop: 16 }}>
           <ClienteForm key={editing ? editing.id : 'novo'} initialData={editing} isEdit={!!editing} saving={saving} onSubmit={salvar} onCancel={fecharModal}/>
@@ -575,7 +600,8 @@ function CadastroFornecedoresPage() {
      /cadastros-mestres/cadastro-fornecedores/novo   → novo fornecedor
      /cadastros-mestres/cadastro-fornecedores/<id>   → editar aquele fornecedor */
   const [rotaId] = window.useRotaId('cadastro-fornecedores');
-  const showForm = rotaId === 'novo' || !!rotaId;
+  const naoEncontrado = !!(items && rotaId && rotaId !== 'novo' && !items.some((f) => f.id === rotaId));
+  const showForm = rotaId === 'novo' || (!!rotaId && !naoEncontrado);
   const editing = (items && rotaId && rotaId !== 'novo') ? (items.find((f) => f.id === rotaId) || null) : null;
   const abrirNovo = () => { if (window.VpRouter) window.VpRouter.navigate('cadastro-fornecedores', 'novo'); };
   const abrirEditar = (f) => { if (window.VpRouter) window.VpRouter.navigate('cadastro-fornecedores', f.id); };
@@ -613,7 +639,7 @@ function CadastroFornecedoresPage() {
   const filtered = items.filter((f) => {
     const q = search.toLowerCase();
     const matchSearch = !q || (f.razao_social || '').toLowerCase().includes(q) || (f.nome_fantasia || '').toLowerCase().includes(q)
-      || (f.codigo || '').toLowerCase().includes(q) || (f.cnpj || '').includes(q) || (f.cpf || '').includes(q);
+      || (f.codigo || '').toLowerCase().includes(q) || cadCasaDocumento(f, q);
     const matchCat = filterCategoria === 'Todas' || (f.categorias || []).includes(filterCategoria);
     return matchSearch && matchCat;
   });
@@ -637,6 +663,7 @@ function CadastroFornecedoresPage() {
         </div>
       </div>
 
+      {naoEncontrado && <CadNaoEncontrado rotulo="Fornecedor" listaIncompleta={!!erroLeitura} onVoltar={fecharForm}/>}
       {showForm && (
         <div ref={formRef} style={{ marginBottom: 20, scrollMarginTop: 16 }}>
           <FornecedorForm key={editing ? editing.id : 'novo'} initialData={editing} isEdit={!!editing} saving={saving} onSubmit={salvar} onCancel={fecharForm}/>
