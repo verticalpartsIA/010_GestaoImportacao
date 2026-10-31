@@ -5,6 +5,13 @@
 > - **Não é lugar de Specify / Clarify / Plan / Tasks / Analyze / diagnóstico.** Esses passos vão no documento do módulo em `docs/modulos/<nn>_<modulo>.md` (ex.: `docs/modulos/03_cadastros_mestres.md`); assunto sem documento de módulo vai em `docs/superpowers/specs/<data>-<assunto>.md`.
 > - Qualquer sessão do Claude (inclusive concorrente) só altera este arquivo com **pedido explícito do Gelson para alterar o CLAUDE.md**. Antes, diga o que vai mudar e espere a confirmação. Pedido de trabalho comum **não** autoriza mexer aqui.
 > - Nunca apague nem reescreva seção existente para "limpar" ou "resumir"; acréscimos só no ponto certo e com data.
+>
+> ### 📘 Documentos de módulo (`docs/modulos/`) — devem ser respeitados (31/10/2026, regra do Gelson)
+> - O site tem **14 módulos**; cada um terá **um `.md` próprio e personalizado** em `docs/modulos/<nn>_<modulo>.md` (ex.: `01_geral.md`, `02_crm.md`, `03_cadastros_mestres.md`), cobrindo o módulo **e todas as suas telas/submódulos ("filhos")**.
+> - Esses documentos são a **referência oficial de cada módulo**: rotas, telas, regras de negócio, herança/doação de dados, tabelas, diagnósticos, decisões e os passos Specify → Clarify → Plan → Tasks → Analyze. **Antes de mexer num módulo, leia o `.md` dele e respeite o que está escrito lá.**
+> - Mudança num módulo (código, regra ou decisão) é registrada **no `.md` daquele módulo**, nunca aqui. Aqui (Constituição) só entram regras permanentes e áreas blindadas que valem para o site inteiro.
+> - Se o código e o `.md` do módulo divergirem, **não "corrija" nenhum dos dois por conta própria**: avise o Gelson e pergunte qual vale.
+> - Um módulo ainda sem `.md` em `docs/modulos/`: os passos vão provisoriamente em `docs/superpowers/specs/<data>-<assunto>.md` e migram para o `.md` do módulo quando ele for criado.
 
 Notas operacionais para uma sessão futura do Claude Code neste repo. O README.md tem a visão de produto/telas; este arquivo é sobre "como trabalhar aqui".
 
@@ -1322,6 +1329,8 @@ Mapeamento feito **read-only** em 30/10; as correções do diagnóstico saíram 
 ## Método de trabalho (regra do Gelson, 24/10/2026) — este CLAUDE.md é a CONSTITUIÇÃO
 
 Para trabalho novo de produto/telas/banco: **SPECIFY → CLARIFY → PLAN → TASKS → ANALYZE → IMPLEMENT**. Este arquivo é a constituição (regras permanentes e limites); os demais passos vão em `docs/superpowers/specs/<data>-<assunto>.md` (um arquivo por assunto, não arquivos soltos). Não se implementa antes de Specify/Clarify; migration/cron/deploy só com "CONFIRMO" dele depois de descrever o que será aplicado. Correção pequena e óbvia não precisa do ciclo inteiro.
+
+> **Atualizado em 31/10/2026 (pedido do Gelson):** os passos do método vão no **documento do módulo** em `docs/modulos/<nn>_<modulo>.md` (um `.md` personalizado por módulo, cobrindo o módulo e suas telas filhas). `docs/superpowers/specs/` fica só para módulo que ainda não tem documento. Ver o cabeçalho deste arquivo ("Documentos de módulo").
 
 ## Evolução dos Equipamentos — "dado a conferir" e cobrança diária ao Felipe (24/10/2026, PR #1089 mergeado em `main`, squash `b1963917`; banco e cron JÁ em produção)
 
