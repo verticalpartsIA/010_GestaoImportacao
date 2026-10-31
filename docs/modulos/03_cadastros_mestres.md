@@ -423,3 +423,10 @@ Decisão do Gelson: **coluna nova** (não trocar o campo de texto).
 - **Como o id é preenchido** (`CadastrosFornecedoresStore.resolverIdPorNome`): o nome digitado tem de bater exatamente (sem acento/maiúscula/espaços extras) com a razão social ou o nome fantasia de **um único** cadastro; dois cadastros com o mesmo nome ou nome parcial = sem id (nunca chuta). Vínculo anterior que ainda bate é mantido. Falha ao ler o cadastro = mantém o id que já havia.
 - P.I. criada pelo lote de Cotações de Varejo herda o `fornecedor_id` do convite. No embarque, o agente de carga vem da cotação de frete vencedora quando há.
 - **Limite:** P.I./embarques antigos ficam sem id até serem salvos de novo (não houve carga retroativa); a tela não mostra o vínculo.
+
+## 15. T5 (#1225) — RFQ de importação liga o fornecedor ao cadastro (31/10/2026)
+
+- `rfq.jsx` (`addFornecedor`): ao adicionar, o nome é conferido no cadastro (`CadastrosFornecedoresStore.resolverPorNome`, mesma regra exata/única da T6). Casou com um cadastro → a entrada ganha `cadastro_id` + `cadastro_codigo` (VPFOR) e o selo mostra o código. Não casou (ou o cadastro não pôde ser lido) → só entra com confirmação, marcada `nome_livre: true` ("nome livre").
+- `fornecedor_id` continua sendo a chave interna da RFQ (preços e vencedor) — não foi trocada, para RFQs antigas seguirem abrindo iguais. RFQs antigas mostram "sem vínculo".
+- **Sem migration**: `rfq_importacao.fornecedores` já é jsonb e `cadastro_vinculos` já procura o id do cadastro nesse campo, então a RFQ passa a travar a exclusão do fornecedor pelo id.
+- Não é o RFQ ao fornecedor do Formulário de Elevador (área blindada), que não foi tocado.

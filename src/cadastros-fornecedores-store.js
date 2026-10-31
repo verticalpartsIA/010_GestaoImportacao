@@ -58,7 +58,7 @@
   async function _todosParaVinculo() {
     if (_cacheNomes && Date.now() - _cacheEm < 60000) return _cacheNomes;
     const c = sb(); if (!c) return null;
-    const r = await lerPaginado(() => c.from('fornecedores').select('id, razao_social, nome_fantasia').order('id'));
+    const r = await lerPaginado(() => c.from('fornecedores').select('id, codigo, razao_social, nome_fantasia').order('id'));
     if (r.erro) return null;
     _cacheNomes = r.itens; _cacheEm = Date.now();
     return _cacheNomes;
@@ -76,6 +76,16 @@
     const lista = await _todosParaVinculo();
     if (!lista) return idAtual || null;
     return idPorNome(lista, nome, idAtual);
+  }
+  /* T5 #1225: id + código VPFOR do cadastro que casa com o nome (mesma regra de idPorNome).
+     Devolve null se nenhum/vários casam; { erro: true } se o cadastro não pôde ser lido. */
+  async function resolverPorNome(nome) {
+    if (!_norm(nome)) return null;
+    const lista = await _todosParaVinculo();
+    if (!lista) return { erro: true };
+    const id = idPorNome(lista, nome);
+    const f = id ? lista.find((x) => x.id === id) : null;
+    return f ? { id: f.id, codigo: f.codigo || null, nome: f.razao_social } : null;
   }
 
   async function listarTodos() { return (await listarTodosDetalhado()).itens; }
@@ -251,7 +261,7 @@
   }
 
   window.CadastrosFornecedoresStore = {
-    CATEGORIAS, gerarCodigo, listarTodos, listarTodosDetalhado, listarAtivos, idPorNome, resolverIdPorNome, obter, criar, atualizar, remover, vinculos, inativar,
+    CATEGORIAS, gerarCodigo, listarTodos, listarTodosDetalhado, listarAtivos, idPorNome, resolverIdPorNome, resolverPorNome, obter, criar, atualizar, remover, vinculos, inativar,
     listarAvaliacoes, avaliar, removerAvaliacao, mediasAvaliacoes,
   };
 }());
