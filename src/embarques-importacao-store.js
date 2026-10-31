@@ -130,6 +130,7 @@
       client: saved.nome_embarque || saved.referencia_embarque || 'Gestão Importação',
       vessel: saved.navio || null, bl, sealine: saved.sealine || null,
       container_number: containerNumero, containers: (saved.containers || []).length || 1,
+      containers_lista: (saved.containers || []).map((x) => ({ numero: x.numero || null, tipo_tamanho: x.tipo_tamanho || null, lacre: x.lacre || null })),
       container_type: (saved.containers && saved.containers[0] && saved.containers[0].tipo_tamanho) || null,
       origin: saved.porto_origem || null, destination: saved.porto_destino || null,
       etd: saved.etd_atual || saved.etd_original || null,

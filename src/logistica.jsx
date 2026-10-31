@@ -776,7 +776,9 @@ function ImportacaoDetail({ embarque, setRoute }) {
             <KvBlock label="IMO" value={e.imo} mono/>
             <KvBlock label="Armador / Linha" value={e.line ? `${e.line}${e.sealine ? ' (' + e.sealine + ')' : ''}` : (e.sealine || '—')}/>
             <KvBlock label="BL" value={e.bl} mono/>
-            <KvBlock label="Nº Container" value={e.container_number} mono/>
+            <KvBlock label="Nº Container" value={(Array.isArray(e.containers_lista) && e.containers_lista.length > 1)
+              ? e.containers_lista.map((x) => [x.numero || 's/ nº', x.tipo_tamanho].filter(Boolean).join(' · ')).join(' | ')
+              : e.container_number} mono/>
             <KvBlock label="Lacre" value={e.seal} mono/>
             <KvBlock label="Carga" value={`${e.containers}× ${e.type || e.container_type}${e.freight_condition ? " · " + e.freight_condition : ""}`}/>
             <KvBlock label="Rota" value={`${e.from || e.origin} → ${e.to || e.destination}`}/>
