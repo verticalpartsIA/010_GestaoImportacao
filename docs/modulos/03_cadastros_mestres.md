@@ -4,6 +4,8 @@
 >
 > Escopo: apenas as duas telas **Clientes** e **Fornecedores**. As telas vizinhas do mesmo grupo de menu (Matérias-Primas, Produtos, Instaladores, Custos, Catálogo Siscomex) não fazem parte deste documento.
 
+> **Leitura obrigatória (atualizado em 31/10/2026):** as seções 2 a 8 descrevem o mapeamento **de antes** das correções T1–T8. Onde uma frase delas ficou superada, está marcada com **[SUPERADO → §N]**; o estado atual está nas seções 10 a 14. Em caso de dúvida, vale a seção mais nova.
+
 ## 1. Visão geral e propósito
 
 Cadastros Mestres é a base corporativa única de **pessoas jurídicas/físicas** que o resto do sistema referencia. Comercial, Importação, Engenharia, Jurídico e Logística leem as mesmas tabelas `clientes` e `fornecedores`, em vez de manter cadastros próprios (`cadastros.jsx`, cabeçalho: "Módulo transversal").
@@ -38,7 +40,7 @@ O prefixo de URL do primeiro segmento é o do grupo de menu (os comentários do 
 | `/<id>` | Abre o formulário de edição daquele cliente |
 | `/<id>/historico` | Abre o modal "Histórico · <razão social>" |
 
-Lógica: `showForm = rotaId === 'novo' || (!!rotaId && sub !== 'historico')`; `editing` e `historicoDe` buscam o cliente em `items` pelo id da URL. Se o id da URL não existir na lista carregada, `editing` fica `null` e o formulário abre como "Novo" (comportamento derivado do código; não há mensagem de "não encontrado"). Abrir/fechar usa `VpRouter.navigate('cadastro-clientes', …)`.
+Lógica: `showForm = rotaId === 'novo' || (!!rotaId && sub !== 'historico')`; `editing` e `historicoDe` buscam o cliente em `items` pelo id da URL. Se o id da URL não existir na lista carregada, `editing` fica `null` e o formulário abre como "Novo" (comportamento derivado do código; não há mensagem de "não encontrado"). **[SUPERADO → §13: hoje aparece o aviso "não encontrado" com "Voltar à lista".]** Abrir/fechar usa `VpRouter.navigate('cadastro-clientes', …)`.
 
 **Fornecedores** (`CadastroFornecedoresPage`, `cadastros.jsx:525`):
 
@@ -76,7 +78,7 @@ Dependências de UI usadas sem definição local: `PIField`, `PIInput`, `PISelec
 **Cabeçalho:** eyebrow "Cadastros", título "Clientes", subtítulo "Cadastro central de clientes — inclui os criados automaticamente pelo Formulário." Botão **Novo cliente** (`abrirNovo`).
 
 **Lista:** carregada por `CadastrosClientesStore.listarTodos()` (falha vira lista vazia). Enquanto `items === null` mostra "Carregando…".
-- **Busca** (campo único, case-insensitive): razão social, nome fantasia, código, CNPJ ou CPF. A comparação de CNPJ/CPF é por `includes` no valor gravado (só dígitos), então digitar com pontuação não casa.
+- **Busca** (campo único, case-insensitive): razão social, nome fantasia, código, CNPJ ou CPF. A comparação de CNPJ/CPF é por `includes` no valor gravado (só dígitos), então digitar com pontuação não casa. **[SUPERADO → §13: `cadCasaDocumento` compara também os dígitos do termo.]**
 - Contador "N cliente(s) encontrado(s)".
 - **Colunas** (todas ordenáveis via `window.useOrdenacao`): Código, Razão social (com nome fantasia abaixo), CNPJ/CPF (formatado; badge amarelo "Doc. pendente" quando `documento_pendente`), Cidade/UF, Contato (`contato` ou `telefone`), Status (Ativo / badge "Inativo").
 - **Ações por linha:** Histórico (ícone `history`), Editar (`edit`), Excluir (`trash`).
@@ -106,7 +108,7 @@ Botões: **Cancelar** (fecha e volta à lista) e **Cadastrar cliente / Salvar al
 3. `contribuinte_icms` não booleano → toast pedindo Sim/Não.
 4. `onSubmit(form)` → `atualizar` ou `criar` na store (que valida o documento de novo, ver 5.2).
 
-**Exclusão (`excluir`):** `window.confirm('Excluir o cliente "…"? Isso pode afetar formulários/propostas já vinculados.')` seguido de `CadastrosClientesStore.remover` (**DELETE físico**, ver 5.5).
+**Exclusão (`excluir`) — [SUPERADO → §10: a lixeira agora mostra as transações e oferece Inativar; só cadastro sem vínculo é apagado]:** `window.confirm('Excluir o cliente "…"? Isso pode afetar formulários/propostas já vinculados.')` seguido de `CadastrosClientesStore.remover` (**DELETE físico**, ver 5.5).
 
 **Modal "Histórico" (`ClienteHistoricoModal`, largura 640):** três blocos —
 1. *Canal de entrada / Vendedor* — leads com `cliente_id` = cliente (data, origem, vendedor, prédio).
@@ -225,11 +227,11 @@ Comentário do código registra que, em produção (04/10/2026), todos os CPF/CN
 ### 5.4 Códigos humanos
 
 - **Clientes:** `gerarCodigo()` chama a RPC `gerar_codigo_cliente` (sequência `seq_clientes_codigo` no Postgres, evita corrida). **Falha da RPC ou resposta vazia lança erro explícito**; o código antigo caía em `'VPCLI-0001'`, que colidia com um cliente real (histórico em comentário, 21/09). O código só é gerado na criação (não muda na edição).
-- **Fornecedores:** `gerarCodigo()` lê `select('codigo')` de **todos** os fornecedores no navegador, pega o maior número e soma 1 (`VPFOR-NNNN`). Corrigido de `count(*)` porque a exclusão causava reutilização de código. **Risco residual (derivado do código):** não é atômico — dois cadastros simultâneos podem gerar o mesmo código e o índice único barrar o segundo; e sem `sb()` devolve `'VPFOR-0001'` (o mesmo anti-padrão corrigido em clientes). Sem tratamento de erro da leitura (`data` nula vira 0).
+- **Fornecedores [SUPERADO → §11 (T3): hoje usa a RPC `gerar_codigo_fornecedor`, atômica, sem fallback fixo]:** `gerarCodigo()` lê `select('codigo')` de **todos** os fornecedores no navegador, pega o maior número e soma 1 (`VPFOR-NNNN`). Corrigido de `count(*)` porque a exclusão causava reutilização de código. **Risco residual (derivado do código):** não é atômico — dois cadastros simultâneos podem gerar o mesmo código e o índice único barrar o segundo; e sem `sb()` devolve `'VPFOR-0001'` (o mesmo anti-padrão corrigido em clientes). Sem tratamento de erro da leitura (`data` nula vira 0).
 
 ### 5.5 Preservação e integridade (soft-delete × exclusão)
 
-**Este módulo NÃO usa soft-delete.** `remover` nas duas stores executa `DELETE` físico em `clientes`/`fornecedores`. A única forma "suave" de retirar um registro de circulação é o flag **`ativo`** (checkbox "Cliente ativo"/"Fornecedor ativo"): `listarAtivos` só devolve ativos; `listarTodos` devolve todos e a lista mostra "Inativo".
+**[SUPERADO → §10: `remover` agora confere `cadastro_vinculos` e recusa com transação ou falha ao conferir; há trava `BEFORE DELETE` no banco e `inativar`.] Texto original:** **Este módulo NÃO usa soft-delete.** `remover` nas duas stores executa `DELETE` físico em `clientes`/`fornecedores`. A única forma "suave" de retirar um registro de circulação é o flag **`ativo`** (checkbox "Cliente ativo"/"Fornecedor ativo"): `listarAtivos` só devolve ativos; `listarTodos` devolve todos e a lista mostra "Inativo".
 
 - A confirmação do cliente avisa "pode afetar formulários/propostas já vinculados". **Não confirmado** no código desta tela: se há FKs `ON DELETE` que bloqueiem a exclusão de cliente referenciado (o `CLAUDE.md` descreve FKs em outras tabelas, mas não para `clientes`). O erro do banco, se vier, é exibido como `Erro: <mensagem>`.
 - Exclusão de avaliação (`fornecedores_avaliacoes`) também é DELETE físico.
@@ -239,7 +241,7 @@ Comentário do código registra que, em produção (04/10/2026), todos os CPF/CN
 ### 5.6 Leitura e paginação
 
 - `CadastrosClientesStore.listarTodos` pagina de 1000 em 1000 por `range` até a página vir incompleta (corrige o limite padrão do PostgREST; 14/09). Em erro devolve **o que já acumulou** (pode ser parcial) e faz `console.warn`.
-- `CadastrosFornecedoresStore.listarTodos` faz um único `select('*')` **sem `range`**: limitado ao teto padrão de 1000 linhas do PostgREST (a base atual de fornecedores não é conhecida; **não confirmado** se já passa disso). O mesmo vale para a leitura de `gerarCodigo` e de `mediasAvaliacoes` (esta última soma todas as avaliações no navegador).
+- **[SUPERADO → §11 (T4): leitura de 1000 em 1000 com `listarTodosDetalhado` e cartão "Lista incompleta".]** `CadastrosFornecedoresStore.listarTodos` faz um único `select('*')` **sem `range`**: limitado ao teto padrão de 1000 linhas do PostgREST (a base atual de fornecedores não é conhecida; **não confirmado** se já passa disso). O mesmo vale para a leitura de `gerarCodigo` e de `mediasAvaliacoes` (esta última soma todas as avaliações no navegador).
 - Ambos devolvem lista vazia se o Supabase não carregou; a tela não diferencia "erro" de "vazio".
 
 ### 5.7 Outras regras
@@ -291,6 +293,8 @@ Vínculos lidos pelo histórico: `leads.cliente_id`, `formularios_elevador.clien
 
 ## 7. Pontos de atenção e lacunas
 
+**Situação atual de cada item (31/10/2026):** 1 resolvido (§10); 2 resolvido (§11 T3); 3 resolvido (§11 T4); 4 resolvido (§11 T4, cartão "Lista incompleta"); 5 em aberto (decisão de produto); 6 em aberto; 7 resolvido (§13); 8 parcial (§13: desempate por e-mail/telefone/ativo); 9 em aberto; 10 vale sempre (tutorial desatualizado pelas mudanças de §10–§14). A lista abaixo é o texto original do mapeamento.
+
 1. **Exclusão física** em clientes/fornecedores/avaliações; comportamento diante de FKs **não confirmado**.
 2. **Código de fornecedor não atômico** e com fallback fixo `VPFOR-0001` (clientes já tiveram esse bug corrigido).
 3. **Fornecedores sem paginação** (limite de 1000 linhas do PostgREST) em `listarTodos`, `gerarCodigo` e `mediasAvaliacoes`.
@@ -303,6 +307,8 @@ Vínculos lidos pelo histórico: `leads.cliente_id`, `formularios_elevador.clien
 10. Tutoriais (`cadastros-mestres/clientes` e `fornecedores`) e os textos de ajuda do `shell.jsx` (linhas 478–479) descrevem o comportamento atual; qualquer mudança nestas telas exige regenerar o tutorial pela sessão de tutoriais.
 
 ## 8. Diagnóstico "Placa-Mãe" (fios, trilhas e componentes) — 31/10/2026
+
+> **Estado após T1–T8:** os fios rompidos/em curto de código e banco listados em 8.3 (exclusão física, código VPFOR, paginação, resultado parcial, dedup por nome, busca com pontuação, id inexistente na URL, ausência de unicidade de CNPJ/CPF) foram tratados nas seções 10–13. O vínculo de P.I./Embarque por texto foi tratado na §14 (coluna `fornecedor_id`, sem carga retroativa). Seguem em aberto: RFQ de peças (`rfq.jsx`) com id gerado em vez do cadastro, PCP sem ligação com `fornecedores` e o isolamento real de dados (#571). Texto original abaixo.
 
 Varredura read-only. Fontes citadas: `docs/MAPA_DE_ROTAS.md` (linhas 49–50: rotas `/cadastros/cadastro-clientes` e `/cadastros/cadastro-fornecedores`; linha 194) e o código. **`sobresite.md` não existe no repositório** (busca em todo o projeto); nenhuma afirmação abaixo depende dele. Estado geral: **com fios rompidos** (sem curto confirmado em produção).
 
