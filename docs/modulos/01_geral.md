@@ -176,6 +176,7 @@ Tela inicial do sistema ("Visão Geral"). Mostra, para um perfil, indicadores (K
 - **Textos que enganam no cartão:** "Leads do mês" mostra delta `+N` igual ao valor e subtítulo "vs. mês anterior" sem comparar; "Fichas técnicas" mostra o total como valor e o do mês só no delta; "Embarques em trânsito" tem subtítulo fixo "Santos+Itaguaí"; o funil tem subtítulo "acumulado" e rodapé "Contratos ÷ Leads (volume)"; "Previsão de término" do projeto é sempre "—"; o "eyebrow" mostra o texto cru "Dashboard admin" e a saudação usa o nome do perfil em maiúsculas.
 - **Botões:** "Tela cheia" é só ícone, sem texto nem `title`; "Ver Prazos & Pendências" aparece também para Comercial e Engenharia, cujo menu não tem a tela (a rota os redireciona).
 - **"Onde Parou"** exclui etapas opcionais e lembretes (`LEMBRETE__`); só entram as de prazo efetivo vencido. Existem duas cópias de `fmtBRL` (`dashboard-metrics-financeiro.js` e `-admin.js`).
+- **Leitura de `leads` sem paginação (doação do CRM, 31/10/2026):** a carga do Dashboard (`loadDashboardData` em `supabase.js`) lê `leads` com `select('*')` e sem `range`. Hoje são 13 leads ativos; acima de 1000 o PostgREST cortaria em silêncio e os indicadores de lead subestimariam. As outras consultas da carga **não** foram conferidas quanto a isso (Não verificado). Ver PC-9.
 - **Dependência futura:** as telas que leem proposta (Dashboard em `supabase.js`, Notificações, "Ver documento") passarão a ler a revisão vigente quando `propostas_vigentes` (docs/revisoes/02, branch ainda não mesclada) entrar.
 
 **Desenho aprovado e ainda não implementado (resumo de `docs/superpowers/specs/2026-10-31-dashboard-kpis-por-perfil.md`; o detalhe fica lá até a implementação):**
@@ -692,6 +693,12 @@ Esta tabela lista os 6 jobs **das telas de Geral**. Em 31/10/2026 o banco tinha 
 - **Testes:** `npm test` (unitários, `scripts/run-tests.js`) e `npm run test:e2e` (Playwright, Supabase simulado: nunca toca produção). Toda rota de `KNOWN_ROUTES` entra no teste de fumaça sozinha.
 - **Ajuda:** o "?" lê `HELP_TOPICS` (`shell.jsx`) e a lista `TUTORIAIS` (`TreinamentoVP/`); tutorial desatualizado **não se corrige à mão**: pede-se à sessão de tutoriais.
 - **Mapa de rotas:** `docs/MAPA_DE_ROTAS.md` é gerado por `node scripts/gerar-mapa-rotas.js` (rode depois de mexer em rotas ou abas) e confere as 5 telas de Geral (Prazos & Pendências aparece em `/adm-financeiro/financeiro`). Não se edita à mão.
+
+- **Benefícios vindos do CRM e de Cadastros (doados em 31/10/2026, Art. 49; valem para qualquer tela de Geral que leia tabela ou mostre data):**
+  - **Tabela que pode passar de 1000 linhas:** o PostgREST corta em 1000 **sem avisar**. Leia em laço com `.range(de, de + 999)` e ordem estável (por data **e** por `id`, senão a paginação repete ou perde linha); em erro mostre um cartão com "Tentar de novo", nunca uma lista parcial nem vazia fingindo estar completa. Exemplos prontos: `useLeadsBase` (`crm.jsx`) e `CadastrosClientesStore.listarTodos`.
+  - **Data pura `aaaa-mm-dd`:** nunca `new Date('aaaa-mm-dd')` (vira meia-noite UTC e cai um dia no fuso do Brasil). Formate o texto direto (`isoParaDataBR` em `comercial.jsx`) ou monte a data local; o `fmtDate` global corta o ano para 2 dígitos.
+  - **Hooks antes de qualquer `return` antecipado:** a tela de estado vazio fica num componente à parte e todos os hooks no componente de dentro, senão o React quebra ao alternar entre vazio e preenchido (padrão `LeadDetail` → `LeadDetailView`).
+  - **Atualizar uma linha sem recarregar a tela:** devolver `atualizarLead(id, patch)` do hook de leitura evita o recarregamento total e a perda de rolagem e de janelas abertas.
 
 ### PC-10 Menu "?" (Ajuda, Treinamento, Enviar feedback)
 *(Migrado do CLAUDE.md em 31/10/2026; arquivos conferidos agora, regras vindas do CLAUDE.md.)*
