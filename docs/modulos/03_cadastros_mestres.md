@@ -1,453 +1,392 @@
-# Módulo Cadastros Mestres — Clientes e Fornecedores (especificação técnica)
+# 3 Cadastros Mestres — documento do módulo (REAL, fonte da verdade — 31/10/2026)
 
-> Mapeamento read-only de 31/10/2026, feito a partir de `src/cadastros.jsx`, `src/cadastros-clientes-store.js`, `src/cadastros-fornecedores-store.js` e `src/enderecos-api.js`, mais conferência pontual de `shell.jsx`, `router.js`, `app.jsx` e `colaboradores-admin-store.js` para rotas/alçadas, e de `grep` dos consumidores. Nenhum código foi alterado. Tudo que não está visível no código está marcado como **"não confirmado"**.
+> **Status: REAL (documento oficial do módulo 3), aprovado pelo Gelson em 31/10/2026.** Este documento substitui a "especificação técnica" anterior do módulo (seções 1 a 17, de 31/10/2026, que continua no histórico do Git) e traz tudo o que o `CLAUDE.md` guardava sobre Clientes e Fornecedores, exceto a **lei** (a Área Blindada "Cadastro com transação nunca é excluído" continua lá, porque é lei). Histórico de entrega não se repete aqui: o Git guarda.
 >
-> Escopo: apenas as duas telas **Clientes** e **Fornecedores**. As telas vizinhas do mesmo grupo de menu (Matérias-Primas, Produtos, Instaladores, Custos, Catálogo Siscomex) não fazem parte deste documento.
+> **Fonte da verdade:** o código e o banco, conferidos em 31/10/2026 (`origin/main` `bfcf9dd`). O que veio de documento anterior e **não** foi reconferido agora está marcado **Herdado**; o que não foi possível conferir está marcado **Não verificado** (Art. 6 da Constituição). Sem selo, vale como Não verificado. Sem número de linha (envelhece): cita-se arquivo e função.
+>
+> **Escopo do módulo:** as duas telas do grupo "Cadastros Mestres" do menu (`NAV_GROUPS` em `shell.jsx`): **Clientes** e **Fornecedores**. Matérias-Primas e Produtos (hoje no grupo Fabricação), Empresas Instaladoras (Parceiros & Instaladores), Atualização de Custos (Financeiro & Preços) e Catálogo Siscomex saíram deste grupo e serão documentados nos módulos deles.
 
-> **Leitura obrigatória (atualizado em 31/10/2026):** as seções 2 a 8 descrevem o mapeamento **de antes** das correções T1–T8. Onde uma frase delas ficou superada, está marcada com **[SUPERADO → §N]**; o estado atual está nas seções 10 a 14. Em caso de dúvida, vale a seção mais nova.
+## Como esta numeração funciona
+- A regra de numeração (móvel, como cláusula de contrato) e os 11 temas de cada tela moram **uma vez só**, em `docs/modulos/01_geral.md` ("Como esta numeração funciona"). Aqui vale a mesma: módulo = **3**; telas filhas = **3.1 e 3.2**; o conteúdo comum do módulo fica na **Parte comum**, com prefixo PC-.
+- **Tudo o que é janela, aba ou cartão de uma tela pertence a ela**: o modal "Histórico" pertence à 3.1; os cartões "Avaliações" e "Avaliação nas cotações (NPS 0–5)" pertencem à 3.2.
+- Mudou algo? Escreva no tema certo da tela e **reescreva o Índice e o Glossário** na mesma sessão.
 
-## 1. Visão geral e propósito
+## Índice
+3. **Cadastros Mestres**
+   3.1 Clientes (lista, formulário Novo/Editar, lixeira e modal Histórico)
+   &nbsp;&nbsp;&nbsp;3.1.1 O que é · 3.1.2 Rota e arquivos · 3.1.3 Perfil e acesso · 3.1.4 O que a tela mostra · 3.1.5 Botões e controles · 3.1.6 Comportamento · 3.1.7 Dados (lê/grava) · 3.1.8 Regras e armadilhas · 3.1.9 Testes · 3.1.10 Pendências e decisões · 3.1.11 Histórico
+   3.2 Fornecedores (lista, formulário Novo/Editar, lixeira, Avaliações e NPS)
+   &nbsp;&nbsp;&nbsp;3.2.1 O que é · 3.2.2 Rota e arquivos · 3.2.3 Perfil e acesso · 3.2.4 O que a tela mostra · 3.2.5 Botões e controles · 3.2.6 Comportamento · 3.2.7 Dados (lê/grava) · 3.2.8 Regras e armadilhas · 3.2.9 Testes · 3.2.10 Pendências e decisões · 3.2.11 Histórico
+   Parte comum de Cadastros Mestres (sem número de tela)
+   &nbsp;&nbsp;&nbsp;PC-1 Mapa de ligações · PC-2 Como nasce um cadastro (todos os caminhos) · PC-3 Consulta de CNPJ "Omie primeiro" · PC-4 CPF/CNPJ de verdade e documento único · PC-5 Nunca excluir cadastro com transação (🔒) · PC-6 Identidade, alçadas e segurança · PC-7 Gatilhos e rotinas · PC-8 Tabelas · PC-9 Navegação, cache e testes · PC-10 Menu "?" e tutoriais · PC-11 Documentos soltos e destino do que foi concatenado · PC-12 Benefícios trocados com os outros módulos
+4. Comercial | Pré-venda → `04_comercial_pre_venda.md` (a criar)
 
-Cadastros Mestres é a base corporativa única de **pessoas jurídicas/físicas** que o resto do sistema referencia. Comercial, Importação, Engenharia, Jurídico e Logística leem as mesmas tabelas `clientes` e `fornecedores`, em vez de manter cadastros próprios (`cadastros.jsx`, cabeçalho: "Módulo transversal").
+## Glossário (módulo Cadastros Mestres)
+Termos gerais (soft-delete, alerta, alçada, Nº da cotação) estão no glossário de `01_geral.md`; **Convertido**, **Contribuinte de ICMS** e **Documento pendente** estão no de `02_crm.md`. Não se repetem aqui.
+- **Cadastro mestre:** registro único de uma pessoa (cliente) ou empresa (fornecedor) que o resto do site referencia em vez de manter lista própria. Linhas das tabelas `clientes` e `fornecedores`.
+- **Código humano / ID-Tag:** `VPCLI-NNNN` (cliente) e `VPFOR-NNNN` (fornecedor). Nasce na criação, vem de uma sequência do banco e **nunca muda**, nem na edição. O `id` (uuid) também nunca muda.
+- **Razão social / Nome:** nome legal da empresa (PJ) ou da pessoa (PF); o único campo de texto obrigatório nas duas telas.
+- **Tipo de pessoa:** `PJ` (CNPJ de 14 dígitos) ou `PF` (CPF de 11). Decide qual campo de documento é lido e gravado (PC-4).
+- **Documento único:** o mesmo CNPJ/CPF não pode ter dois cadastros na mesma tabela, ativo ou inativo (PC-4).
+- **Categoria (fornecedor):** uma ou mais de **Fornecedor**, **Agente de Carga**, **Transportador** e **Prestador IMS**. Um mesmo fornecedor pode ter várias. Alimenta as listas de escolha de outras telas.
+- **Agente de Carga:** empresa que cuida do frete marítimo; é escolhida nas cotações de frete do Embarque. **Prestador IMS:** empresa que presta o serviço contratado na tela IMS da Importação.
+- **Omie primeiro:** regra da consulta de CNPJ: olhar o ERP antes da consulta pública (PC-3).
+- **Cadastrado no Omie (cliente):** cliente com `codigo_cliente_omie` preenchido. Conta como transação para efeito de exclusão (PC-5).
+- **Transação / vínculo:** qualquer coisa que referencia o cadastro (lead, formulário, proposta, P.I., e-mail trocado…). Quem tem transação **não é excluído**, só inativado (PC-5).
+- **Inativar:** `ativo = false`. Tira o cadastro das listas de escolha, mas mantém o histórico, o `id` e o código.
+- **Vida do Cliente:** o modal Histórico da tela 3.1 (canal de entrada, obras, score).
+- **Score de relacionamento:** faixa (Dormente, Estratégico, Recorrente ou Novo) calculada no navegador a partir de obras, equipamentos e datas. **Não é nota numérica.**
+- **Avaliação (1–5) × NPS (0–5):** duas avaliações de fornecedor que convivem: a primeira é digitada na tela 3.2 (tabela `fornecedores_avaliacoes`); a segunda nasce nas Cotações de Varejo (tabela `fornecedor_avaliacoes`, 6 critérios) e na 3.2 é só leitura.
+- **Nome livre:** fornecedor citado numa RFQ de importação por nome que não casa com um único cadastro (PC-1, 3.2.8).
 
-- **Clientes** — tabela `clientes`. Alimentada de três formas: digitação manual nesta tela, criação automática pelo Formulário de Elevador (quando alguém informa CNPJ/razão social) e conversão de Lead em Cliente (CRM). Código humano `VPCLI-0001…`.
-- **Fornecedores** — tabela `fornecedores`. Cadastro **único** com `categorias[]` (Fornecedor, Agente de Carga, Transportador, Prestador IMS) em vez de um cadastro por tipo de prestador. Código humano `VPFOR-0001…`.
-- **Consulta de CNPJ "Omie primeiro"** nos dois formulários, com fallback para consulta pública (BrasilAPI).
+---
 
-Menu: grupo "Cadastros" (`shell.jsx` linhas 38–39), com `MODULE_HOME["Cadastros"] = "cadastro-clientes"`. Na alocação de alçadas por grupo, `'Cadastros Mestres'` agrupa `cadastro-clientes`, `cadastro-fornecedores`, `cadastro-materias-primas` e `cadastro-produtos` (`colaboradores-admin-store.js:324`); os módulos de alçada são `cadastro-clientes` e `cadastro-fornecedores` (linhas 162–163).
+## 3.1 Clientes
 
-## 2. Mapeamento de rotas e componentes
+### 3.1.1 O que é
+O cadastro central de clientes da empresa. Lista todos os clientes (digitados aqui, criados nos bastidores pelo Formulário de Elevador, vindos da conversão de um lead ou do Omie), deixa criar, editar, inativar e excluir (só sem transação) e mostra o histórico de relacionamento de cada um. **Conferido** em `cadastros.jsx` e no banco, 31/10/2026.
 
-### 2.1 Roteamento
+**Fora do escopo desta tela:** registrar venda, proposta, contrato ou obra (isso é de Comercial, Jurídico e Engenharia); vincular o cliente a uma obra (feito em Engenharia → Dossiê da Obra); escrever no Omie (a tela só **consulta** o Omie); importar clientes em massa do Omie (a carga de 1.050 clientes com código do Omie foi feita fora desta tela; o mecanismo **não está neste módulo**, Herdado); dar nota numérica ao cliente.
 
-| Item | Valor | Fonte |
-|---|---|---|
-| id da rota Clientes | `cadastro-clientes` | `router.js:31` (`KNOWN_ROUTES`), `app.jsx:442` → `<window.CadastroClientesPage/>` |
-| id da rota Fornecedores | `cadastro-fornecedores` | `router.js:31`, `app.jsx:443` → `<window.CadastroFornecedoresPage/>` |
-| Rótulo no menu | "Clientes" / "Fornecedores" | `shell.jsx:38–39`, `BREADCRUMB_MAP` linhas 385–386 (módulo "Cadastros") |
-| Caminho do tutorial | `cadastros-mestres/clientes`, `cadastros-mestres/fornecedores` | `shell.jsx:515–516` |
+### 3.1.2 Rota e arquivos
+- Rota `cadastro-clientes`; URL `/cadastros/cadastro-clientes`, mais `/novo`, `/<id>` ou `/<id>/historico` (**Conferido** em `docs/MAPA_DE_ROTAS.md` e no código). Item "Clientes" do grupo "Cadastros Mestres" do menu; caminho do topo "Cadastros › Clientes"; abre `window.CadastroClientesPage` (`app.jsx`).
+- Arquivos: `src/cadastros.jsx` (tela, formulário, modal), `src/cadastros-clientes-store.js` (`window.CadastrosClientesStore`), `src/enderecos-api.js` (validação de documento e consulta de CNPJ). No `index.html` (**Conferido**): `cadastros.jsx` `?v=17`, `cadastros-clientes-store.js` `?v=19`, `enderecos-api.js` `?v=5`. `cadastros.jsx` usa `PIField`, `PIInput` e `PISelect`, que são definidos em `pi.jsx`: **`pi.jsx` precisa carregar antes** (hoje carrega, `?v=26`).
+- O estado da tela está na URL: sem sufixo = lista; `/novo` = formulário de cliente novo; `/<id>` = editar aquele cliente; `/<id>/historico` = modal de histórico (hooks `useRotaId` e `useRotaItem`). Voltar/Avançar do navegador e F5 funcionam.
 
-O prefixo de URL do primeiro segmento é o do grupo de menu (os comentários do próprio arquivo usam `/cadastros-mestres/cadastro-clientes…`; o texto das rotas em `CLAUDE.md` cita também `/cadastros/clientes`). **Não confirmado:** qual prefixo literal o roteador gera hoje na barra de endereços; o roteador usa só o 2º segmento para resolver a tela.
+### 3.1.3 Perfil e acesso
+- Sem restrição por perfil em `app.jsx` (`RESTRICTED` não tem a rota). O que esconde a tela é a **alocação de grupo** do menu (`gruposAlocados` contendo "Cadastros Mestres"); com o link direto ela abre para quem tem sessão (**Conferido**, leitura de `shell.jsx` e `app.jsx`).
+- As alçadas `cadastro-clientes` (ver, criar, editar, excluir) **existem** no catálogo e no banco (31/10/2026: `ver` 23 perfis, `criar` 3, `editar` 3, `excluir` 2), **mas `cadastros.jsx` não chama `temCapacidade` em nenhum ponto**: criar, editar, inativar, excluir e abrir o histórico não dependem da alçada (**Conferido**: busca no arquivo). Ver 3.1.10.
+- Isolamento real de dados: **não existe** (PC-6).
 
-### 2.2 Estado refletido na URL (`window.useRotaId` / `window.useRotaItem`)
-
-**Clientes** (`CadastroClientesPage`, `cadastros.jsx:154`):
-
-| URL (após o id da rota) | Efeito |
-|---|---|
-| *(vazio)* | Lista |
-| `/novo` | Abre o formulário de novo cliente |
-| `/<id>` | Abre o formulário de edição daquele cliente |
-| `/<id>/historico` | Abre o modal "Histórico · <razão social>" |
-
-Lógica: `showForm = rotaId === 'novo' || (!!rotaId && sub !== 'historico')`; `editing` e `historicoDe` buscam o cliente em `items` pelo id da URL. Se o id da URL não existir na lista carregada, `editing` fica `null` e o formulário abre como "Novo" (comportamento derivado do código; não há mensagem de "não encontrado"). **[SUPERADO → §13: hoje aparece o aviso "não encontrado" com "Voltar à lista".]** Abrir/fechar usa `VpRouter.navigate('cadastro-clientes', …)`.
-
-**Fornecedores** (`CadastroFornecedoresPage`, `cadastros.jsx:525`):
-
-| URL | Efeito |
-|---|---|
-| *(vazio)* | Lista |
-| `/novo` | Novo fornecedor |
-| `/<id>` | Editar aquele fornecedor |
-
-Não há modal de histórico em Fornecedores.
-
-Ao abrir o formulário, a página rola até ele (`scrollIntoView`) — correção de 27/09 porque a lista tem 1200+ linhas. O formulário usa `key={editing ? editing.id : 'novo'}` para trocar de registro sem reaproveitar `useState`.
-
-### 2.3 Componentes (`src/cadastros.jsx`)
-
-| Componente / função | Papel |
-|---|---|
-| `CAD_UFS`, `cadFmtDoc` | Lista de 27 UFs; formata CNPJ (14 díg.) e CPF (11 díg.); outro tamanho devolve o valor cru; vazio devolve "—". |
-| `CadEnderecoFields` | Bloco de endereço compartilhado: Logradouro, Complemento, Bairro, CEP, Cidade, Estado (select de UF). |
-| `cadConsultarCnpj(form)` | Chama `EnderecoAPI.consultarCnpjOmieFirst` e monta um `patch` só com campos **vazios** do formulário. |
-| `useCnpjOmieFirst(form, setForm)` | Hook do botão "Buscar CNPJ" e da consulta no salvar (`buscar`, `garantirConsulta`, `buscando`). |
-| `ClienteForm` / `CadastroClientesPage` | Formulário e lista de clientes. |
-| `ClienteHistoricoModal` / `calcularScoreRelacionamento` | Modal "Vida do Cliente". |
-| `FornecedorForm` / `CadastroFornecedoresPage` | Formulário e lista de fornecedores. |
-| `FornecedorAvaliacoes` | Avaliação simples (nota 1–5 + comentário), só ao editar. |
-| `FornecedorNPS` | NPS das cotações de varejo (0–5, 6 critérios), só leitura, só ao editar. |
-| `cadFmtEstrelas` | Média em estrelas arredondando para **baixo** (4,5 → 4 estrelas cheias) com o número exato ao lado. |
-
-Dependências de UI usadas sem definição local: `PIField`, `PIInput`, `PISelect`, `Card`, `Button`, `Modal`, `StatusBadge`, `window.toast`, `window.useOrdenacao`, `window.NpsMini`, `window.CotacoesVarejoStore`.
-
-## 3. Telas em detalhe
-
-### 3.1 Clientes
-
-**Cabeçalho:** eyebrow "Cadastros", título "Clientes", subtítulo "Cadastro central de clientes — inclui os criados automaticamente pelo Formulário." Botão **Novo cliente** (`abrirNovo`).
-
-**Lista:** carregada por `CadastrosClientesStore.listarTodos()` (falha vira lista vazia). Enquanto `items === null` mostra "Carregando…".
-- **Busca** (campo único, case-insensitive): razão social, nome fantasia, código, CNPJ ou CPF. A comparação de CNPJ/CPF é por `includes` no valor gravado (só dígitos), então digitar com pontuação não casa. **[SUPERADO → §13: `cadCasaDocumento` compara também os dígitos do termo.]**
-- Contador "N cliente(s) encontrado(s)".
-- **Colunas** (todas ordenáveis via `window.useOrdenacao`): Código, Razão social (com nome fantasia abaixo), CNPJ/CPF (formatado; badge amarelo "Doc. pendente" quando `documento_pendente`), Cidade/UF, Contato (`contato` ou `telefone`), Status (Ativo / badge "Inativo").
-- **Ações por linha:** Histórico (ícone `history`), Editar (`edit`), Excluir (`trash`).
+### 3.1.4 O que a tela mostra
+**Conferido** no código, 31/10/2026.
+- Cabeçalho: "Cadastros" / **Clientes** / "Cadastro central de clientes — inclui os criados automaticamente pelo Formulário." e o botão **Novo cliente**.
+- Enquanto a lista não chegou, só a mensagem "Carregando…" (sem cabeçalho).
+- Aviso amarelo **"Cliente não encontrado."** (com **Voltar à lista**) quando o link tem um id que não está na lista; se a lista veio incompleta, o aviso diz isso.
+- Campo de busca **"Buscar por código, nome ou CNPJ/CPF…"** e contador **"N cliente(s) encontrado(s)"**.
+- Cartão vermelho **"Lista incompleta"** (com **Tentar de novo**) quando a leitura falhou no meio: diz quantos clientes chegaram.
+- Tabela com as colunas **Código · Razão social** (com o nome fantasia embaixo) **· CNPJ/CPF** (formatado; selo amarelo "Doc. pendente" quando marcado) **· Cidade/UF · Contato** (o contato, senão o telefone) **· Status** (Ativo ou selo "Inativo") e a coluna de ações. Todas as colunas, menos a de ações, ordenam ao clicar no título (▲, ▼, ordem original).
 - Estado vazio: "Nenhum cliente encontrado."
 
-**Formulário (`ClienteForm`)** — campos e estado inicial (`CLI_EMPTY`):
+### 3.1.5 Botões e controles
+**Conferido** no código, 31/10/2026. Rótulos exatamente como aparecem.
 
-| Campo | Observação |
+| Controle | O que faz |
 |---|---|
-| Tipo de pessoa | select `PJ` (padrão) / `PF` |
-| CNPJ ou CPF | o campo exibido/gravado depende do tipo; só PJ tem botão **Buscar CNPJ** |
-| Inscrição estadual | texto livre |
-| Razão social / Nome * | obrigatório |
-| Nome fantasia, E-mail, Telefone, Contato | texto livre, sem máscara nem validação de formato |
-| Contribuinte de ICMS? * | select Sim/Não; **obrigatório** (valor `boolean`, nulo bloqueia) |
-| Documento pendente | checkbox (`documento_pendente`) |
-| Endereço | 6 campos de `CadEnderecoFields` |
-| Cliente ativo | checkbox (`ativo`, padrão marcado) |
+| **Novo cliente** (cabeçalho) | Abre o formulário em branco (`/novo`) e rola até ele |
+| Busca | Filtra em memória por razão social, nome fantasia, código, CNPJ ou CPF; o documento casa também com pontuação digitada ("12.345.678/0001-90"), a partir de 3 dígitos |
+| Título de coluna | Ordena (▲, ▼, volta à ordem original); texto em pt-BR com números naturais, vazio vai ao fim |
+| Ícone **Histórico** | Abre o modal "Histórico · <razão social>" (`/<id>/historico`) |
+| Ícone **Editar** | Abre o formulário com os dados daquele cliente (`/<id>`) |
+| Ícone **Excluir** (lixeira) | Confere as transações no banco e: com transação oferece **Inativar**; sem transação pede confirmação e exclui (3.1.6) |
+| **Tentar de novo** (cartão "Lista incompleta") | Lê a lista de novo |
+| **Voltar à lista** (aviso "não encontrado") | Volta para a lista (URL limpa) |
 
-Explicação na tela: *Contribuinte de ICMS* define quem paga o DIFAL nas vendas interestaduais — **não contribuinte** = a VerticalParts recolhe (custo na Precificação); **contribuinte** = o próprio cliente recolhe.
+**Formulário "Novo cliente" / "Editar cliente <código>"**
 
-Botões: **Cancelar** (fecha e volta à lista) e **Cadastrar cliente / Salvar alterações** (desabilitado enquanto `saving`).
-
-**Ordem de validação no salvar (`submit`):**
-1. `garantirConsulta()` (CNPJ — ver 5.1); se devolver `false`, para.
-2. Razão social vazia → toast "Informe a razão social / nome."
-3. `contribuinte_icms` não booleano → toast pedindo Sim/Não.
-4. `onSubmit(form)` → `atualizar` ou `criar` na store (que valida o documento de novo, ver 5.2).
-
-**Exclusão (`excluir`) — [SUPERADO → §10: a lixeira agora mostra as transações e oferece Inativar; só cadastro sem vínculo é apagado]:** `window.confirm('Excluir o cliente "…"? Isso pode afetar formulários/propostas já vinculados.')` seguido de `CadastrosClientesStore.remover` (**DELETE físico**, ver 5.5).
-
-**Modal "Histórico" (`ClienteHistoricoModal`, largura 640):** três blocos —
-1. *Canal de entrada / Vendedor* — leads com `cliente_id` = cliente (data, origem, vendedor, prédio).
-2. *Obras e equipamentos* — dossiês ligados ao cliente (nome da obra, status master, data de criação) e os montadores (união de `equipamentos_obra.parceiros_instaladores` e `dossier_obra_instaladores`). Texto vazio: "Nenhuma obra vinculada… vincule em Engenharia → Dossiê da Obra → Visão Geral."
-3. *Score de relacionamento* — faixa em badge colorido, calculada **no navegador** por `calcularScoreRelacionamento` (não é nota numérica; comentário do código: não há dado financeiro/satisfação ligado ao cliente):
-   - **Dormente** — maior data entre leads (`date`) e obras (`created_at`) anterior a 12 meses.
-   - **Estratégico** — ≥ 3 obras ou ≥ 5 equipamentos.
-   - **Recorrente** — ≥ 2 obras.
-   - **Novo** — demais casos (inclui 1 obra ou só leads).
-   A checagem de "Dormente" vem primeiro, então um cliente com muitas obras mas sem atividade há mais de 12 meses aparece como Dormente. Sem nenhuma data, `dormente` é falso.
-
-### 3.2 Fornecedores
-
-**Cabeçalho:** título "Fornecedores", subtítulo "Cadastro único — Fornecedor, Agente de Carga, Transportador e Prestador IMS, marcados por categoria." Botão **Novo fornecedor**.
-
-**Lista:** `CadastrosFornecedoresStore.listarTodos()` + `mediasAvaliacoes()` (falhas viram vazio).
-- **Busca:** razão social, nome fantasia, código, CNPJ ou CPF (mesma observação sobre pontuação).
-- **Filtro de categoria:** select "Todas as categorias" + as 4 categorias (`CATEGORIAS`); filtra por `categorias.includes`.
-- **Colunas** (ordenáveis): Código, Razão social (+ fantasia), Categorias (badges), CNPJ/CPF, Contato, Avaliação (estrelas + média; "—" sem avaliação), Status.
-- **Ações por linha:** Editar, Excluir (**não há botão de histórico**).
-- Excluir: `confirm('Excluir o fornecedor "…"?')` + `remover` (DELETE físico).
-
-**Formulário (`FornecedorForm`)** — estado inicial `FOR_EMPTY`:
-
-| Campo | Observação |
+| Campo / controle | Observação |
 |---|---|
-| Categorias * | 4 "pílulas" com checkbox escondido; pelo menos uma obrigatória |
-| Tipo de pessoa | `PJ` / `PF` |
-| CNPJ ou CPF | botão **Buscar CNPJ** só em PJ |
-| Razão social / Nome * | obrigatório |
-| Nome fantasia, E-mail, Telefone, Contato | livres |
-| Endereço | 6 campos |
-| Observações | textarea |
-| Fornecedor ativo | checkbox |
+| **Tipo de pessoa** | `PJ` (padrão) ou `PF`; muda o campo de documento exibido |
+| **CNPJ** ou **CPF** | Só o campo do tipo escolhido é lido e gravado. Em PJ há o botão **Buscar CNPJ** (vira "Buscando…") |
+| **Inscrição estadual** | Texto livre |
+| **Razão social / Nome \*** | Obrigatório |
+| **Nome fantasia**, **E-mail**, **Telefone**, **Contato** | Texto livre, sem máscara nem validação de formato |
+| **Contribuinte de ICMS? \*** | Lista "Selecione… / Sim — contribuinte (tem inscrição estadual) / Não — não contribuinte"; **obrigatório** |
+| Caixa **Documento pendente (CNPJ/CPF ainda não regularizado)** | Marca `documento_pendente`; dispensa a consulta de CNPJ ao salvar |
+| Bloco **Endereço** | **Logradouro, Complemento, Bairro, CEP, Cidade, Estado** (lista das 27 UFs); sem busca por CEP |
+| Caixa **Cliente ativo** | Marcada por padrão |
+| **Cancelar** | Fecha o formulário e volta à lista, sem gravar |
+| **Cadastrar cliente** / **Salvar alterações** (vira "Salvando…") | Valida e grava (3.1.6) |
 
-Não existe campo de "Contribuinte de ICMS", "Inscrição estadual" nem "Documento pendente" em Fornecedores.
+**Modal "Histórico · <razão social>"** (largura 640): três blocos, **Canal de entrada / Vendedor (N)**, **Obras e equipamentos (N)** e **Score de relacionamento**, e o botão **Fechar**.
 
-Ordem de validação no salvar: `garantirConsulta()` → razão social → ao menos uma categoria → `onSubmit`.
+**Mensagens (toasts) e janelas de confirmação:** "Cliente cadastrado." / "Cliente atualizado." / "Cliente inativado." / "Cliente excluído."; "Erro: …" em qualquer falha; "Informe a razão social / nome."; a pergunta de Contribuinte de ICMS; os avisos da consulta de CNPJ (PC-3). Janelas do navegador na lixeira: uma de **alerta** (cliente inativo com transação) e duas de **confirmação** (Inativar; Excluir definitivamente).
 
-**Seções extras (só ao editar, abaixo do formulário):**
-- `FornecedorAvaliacoes` — nota 1–5 (select), comentário opcional, botão **Avaliar**; lista histórico com lixeira por avaliação (confirmação "Remover esta avaliação?"). O autor gravado é `user.nome || user.email || null`. Remover é DELETE físico.
-- `FornecedorNPS` — usa `CotacoesVarejoStore.avaliacoesDoFornecedor(id, nome)` e `NPS_CRITERIOS`; mostra `NpsMini` + as 8 últimas. **Somente leitura**: as notas nascem em Cotações de Varejo. Retorna `null` se `CotacoesVarejoStore` ou `NpsMini` não existirem. Convive com `fornecedores_avaliacoes` (nota única 1–5) sem unificação; no código apenas a segunda é editada aqui.
+### 3.1.6 Comportamento
+**Conferido** no código, 31/10/2026.
+1. **Salvar** (ordem exata): (a) consulta de CNPJ, se couber (PC-3); se ela trouxe dado novo, **para** e pede para clicar de novo; (b) razão social vazia → aviso; (c) Contribuinte de ICMS não respondido → aviso; (d) a store valida o documento (PC-4), confere se já existe em outro cadastro, **só então** gera o código (na criação) e grava. Sucesso: volta à lista e recarrega tudo.
+2. **Lixeira:** a tela pergunta ao banco quais transações o cliente tem (função `cadastro_vinculos`, PC-5). Se a conferência falhar, **não apaga nada** e mostra o erro. Com transação: lista as fontes e quantidades; se o cliente já está inativo, só avisa que não pode excluir; se está ativo, oferece **Inativar** (confirmação) — o cliente some das listas de escolha, mas o histórico, o `id` e o código ficam. Sem transação: "Excluir definitivamente?" e `DELETE`.
+3. **Histórico:** lê leads do cliente (`leads.cliente_id`), as cotações do cliente (`formularios_elevador`) e os dossiês de obra dele (por `cliente_id`, por lead ou por Nº da cotação), com equipamentos e montadores (união de `equipamentos_obra` e `dossier_obra_instaladores`). Mostra "Nenhum lead vinculado a este cliente ainda." e "Nenhuma obra vinculada a este cliente ainda — vincule em Engenharia → Dossiê da Obra → Visão Geral." quando vazio.
+4. **Score:** a primeira regra que bater vale: **Dormente** (maior data entre leads e obras anterior a 12 meses), **Estratégico** (3 obras ou mais, ou 5 equipamentos ou mais), **Recorrente** (2 obras), **Novo** (o resto). "Dormente" vem primeiro: cliente com muitas obras e sem atividade há mais de 12 meses aparece como Dormente.
+5. Ao abrir o formulário a página rola até ele; o formulário usa `key` por registro, então trocar de cliente sem fechar troca os dados.
+6. A lista é lida de 1000 em 1000 (a base tem 1.239 clientes); o recarregamento depois de salvar é **da lista inteira**.
 
-## 4. Matriz de herança e doação de dados
+### 3.1.7 Dados — o que lê e o que grava
+- **Lê:** `clientes` (todas as colunas); para o Histórico: `leads` (id, building, origin, owner, status, date), `formularios_elevador` (número da cotação), `dossier_obra`, `equipamentos_obra`, `dossier_obra_instaladores` e `parceiros_instaladores` (nome); RPC `cadastro_vinculos`.
+- **Grava:** `clientes` (insert, update de edição e de inativação, delete só sem transação); `vp_logs` (módulo "Cadastros": Criou, Editou, Inativou e Excluiu cliente; a exclusão grava só o id). Pelo caminho Lead → Cliente (PC-2) a store também grava `leads.cliente_id` e `quadros_comando.cliente_id`.
+- **Herda de:** Leads convertidos, Formulário de Elevador, Omie e BrasilAPI (PC-2 e PC-3).
+- **Doa para:** ver o Mapa de ligações (PC-1). Em resumo: Formulário, Proposta, Leads/CRM, Dossiê da Obra, Contratos Social, Contrato do Instalador, Projeto de Elevadores, Precificação (lê Contribuinte de ICMS e Estado), Etiquetas, PCP, Dashboard.
 
-### 4.1 O que herda
+### 3.1.8 Regras e armadilhas
+- **Contribuinte de ICMS é obrigatório** na tela: define quem paga o DIFAL nas vendas interestaduais — não contribuinte = a VerticalParts recolhe e o custo entra na Precificação; contribuinte = o próprio cliente recolhe. A Precificação lê esse campo e o Estado do cliente do formulário (**Conferido**).
+- **O documento gravado vem do tipo escolhido** (PJ → `cnpj` e `cpf` nulo; PF → o contrário). Não se usa mais "CNPJ ou CPF, o que estiver preenchido" (bug antigo). Detalhe em PC-4.
+- **Código só na criação e só depois das conferências**: a falha de uma conferência não gasta número da sequência.
+- **Falha da função de código = erro claro**, nunca um código fixo (o `VPCLI-0001` fixo colidiu com um cliente real em 21/09/2026).
+- **Conferência de transações com falha = não exclui.** A trava vale também no banco (PC-5), então vale mesmo fora da tela.
+- O campo `endereco` (texto), `cidade` e `estado` de `clientes` são montados/duplicados a partir das partes `endereco_*` para compatibilidade com consumidores antigos.
+- Hooks do componente vêm todos **antes** do `return` de "Carregando…" (padrão de `01_geral.md` PC-9, **Conferido**).
+- Toda criação, edição, inativação e exclusão grava em `vp_logs` se `window.VPLog` existir.
 
-| Origem | Como chega nos Cadastros | Evidência |
-|---|---|---|
-| **CRM / Leads** | Ao virar "Convertido" (edição do lead, Kanban, Proposta assinada, botão "Vincular agora" da Automação) chama `CadastrosClientesStore.criarOuVincularDeLead(lead)`. Idempotente por `leads.cliente_id`; sem vínculo, procura cliente por razão social (`ilike` exato, com `limit(1)` e curingas `%`/`_`/`\` escapados) e, se não achar, **cria** com `razao_social = lead.building || lead.contact`, `contato`, `telefone`, `email` e `contribuinte_icms`; depois grava `leads.cliente_id`. | `comercial.jsx:333–344, 746–748`, `crm.jsx:194–197`, `proposta-store.js:440`, store `:204–230` |
-| **Formulário de Elevador** | Cria clientes "nos bastidores" ao preencher CNPJ/razão social e usa `gerarCodigo()` do store de clientes. | `formulario-elevador-store.js:287` (e comentário do cabeçalho da store) |
-| **Omie** | Dados cadastrais via consulta de CNPJ (razão, fantasia, telefone, e-mail). Histórico de importação (191 → 1212 clientes) citado em comentário; o mecanismo da importação **não está neste módulo** (não confirmado). | `enderecos-api.js`, comentário `cadastros-clientes-store.js:42` |
-| **Consulta pública** | BrasilAPI (CNPJ) e BrasilAPI/ViaCEP (CEP) para endereço e CNAEs. | `enderecos-api.js` |
+### 3.1.9 Testes
+- `src/cadastros-nunca-excluir.test.js` (20 blocos `test`, alguns repetidos para clientes e fornecedores): exclusão com transação, falha de conferência, exclusão sem transação, inativar; leitura de 1000+ linhas e falha no meio; documento repetido (grava, editar com o de outro, recusa do índice único, sem documento); desempate de homônimo do Lead. `src/cadastros-clientes-vincula-quadros.test.js` (4), `src/proposta-lead-cliente.test.js` (6) e `src/enderecos-api.test.js` (3). **Rodei `npm test` em 31/10/2026: 906 passaram, 0 falharam** (suíte inteira). A rota entra sozinha no teste de fumaça do e2e (`KNOWN_ROUTES`); **não rodei o e2e** (roda no CI). **Não há teste de componente** para `cadastros.jsx`: formulário, lista, modal e lixeira não têm teste automatizado.
+- **Cenários de aceitação** (os que têm teste de apoio dizem qual):
+  1. *Dado* um cliente com proposta, *quando* alguém clica na lixeira, *então* a tela lista as transações e só oferece Inativar (`cadastros-nunca-excluir`).
+  2. *Dado* que a conferência de transações falha, *quando* alguém clica na lixeira, *então* nada é excluído e aparece o erro (`cadastros-nunca-excluir`).
+  3. *Dado* um CNPJ já usado por outro cliente, *quando* alguém tenta cadastrar, *então* a gravação é recusada dizendo qual cadastro usa o número (`cadastros-nunca-excluir`).
+  4. *Dado* PF com um CNPJ digitado, *quando* salva, *então* a store recusa e a mensagem diz que o número parece um CNPJ e sugere trocar o tipo (`enderecos-api`, que testa a validação; a exibição na tela não tem teste).
+  5. *Dado* um link para um cliente que não existe, *quando* abre, *então* aparece "Cliente não encontrado." com **Voltar à lista**. **Sem teste automatizado** (Conferido só por leitura do código).
+  6. *Dado* um lead Convertido com nome igual ao de 2 clientes, *quando* converte, *então* vincula pelo e-mail ou pelo telefone, preferindo o ativo (`cadastros-nunca-excluir`).
 
-Regras da conversão Lead → Cliente (store): quando o lead já tem `cliente_id`, o contribuinte de ICMS informado no lead só completa o cliente **se ainda for nulo** (`completarContribuinte`, nunca troca valor existente); `vincularQuadrosDoLead` aponta `quadros_comando.cliente_id` para o cliente apenas em quadros do lead que ainda não têm cliente (falha só loga no console). O lead não tem CNPJ, então a deduplicação por nome é "best-effort".
+### 3.1.10 Pendências e decisões
+Todos são **achados, sem correção** (Art. 45), salvo onde dito.
+1. **A alçada do módulo não é conferida na tela.** O catálogo tem `cadastro-clientes` com ver/criar/editar/excluir e há perfis concedidos, mas qualquer pessoa com sessão que abra o link cria, edita, inativa e exclui (sem transação). **Decisão do Gelson:** ligar as quatro ações às alçadas ou manter assim.
+2. **1.208 dos 1.239 clientes têm Contribuinte de ICMS vazio** (banco, 31/10/2026). Como a tela exige a resposta, **editar qualquer um desses clientes obriga a responder Sim ou Não** antes de salvar (até para corrigir um telefone). Inativar pela lixeira não passa por essa exigência.
+3. **Histórico ignora erro de consulta:** `historicoCliente` lê `leads`, `formularios_elevador`, `dossier_obra`, `equipamentos_obra` e o elenco sem olhar o erro; falha vira "Nenhum lead/obra vinculado", indistinguível de vazio. **Conferido** no código.
+4. **Mensagem do Score com data pura:** `leads.date` é do tipo `date` (o banco devolve `aaaa-mm-dd`) e o cálculo faz `new Date(l.date)` e depois `toLocaleDateString('pt-BR')`; no fuso do Brasil a data pode aparecer **um dia antes** na frase "Sem obra ou lead novo desde …". Conferido no código e no tipo da coluna; **o efeito na tela não foi reproduzido**. Benefício vindo do CRM (PC-12).
+5. **Datas em formatos diferentes no modal Histórico:** a data do lead aparece como texto cru (`aaaa-mm-dd`) e a da obra em `dd/mm/aaaa`. Estético. **Conferido** no código.
+6. **Salvar recarrega a lista inteira** (2 páginas de 1000). Padrão de atualizar só a linha (`01_geral.md` PC-9) não foi aplicado. Pendência de melhoria.
+7. **Busca só em memória:** toda abertura da tela lê os 1.239 clientes. Hoje funciona; cresce com a base.
+8. **Sem validação de formato** de e-mail, telefone e CEP; o campo CEP não chama `EnderecoAPI.buscarCEP` (a função existe). **Conferido**.
+9. **"Cliente cadastrado" no Dashboard/Linha do Tempo sempre sai com o ator "Vendedor":** a store não grava `criado_por` (a coluna é uuid de `auth.users`) e o gatilho `trg_evfluxo_cliente_cadastrado` usa essa coluna para achar o nome. Banco: 4 eventos, todos "Vendedor" (31/10/2026).
+10. **Índices repetidos:** `clientes_cnpj_key` (único em todo `cnpj`) convive com `clientes_cnpj_unico` (único parcial), e o mesmo ocorre em `fornecedores` (PC-8). Sem efeito prático hoje; só poluição.
+11. **Ajuda do "?" está curta** e o tutorial está desatualizado (PC-10).
+12. **Duas implementações da consulta "Omie primeiro"** (esta tela e a de Leads): PC-3.
+13. **Cliente criado pela Edge Function do Quadro de Comando pode ficar sem código:** se `gerar_codigo_cliente` falhar, o arquivo da função insere o cliente com `codigo` nulo (a regra da tela é falhar com erro claro, 3.1.8). Conferido no arquivo do repositório; a versão no ar não foi comparada. Não há como saber hoje quantos clientes estão sem código sem uma consulta própria (**Não verificado**).
 
-### 4.2 O que doa
+### 3.1.11 Histórico (só o que ainda ensina)
+- **27/09/2026:** "Editar" parecia não funcionar porque o formulário abre no topo e a lista tem mais de 1.200 linhas; passou a rolar até o formulário e a usar `key` por registro. Vale para qualquer lista longa com formulário no topo.
+- **14/09/2026:** a lista parava em 1.000 (limite do PostgREST) depois da importação do Omie; passou a ler em páginas. **31/10/2026:** passou a avisar quando a leitura falha no meio.
+- **14/09/2026:** `documento_pendente` existia na tabela mas a tela não deixava ver nem limpar; hoje é caixa do formulário e selo da lista.
+- **21/09/2026:** `VPCLI-0001` fixo como reserva do código colidiu com um cliente real; hoje a falha da função é erro claro.
+- **04/10/2026:** CPF/CNPJ com dígito verificador e coerente com o tipo (PC-4); todos os 1.043 CNPJ e 75 CPF da época eram válidos.
+- **31/10/2026:** nunca excluir com transação, documento único, busca com pontuação, aviso de cadastro inexistente e desempate de homônimo do lead (PC-4, PC-5, 3.1.6). Decisões do Gelson em PC-5.
 
-**Clientes** (`CadastrosClientesStore`):
+---
 
-| Consumidor | Uso |
+## 3.2 Fornecedores
+
+### 3.2.1 O que é
+O cadastro **único** de fornecedores: o mesmo cadastro serve a Fornecedor, Agente de Carga, Transportador e Prestador IMS, separados pelas **categorias** marcadas, em vez de um cadastro por tipo de prestador. Deixa criar, editar, inativar, excluir (só sem transação) e avaliar. **Conferido** em `cadastros.jsx` e no banco, 31/10/2026.
+
+**Fora do escopo desta tela:** cotar, comprar ou pagar (isso é de Importação, Cotações de Varejo e Embarques); gravar a nota NPS (nasce nas Cotações de Varejo); campos fiscais do cliente (Inscrição estadual, Contribuinte de ICMS e Documento pendente **não existem** em fornecedor); contato por e-mail ou histórico de e-mails (o Inbox é de Geral).
+
+### 3.2.2 Rota e arquivos
+- Rota `cadastro-fornecedores`; URL `/cadastros/cadastro-fornecedores`, mais `/novo` ou `/<id>` (**Conferido** em `docs/MAPA_DE_ROTAS.md` e no código). Item "Fornecedores" do grupo "Cadastros Mestres"; abre `window.CadastroFornecedoresPage`. **Não há** modal de histórico nem rota de histórico para fornecedor.
+- Arquivos: `src/cadastros.jsx` (`CadastroFornecedoresPage`, `FornecedorForm`, `FornecedorAvaliacoes`, `FornecedorNPS`), `src/cadastros-fornecedores-store.js` (`window.CadastrosFornecedoresStore`, `?v=11`), `src/enderecos-api.js`. O cartão NPS depende de `window.CotacoesVarejoStore` (`cotacoes-varejo-store.js`, `?v=10`) e de `window.NpsMini`; se um deles não existir, o cartão simplesmente não aparece.
+
+### 3.2.3 Perfil e acesso
+- Mesma situação da 3.1.3: sem `RESTRICTED`; só a alocação de grupo esconde o menu; as alçadas `cadastro-fornecedores` existem (banco, 31/10/2026: `ver` 17 perfis, `criar` 6, `editar` 6, `excluir` 2) e **a tela não as consulta**. Ver 3.2.10.
+- As listas de escolha que outras telas montam (`listarAtivos`) só mostram fornecedores **ativos**.
+
+### 3.2.4 O que a tela mostra
+**Conferido** no código, 31/10/2026.
+- Cabeçalho: "Cadastros" / **Fornecedores** / "Cadastro único — Fornecedor, Agente de Carga, Transportador e Prestador IMS, marcados por categoria." e o botão **Novo fornecedor**.
+- "Carregando…", aviso **"Fornecedor não encontrado."** e cartão **"Lista incompleta"** funcionam como na 3.1.4.
+- Busca **"Buscar por código, nome ou CNPJ…"** e lista **"Todas as categorias"** + as 4 categorias; contador **"N fornecedor(es) encontrado(s)"**.
+- Tabela: **Código · Razão social** (com fantasia) **· Categorias** (um selo por categoria) **· CNPJ/CPF · Contato · Avaliação** (estrelas e média; "—" sem avaliação) **· Status** e as ações. Colunas ordenáveis (exceto ações). Estado vazio: "Nenhum fornecedor encontrado."
+- As estrelas da lista **arredondam para baixo** de propósito (média 4,5 = 4 estrelas cheias, com o número exato ao lado), para não superestimar a nota.
+
+### 3.2.5 Botões e controles
+**Conferido** no código, 31/10/2026.
+
+| Controle | O que faz |
 |---|---|
-| Formulário de Elevador (`formulario-elevador.jsx:483, 490, 1454`) | `listarTodos` e `obter` para escolher/exibir o cliente do formulário |
-| Propostas | `proposta-store.js:440` chama `criarOuVincularDeLead` ao assinar |
-| Dossiê da Obra (`dossier-obra.jsx:526`) | lista para vincular o dossiê ao cliente |
-| Contratos Social (`contratos-sociais.jsx:37`) | busca do cliente ao salvar o PDF |
-| Contrato do Instalador (`contrato-instalador.jsx:363`) | `listarTodos` |
-| Projeto de Elevadores (`projeto-elevador-store.js:150`) | resolve cliente por documento |
-| Leads/CRM (`comercial.jsx`, `crm.jsx`) | conversão e vínculo |
+| **Novo fornecedor** | Abre o formulário em branco (`/novo`) e rola até ele |
+| Busca e lista de categoria | Filtram em memória (a categoria exige que o fornecedor a tenha marcada) |
+| Título de coluna | Ordena |
+| Ícone **Editar** | Abre o formulário (`/<id>`) |
+| Ícone **Excluir** (lixeira) | Igual à 3.1: confere transações; com transação oferece Inativar |
+| **Tentar de novo**, **Voltar à lista** | Igual à 3.1 |
 
-Não aparece no `grep` do módulo, mas o `CLAUDE.md` descreve a herança de dados do cliente para Contrato de Venda; **não confirmado** nos arquivos deste escopo.
+**Formulário "Novo fornecedor" / "Editar fornecedor <código>"**
 
-**Fornecedores** (`CadastrosFornecedoresStore`):
-
-| Consumidor | Chamada |
+| Campo / controle | Observação |
 |---|---|
-| Formulário de Elevador / RFQ (`formulario-elevador.jsx:1183`) | `listarAtivos('Fornecedor')` — e-mail/telefone/contato do cadastro substituem um mapa antes hardcoded |
-| P.I. (`pi.jsx:45`, datalist por categoria) | `listarAtivos(categoria)` |
-| Cotação de frete / Embarques (`embarques-frete-cotacoes.jsx:70, 285`) | `listarAtivos('Agente de Carga')` (ou todos) |
-| Cotações de Varejo (`cotacoes-varejo-store.js:124`) | `listarAtivos()` sem filtro |
+| **Categorias \*** | Quatro "pílulas" (Fornecedor, Agente de Carga, Transportador, Prestador IMS); **ao menos uma** |
+| **Tipo de pessoa**, **CNPJ** ou **CPF**, **Buscar CNPJ** | Igual à 3.1 |
+| **Razão social / Nome \*** | Obrigatório |
+| **Nome fantasia**, **E-mail**, **Telefone**, **Contato** | Texto livre, sem validação de formato |
+| Bloco **Endereço** | Os mesmos 6 campos da 3.1 |
+| **Observações** | Texto livre (2 linhas) |
+| Caixa **Fornecedor ativo** | Marcada por padrão |
+| **Cancelar** / **Cadastrar fornecedor** ou **Salvar alterações** | Como na 3.1 |
 
-PCP como consumidor direto da store **não foi encontrado** no `grep` de `src/` (não confirmado).
+**Cartões que aparecem só ao editar (abaixo do formulário):**
+- **Avaliações** — lista **Nota** (1 a 5), **Comentário** ("Opcional"), botão **Avaliar** (vira "Salvando…"), histórico de avaliações com lixeira por linha (confirmação "Remover esta avaliação?"). Subtítulo "Média: ★★★★☆ (4.0) · N avaliação(ões)" ou "Nenhuma avaliação ainda."
+- **Avaliação nas cotações (NPS 0–5)** — só leitura: o resumo do `NpsMini` e as 8 avaliações mais recentes, ou "Nenhuma avaliação ainda — elas nascem em Cotações de Varejo, no cartão do fornecedor."
 
-## 5. Regras de negócio e validações
+**Mensagens:** "Fornecedor cadastrado." / "Fornecedor atualizado." / "Fornecedor inativado." / "Fornecedor excluído."; "Informe a razão social / nome."; "Selecione ao menos uma categoria."; "Erro: …".
 
-### 5.1 Consulta de CNPJ "Omie primeiro" (`enderecos-api.js › consultarCnpjOmieFirst`)
+### 3.2.6 Comportamento
+**Conferido** no código, 31/10/2026.
+1. **Salvar** (ordem): consulta de CNPJ (PC-3) → razão social → ao menos uma categoria → a store valida o documento (PC-4), confere documento único, gera o código (RPC) e grava. A criação grava `criado_por` com o e-mail da sessão.
+2. **Lixeira:** igual à 3.1.6 (2), com a diferença de que as fontes de transação de fornecedor são muitas e algumas **casam pelo nome** (PC-5).
+3. **Avaliar:** nota de 1 a 5 e comentário opcional; o autor gravado é o nome ou o e-mail da sessão. **Remover avaliação** apaga a linha (sem soft-delete).
+4. **NPS:** lê `CotacoesVarejoStore.avaliacoesDoFornecedor(id, nome)`; é a nota que o comprador dá ao fechar uma cotação de varejo.
+5. **Média na lista:** vem de uma segunda leitura (`mediasAvaliacoes`, de 1000 em 1000); se ela falhar, a lista aparece sem estrelas (sem aviso).
 
-1. CNPJ inválido (dígitos verificadores) → `{ fonte: null, erro: 'CNPJ inválido — confira os dígitos.' }` sem chamar nada.
-2. Chama a Edge Function **`omie-buscar-cliente`** com `{ cnpj_cpf }` (o front nunca fala direto com o Omie). Estados: `encontrado: true` / `false` / `null` (falha de consulta, **nunca** tratar como "não cadastrado"). Mensagens de erro distinguem HTTP 401 ("sessão sem permissão…") e outros status.
-3. Encontrado → `fonte: 'omie'`; só trazem razão social, fantasia, telefone e e-mail (endereço vem vazio; `status` ativo/inativo pelo flag `inativo`).
-4. Não encontrado **ou** falha → tenta `buscarCNPJ` (BrasilAPI v1, timeout 5 s): 404 = "CNPJ não encontrado."; demais falhas = "Serviço… temporariamente indisponível." Sucesso → `fonte: 'externo'` com endereço completo, situação cadastral e CNAEs.
-5. Função nunca lança.
+### 3.2.7 Dados — o que lê e o que grava
+- **Lê:** `fornecedores` (todas as colunas), `fornecedores_avaliacoes`, RPC `cadastro_vinculos`; no NPS, `fornecedor_avaliacoes` (via `CotacoesVarejoStore`).
+- **Grava:** `fornecedores` (insert, update, delete só sem transação), `fornecedores_avaliacoes` (insert e delete) e `vp_logs` ("Criou", "Editou", "Inativou", "Excluiu fornecedor"; "Avaliou fornecedor", "Removeu avaliação de fornecedor").
+- **Herda de:** digitação e consulta de CNPJ (PC-3); **não** há conversão automática (diferente do cliente).
+- **Doa para:** Formulário/RFQ de elevador, P.I., Embarques (cotações de frete e agente/desembaraço), Cotações de Varejo, RFQ de importação, Tratativas (PC-1).
 
-**No formulário (`cadConsultarCnpj` + `useCnpjOmieFirst`):**
-- O `patch` só inclui campos **vazios** do formulário (razão, fantasia, telefone, e-mail e os 6 de endereço) — nunca sobrescreve digitado.
-- **Botão "Buscar CNPJ"**: exige CNPJ válido (senão toast "Informe um CNPJ válido para buscar."); toast verde indica a fonte ("CNPJ já cadastrado no ERP Omie…" ou "…não está no Omie — dados trazidos da consulta pública.").
-- **Consulta no salvar (`garantirConsulta`)**: pula se PF, se "documento pendente" (somente em clientes) ou se não há dígitos. Com dígitos: CNPJ inválido bloqueia (toast "CNPJ inválido… (ou marque 'documento pendente')"); se o CNPJ atual já foi consultado (`consultadoRef`) segue; senão consulta e, **se trouxe dado novo, para** com o toast "Dados preenchidos… clique em salvar de novo"; se não trouxe nada novo, ou a consulta falhou (só aviso, "Confira os dados manualmente"), **deixa salvar**.
-- Observação: em Fornecedores `form.documento_pendente` não existe no estado, então a condição nunca é verdadeira ali; CNPJ inválido sempre bloqueia o salvar.
-- A consulta é uma só por CNPJ por abertura de formulário; editar o CNPJ para outro valor dispara nova consulta no próximo salvar.
+### 3.2.8 Regras e armadilhas
+- **Categorias são lista de texto** (`categorias`): o banco não restringe os valores, quem restringe é a lista `CATEGORIAS` da store (**Conferido**: só há CHECK de `tipo_pessoa`).
+- **`listarAtivos(categoria)`** devolve só os ativos, ordenados por razão social, com `id, codigo, razao_social, nome_fantasia, categorias, email, telefone, contato`; usa `contains` na categoria. **Não foi paginado de propósito**: é peça da Área Blindada do E-mail/RFQ e a base (82) está longe do limite de 1000.
+- **Vínculo por id ao lado do nome** (decisão do Gelson, 31/10/2026): P.I. e Embarque guardam `fornecedor_id`/`agente_carga_id`/`empresa_desembaraco_id` (FK com `RESTRICT`) além do nome digitado. O id só é preenchido quando o nome bate **exatamente** (sem acento, maiúscula ou espaço extra) com a razão social ou o fantasia de **um único** cadastro; dois cadastros com o mesmo nome, nome parcial ou falha de leitura = sem id (nunca chuta; mantém o id anterior se o nome ainda bate com ele). A RFQ de importação segue a mesma regra: casou, guarda `cadastro_id` e `cadastro_codigo`; não casou, só entra com confirmação e fica marcada `nome_livre`. **Não houve carga retroativa**: P.I. e embarques antigos ficam sem id até serem salvos de novo.
+- **Duas avaliações convivem sem unificar** (nota única 1–5 editável aqui; NPS 0–5 de 6 critérios só leitura). Decisão pendente do Gelson (3.2.10).
+- **Fornecedor sem CNPJ/CPF é permitido** (documento vazio não é conferido); só 3 dos 82 têm CNPJ (3.2.10).
+- Não há "documento pendente" em fornecedor: CNPJ inválido sempre bloqueia o salvar.
 
-### 5.2 Validação algorítmica de CPF/CNPJ
+### 3.2.9 Testes
+- Os mesmos arquivos da 3.1.9 cobrem fornecedores: `cadastros-nunca-excluir.test.js` (exclusão com transação, falha de conferência, inativar, 1000+ linhas, falha no meio, média de avaliação em duas páginas, código vindo do banco e sem `VPFOR-0001` fixo, documento repetido, ligação pelo nome e `rfq.jsx` com `cadastro_id`/`nome_livre`). Suíte: **906 passaram, 0 falharam** (31/10/2026). Sem teste de componente.
+- **Cenários de aceitação:**
+  1. *Dado* um fornecedor com P.I., *quando* alguém clica na lixeira, *então* só pode inativar (`cadastros-nunca-excluir`).
+  2. *Dado* que a função de código falha, *quando* cadastra, *então* aparece erro claro e **nenhum** `VPFOR-0001` é inventado (`cadastros-nunca-excluir`).
+  3. *Dado* um nome que bate com dois cadastros, *quando* o vínculo é resolvido (P.I., embarque), *então* o resultado é sem id (`cadastros-nunca-excluir`, que testa a regra de ligação pelo nome).
+  4. *Dado* uma lista de 1.005 fornecedores, *quando* a store lê, *então* traz as 1.005 (`cadastros-nunca-excluir`).
+  5. *Dado* que a leitura da lista falha no meio, *quando* a store lê, *então* devolve o erro junto (`cadastros-nunca-excluir`); o cartão "Lista incompleta" que aparece na tela **não tem teste**.
 
-`enderecos-api.js`: `cpfConfere` (11 dígitos, recusa sequência repetida, 2 dígitos verificadores) e `cnpjConfere` (14 dígitos, recusa repetidos, pesos oficiais). `validarDocumento(tipo, valor)`:
-- vazio → `{ ok: true, digitos: '' }` (aceito; quem chama decide se é obrigatório);
-- tamanho diferente do esperado para o tipo → mensagem que cita o tamanho e sugere "parece um CNPJ/CPF… Troque o tipo…";
-- dígitos verificadores errados → "CPF/CNPJ inválido — os dígitos verificadores não conferem."
+### 3.2.10 Pendências e decisões
+Achados, sem correção, salvo onde dito.
+1. **Alçada não conferida na tela** (igual à 3.1.10, item 1). **Decisão do Gelson.**
+2. **79 dos 82 fornecedores não têm CNPJ nem CPF** (banco, 31/10/2026: 3 CNPJ, 0 CPF). Sem documento, o índice único não protege duplicata por nome e a consulta "Omie primeiro" nunca roda; o nome vira a única chave dos vínculos antigos.
+3. **Duas avaliações de fornecedor** coexistem (`fornecedores_avaliacoes` e `fornecedor_avaliacoes`); as duas estão vazias hoje (0 linhas). **Decisão do Gelson:** unificar ou manter.
+4. **Remover avaliação** (lixeira do cartão) não trata erro: se o banco recusar, o erro não aparece. **Conferido** no código.
+5. **Vínculos antigos só por nome:** P.I., embarques, cotações de elevador, unidades do Formulário, expedições, IMS, RFQ de importação e pedidos a fornecedor citam o fornecedor por nome; a trava de exclusão os acha por aproximação de nome (PC-5), mas renomear o cadastro rompe a ligação por nome. Parte foi tratada pela coluna de id; o resto não.
+6. **Leitura direta fora da store:** as Tratativas leem `fornecedores` (nome, fantasia e e-mail, até 2.000 linhas) e casam o nome por aproximação para achar o e-mail da cotação. **Conferido** (`tratativas-store.js`).
+7. **PCP não usa o cadastro:** a tabela `pcp_produto_fornecedor` (fornecedor em texto) tem 0 linhas e nenhum código a lê ou grava (decisão do Gelson em 31/10/2026: documentar e não criar vínculo agora). Regra para quando o PCP passar a usar fornecedor por produto: guardar o **id do cadastro** ao lado do nome e incluir a tabela em `cadastro_vinculos` (PC-5); não criar outra lista de fornecedores.
+8. **Média de avaliação sem aviso de erro** (3.2.6, item 5).
+9. **Sem validação de e-mail, telefone e CEP**; sem busca por CEP (igual à 3.1).
+10. **Ajuda curta e tutorial desatualizado** (PC-10).
 
-As duas stores (`_payload`) chamam `validarDocumento` **antes** de gravar e lançam o erro (o formulário mostra `Erro: …`). O campo gravado é determinado pelo **tipo escolhido** (`cnpj` para PJ com `cpf = null`; `cpf` para PF com `cnpj = null`), eliminando o bug antigo de `form.cnpj || form.cpf`. Se `window.EnderecoAPI` não estiver carregado, a store aceita só os dígitos (sem validação).
+### 3.2.11 Histórico (só o que ainda ensina)
+- **31/10/2026 (T3):** o código `VPFOR` era "maior código + 1" lido no navegador, com `VPFOR-0001` fixo se o banco falhasse; passou para a sequência do banco (RPC `gerar_codigo_fornecedor`). Sequência em 82, próximo `VPFOR-0083`.
+- **31/10/2026 (T4):** a lista de fornecedores não era paginada (teto de 1000); passou a ler em páginas e avisar quando falha no meio.
+- **31/10/2026 (T6 e T5):** vínculo por id em P.I., Embarque e RFQ de importação (coluna nova, sem trocar o texto).
+- **Média de estrelas arredondava 4,5 para 5**; passou a arredondar para baixo.
 
-Comentário do código registra que, em produção (04/10/2026), todos os CPF/CNPJ existentes eram válidos antes do endurecimento (informação do `CLAUDE.md`; não revalidada aqui).
+---
 
-### 5.3 Segregação por categoria (Fornecedores)
+## Parte comum de Cadastros Mestres
 
-`CATEGORIAS = ['Fornecedor', 'Agente de Carga', 'Transportador', 'Prestador IMS']`; `categorias` é um array e um fornecedor pode ter várias. `criar` exige ao menos uma (também na tela). `listarAtivos(categoria)` filtra `ativo = true` e, se informada, `contains('categorias', [categoria])`, ordenado por razão social, devolvendo `id, codigo, razao_social, nome_fantasia, categorias, email, telefone, contato`.
+### PC-1 Mapa de ligações
+**Conferido** por busca no código em 31/10/2026 (função/arquivo, sem número de linha).
 
-### 5.4 Códigos humanos
-
-- **Clientes:** `gerarCodigo()` chama a RPC `gerar_codigo_cliente` (sequência `seq_clientes_codigo` no Postgres, evita corrida). **Falha da RPC ou resposta vazia lança erro explícito**; o código antigo caía em `'VPCLI-0001'`, que colidia com um cliente real (histórico em comentário, 21/09). O código só é gerado na criação (não muda na edição).
-- **Fornecedores [SUPERADO → §11 (T3): hoje usa a RPC `gerar_codigo_fornecedor`, atômica, sem fallback fixo]:** `gerarCodigo()` lê `select('codigo')` de **todos** os fornecedores no navegador, pega o maior número e soma 1 (`VPFOR-NNNN`). Corrigido de `count(*)` porque a exclusão causava reutilização de código. **Risco residual (derivado do código):** não é atômico — dois cadastros simultâneos podem gerar o mesmo código e o índice único barrar o segundo; e sem `sb()` devolve `'VPFOR-0001'` (o mesmo anti-padrão corrigido em clientes). Sem tratamento de erro da leitura (`data` nula vira 0).
-
-### 5.5 Preservação e integridade (soft-delete × exclusão)
-
-**[SUPERADO → §10: `remover` agora confere `cadastro_vinculos` e recusa com transação ou falha ao conferir; há trava `BEFORE DELETE` no banco e `inativar`.] Texto original:** **Este módulo NÃO usa soft-delete.** `remover` nas duas stores executa `DELETE` físico em `clientes`/`fornecedores`. A única forma "suave" de retirar um registro de circulação é o flag **`ativo`** (checkbox "Cliente ativo"/"Fornecedor ativo"): `listarAtivos` só devolve ativos; `listarTodos` devolve todos e a lista mostra "Inativo".
-
-- A confirmação do cliente avisa "pode afetar formulários/propostas já vinculados". **Não confirmado** no código desta tela: se há FKs `ON DELETE` que bloqueiem a exclusão de cliente referenciado (o `CLAUDE.md` descreve FKs em outras tabelas, mas não para `clientes`). O erro do banco, se vier, é exibido como `Erro: <mensagem>`.
-- Exclusão de avaliação (`fornecedores_avaliacoes`) também é DELETE físico.
-- Registros de log: toda criação/edição/exclusão chama `VPLog.registrar` (módulo "Cadastros": *Criou/Editou/Excluiu cliente*, *Criou/Editou/Excluiu fornecedor*, *Avaliou fornecedor*, *Removeu avaliação de fornecedor*) se `window.VPLog` existir. A exclusão de cliente registra só o id (sem nome).
-- `criado_em`/`atualizado_em`: `atualizar` grava `atualizado_em`; `criar` de fornecedor grava `criado_por` com o e-mail de `window.__VP_USER`; em clientes `criado_por` **não** é gravado (coluna é uuid de `auth.users`, comentário no código).
-
-### 5.6 Leitura e paginação
-
-- `CadastrosClientesStore.listarTodos` pagina de 1000 em 1000 por `range` até a página vir incompleta (corrige o limite padrão do PostgREST; 14/09). Em erro devolve **o que já acumulou** (pode ser parcial) e faz `console.warn`.
-- **[SUPERADO → §11 (T4): leitura de 1000 em 1000 com `listarTodosDetalhado` e cartão "Lista incompleta".]** `CadastrosFornecedoresStore.listarTodos` faz um único `select('*')` **sem `range`**: limitado ao teto padrão de 1000 linhas do PostgREST (a base atual de fornecedores não é conhecida; **não confirmado** se já passa disso). O mesmo vale para a leitura de `gerarCodigo` e de `mediasAvaliacoes` (esta última soma todas as avaliações no navegador).
-- Ambos devolvem lista vazia se o Supabase não carregou; a tela não diferencia "erro" de "vazio".
-
-### 5.7 Outras regras
-
-- `Contribuinte de ICMS` é obrigatório na tela e gravado como `true/false/null` (`null` só vem de cadastros criados por outras origens, como Lead sem a resposta).
-- Cliente com `documento_pendente` mostra o selo "Doc. pendente"; a flag nasce em Leads/Formulário (cliente sem CNPJ/CPF ainda) e aqui pode ser vista e limpa (correção de 14/09).
-- O campo composto `endereco` (texto) de `clientes` é montado por `formatarEndereco` a partir das partes, e `cidade`/`estado` duplicam `endereco_cidade`/`endereco_estado` (compatibilidade com consumidores antigos). Fornecedores não têm esses campos compostos.
-- Ordenação por coluna (`useOrdenacao`, 23/10): sem valor vai ao fim (regra do helper; não revalidada aqui).
-- E-mail/telefone/CEP **não têm validação de formato** em nenhuma das telas.
-- A tela não aplica filtro por vendedor/dono nem alçada por registro; o controle é a alçada do módulo (`cadastro-clientes`, `cadastro-fornecedores`) e o `CLAUDE.md` registra que a segurança real de dados depende da issue #571 (não verificado aqui).
-
-## 6. Mapeamento de tabelas do Supabase
-
-Colunas abaixo são **as que o código lê/grava**; o schema real (tipos, constraints, FKs, RLS) **não foi inspecionado** nesta etapa e deve ser conferido no banco antes de qualquer mudança estrutural.
-
-### 6.1 `clientes`
-
-| Coluna | Origem no código |
+**Clientes — quem usa:**
+| Consumidor | Como usa |
 |---|---|
-| `id` (uuid), `codigo` (`VPCLI-NNNN`) | `criar` / RPC `gerar_codigo_cliente` |
-| `razao_social`, `nome_fantasia` | payload |
-| `tipo_pessoa` (`PJ`/`PF`), `cnpj`, `cpf` (só dígitos, um deles nulo) | payload |
-| `inscricao_estadual`, `contribuinte_icms` (boolean/null) | payload |
-| `documento_pendente` (boolean) | payload |
-| `email`, `telefone`, `contato` | payload |
-| `endereco_logradouro`, `endereco_complemento`, `endereco_bairro`, `endereco_cep`, `endereco_cidade`, `endereco_estado` | payload |
-| `endereco` (texto composto), `cidade`, `estado` | derivados do payload |
-| `ativo`, `criado_em`, `atualizado_em` | payload / default |
-| `omie_cadastrado_desde`, `omie_verificado_em`, `codigo_cliente_omie` | citadas no `CLAUDE.md` (migration `20260926170000_clientes_omie_cadastrado_desde.sql`); **não usadas nesta tela** |
-| `criado_por` (uuid) | existe na tabela; **não gravada** por esta store |
+| Formulário de Elevador (`formulario-elevador.jsx`, `formulario-elevador-store.js`) | `listarTodos` e `obter` para escolher o cliente; `gerarCodigo`; **cria cliente nos bastidores** (`buscarOuCriarCliente`) ao preencher CNPJ/razão social, **por insert próprio**, não pela `criar` da store |
+| Proposta (`proposta-store.js`) | `criarOuVincularDeLead` ao assinar; confere se o `cliente_id` existe |
+| Leads/CRM (`comercial.jsx`, `crm.jsx`) | `criarOuVincularDeLead`, `vincularQuadrosDoLead`; grava as colunas do Omie em `clientes` (`gravarOmieNoCliente`, PC-12) |
+| Dossiê da Obra (`dossier-obra.jsx`) | `listarTodos` para vincular o dossiê ao cliente |
+| Contratos Social (`contratos-sociais.jsx`) | `listarTodos` para achar o cliente ao salvar o PDF |
+| Contrato do Instalador (`contrato-instalador.jsx`) | `listarTodos` |
+| Projeto de Elevadores (`projeto-elevador-store.js`) | `listarTodos` para resolver o cliente por documento |
+| Precificação (`precificacao-elevador-store.js`) | Lê `contribuinte_icms` e `endereco_estado` do cliente do formulário (DIFAL); monta o link `/cadastros/cadastro-clientes/<id>` |
+| Dashboard (`supabase.js`), Etiquetas (`etiquetas-store.js`), PCP (`pcp.jsx`) | Leem `clientes` direto, só para mostrar nome |
+| Edge Function `capturar-lead-quadro-comando` | **Acha o cliente pelo CNPJ ou cria** um (formulário público do Quadro de Comando, quando o CNPJ já está no Omie) e grava nele os dados do Omie (PC-2, item 5; `02_crm.md` PC-2) |
 
-Vínculos lidos pelo histórico: `leads.cliente_id`, `formularios_elevador.cliente_id` (para obter `numero_cotacao`), `dossier_obra` (por `cliente_id`, `lead_id` ou `numero_cotacao`), `equipamentos_obra` e `dossier_obra_instaladores` (com `parceiros_instaladores(nome)`). Escrita de vínculo: `leads.cliente_id`, `quadros_comando.cliente_id`.
+**Fornecedores — quem usa:**
+| Consumidor | Como usa |
+|---|---|
+| Formulário de Elevador / RFQ (`formulario-elevador.jsx`) | `listarAtivos('Fornecedor')`: e-mail, telefone e contato do cadastro substituíram um mapa fixo no código |
+| P.I. (`pi.jsx`, `pi-store.js`) | `listarAtivos(categoria)` para a lista de escolha; `resolverIdPorNome` grava `fornecedor_id` |
+| Embarques (`embarques-importacao-store.js`, `embarques-frete-cotacoes.jsx`) | `resolverIdPorNome` para agente de carga e desembaraço; `listarAtivos('Agente de Carga')` (ou todos) nas cotações de frete |
+| Cotações de Varejo (`cotacoes-varejo-store.js`) | `listarAtivos()` sem filtro; o botão "+ Cadastrar novo fornecedor" leva a esta tela |
+| RFQ de importação (`rfq.jsx`) | `resolverPorNome` (`cadastro_id`, `cadastro_codigo`, `nome_livre`) |
+| Tratativas (`tratativas-store.js`) | Leitura direta de `fornecedores` (3.2.10, item 6) |
 
-### 6.2 `fornecedores`
+### PC-2 Como nasce um cadastro (todos os caminhos)
+**Cliente:**
+1. **Digitado nesta tela** (3.1).
+2. **Formulário de Elevador**, nos bastidores, quando alguém informa CNPJ/CPF e razão social. Acha o cliente pelo documento (devolve o existente sem alterar, só completando Contribuinte de ICMS vazio); com um "cliente provisório" já criado na mesma sessão, **atualiza** esse registro; senão cria com o código da sequência. **Conferido.**
+3. **Lead Convertido** (`criarOuVincularDeLead`): idempotente por `leads.cliente_id`; sem vínculo, busca por razão social **exata** (até 20 homônimos; desempata pelo e-mail do lead, depois pelos 8 últimos dígitos do telefone, depois o ativo; sem desempate fica o primeiro e avisa no console) e, se não achar, **cria** com `razao_social` = prédio do lead (ou o contato). O lead não tem CNPJ, então o desempate é "o melhor possível". Depois grava `leads.cliente_id` e aponta `quadros_comando.cliente_id` dos pedidos de quadro do lead que ainda não têm cliente. Detalhe do lado do lead em `02_crm.md` PC-3.
+4. **Omie:** 1.050 clientes têm `codigo_cliente_omie` (banco, 31/10/2026). O mecanismo que os trouxe **não está neste módulo** (Herdado).
+5. **Formulário público do Quadro de Comando** (Edge Function `capturar-lead-quadro-comando`, do repositório): quando o CNPJ informado já é cliente no Omie, a função **acha o cliente local pelo CNPJ** (e grava nele `codigo_cliente_omie`, `omie_cadastrado_desde` e `omie_verificado_em`) ou, se não existir, **cria** um cliente PJ com o nome do Omie, o contato e o código pedido à função `gerar_codigo_cliente`. **Conferido** no arquivo do repositório; a versão no ar (v10) pode diferir do arquivo (o repositório já esteve defasado em outras funções): **Não verificado**. Se a função de código falhar, o arquivo grava o cliente com `codigo` **nulo** em vez de parar com erro (3.1.10, item 13).
 
-`id`, `codigo` (`VPFOR-NNNN`), `razao_social`, `nome_fantasia`, `tipo_pessoa`, `cnpj`, `cpf`, `categorias` (array de texto), `email`, `telefone`, `contato`, os 6 `endereco_*`, `observacoes`, `ativo`, `criado_em`, `atualizado_em`, `criado_por` (e-mail). Não há `inscricao_estadual`, `contribuinte_icms` nem `documento_pendente`.
+**Fornecedor:** só digitado nesta tela (3.2); as Cotações de Varejo só convidam quem já existe no cadastro (**Herdado** de `CLAUDE.md`).
 
-### 6.3 `fornecedores_avaliacoes`
+### PC-3 Consulta de CNPJ "Omie primeiro"
+**Conferido** em `enderecos-api.js` e `cadastros.jsx`, 31/10/2026. Vale para Clientes e Fornecedores; a tela de Leads tem implementação própria (`02_crm.md` PC-4) e o Formulário de Elevador usa a mesma função desta (Herdado).
+1. CNPJ inválido (dígito verificador) → não chama nada, devolve "CNPJ inválido — confira os dígitos."
+2. Chama a Edge Function **`omie-buscar-cliente`** (`verify_jwt` ligado, versão 7 no ar); o front **nunca** fala direto com o Omie. Respostas: `encontrado: true`, `false` ou `null` (falha de consulta, **nunca** "não cadastrado"). Mensagens distinguem HTTP 401 ("sessão sem permissão pra consultar o ERP") de outros status.
+3. Encontrado → fonte `omie`; **só** razão social, fantasia, telefone, e-mail e situação (ativo/inativo) — o Omie **não devolve endereço**.
+4. Não encontrado ou falha → BrasilAPI (timeout de 5 s): 404 = "CNPJ não encontrado."; outras falhas = "Serviço de consulta de CNPJ temporariamente indisponível." Sucesso → fonte `externo`, com endereço completo, situação cadastral e CNAEs.
+5. A função **nunca lança**; devolve `{ fonte, omie, dados, erro }`.
 
-`id`, `fornecedor_id`, `nota` (1–5), `comentario`, `avaliado_por`, `avaliado_em`. Média e contagem agregadas no navegador (`mediasAvaliacoes`).
+**No formulário (`cadConsultarCnpj` e `useCnpjOmieFirst`):**
+- O resultado preenche **só campos vazios** (razão social, fantasia, telefone, e-mail e os 6 de endereço); nunca sobrescreve o digitado.
+- **Buscar CNPJ:** exige CNPJ válido; avisa a fonte ("CNPJ já cadastrado no ERP Omie — dados trazidos de lá." ou "CNPJ não está no Omie — dados trazidos da consulta pública.").
+- **Consulta ao salvar:** pula PF, "Documento pendente" (só existe em cliente) e campo vazio; CNPJ inválido bloqueia ("CNPJ inválido — confira os dígitos (ou marque 'documento pendente')."); se já foi consultado nesta abertura, segue; senão consulta e, **se trouxe dado novo, para** com "Dados preenchidos pela consulta de CNPJ. Confira e clique em salvar de novo."; se não trouxe nada novo ou a consulta falhou (só aviso "Confira os dados manualmente"), **deixa salvar**.
+- Em fornecedor o estado do formulário não tem `documento_pendente`, então um CNPJ inválido sempre bloqueia.
 
-### 6.4 Outras peças
+### PC-4 CPF/CNPJ de verdade e documento único
+**Conferido** em `enderecos-api.js` e nas duas stores, 31/10/2026.
+- **Validação (`validarDocumento(tipo, valor)`):** vazio é aceito (documento pendente); o tamanho precisa combinar com o tipo (PF = 11, PJ = 14) e a mensagem sugere trocar o tipo quando o número parece do outro ("parece um CNPJ"); os **dois dígitos verificadores** conferem (recusa sequência repetida, como `000.000.000-00`). As duas stores validam **antes de gravar** e lançam o erro; sem o módulo carregado, aceitam só os dígitos.
+- **Documento gravado pelo tipo escolhido** (PJ: `cnpj`, `cpf` nulo; PF: o contrário). Só dígitos no banco.
+- **Documento único (31/10/2026):** antes de criar ou editar, a store procura o mesmo documento em **outro** cadastro (inativo também conta) e recusa com o código e a razão social de quem o usa, avisando "reative esse cadastro em vez de criar outro" se estiver inativo. Falha ao conferir = nada é gravado. Na criação a conferência roda **antes** de gerar o código. O banco reforça com índices únicos parciais (PC-8); a recusa do índice (código `23505`) vira a mesma mensagem clara. Medição de 31/10/2026: 0 documentos repetidos.
+- Observação: o Formulário de Elevador cria cliente por insert próprio e **não** passa pela conferência da store; quem o protege é o índice do banco (**Conferido** no código).
 
-- RPC `gerar_codigo_cliente` (sequência `seq_clientes_codigo`).
-- Edge Function `omie-buscar-cliente` (projeto `jxtqwzmpgofwctqajewt`).
-- APIs externas: BrasilAPI (`/api/cnpj/v1`, `/api/cep/v2`) e ViaCEP (fallback de CEP). A busca de CEP existe em `EnderecoAPI.buscarCEP`, mas **os formulários de Clientes/Fornecedores deste módulo não a chamam** (o campo CEP é digitação livre; não confirmado em outros pontos).
-- NPS: tabela/consulta mantida por `CotacoesVarejoStore.avaliacoesDoFornecedor` (view `fornecedor_nps_v`, segundo o `CLAUDE.md`; não inspecionada aqui).
-- Auditoria: `vp_logs` via `VPLog.registrar`.
+### PC-5 Nunca excluir cadastro com transação (🔒 Área Blindada)
+A **lei** está no `CLAUDE.md` (Art. 16 e a seção "🔒 ÁREA BLINDADA — Cadastros Mestres"): cliente ou fornecedor com qualquer transação pode ser editado, mas **nunca excluído**; `id` e código nunca mudam; retirar de circulação é `ativo = false`; exclusão física só sem nenhum vínculo, conferido antes; falha ao conferir = não apaga. Se pedirem para "limpar", "unificar" ou "apagar" cadastros, **pare**, informe a lei e peça confirmação. **Este documento descreve como a lei é cumprida; não a afrouxa.**
 
-## 7. Pontos de atenção e lacunas
+**Conferido** no banco e no código, 31/10/2026:
+- **Função `cadastro_vinculos(tipo, id)`** (SQL, `SECURITY DEFINER`, estável): fonte única das transações. Para **cliente** conta leads, formulários/cotações, dossiês de obra, contratos sociais, propostas, pedidos de Quadro de Comando, desenhos do Projeto de Elevadores, "Cadastrado no ERP Omie" (se tem código do Omie) e pedidos de venda do Omie. Para **fornecedor** conta convites de cotação de varejo, cotações de frete, avaliações (as duas tabelas), P.I., embarques (agente e desembaraço), cotações de elevador (pelo nome), unidades do Formulário (pelo nome), expedições (transportadora, pelo nome), IMS, RFQ de importação e pedidos a fornecedor. Para os dois conta também os **e-mails trocados** (Inbox) com o endereço de e-mail do cadastro. Casamento por nome usa normalização sem acento/maiúscula.
+- **Gatilho `BEFORE DELETE`** em `clientes` e `fornecedores` (`cadastro_bloquear_exclusao`): recusa o `DELETE` listando os vínculos; vale mesmo fora da tela (SQL, MCP). A recusa real de um `DELETE` **não foi testada** (exigiria comando destrutivo).
+- **Chaves estrangeiras:** `propostas`, `quadros_comando` (para `clientes`) e `fornecedores_avaliacoes`, `pi_importacao`, `embarques_importacao` ×2 (para `fornecedores`) estão em `RESTRICT`; `leads`, `dossier_obra`, `formularios_elevador` e `contratos_sociais` em `NO ACTION`. Antes de 31/10/2026 três delas apagavam em silêncio (`SET NULL` e `CASCADE`).
+- **Números (Herdado de 31/10/2026, não recalculados hoje):** 99 de 1.239 clientes e 59 de 82 fornecedores não tinham nenhuma transação; só esses podem ser excluídos.
+- **Decisões do Gelson (Clarify, 31/10/2026):** (a) cliente vindo do Omie conta como transação, mesmo sem vínculo no site; (b) fornecedor citado só pelo nome conta como transação, principalmente se houve troca de e-mails; (c) a trava vale também no banco.
+- **Razões sociais repetidas em `clientes`** (analisadas em 13/10/2026, **Herdado**): 59 grupos; 36 têm um cadastro antigo sem CNPJ e sem nenhuma ligação ao lado de outro com CNPJ; os outros 23 são filiais com CNPJ e código do Omie próprios (não são duplicata). **Mantidas por decisão do Gelson**: não unificar nem desativar sem pedido novo. Se um dia for pedido, a proposta registrada é só `ativo = false` nos 36 sem CNPJ e sem ligação, nunca nas filiais, depois de confirmar que nenhum é usado fora do sistema.
 
-**Situação atual de cada item (31/10/2026):** 1 resolvido (§10); 2 resolvido (§11 T3); 3 resolvido (§11 T4); 4 resolvido (§11 T4, cartão "Lista incompleta"); 5 em aberto (decisão de produto); 6 em aberto; 7 resolvido (§13); 8 parcial (§13: desempate por e-mail/telefone/ativo); 9 em aberto; 10 vale sempre (tutorial desatualizado pelas mudanças de §10–§14). A lista abaixo é o texto original do mapeamento.
+### PC-6 Identidade, alçadas e segurança
+- **Estado real da segurança (banco, 31/10/2026):** `clientes` tem RLS ligada com uma política `ALL` liberada a `anon` e outra a `authenticated` (`qual = true`); `fornecedores` e `fornecedores_avaliacoes` têm RLS ligada com leitura, inclusão, alteração e exclusão liberadas a `public` (`true`). **Qualquer pessoa com a chave pública lê e escreve nas três tabelas.** Trava na tela é organização, não segurança (Art. 25); o isolamento verdadeiro é a issue #571 (`01_geral.md` PC-6). A **trava de exclusão** (PC-5) é a única proteção que vale também fora da tela.
+- **Alçadas:** ver 3.1.3 e 3.2.3. Existem no catálogo e no banco; a tela não as consulta.
+- **Identidade nos registros:** `fornecedores.criado_por` guarda o e-mail da sessão; `clientes.criado_por` é uuid de `auth.users` e **nunca é gravado** (3.1.10, item 9).
 
-1. **Exclusão física** em clientes/fornecedores/avaliações; comportamento diante de FKs **não confirmado**.
-2. **Código de fornecedor não atômico** e com fallback fixo `VPFOR-0001` (clientes já tiveram esse bug corrigido).
-3. **Fornecedores sem paginação** (limite de 1000 linhas do PostgREST) em `listarTodos`, `gerarCodigo` e `mediasAvaliacoes`.
-4. `listarTodos` de clientes devolve resultado **parcial em silêncio** quando uma página falha.
-5. Fornecedor não tem "documento pendente"; CNPJ inválido de fornecedor sempre bloqueia o cadastro.
-6. Duas avaliações de fornecedor coexistem (nota única 1–5 editável aqui × NPS 0–5 de cotações, só leitura).
-7. Busca por CNPJ/CPF não ignora pontuação.
-8. Dedup Lead→Cliente é só por razão social exata (sem CNPJ no lead); homônimos reaproveitam o primeiro encontrado.
-9. Sem validação de e-mail/telefone/CEP e sem autopreenchimento por CEP nesta tela.
-10. Tutoriais (`cadastros-mestres/clientes` e `fornecedores`) e os textos de ajuda do `shell.jsx` (linhas 478–479) descrevem o comportamento atual; qualquer mudança nestas telas exige regenerar o tutorial pela sessão de tutoriais.
+### PC-7 Gatilhos e rotinas
+- `trg_evfluxo_cliente_cadastrado` (`AFTER INSERT` em `clientes`): grava o evento "Cliente cadastrado" (módulo Comercial) em `eventos_fluxo`; falha engolida de propósito. **Conferido** (4 eventos até 31/10/2026).
+- `trg_clientes_bloquear_exclusao` e `trg_fornecedores_bloquear_exclusao` (`BEFORE DELETE`): PC-5.
+- **Não há** job de `pg_cron` que cite `clientes`/`fornecedores` e **nenhuma** das três tabelas está no Realtime (banco, 31/10/2026): a tela só atualiza ao abrir, ao salvar ou em "Tentar de novo".
 
-## 8. Diagnóstico "Placa-Mãe" (fios, trilhas e componentes) — 31/10/2026
+### PC-8 Tabelas
+- **`clientes`** (1.239 linhas em 31/10/2026; 1 inativo; 3 com documento pendente; 1.060 com CNPJ e 75 com CPF; 1.050 com código do Omie): `id`, `codigo`, `razao_social`, `nome_fantasia`, `tipo_pessoa`, `cnpj`, `cpf`, `inscricao_estadual`, `contribuinte_icms`, `documento_pendente`, `email`, `telefone`, `contato`, os 6 `endereco_*`, `endereco`/`cidade`/`estado` (compatibilidade), `ativo`, `criado_por`, `criado_em`, `atualizado_em`, `codigo_cliente_omie`, `omie_cadastrado_desde`, `omie_verificado_em`. CHECK só em `tipo_pessoa`. Índices: único em `codigo`, único parcial em `cnpj` e em `cpf` (quando preenchidos), único em `codigo_cliente_omie` (quando preenchido) e um índice único antigo em `cnpj` (`clientes_cnpj_key`).
+- **`fornecedores`** (82 linhas; 0 inativos; 3 com CNPJ): `id`, `codigo`, `razao_social`, `nome_fantasia`, `tipo_pessoa`, `cnpj`, `cpf`, `categorias` (lista de texto), `email`, `telefone`, `contato`, os 6 `endereco_*`, `observacoes`, `ativo`, `criado_por` (texto), `criado_em`, `atualizado_em`. Índices: único em `codigo`, únicos parciais de `cnpj` e `cpf` (e dois índices únicos antigos equivalentes) e GIN em `categorias`.
+- **`fornecedores_avaliacoes`** (0 linhas): `id`, `fornecedor_id` (FK `RESTRICT`), `nota` (CHECK 1–5), `comentario`, `avaliado_por`, `avaliado_em`.
+- **Colunas de outras tabelas que apontam para estes cadastros:** `pi_importacao.fornecedor_id`, `embarques_importacao.agente_carga_id` e `empresa_desembaraco_id`, `leads.cliente_id`, `propostas.cliente_id`, `quadros_comando.cliente_id`, `dossier_obra.cliente_id`, `formularios_elevador.cliente_id`, `contratos_sociais.cliente_id`.
+- **Funções SQL:** `gerar_codigo_cliente` (sequência `seq_clientes_codigo`), `gerar_codigo_fornecedor` (sequência `seq_fornecedores_codigo`), `cadastro_vinculos`, `cadastro_bloquear_exclusao`. **Edge Function:** `omie-buscar-cliente`. **APIs externas:** BrasilAPI (CNPJ e CEP) e ViaCEP.
 
-> **Estado após T1–T8:** os fios rompidos/em curto de código e banco listados em 8.3 (exclusão física, código VPFOR, paginação, resultado parcial, dedup por nome, busca com pontuação, id inexistente na URL, ausência de unicidade de CNPJ/CPF) foram tratados nas seções 10–13. O vínculo de P.I./Embarque por texto foi tratado na §14 (coluna `fornecedor_id`, sem carga retroativa). Seguem em aberto: RFQ de peças (`rfq.jsx`) com id gerado em vez do cadastro, PCP sem ligação com `fornecedores` e o isolamento real de dados (#571). Texto original abaixo.
+### PC-9 Navegação, cache e testes
+- **Padrões gerais** (navegar por `setSubsel` + `setRoute`, estado na URL, cache-busting `?v=`, mapa de rotas, testes e CI): `01_geral.md` PC-9. **Específico daqui:** `cadastros.jsx` depende de `pi.jsx` (componentes `PI*`) e de `ordenar-tabela.js` (`useOrdenacao`) já carregados; o cartão NPS depende de `cotacoes-varejo-store.js`. Mexeu em `cadastros.jsx`, nas duas stores ou em `enderecos-api.js`? Suba o `?v=` no `index.html`; **`enderecos-api.js` também é carregado por `formulario-cliente.html`** (que usa `?v=4`, enquanto o `index.html` usa `?v=5` — conferir os dois ao mexer).
+- Rota nova de Cadastros entra no teste de fumaça sozinha (`KNOWN_ROUTES`). As rotas aqui usam `useRotaId` (segundo segmento) e `useRotaItem` (terceiro, só em Clientes).
 
-Varredura read-only. Fontes citadas: `docs/MAPA_DE_ROTAS.md` (linhas 49–50: rotas `/cadastros/cadastro-clientes` e `/cadastros/cadastro-fornecedores`; linha 194) e o código. **`sobresite.md` não existe no repositório** (busca em todo o projeto); nenhuma afirmação abaixo depende dele. Estado geral: **com fios rompidos** (sem curto confirmado em produção).
+### PC-10 Menu "?" e tutoriais
+- O mecanismo do "?" e a regra "tutorial não se edita à mão" estão em `01_geral.md` PC-10. **Aqui só o estado do módulo (Conferido em `shell.jsx` e `TreinamentoVP/`):** há texto de ajuda (`HELP_TOPICS`) para `cadastro-clientes` e `cadastro-fornecedores`; o do cliente termina com "Exclua com cuidado." e **nenhum dos dois cita Inativar, a regra de nunca excluir com transação, o documento único nem o NPS**. Há tutorial para as duas telas (`TreinamentoVP/cadastros-mestres/clientes` e `/fornecedores`, último commit versionado em 10/10/2026) e um "?" do módulo ("Cadastros Mestres" → pasta `cadastros-mestres`).
+- **Estado: desatualizados.** As telas mudaram em 31/10/2026 (lixeira com Inativar, busca com pontuação, aviso de "não encontrado", cartão "Lista incompleta", documento único). Regerar pela sessão de tutoriais; **não** editar o HTML à mão.
+- A pasta `cadastros-mestres` também guarda os tutoriais de Matérias-Primas e Produtos, que **hoje são telas de Fabricação** (módulo 13): ver PC-11.
 
-### 8.1 Componentes
-- **Entradas (Omie/BrasilAPI, `enderecos-api.js`)** — protegidas: `consultarCnpjOmieFirst` nunca lança, timeout de 5 s na BrasilAPI, `encontrado: null` distinto de "não cadastrado", preenchimento só de campos vazios. Risco: o Omie não devolve endereço; falha de consulta deixa salvar (decisão deliberada). CEP existe em `buscarCEP`, mas os formulários não o chamam.
-- **Entradas (Lead→Cliente, Formulário)** — `criarOuVincularDeLead` (store clientes `:204`) é idempotente; dedup só por razão social exata. Formulário usa `buscarOuCriarCliente` (`formulario-elevador-store.js:254`), que acha cliente por CNPJ/CPF e **devolve o existente sem atualizar dados** (só completa `contribuinte_icms` nulo).
-- **Diodos (CPF/CNPJ)** — `validarDocumento` é chamado no `_payload` das duas stores e em `buscarOuCriarCliente`: gravação de documento inválido/trocado é barrada. Vazio é aceito de propósito. Lacuna: não há checagem de **duplicidade** de CNPJ/CPF em `clientes` na tela nem em `fornecedores` (nenhuma migration de `unique` para essas colunas foi encontrada em `supabase/migrations`).
-- **Triacs (categorias)** — chaveamento correto via `listarAtivos(categoria)` (`contains`) em P.I., Embarques e RFQ; `listarAtivos()` sem filtro em Cotações de Varejo. Isolamento só no front.
+### PC-11 Documentos soltos e destino do que foi concatenado
+*"Concatenar" = reunir num só documento o que estava espalhado (Art. 50).* **Reunido neste documento:**
+- **O próprio `03_cadastros_mestres.md` anterior** (seções 1 a 17: mapeamento de 31/10/2026, "Placa-Mãe", regras do Gelson e as tarefas T1 a T8): reescrito nos temas das telas e na Parte comum; continua no Git. O passo a passo SDD das tarefas T1–T8 (Specify, Clarify, Plan, Tasks) virou decisões em PC-5, 3.2.8, 3.2.10 e 3.x.11.
+- **Do `CLAUDE.md`** (continua lá só o que é lei ou o que é de outro módulo): as seções mistas **"Consulta de CNPJ 'Omie primeiro' — Clientes, Fornecedores, Formulário e Leads"** e **"CPF/CNPJ de verdade + comissão manual do lead"** (a parte de Clientes e Fornecedores está em PC-3 e PC-4; a de Leads já estava em `02_crm.md`), o item **"Razões sociais repetidas em `clientes`"** da "Auditoria #843" (PC-5) e o item 15 da "Auditoria de amarrações" (Histórico do cliente por lead e cotação, 3.1.6 e 3.1.10). Cada uma ganhou uma nota "→ parte já migrada para Cadastros Mestres"; **nada foi apagado**.
+- **Fica no `CLAUDE.md` por ser lei:** Art. 16 e a seção "🔒 ÁREA BLINDADA — Cadastros Mestres".
+- **De outro módulo (apontado, não copiado):** o item 18 da "Auditoria de amarrações" (conversão de cotação da planilha histórica em Formulário: PF/PJ do documento) é do Formulário (módulo 4); as cotações de varejo e o NPS são do módulo 7 (aqui só a leitura do NPS).
+- **Só histórico, ficam onde estão:** `AUDITORIA_FORENSE_E2E_SCORE.md` (raiz, 19/10/2026) cita as duas telas apenas como "já investigadas"; `docs/seguranca/cascata-assinatura.md` cita `criarOuVincularDeLead` como um passo da cascata da assinatura (módulo 14 e `01_geral.md` PC-3); `docs/CONTEXTO_workflow_setores_vpclick.md` não trata destes cadastros (as menções são de outro assunto); `README.md` da raiz descreve o produto.
+- **Tutoriais** (`TreinamentoVP/cadastros-mestres/*`): pertencem à sessão de tutoriais (PC-10). Os de `materias-primas` e `produtos` ficam sob esta pasta embora as telas sejam do módulo 13: **a decidir** com a sessão de tutoriais.
+- **Candidatos a obsoletos para o Gelson decidir:** nenhum arquivo solto sobre Cadastros foi achado para descarte. Os arquivos não versionados de `docs/` (planos de Separação) e de `TreinamentoVP/` não são deste módulo e não foram tocados.
+- Nenhum outro arquivo sobre Clientes ou Fornecedores foi encontrado na raiz, em `docs/`, `docs/superpowers/specs/`, `docs/superpowers/plans/`, `docs/seguranca/`, `docs/revisoes/` nem em `handoffs/` (busca por "cadastros mestres", "cadastro-clientes", "cadastro-fornecedores", nomes das stores, `VPCLI`, `VPFOR` e `cadastro_vinculos`).
 
-### 8.2 Trilhas de doação
+### PC-12 Benefícios trocados com os outros módulos
+*(Regra do Gelson, 31/10/2026, Art. 49: o que um módulo tem de bom e novo passa para os outros.)*
+- **Recebido do Geral (`01_geral.md`) e aplicado aqui:** os 11 temas por tela, o selo de verificação, o glossário próprio, a Parte comum, "achado, sem correção", a contagem de testes rodados de verdade e os padrões de PC-9: leitura paginada com cartão de erro (já existia), hooks antes do `return` (**Conferido**: respeitado em `cadastros.jsx`).
+- **Recebido do CRM (`02_crm.md`) e aplicado aqui:** a regra da **data pura `aaaa-mm-dd`** (gerou o achado 3.1.10, item 4: a frase do Score) e a de **atualizar uma linha sem recarregar** (gerou o item 6); as colunas do Omie em `clientes` são gravadas pela tela de Leads (`gravarOmieNoCliente`, `02_crm.md` PC-4): encontrado grava data e código do Omie; não encontrado grava a data vazia e marca como verificado; **falha de consulta (`null`) não grava nada**. Quem mexer nessas colunas aqui deve respeitar essas três regras.
+- **Duas implementações da mesma regra (a corrigir quando o Gelson decidir):** a consulta "Omie primeiro" existe em `enderecos-api.js` (`consultarCnpjOmieFirst`, usada por Clientes, Fornecedores e Formulário) e em `comercial.jsx` (`buscarClienteOmie`, usada por Leads). **Não feito:** unificar.
+- **Doado ao Geral e ao CRM (texto completo em `01_geral.md` PC-9; o CRM aponta):**
+  - **Gravar com conferência prévia de duplicidade, índice único parcial e mensagem clara:** a store confere o documento antes de gravar (para dizer **qual** cadastro já usa), o banco reforça com índice único parcial (para valer com dois cadastros ao mesmo tempo ou fora da tela) e o erro `23505` do índice vira a mesma mensagem; falha ao conferir = não grava; na criação a conferência roda antes de gerar o código.
+  - **Código humano pela sequência do banco, sem reserva fixa:** nunca "maior código + 1" no navegador nem um código constante quando o banco falha; falha vira erro claro. Para o CRM: o `id` do lead (`LD-` + 6 dígitos do relógio, gerado no navegador) é do tipo que a regra desencoraja; ver `02_crm.md` 2.1.10.
+  - **Link para registro que não existe:** mostrar aviso com "Voltar à lista" em vez de abrir a tela como se fosse "Novo".
+- **Doado a Cadastros por outros módulos e ainda sem aplicação (pendência de código, não feita aqui):** atualizar só a linha depois de salvar; olhar o erro nas consultas do Histórico (3.1.10 itens 3 e 6).
 
-| Destino | Origem | Status | Observação |
-| :--- | :--- | :--- | :--- |
-| Comercial (Formulário/Proposta) | `clientes.id` (`formularios_elevador.cliente_id`) | Íntegra | Proposta assinada → `criarOuVincularDeLead` (`proposta-store.js:421–440`) |
-| Jurídico (Contrato Social) | `clientes` | Íntegra | `contratos_sociais.cliente_id`, busca em `listarTodos` |
-| Jurídico (Contrato Venda/Instalador) | `clientes` | Parcial | Instalador lê `listarTodos` (`contrato-instalador.jsx:363`); herança de dados do cliente no Contrato de Venda **não confirmada** neste escopo |
-| Suprimentos (RFQ de peças `rfq.jsx`) | `fornecedores` | **Rompida** | `addFornecedor` grava `fornecedor_id: store.novoId()` (id novo, não o do cadastro) + nome digitado (`rfq.jsx:28–38`) |
-| Cotação de elevador (Formulário/RFQ) | `fornecedores` | Íntegra por nome | `listarAtivos('Fornecedor')` (`formulario-elevador.jsx:1183`); casamento por aproximação de nome |
-| Importação (P.I., Embarque) | `fornecedores` | Parcial | `CadFornecedorDatalist` (`pi.jsx:41`) grava só **texto** (`agente_carga` no embarque, `embarques-importacao-store.js:96`); sem FK |
-| Frete (cotações) | `fornecedores` "Agente de Carga" | Íntegra | `embarques-frete-cotacoes.jsx:70,285`, guarda `fornecedor_id` |
-| PCP / Fabricação | `fornecedores` | **Rompida (inexistente)** | Nenhum arquivo de PCP/Almoxarifado lê `fornecedores`; PCP usa `pcp_produto_fornecedor` (tabela própria, `20261002130000`) |
-| Pagamentos a Instaladores | `fornecedores` | Não aplicável | Instaladores usam `parceiros_instaladores`, não `fornecedores` (não há leitura de `fornecedores` nesses arquivos) |
-
-### 8.3 Fios rompidos e curtos
-- **[Fio rompido]** `rfq.jsx:28–38`: fornecedor da RFQ identificado por id gerado + nome livre; renomear/desativar no cadastro não se reflete.
-- **[Fio rompido]** P.I./Embarque (`pi.jsx:41–52`, `embarques-importacao-store.js:96`): vínculo por texto; mudança de nome no cadastro quebra a correspondência.
-- **[Fio rompido]** PCP × `fornecedores`: sem ligação (duas bases de fornecedor).
-- **[Fio rompido]** `cadastros-fornecedores-store.js:19–27`: código `VPFOR` calculado no navegador, não atômico, com fallback fixo `VPFOR-0001`.
-- **[Fio rompido]** `cadastros-fornecedores-store.js:29–34,143–155`: sem paginação (teto de 1000 linhas do PostgREST) em `listarTodos`, `gerarCodigo` e `mediasAvaliacoes`.
-- **[Fio em curto]** `cadastros-clientes-store.js:170–177` / `cadastros.jsx:197–201`: DELETE físico de cliente; FKs (`leads`, `formularios_elevador`, `dossier_obra`, `contratos_sociais`) **não verificadas** — a trava de integridade relacional exigida deve ser conferida no banco (nesta etapa não inspecionado). Preferir `ativo = false`.
-- **[Fio em curto]** `cadastros-clientes-store.js:47–58`: `listarTodos` devolve resultado parcial em silêncio se uma página falhar.
-- **[Fio em curto]** `cadastros-clientes-store.js:216`: dedup Lead→Cliente por razão social exata; homônimos reaproveitam o primeiro.
-- **[Fio em curto]** `cadastros.jsx:205–209`: busca por CNPJ/CPF não ignora pontuação.
-- **Estado/F5:** abrir/editar/histórico refletem a URL (`useRotaId`/`useRotaItem`); id inexistente na URL abre formulário "Novo" sem aviso (`cadastros.jsx:173`).
-
-## 9. Regras do Gelson (31/10/2026)
-
-- **Cliente/fornecedor com transação nunca é excluído** — pode ser editado; `id` e o código `VPCLI`/`VPFOR` ("ID-Tag") ficam sempre os mesmos; para tirar de circulação, inativar. Registrado como Área Blindada no `CLAUDE.md`. Implementação: issue #1221 (hoje `remover` ainda faz DELETE físico sem conferir vínculos — ver 5.5 e 8.3).
-- **Onde ficam os passos do método:** Specify, Clarify, Plan, Tasks e Analyze deste módulo (inclusive T5 #1225 e T6 #1226) são escritos **neste documento**, nunca no `CLAUDE.md`, que é a Constituição (blindada desde o cabeçalho).
-
-## 10. T1 (#1221) — nunca excluir cadastro com transação: Specify e levantamento no banco (31/10/2026)
-
-**Specify.** Regra blindada: cliente/fornecedor com transação pode ser editado (o `id` e o código VPCLI/VPFOR não mudam) e nunca é excluído; tirar de circulação = `ativo = false`. Exclusão física só sem nenhum vínculo, conferido antes; falha ao conferir = não apaga.
-
-**Levantamento (só leitura, projeto `jxtqwzmpgofwctqajewt`).**
-
-FKs que apontam para os cadastros (`pg_constraint`):
-
-| Tabela → alvo | Coluna | ON DELETE | Efeito de apagar hoje |
-| :--- | :--- | :--- | :--- |
-| `leads` → `clientes` | `cliente_id` | NO ACTION | banco recusa (protegido) |
-| `formularios_elevador` → `clientes` | `cliente_id` | NO ACTION | banco recusa |
-| `dossier_obra` → `clientes` | `cliente_id` | NO ACTION | banco recusa |
-| `contratos_sociais` → `clientes` | `cliente_id` | NO ACTION | banco recusa |
-| `propostas` → `clientes` | `cliente_id` | **SET NULL** | **apaga em silêncio o vínculo da proposta** |
-| `quadros_comando` → `clientes` | `cliente_id` | **SET NULL** | **apaga em silêncio o vínculo do pedido de quadro** |
-| `fornecedores_avaliacoes` → `fornecedores` | `fornecedor_id` | **CASCADE** | **apaga junto o histórico de avaliações** |
-
-Vínculos **sem FK** (o banco não protege nada):
-- Clientes: `projetos_elevador_desenhos.cliente_id`, `propostas_vigentes.cliente_id`; `pcp_pedidos.codigo_cliente` (código do Omie, casa com `clientes.codigo_cliente_omie` — 12 clientes com pedido).
-- Fornecedores: `iv_cotacao_convites.fornecedor_id` (8 fornecedores), `embarques_importacao.cotacoes_frete[].fornecedor_id` (7, jsonb); por **nome** em `pi_importacao.fornecedor`, `embarques_importacao.agente_carga`/`empresa_desembaraco`, `cotacoes_elevador_fornecedor.fornecedor`, `formularios_elevador_unidades.fornecedor`, `pcp_expedicoes.transportadora` (14 fornecedores casam por nome); jsonb `ims_importacao.fornecedores`, `rfq_importacao.fornecedores` (ids próprios, ver T5), `pedidos_fornecedor.fornecedor`.
-
-Políticas: `clientes` tem `ALL` liberado para `anon` e `authenticated`; `fornecedores` e `fornecedores_avaliacoes` têm DELETE liberado para `public`. **Qualquer pessoa com a chave pública consegue apagar** (segurança real = #571).
-
-Números: 1.239 clientes (134 com vínculo por id; 1.050 com código do Omie; 1 inativo); 82 fornecedores (nenhum inativo; 0 avaliações em `fornecedores_avaliacoes` e 0 no NPS hoje).
-
-**Plan proposto (aguarda Clarify do Gelson — ver perguntas abaixo).**
-1. Store: `vinculos(id)` conta todas as fontes acima; `remover` recusa com qualquer vínculo ou erro de leitura.
-2. Tela: a lixeira abre um aviso com a lista de vínculos e o botão **Inativar**; sem vínculo, pede confirmação e apaga.
-3. Banco (migration, só com CONFIRMO): trocar `propostas`/`quadros_comando` de SET NULL e `fornecedores_avaliacoes` de CASCADE para `RESTRICT`; gatilho `BEFORE DELETE` em `clientes` e `fornecedores` conferindo também os vínculos sem FK, para valer mesmo fora da tela.
-4. Testes unitários da regra + `?v=` bumpado.
-
-**Perguntas (Clarify).**
-- (a) Cliente que **veio do Omie** (tem `codigo_cliente_omie`) conta como "com transação" mesmo sem vínculo no site?
-- (b) Fornecedor citado **só por nome** (P.I., embarque, cotação) conta como transação?
-- (c) Aplicar a trava também no banco (passo 3), além da tela?
-
-**Clarify — respostas do Gelson (31/10/2026).** (a) Cliente vindo do Omie conta como transação. (b) Fornecedor citado só pelo nome conta como transação — principalmente se houve troca de e-mails, o que também trava a saída. (c) Travar também no banco.
-
-**Implementação (branch `claude/confident-einstein-nqzyq4`).**
-- Banco: migration `20261031120000_cadastros_nunca_excluir_com_transacao.sql` — função `cadastro_vinculos(tipo, id)` (fonte única das transações, inclui Omie, nome aproximado e e-mails em `emails_projeto`, para clientes e fornecedores), gatilho `BEFORE DELETE` em `clientes` e `fornecedores`, e FKs `propostas`/`quadros_comando`/`fornecedores_avaliacoes` trocadas para `RESTRICT`. **Aplicada só com o "CONFIRMO" do Gelson.**
-- Stores: `vinculos(id)` e `inativar(id)`; `remover` recusa com transação ou falha ao conferir (sem a função no banco, nenhuma exclusão passa).
-- Tela: a lixeira mostra as transações e oferece Inativar; sem transação, pede confirmação e exclui.
-- Testes: `src/cadastros-nunca-excluir.test.js` (8).
-- **Migration aplicada em produção em 31/10/2026** (com o "Confirmo" do Gelson). Conferido no banco: os 2 gatilhos existem; as 3 FKs estão em `RESTRICT`; `cadastro_vinculos` é executável pela tela e a função da trava não é. Exemplos: AKAI (Formulário 1, cadastrado no Omie, 5 e-mails), Glarie (11 P.I., 37 cotações, 85 unidades, 63 e-mails). Hoje **99 de 1.239 clientes** e **59 de 82 fornecedores** não têm nenhuma transação (só esses podem ser excluídos). A tentativa real de DELETE barrada pela trava **não foi testada** (exigiria comando destrutivo no banco).
-
-## 11. T4 (#1224) e T3 (#1223) — leitura completa e código VPFOR do banco (31/10/2026)
-
-**T4 — feito no código.** `listarTodosDetalhado()` nas duas stores devolve `{ itens, erro }`; Fornecedores passou a ler de 1000 em 1000 (lista e médias de avaliação), como Clientes já fazia. A tela mostra o cartão "Lista incompleta… Tentar de novo" quando a leitura falha no meio, em vez de exibir a lista parcial como inteira. `listarTodos()` continua devolvendo só a lista (contrato dos outros módulos). **`listarAtivos` não foi mexido de propósito** (é peça da Área Blindada do E-mail/RFQ; com 82 fornecedores está longe do teto de 1000).
-
-**T3 — feito; migration aplicada em produção em 31/10/2026 com o "Confirmo" do Gelson (sequência em 82, o próximo é VPFOR-0083; só a função usa a sequência).** `gerarCodigo()` de Fornecedores chama a RPC `gerar_codigo_fornecedor` (sequência `seq_fornecedores_codigo`, começa depois do maior código existente, hoje VPFOR-0082) e falha com erro claro, sem o antigo `VPFOR-0001` fixo. Migration `20261031130000_gerar_codigo_fornecedor.sql`. **O código só pode ir para a `main` depois da migration aplicada**: sem a função no banco, ninguém consegue cadastrar fornecedor novo.
-
-Testes: +5 em `src/cadastros-nunca-excluir.test.js` (1.005 linhas, falha no meio, média com 2 páginas, código do banco e falha sem chute). Suíte 886/886.
-
-## 12. T2 (#1222) — o mesmo CNPJ/CPF não pode ter dois cadastros (31/10/2026)
-
-**Medição no banco (só leitura):** **0** documentos repetidos. Clientes: 1.239 cadastros, 1.060 com CNPJ, 75 com CPF; fornecedores: 82 cadastros, só 3 com CNPJ. Todos gravados só com dígitos. Não há duplicata a limpar.
-
-**Código (Clientes e Fornecedores):** antes de criar ou editar, a store confere se o CNPJ/CPF já existe em outro cadastro e recusa com o código e a razão social de quem já usa ("… já está cadastrado em VPCLI-0123 — Fulano (inativo: reative esse cadastro em vez de criar outro)"). Falha ao conferir = não grava. Documento vazio (pendente) não é conferido. Na criação a conferência roda antes de gerar o código, para não gastar número.
-
-**Banco (aplicado em produção em 31/10/2026 com o "Confirmo" do Gelson; os 4 índices conferidos como únicos e válidos):** migration `20261031140000_cadastros_documento_unico.sql` — 4 índices únicos parciais (`cnpj`/`cpf` de `clientes` e `fornecedores`, só quando o documento está preenchido). Garante a regra mesmo com dois cadastros ao mesmo tempo ou gravação fora da tela; a recusa do índice (código `23505`) vira a mesma mensagem clara. **Cadastro inativo também conta.** O código pode ir para a `main` antes ou depois dos índices (a conferência da tela funciona sozinha).
-
-Testes: +10 em `src/cadastros-nunca-excluir.test.js`.
-
-## 13. T8 (#1228) — ajustes de robustez (31/10/2026)
-
-- **Busca por CNPJ/CPF com pontuação:** digitar `12.345.678/0001-90` agora acha o cadastro (o banco grava só dígitos; a busca compara também os dígitos do termo, com 3+ dígitos). `cadCasaDocumento` em `cadastros.jsx`.
-- **Link para cadastro inexistente** (`/cadastro-clientes/<id>` ou `/cadastro-fornecedores/<id>` de cadastro excluído ou link antigo): mostra o aviso amarelo "não encontrado" com "Voltar à lista", em vez de abrir o formulário como "Novo". Se a lista também estiver incompleta, o aviso diz isso.
-- **Lead → Cliente com nome repetido:** `criarOuVincularDeLead` agora busca até 20 clientes com a mesma razão social e escolhe pelo **e-mail** do lead, depois pelos **8 últimos dígitos do telefone**, depois o **ativo**; sem desempate fica o primeiro, como antes, com aviso no console. Nunca cria um cliente a mais quando já existe o nome.
-- **Contrato de Venda (investigação, só leitura):** o Contrato **não lê `clientes`**. Ele herda o comprador do snapshot da Proposta (`propostas.data_json.cliente`, em `aplicarProposta` de `contrato-venda.jsx`). Ou seja, editar o cadastro do cliente depois de a Proposta existir **não** muda o Contrato. Não foi alterado (seria decisão do Jurídico).
-- Testes: +2 (desempate de homônimo). `cadastros.jsx` v17, `cadastros-clientes-store.js` v19.
-
-## 14. T6 (#1226) — P.I. e Embarque guardam o id do fornecedor (31/10/2026)
-
-Decisão do Gelson: **coluna nova** (não trocar o campo de texto).
-- **Banco** (migration `20261031150000_fornecedor_id_pi_embarque.sql`): `pi_importacao.fornecedor_id`, `embarques_importacao.agente_carga_id` e `embarques_importacao.empresa_desembaraco_id` (uuid → `fornecedores(id)`, `on delete restrict`). Os campos de texto continuam existindo e sendo o que a tela mostra.
-- `cadastro_vinculos` passa a contar a P.I./embarque pelo id **ou** pelo nome (o nome continua valendo para o histórico antigo).
-- **Como o id é preenchido** (`CadastrosFornecedoresStore.resolverIdPorNome`): o nome digitado tem de bater exatamente (sem acento/maiúscula/espaços extras) com a razão social ou o nome fantasia de **um único** cadastro; dois cadastros com o mesmo nome ou nome parcial = sem id (nunca chuta). Vínculo anterior que ainda bate é mantido. Falha ao ler o cadastro = mantém o id que já havia.
-- P.I. criada pelo lote de Cotações de Varejo herda o `fornecedor_id` do convite. No embarque, o agente de carga vem da cotação de frete vencedora quando há.
-- **Limite:** P.I./embarques antigos ficam sem id até serem salvos de novo (não houve carga retroativa); a tela não mostra o vínculo.
-
-## 15. T5 (#1225) — RFQ de importação liga o fornecedor ao cadastro (31/10/2026)
-
-- `rfq.jsx` (`addFornecedor`): ao adicionar, o nome é conferido no cadastro (`CadastrosFornecedoresStore.resolverPorNome`, mesma regra exata/única da T6). Casou com um cadastro → a entrada ganha `cadastro_id` + `cadastro_codigo` (VPFOR) e o selo mostra o código. Não casou (ou o cadastro não pôde ser lido) → só entra com confirmação, marcada `nome_livre: true` ("nome livre").
-- `fornecedor_id` continua sendo a chave interna da RFQ (preços e vencedor) — não foi trocada, para RFQs antigas seguirem abrindo iguais. RFQs antigas mostram "sem vínculo".
-- **Sem migration**: `rfq_importacao.fornecedores` já é jsonb e `cadastro_vinculos` já procura o id do cadastro nesse campo, então a RFQ passa a travar a exclusão do fornecedor pelo id.
-- Não é o RFQ ao fornecedor do Formulário de Elevador (área blindada), que não foi tocado.
-
-## 16. T7 (#1227) — base de fornecedores do PCP: levantamento e decisão (31/10/2026)
-
-- **Levantamento (só leitura, 31/10):** `pcp_produto_fornecedor` (colunas `codigo`, `codigo_no_fornecedor`, `fornecedor` em texto, `categoria_compra`, `cfop_entrada`; **sem CNPJ**) tem **0 linhas** e **nenhum código** em `src/` ou `supabase/functions/` lê ou grava nela. Foi criada na migration `20261002130000` e nunca entrou em uso.
-- **Decisão (Gelson pediu "faça"):** opção (a) — **deixar como está e documentar**. Não há duas bases de fornecedor ativas a ligar; criar coluna de vínculo numa tabela vazia e sem uso não muda nada. Nenhuma migration.
-- **Regra para quando o PCP passar a usar fornecedor por produto:** guardar o **id do cadastro** (`fornecedores.id`, `on delete restrict`) ao lado do nome, como P.I./Embarque (T6) e RFQ (T5), e incluir a tabela em `cadastro_vinculos`. Não criar outra lista de fornecedores.
-- Fora do escopo: o histórico de fornecedor/preço da Compras (`importacao_varejo_fornecedor`) usa o **código do Omie**, não o cadastro do hub — é cache de leitura do Omie, não cadastro.
-
-
-## 17. Benefícios recebidos de outros módulos (31/10/2026, Art. 49)
-
-- **Quem grava as colunas do Omie em `clientes`:** `omie_cadastrado_desde`, `omie_verificado_em` e `codigo_cliente_omie` (tabela 6.1, "não usadas nesta tela") são gravadas pela tela **Leads** do CRM, em `gravarOmieNoCliente` (`comercial.jsx`): encontrado grava data e código; não encontrado grava a data vazia e marca como verificado; **falha de consulta (`null`) não grava nada**. Quem mexer nessas colunas aqui deve respeitar essas três regras. Detalhe em `02_crm.md` PC-4.
-- **Quem mais cria cliente sozinho:** o lead Convertido (`criarOuVincularDeLead`, com o desempate de homônimos da T8) e o formulário público do Quadro de Comando quando o CNPJ já é cliente no Omie. Ver `02_crm.md` PC-2 e PC-3.
-- **Data pura `aaaa-mm-dd`:** nunca `new Date('aaaa-mm-dd')` (cai um dia no fuso do Brasil); use `isoParaDataBR`. Em `cadastros.jsx`, as datas conferidas hoje (`created_at`, `avaliado_em`) são timestamps completos e estão corretas; as demais **Não verificado**.
-- **Hooks antes de qualquer `return` antecipado** e **atualizar uma linha sem recarregar a tela**: padrões do CRM (ver `01_geral.md` PC-9); valem para os formulários e listas daqui.
+---
+*Documento reescrito em 31/10/2026 no molde de `01_geral.md` e `02_crm.md`. Aprovado como REAL pelo Gelson em 31/10/2026.*
