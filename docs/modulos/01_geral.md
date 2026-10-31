@@ -76,7 +76,7 @@ Tela inicial do sistema ("Visão Geral"). Mostra, para um perfil, indicadores (K
 - Tela: `src/dashboard.jsx`, função `Dashboard`, com os subcomponentes `GanttChart`, `ProjectList`, `ProjectKanban`, `ModalNovaTask`, `PipelineFunnel`, `OriginBars` e `OndeParouWidget`.
 - Dados: `window.__VP_SB.loadDashboardData(role, period)` em `src/supabase.js`, que usa os módulos puros `dashboard-metrics-comercial.js`, `-engenharia.js`, `-financeiro.js`, `-admin.js` e `-gantt.js`.
 - Menu: grupo "Geral", 1º item. Caminho do topo: Dashboard › Visão Geral. Texto do "?" e tutorial `geral/dashboard` (ver 1.1.10 sobre o tutorial).
-- URL: o projeto aberto no modal fica na URL (`useRotaId('dashboard')`); F5, link e Voltar/Avançar funcionam. Link de projeto que já saiu da esteira mostra aviso e limpa a URL.
+- URL: a visão dos Projetos em Andamento fica na URL (`useRouteTab`): `/geral/dashboard` (Gantt, padrão), `/geral/dashboard/lista`, `/geral/dashboard/kanban`. O projeto aberto no modal fica no 3º segmento (`/geral/dashboard/<visão>/<id>`); o link antigo `/geral/dashboard/<id>` (sem visão) continua abrindo o projeto. F5, link e Voltar/Avançar funcionam. Link de projeto que já saiu da esteira mostra aviso e limpa a URL. **Conferido em 31/10/2026 só por leitura do código; teste novo B.1 em `e2e/dashboard.spec.js` roda no CI.** Os demais controles (Período, Tela cheia, "+" Nova Tarefa) seguem fora da URL (estado efêmero; Período é recorte que reinicia em "Hoje").
 
 ### 1.1.3 Perfil e acesso
 - Os KPIs e as tarefas dependem do perfil: comercial, engenharia, financeiro ou admin.
@@ -153,7 +153,7 @@ Tela inicial do sistema ("Visão Geral"). Mostra, para um perfil, indicadores (K
 
 ### 1.1.9 Testes
 - 62 testes unitários em `dashboard-metrics-*.test.js` (rodados em 31/10/2026: 62 passam).
-- E2E em `e2e/dashboard.spec.js` (3 testes, Supabase simulado, nunca toca produção).
+- E2E em `e2e/dashboard.spec.js` (4 testes, o B.1 cobre as visões Gantt/Lista/Kanban na URL; Supabase simulado, nunca toca produção).
 
 ### 1.1.10 Pendências e decisões
 **Decisões do Gelson (31/10/2026)**
