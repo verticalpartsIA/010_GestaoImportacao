@@ -430,3 +430,10 @@ Decisão do Gelson: **coluna nova** (não trocar o campo de texto).
 - `fornecedor_id` continua sendo a chave interna da RFQ (preços e vencedor) — não foi trocada, para RFQs antigas seguirem abrindo iguais. RFQs antigas mostram "sem vínculo".
 - **Sem migration**: `rfq_importacao.fornecedores` já é jsonb e `cadastro_vinculos` já procura o id do cadastro nesse campo, então a RFQ passa a travar a exclusão do fornecedor pelo id.
 - Não é o RFQ ao fornecedor do Formulário de Elevador (área blindada), que não foi tocado.
+
+## 16. T7 (#1227) — base de fornecedores do PCP: levantamento e decisão (31/10/2026)
+
+- **Levantamento (só leitura, 31/10):** `pcp_produto_fornecedor` (colunas `codigo`, `codigo_no_fornecedor`, `fornecedor` em texto, `categoria_compra`, `cfop_entrada`; **sem CNPJ**) tem **0 linhas** e **nenhum código** em `src/` ou `supabase/functions/` lê ou grava nela. Foi criada na migration `20261002130000` e nunca entrou em uso.
+- **Decisão (Gelson pediu "faça"):** opção (a) — **deixar como está e documentar**. Não há duas bases de fornecedor ativas a ligar; criar coluna de vínculo numa tabela vazia e sem uso não muda nada. Nenhuma migration.
+- **Regra para quando o PCP passar a usar fornecedor por produto:** guardar o **id do cadastro** (`fornecedores.id`, `on delete restrict`) ao lado do nome, como P.I./Embarque (T6) e RFQ (T5), e incluir a tabela em `cadastro_vinculos`. Não criar outra lista de fornecedores.
+- Fora do escopo: o histórico de fornecedor/preço da Compras (`importacao_varejo_fornecedor`) usa o **código do Omie**, não o cadastro do hub — é cache de leitura do Omie, não cadastro.
