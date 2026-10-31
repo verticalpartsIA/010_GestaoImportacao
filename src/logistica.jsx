@@ -1699,7 +1699,9 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
   }, []);
   React.useEffect(() => { carregarExcluidos(); }, [carregarExcluidos]);
   const emailsVisiveis = React.useMemo(() => (perm === undefined || !meta.pronto) ? []
-    : emails.filter((e) => !excluidos.includes(e.id)).filter((e) => verOk(meta.dono[e.id] || null, (meta.atribuido || {})[e.id] || null)), [emails, excluidos, meta, perm]);
+    : emails.filter((e) => !excluidos.includes(e.id))
+      // #1213 E.2: sem saber o responsável (falha de leitura) não dá para aplicar a regra de dono — mostra tudo com aviso, nunca esconde.
+      .filter((e) => meta.erro || verOk(meta.dono[e.id] || null, (meta.atribuido || {})[e.id] || null)), [emails, excluidos, meta, perm]);
   /* 04/10 — triagem silenciosa (estilo JEV, só regras; autorizada pelo usuário): a decisão (assunto/departamento/
      prioridade/confiança) é calculada no banco e só LIDA aqui (inbox-triagem.jsx). Esconde apenas e-mail automático
      com confiança suficiente (nunca apaga; "ver tudo" devolve) e destaca o que precisa de resposta. Sem classificação,
@@ -1784,14 +1786,21 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
   const buscouParaAbrir = React.useRef(null);
   React.useEffect(() => {
     if (!idParaAbrir || perm === undefined || loading) return;
-    if (todasLinhas.some((m) => m.id === idParaAbrir)) { setFolder('all'); setActiveId(idParaAbrir); if (setSubsel) setSubsel(null); return; }
+    /* #1213 E.1: clicar numa linha já abre o e-mail (abrirEmail) e grava o id na URL — esse id volta como `subsel`.
+       Sem esta saída, o clique caía aqui e trocava a pasta para "Todos os e-mails". Este efeito é só para o id que
+       chega de fora (link direto, Voltar/Avançar, "Ver documento" da Central). */
+    if (idParaAbrir === activeId) return;
+    if (todasLinhas.some((m) => m.id === idParaAbrir)) {
+      if (!listaFiltrada.some((m) => m.id === idParaAbrir)) setFolder('all');   // só troca de pasta se a atual não mostra o e-mail
+      setActiveId(idParaAbrir); if (setSubsel) setSubsel(null); return;
+    }
     if (buscouParaAbrir.current === idParaAbrir) return;
     buscouParaAbrir.current = idParaAbrir;
     window.__VP_SB.sb.from('emails_projeto').select('assunto').eq('id', idParaAbrir).maybeSingle().then(({ data }) => {
       if (data && data.assunto) setBusca('assunto:"' + String(data.assunto).replace(/["]/g, ' ').trim() + '"');
       else { window.toast?.('Não encontrei este e-mail (pode ter sido excluído).', 'warning'); if (setSubsel) setSubsel(null); }
     });
-  }, [idParaAbrir, todasLinhas.length, perm, loading]);
+  }, [idParaAbrir, todasLinhas.length, perm, loading, activeId]);
   const nomeDe = (email) => { const p = ((perm && perm.colaboradores) || []).find((x) => String(x.email).toLowerCase() === String(email || '').toLowerCase()); return (p && p.nome) || email; };
   const pontaAtiva = active ? (ehEnviado(active) ? (active.to || []).join(',') : active.from) : '';
   const sugAtiva = (window.useSugestaoVinculo || (() => null))(active, pontaAtiva);
@@ -2364,6 +2373,11 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
               <span className="mono">{listaFiltrada.length}</span>
             </div>
           </div>
+          {meta.erro && (
+            <div className="small" style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', background: 'var(--vp-warning-tint, rgba(245,158,11,.10))' }}>
+              Não foi possível conferir o responsável dos e-mails — mostrando todos. <a href="#" onClick={(ev) => { ev.preventDefault(); if (meta.recarregar) meta.recarregar(); }}>Tentar de novo</a>
+            </div>
+          )}
           {folder === "inbox" && !buscando && window.InboxFaixaImportante && (
             <window.InboxFaixaImportante itens={importantes} ocultos={silenciosos.length} foco={foco} onToggleFoco={() => setFoco((f) => !f)} onAbrir={abrirEmail}/>
           )}
