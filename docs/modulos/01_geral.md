@@ -492,7 +492,7 @@ A caixa de e-mail compartilhada da empresa (`suporte@vpsistema.com`) dentro do s
 Em 31/10/2026 havia **133 e-mails** em `emails_projeto`: 55 de entrada e 78 de saída; 22 excluídos (só da lista), nenhum em spam, 30 sem dono. Vínculo: 2 certos, 24 prováveis e 107 sem vínculo. Por origem: cotação a fornecedor 33, cotação de varejo 16, cotação de frete 9, contrato de venda 7, projeto de instalação 2, proposta 1, respostas/avulsos 4 e 61 sem referência.
 
 ### 1.5.2 Rota e arquivos
-- Rota `inbox` → `/geral/inbox[/<id do e-mail>]?pasta=<pasta>&q=<pesquisa>`. O e-mail aberto vem no caminho (pelo `App`); pasta e pesquisa vêm da query desta tela. Trocar de pasta cria entrada no Voltar; digitar na pesquisa só substitui. As janelas de ação (Escrever, Atribuir, Pedir decisão, Extrair preço) ficam fora da URL de propósito.
+- Rota `inbox` → `/geral/inbox`, `/geral/inbox/<pasta>`, `/geral/inbox/<id do e-mail>` e `/geral/inbox/<pasta>/<id do e-mail>`, mais `?q=<pesquisa>`. **Pastas (ids):** Caixa de entrada = padrão (URL limpa), `starred` (Com estrela), `adiados`, `mine` (Atribuídos a mim), `triagem` (Sem responsável), `sent` (Enviados), `all` (Todos os e-mails), `spam` e `m:<id>` (marcador). E-mail aberto na Caixa de entrada fica em `/geral/inbox/<id>` (forma antiga, continua valendo); em outra pasta, em `/geral/inbox/<pasta>/<id>`. **Link antigo com `?pasta=` ainda abre e é regravado no formato novo.** O `App` entrega o 2º segmento como `subsel`; a tela mantém o `subsel` igual a ele (`setSubsel`) para o `App` não reescrever o endereço, e escreve o 3º segmento por conta própria. Trocar de pasta ou abrir e-mail cria entrada no Voltar; digitar na pesquisa só substitui. Pasta que a pessoa não pode ver (marcador apagado, `triagem` sem alçada, nome inventado) avisa e volta à Caixa de entrada. As janelas de ação (Escrever, Atribuir, Pedir decisão, Extrair preço) ficam fora da URL de propósito.
 - **Tela:** `EmailInbox`, `EmailBody`, `EmailNovoModal` e `InboxRespostasFormulario` em **`src/logistica.jsx`** (2.853 linhas, o mesmo arquivo da Importação/Embarques). Camadas em arquivos próprios: `inbox-triagem(.jsx/-calc.js)` (robô, atribuição, lido/estrela, sugestão de vínculo), `inbox-visibilidade.js` (quem vê o quê), `inbox-gmail.jsx` + `styles/inbox-gmail.css` (barra de pesquisa, configurações, ajuda, janela Escrever, barra de ferramentas), `inbox-busca-calc.js`, `inbox-organizar(.jsx/-calc.js)` (arquivar, suspender, spam, marcadores), `inbox-historico.jsx` (pesquisa no histórico completo), `inbox-conversas(.jsx/-calc.js)`, `inbox-decisao.jsx` (Pedir decisão), `inbox-preco(.jsx/-calc.js)` e `inbox-preco-varejo.jsx` (extrair preço), `email-envio-helper.js` (envio direto, usado por RFQ, Proposta, Contratos, Tratativas, Frete…).
 - **Edge Functions (versões em produção em 31/10/2026):** `send-email` v24, `read-inbox` v17, `sign-email-anexos` v7, `suggest-email-reply` v7. As quatro têm pasta em `supabase/functions/`.
 - Menu: grupo "Geral", 5º item, "Inbox". Tutorial `geral/inbox`.
@@ -515,6 +515,7 @@ Em 31/10/2026 havia **133 e-mails** em `emails_projeto`: 55 de entrada e 78 de s
 7. **Janela Escrever** flutuante (De, Para, Cc, Assunto, corpo, anexos).
 
 ### 1.5.5 Botões e controles
+- **Menu lateral (cada item muda a URL, ver 1.5.2):** **Escrever** (abre a janela flutuante; não mexe na URL; precisa da alçada `criar`) · Caixa de entrada (com contagem de não lidas) · Com estrela · Adiados · Atribuídos a mim · Sem responsável (só `triagem` ou `ver_todos`) · Enviados · Todos os e-mails · Spam, mais a seção Marcadores. Clicar numa pasta fecha o e-mail aberto, limpa a pesquisa e grava a pasta no endereço.
 - **Pasta/pesquisa:** operadores `de: para: assunto: cotacao: tem:anexo é:nao-lida|lida|estrela depois: antes: em: marcador: -palavra "frase"`; formulário avançado gera o mesmo texto.
 - **Barra de ferramentas:** Selecionar, Arquivar, Denunciar spam ("Não é spam"), Suspender, Mover para, Marcadores, Marcar lida/não lida, Excluir, Atualizar. Agem nas conversas marcadas ou, sem marcação, no e-mail aberto.
 - **No e-mail aberto:** Responder · Responder a todos · Encaminhar · Sugerir resposta (IA) · Vincular/desvincular a cotação · Atribuir · Pedir decisão · Extrair preço (e-mail de fornecedor ligado a cotação) · Abrir tratativas (e-mails de RFQ/Tratativa) · Excluir.
@@ -568,7 +569,7 @@ Em 31/10/2026 havia **133 e-mails** em `emails_projeto`: 55 de entrada e 78 de s
 - **Aviso de resposta no Inbox:** o gatilho que cria o alerta engole qualquer falha de propósito (`exception when others then null`), porque o alerta jamais pode impedir um e-mail de ser gravado; não troque por propagar o erro. O id é `inbox-<id do e-mail>`, no máximo um aviso por e-mail.
 
 ### 1.5.9 Testes
-- 71 testes unitários nos 6 arquivos `inbox-*.test.js` (triagem, visibilidade, busca, conversas, organizar, preço), todos passam (rodados em 31/10/2026). 9 de navegador em `e2e/inbox.spec.js`, que rodam no CI com Supabase simulado e **não rodei agora**.
+- 71 testes unitários nos 6 arquivos `inbox-*.test.js` (triagem, visibilidade, busca, conversas, organizar, preço), todos passam (rodados em 31/10/2026). 12 de navegador em `e2e/inbox.spec.js` (Supabase simulado; nunca toca produção). **Rodados em 01/11/2026 neste ambiente:** 12 de 12 passam (2 rodadas com 2 workers como no CI e 1 com 4 workers); com 4 workers, 2 rodadas deram uma falha cada, em teste diferente e na carga fria do primeiro teste de cada worker (cada um passou isolado), então há instabilidade de carga fria. Os 3 testes de URL por pasta (cada pasta, link antigo com `?pasta=`, link direto `/<pasta>/<id>`) são novos.
 - **Não exercitado de ponta a ponta:** leitura real da caixa pelo `read-inbox` depois de v17, entrega em spam/quarentena no destino, "Vincular e enviar" e o aviso pós-envio ao responsável, resposta real a "Pedir decisão" e Extrair preço com e-mail de fornecedor real.
 
 ### 1.5.10 Pendências e decisões
@@ -591,7 +592,8 @@ Achados, **sem correção** (todos registrados por sessões anteriores, nada nov
 - **04/10/2026:** triagem por regras; dono e permissões em Administração (fase 1); troca de dono, sugestão de vínculo, lido/estrela por pessoa (fase 2); layout estilo Gmail (fase 3); arquivar, suspender, spam e marcadores (4A); pesquisa no histórico (4B); conversas (4C); alerta de 2 horas úteis; Pedir decisão; Extrair preço.
 - **07/10/2026:** Tratativas ⇄ Inbox em mão dupla (bug do corpo vazio do `send-email` nas Tratativas corrigido).
 - **30/10/2026:** CC em todos os envios, correção de acentos/quebra no Outlook e Gmail (`send-email` v24, `read-inbox` v17, PR #1187).
-- **31/10/2026:** pasta e pesquisa na URL; abrir e-mail limpa a URL ao fechar.
+- **31/10/2026:** pasta e pesquisa na URL (a pasta em `?pasta=`); abrir e-mail limpa a URL ao fechar.
+- **01/11/2026:** a pasta passou para o caminho (`/geral/inbox/<pasta>[/<id>]`); só a pesquisa ficou na query; link antigo `?pasta=` segue valendo. Pedido e "Confirmo" do Gelson (área blindada); só front, sem tocar `send-email`, `read-inbox`, vínculo nem soft-delete.
 
 ---
 
