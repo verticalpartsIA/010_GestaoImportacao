@@ -81,7 +81,7 @@ Tela inicial do sistema ("Visão Geral"). Mostra, para um perfil, indicadores (K
 ### 1.1.3 Perfil e acesso
 - Os KPIs e as tarefas dependem do perfil: comercial, engenharia, financeiro ou admin.
 - **Hoje (código):** o perfil é uma escolha da interface, guardada no navegador (`localStorage "vpprd.role"`, padrão `admin`; `readLS/writeLS` prefixam `vpprd.`) e trocável pelo seletor **"Visualizando como"** do cabeçalho (`RoleSwitch`, `shell.jsx`), visível a todos. **Não vem do login:** qualquer pessoa vê os números de qualquer perfil. O mesmo perfil decide também as rotas restritas (`RESTRICTED` em `app.jsx`) e o menu: quem troca para Admin abre as rotas restritas (ver 1.4.3). `juridico` está em `RESTRICTED` mas não em `ROLE_MAP`.
-- **Decisão do Gelson (31/10/2026):** o perfil deve vir do **usuário logado** (não de uma escolha livre). Administrador continua podendo trocar de visão. **Não implementado** — a regra proposta de ligação usuário → perfil está em `2026-10-31-dashboard-kpis-por-perfil.md`, aguardando aprovação. **Em 31/10/2026 o Gelson pediu que "o que a pessoa pode ver" siga as alçadas dela (Administração › Alçadas), em vez do departamento. [Aberto — não implementado]: conferido no banco que gatear por `ver` esconderia dados de quase todos (ver 1.1.10).** Segurança real de dados continua dependendo da issue #571.
+- **Decisão do Gelson (31/10/2026):** o perfil deve vir do **usuário logado** (não de uma escolha livre). Administrador continua podendo trocar de visão. **Não implementado** — a regra proposta de ligação usuário → perfil está em `2026-10-31-dashboard-kpis-por-perfil.md`, aguardando aprovação. **Em 31/10/2026 o Gelson decidiu: o departamento escolhe o conjunto de KPIs e a alçada dá o limite do que a pessoa vê (quem não tem nenhuma alçada da tabela vê o Dashboard completo). Plano, tarefas e a Analyze estão em 1.1.10; [Aberto — não implementado], aguardando a resposta da Analyze.** Segurança real de dados continua dependendo da issue #571.
 - **Saudação (decisão do Gelson, 31/10/2026) — implementada em 31/10/2026 (mesmo dia da decisão):** o cabeçalho chama a pessoa pelo que vem **antes do `@` do e-mail do login**, cada parte separada por `.`, `_` ou `-` vira uma palavra com inicial maiúscula: `bianca@…` → "Bianca"; `almoxarifado@…` → "Almoxarifado"; `gelson.simoes@…` → "Gelson Simões". O e-mail e o cadastro (`perfis.nome`, conferido: "Gelson Simoes") não trazem acento; o acento vem do dicionário `ACENTOS` e das regras de final de palavra (-ção, -ções, -ões) em `src/dashboard-saudacao.js` (`window.DashboardSaudacao`, 5 testes unitários; e2e C.1). **Palavra fora do dicionário fica sem acento:** para acrescentar, uma linha em `ACENTOS`. Sem login (e-mail vazio ou `@localhost`) mostra "VP Gestão". O nome aparece como escrito (não mais em maiúsculas). **Conferido em 31/10/2026:** testes unitários; o e2e C.1 roda no CI.
 
 ### 1.1.4 O que a tela mostra (de cima para baixo)
@@ -186,7 +186,34 @@ Tela inicial do sistema ("Visão Geral"). Mostra, para um perfil, indicadores (K
 - *Seis regras de KPI:* nome + pergunta + fonte + período; período explícito no rótulo (estado = "agora", fluxo = usa o botão); todo KPI clicável e filtrado; sem dado = traço, não zero; meta fora do código (tabela editável); no máximo 5 KPIs por perfil.
 - *Fases:* 0 corrigir o que está errado (A receber, Contratos abertos, Propostas enviadas, período padrão 30 dias); 1 perfil pelo usuário e saudação pelo e-mail; 2 KPIs de Comercial, Financeiro, Engenharia e Diretoria; 3 perfis Logística e Importação. Cada fase é uma entrega com "Confirmo" para migration.
 
-**Visão do Dashboard pelas alçadas (pedido de 31/10/2026, [Aberto]).** Dados conferidos no banco em 31/10/2026 (34 perfis não administradores ativos), nº com a alçada `ver` do módulo de origem do cartão: `dashboard` 27, `notificacoes` 27, `ficha-tecnica` 16, `contrato-venda-equipamentos` 11, `ncm-catalogo` 9, `cotacoes-fornecedor` 8, `eng-projeto-elevadores` 7, `importacao` 6, `leads` 6, `financeiro` 4 e **`propostas` 0**. Ou seja, gatear cada cartão por `ver` esconderia, por exemplo, Faturamento, Propostas enviadas e o Pipeline de todos os não administradores, e os cartões de Prazos & Pendências de 30 de 34. Antes de implementar é preciso decidir (a) quais alçadas valem para cada cartão (hoje `propostas` usa `ver_todas`/`criar`, não `ver`), (b) o que fazer com quem não tem nenhuma, (c) se isto substitui o plano por departamento da spec `2026-10-31-dashboard-kpis-por-perfil.md`.
+**Visão do Dashboard pelas alçadas (pedido de 31/10/2026; decisões do Gelson em 31/10/2026; Specify/Clarify/Plan/Tasks/Analyze feitos, implementação aguardando a resposta da Analyze).**
+
+*Specify.* O departamento da pessoa escolhe **qual conjunto de KPIs** ela vê (perfil); a alçada dela (Administração › Alçadas) **limita** o que pode ver desse conjunto. Administrador vê tudo e continua podendo trocar de visão.
+
+*Clarify (respostas do Gelson, 31/10/2026).* (1) Tabela cartão → alçada **aprovada** (abaixo). (2) Quem não tem nenhuma das alçadas da tabela vê o Dashboard **completo**, como hoje. (3) **Departamento escolhe, alçada dá o limite.**
+
+| Cartão ou bloco | Alçada que libera |
+|---|---|
+| Leads do mês, Conversão Lead→Proposta, Conversão por Origem | `leads` › ver |
+| Propostas enviadas, Faturamento, Pipeline Comercial | `propostas` › `ver_todas` (a ação `ver` não existe) |
+| Cot. em China | `cotacoes-fornecedor` › ver |
+| Onde Parou, Projetos em Andamento, Gatilhos próx. 7d, Comissões | `financeiro` (Prazos & Pendências) › ver |
+| Embarques em trânsito | `importacao` › ver |
+| Projetos abertos (Engenharia) | `eng-projeto-elevadores` › ver |
+| Fichas técnicas / Catálogo | `ficha-tecnica` / `ncm-catalogo` › ver |
+| A receber, Contratos abertos | `contrato-venda-equipamentos` › ver |
+| Alertas críticos / Alertas engenharia | `notificacoes` › ver |
+| Tarefas de Hoje | sempre visível |
+
+*Plan.* Função pura nova `dashboard-visao-calc.js` (`window.DashboardVisao`): (a) **perfil pelo departamento** (`colaboradores_vpsistema.departamento`, por e-mail): Comercial → comercial, Engenharia → engenharia, Adm/Financeiro → financeiro, CEO → admin; **Logística, Importação/Suprimentos, Marketing, Gente & Gestão e sem departamento mantêm a visão completa de hoje** até a Fase 3 criar o conjunto deles (a spec `2026-10-31-dashboard-kpis-por-perfil.md` continua valendo para as Fases 0, 2 e 3); (b) **limite por alçada** (`alcadas_capacidade` da pessoa): cartão só aparece se ela tem a alçada da tabela; **se não tem nenhuma das alçadas da tabela, vê tudo**; (c) **falha ao ler departamento ou alçadas = visão completa** (mesma regra do Inbox; nunca esconder por erro de leitura); (d) o seletor "Visualizando como" fica só para Administrador. Sem migration e sem escrita no banco.
+
+*Tasks.* T001 `dashboard-visao-calc.js` + testes (perfil, limite, "nenhuma alçada = completo", falha = completo) · T002 `dashboard.jsx`: ler departamento e alçadas e aplicar · T003 `shell.jsx`: seletor só para Administrador · T004 aviso discreto "N cartões ocultos por falta de alçada" · T005 e2e (perfil comercial com e sem alçada, falha de leitura) · T006 este documento (1.1.3, 1.1.5, 1.1.8) e texto do "?".
+
+*Analyze (dados do banco em 31/10/2026, 34 pessoas ativas que não são administradores; Conferido por SQL).* Por departamento (pessoas · com `leads.ver` · com `propostas.ver_todas` · com `financeiro.ver` · com `importacao.ver` · sem nenhuma alçada da tabela): Logística 9 · 0 · 0 · 0 · 2 · **7**; Comercial 6 · 5 · 1 · 0 · 0 · 1; Engenharia 6 · 0 · 0 · 0 · 0 · 1; Jurídico/Importação 5 · 0 · 1 · 1 · 4 · 0; Adm/Financeiro 3 · 0 · 3 · 3 · 0 · 0; Marketing 2 · 1 · 0 · 0 · 0 · 1; Gente & Gestão 2 · 0 · 0 · 0 · 0 · 2; sem departamento 1 · 0 · 0 · 0 · 0 · 1. **12 de 34 não têm nenhuma** e continuariam com a visão completa. Achados:
+1. **Conflito entre duas decisões aprovadas:** a spec aprovada em 31/10 diz que *Onde Parou* e *Projetos em Andamento* são **blocos comuns a todos**; a tabela acima (resposta 1) os liga a `financeiro`, que só 4 pessoas têm. Aplicada a tabela, quase todos perdem esses dois blocos.
+2. **Quem tem só parte das alçadas perde os outros cartões:** ex. Comercial, 5 de 6 têm `leads.ver`, mas só 1 tem `propostas.ver_todas`; os outros 4 passariam a **não ver "Propostas enviadas"** do próprio perfil. O mesmo vale para os demais departamentos.
+3. **`propostas` não tem a ação `ver`:** a tabela usa `ver_todas` (a que existe); quem só tem `criar`/`editar` de propostas não vê esses cartões.
+4. **Conceder alçada é escrita em produção** (`alcadas_capacidade`) e só se faz com o "Confirmo" do Gelson para aquela lista de pessoas; não faz parte desta entrega.
 
 ### 1.1.11 Histórico (só o que ainda ensina)
 - **31/10/2026:** saudação pelo nome do e-mail (`DashboardSaudacao`); Gantt/Lista/Kanban com URL própria.
