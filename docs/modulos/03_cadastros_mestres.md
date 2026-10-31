@@ -396,3 +396,13 @@ Números: 1.239 clientes (134 com vínculo por id; 1.050 com código do Omie; 1 
 **T3 — feito; migration aplicada em produção em 31/10/2026 com o "Confirmo" do Gelson (sequência em 82, o próximo é VPFOR-0083; só a função usa a sequência).** `gerarCodigo()` de Fornecedores chama a RPC `gerar_codigo_fornecedor` (sequência `seq_fornecedores_codigo`, começa depois do maior código existente, hoje VPFOR-0082) e falha com erro claro, sem o antigo `VPFOR-0001` fixo. Migration `20261031130000_gerar_codigo_fornecedor.sql`. **O código só pode ir para a `main` depois da migration aplicada**: sem a função no banco, ninguém consegue cadastrar fornecedor novo.
 
 Testes: +5 em `src/cadastros-nunca-excluir.test.js` (1.005 linhas, falha no meio, média com 2 páginas, código do banco e falha sem chute). Suíte 886/886.
+
+## 12. T2 (#1222) — o mesmo CNPJ/CPF não pode ter dois cadastros (31/10/2026)
+
+**Medição no banco (só leitura):** **0** documentos repetidos. Clientes: 1.239 cadastros, 1.060 com CNPJ, 75 com CPF; fornecedores: 82 cadastros, só 3 com CNPJ. Todos gravados só com dígitos. Não há duplicata a limpar.
+
+**Código (Clientes e Fornecedores):** antes de criar ou editar, a store confere se o CNPJ/CPF já existe em outro cadastro e recusa com o código e a razão social de quem já usa ("… já está cadastrado em VPCLI-0123 — Fulano (inativo: reative esse cadastro em vez de criar outro)"). Falha ao conferir = não grava. Documento vazio (pendente) não é conferido. Na criação a conferência roda antes de gerar o código, para não gastar número.
+
+**Banco (aplicado em produção em 31/10/2026 com o "Confirmo" do Gelson; os 4 índices conferidos como únicos e válidos):** migration `20261031140000_cadastros_documento_unico.sql` — 4 índices únicos parciais (`cnpj`/`cpf` de `clientes` e `fornecedores`, só quando o documento está preenchido). Garante a regra mesmo com dois cadastros ao mesmo tempo ou gravação fora da tela; a recusa do índice (código `23505`) vira a mesma mensagem clara. **Cadastro inativo também conta.** O código pode ir para a `main` antes ou depois dos índices (a conferência da tela funciona sozinha).
+
+Testes: +10 em `src/cadastros-nunca-excluir.test.js`.

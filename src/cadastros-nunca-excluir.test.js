@@ -103,3 +103,53 @@ test('fornecedores: código vem do banco; falha não inventa VPFOR-0001', async 
   const falha = montarLeitura('cadastros-fornecedores-store.js', { paginas: [] });
   await assert.rejects(falha.CadastrosFornecedoresStore.gerarCodigo(), /gerar_codigo_fornecedor/);
 });
+
+/* T2 #1222 — documento único */
+function montarDoc(arquivo, { existente, erroBusca, erroInsert }) {
+  const chamadas = { insert: 0, update: 0, rpc: 0 };
+  const sb = {
+    rpc: async () => { chamadas.rpc += 1; return { data: 'COD-0001', error: null }; },
+    from() {
+      let op = 'select';
+      const q = {
+        select() { return q; }, eq() { return q; }, neq() { return q; }, limit() { return q; },
+        insert() { op = 'insert'; chamadas.insert += 1; return q; },
+        update() { op = 'update'; chamadas.update += 1; return q; },
+        single: async () => (op === 'insert' && erroInsert ? { data: null, error: erroInsert } : { data: { id: 'n', razao_social: 'ACME' }, error: null }),
+        then(res) { return Promise.resolve(erroBusca ? { data: null, error: { message: 'timeout' } } : { data: existente ? [existente] : [], error: null }).then(res); },
+      };
+      return q;
+    },
+  };
+  const window = { __VP_SB: { sb }, VPLog: { registrar() {} }, EnderecoAPI: undefined };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, arquivo), 'utf8'), { window, console });
+  return { window, chamadas };
+}
+const CNPJ = '11222333000181';
+for (const [arquivo, chave, extra] of [['cadastros-clientes-store.js', 'CadastrosClientesStore', {}], ['cadastros-fornecedores-store.js', 'CadastrosFornecedoresStore', { categorias: ['Fornecedor'] }]]) {
+  const form = { razao_social: 'ACME', tipo_pessoa: 'PJ', cnpj: CNPJ, ...extra };
+  test(`${chave}: CNPJ repetido não grava e diz qual cadastro usa`, async () => {
+    const { window, chamadas } = montarDoc(arquivo, { existente: { id: 'o', codigo: 'VPXX-0007', razao_social: 'Outra', ativo: false } });
+    await assert.rejects(window[chave].criar(form), /já está cadastrado em VPXX-0007.*inativo/);
+    assert.strictEqual(chamadas.insert, 0); assert.strictEqual(chamadas.rpc, 0);
+  });
+  test(`${chave}: falha ao conferir não grava`, async () => {
+    const { window, chamadas } = montarDoc(arquivo, { erroBusca: true });
+    await assert.rejects(window[chave].criar(form), /nada foi gravado/);
+    assert.strictEqual(chamadas.insert, 0);
+  });
+  test(`${chave}: editar com CNPJ de outro não grava`, async () => {
+    const { window, chamadas } = montarDoc(arquivo, { existente: { id: 'o', codigo: 'VPXX-0007', razao_social: 'Outra' } });
+    await assert.rejects(window[chave].atualizar('meu', form), /já está cadastrado/);
+    assert.strictEqual(chamadas.update, 0);
+  });
+  test(`${chave}: recusa do índice único vira mensagem clara`, async () => {
+    const { window } = montarDoc(arquivo, { erroInsert: { code: '23505', message: 'duplicate key value violates unique constraint "x_cnpj_unico"' } });
+    await assert.rejects(window[chave].criar(form), /CNPJ\/CPF já está cadastrado/);
+  });
+  test(`${chave}: sem documento não consulta e grava`, async () => {
+    const { window, chamadas } = montarDoc(arquivo, {});
+    await window[chave].criar({ ...form, cnpj: '' });
+    assert.strictEqual(chamadas.insert, 1);
+  });
+}
