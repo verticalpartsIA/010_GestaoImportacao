@@ -301,3 +301,39 @@ Vínculos lidos pelo histórico: `leads.cliente_id`, `formularios_elevador.clien
 8. Dedup Lead→Cliente é só por razão social exata (sem CNPJ no lead); homônimos reaproveitam o primeiro encontrado.
 9. Sem validação de e-mail/telefone/CEP e sem autopreenchimento por CEP nesta tela.
 10. Tutoriais (`cadastros-mestres/clientes` e `fornecedores`) e os textos de ajuda do `shell.jsx` (linhas 478–479) descrevem o comportamento atual; qualquer mudança nestas telas exige regenerar o tutorial pela sessão de tutoriais.
+
+## 8. Diagnóstico "Placa-Mãe" (fios, trilhas e componentes) — 31/10/2026
+
+Varredura read-only. Fontes citadas: `docs/MAPA_DE_ROTAS.md` (linhas 49–50: rotas `/cadastros/cadastro-clientes` e `/cadastros/cadastro-fornecedores`; linha 194) e o código. **`sobresite.md` não existe no repositório** (busca em todo o projeto); nenhuma afirmação abaixo depende dele. Estado geral: **com fios rompidos** (sem curto confirmado em produção).
+
+### 8.1 Componentes
+- **Entradas (Omie/BrasilAPI, `enderecos-api.js`)** — protegidas: `consultarCnpjOmieFirst` nunca lança, timeout de 5 s na BrasilAPI, `encontrado: null` distinto de "não cadastrado", preenchimento só de campos vazios. Risco: o Omie não devolve endereço; falha de consulta deixa salvar (decisão deliberada). CEP existe em `buscarCEP`, mas os formulários não o chamam.
+- **Entradas (Lead→Cliente, Formulário)** — `criarOuVincularDeLead` (store clientes `:204`) é idempotente; dedup só por razão social exata. Formulário usa `buscarOuCriarCliente` (`formulario-elevador-store.js:254`), que acha cliente por CNPJ/CPF e **devolve o existente sem atualizar dados** (só completa `contribuinte_icms` nulo).
+- **Diodos (CPF/CNPJ)** — `validarDocumento` é chamado no `_payload` das duas stores e em `buscarOuCriarCliente`: gravação de documento inválido/trocado é barrada. Vazio é aceito de propósito. Lacuna: não há checagem de **duplicidade** de CNPJ/CPF em `clientes` na tela nem em `fornecedores` (nenhuma migration de `unique` para essas colunas foi encontrada em `supabase/migrations`).
+- **Triacs (categorias)** — chaveamento correto via `listarAtivos(categoria)` (`contains`) em P.I., Embarques e RFQ; `listarAtivos()` sem filtro em Cotações de Varejo. Isolamento só no front.
+
+### 8.2 Trilhas de doação
+
+| Destino | Origem | Status | Observação |
+| :--- | :--- | :--- | :--- |
+| Comercial (Formulário/Proposta) | `clientes.id` (`formularios_elevador.cliente_id`) | Íntegra | Proposta assinada → `criarOuVincularDeLead` (`proposta-store.js:421–440`) |
+| Jurídico (Contrato Social) | `clientes` | Íntegra | `contratos_sociais.cliente_id`, busca em `listarTodos` |
+| Jurídico (Contrato Venda/Instalador) | `clientes` | Parcial | Instalador lê `listarTodos` (`contrato-instalador.jsx:363`); herança de dados do cliente no Contrato de Venda **não confirmada** neste escopo |
+| Suprimentos (RFQ de peças `rfq.jsx`) | `fornecedores` | **Rompida** | `addFornecedor` grava `fornecedor_id: store.novoId()` (id novo, não o do cadastro) + nome digitado (`rfq.jsx:28–38`) |
+| Cotação de elevador (Formulário/RFQ) | `fornecedores` | Íntegra por nome | `listarAtivos('Fornecedor')` (`formulario-elevador.jsx:1183`); casamento por aproximação de nome |
+| Importação (P.I., Embarque) | `fornecedores` | Parcial | `CadFornecedorDatalist` (`pi.jsx:41`) grava só **texto** (`agente_carga` no embarque, `embarques-importacao-store.js:96`); sem FK |
+| Frete (cotações) | `fornecedores` "Agente de Carga" | Íntegra | `embarques-frete-cotacoes.jsx:70,285`, guarda `fornecedor_id` |
+| PCP / Fabricação | `fornecedores` | **Rompida (inexistente)** | Nenhum arquivo de PCP/Almoxarifado lê `fornecedores`; PCP usa `pcp_produto_fornecedor` (tabela própria, `20261002130000`) |
+| Pagamentos a Instaladores | `fornecedores` | Não aplicável | Instaladores usam `parceiros_instaladores`, não `fornecedores` (não há leitura de `fornecedores` nesses arquivos) |
+
+### 8.3 Fios rompidos e curtos
+- **[Fio rompido]** `rfq.jsx:28–38`: fornecedor da RFQ identificado por id gerado + nome livre; renomear/desativar no cadastro não se reflete.
+- **[Fio rompido]** P.I./Embarque (`pi.jsx:41–52`, `embarques-importacao-store.js:96`): vínculo por texto; mudança de nome no cadastro quebra a correspondência.
+- **[Fio rompido]** PCP × `fornecedores`: sem ligação (duas bases de fornecedor).
+- **[Fio rompido]** `cadastros-fornecedores-store.js:19–27`: código `VPFOR` calculado no navegador, não atômico, com fallback fixo `VPFOR-0001`.
+- **[Fio rompido]** `cadastros-fornecedores-store.js:29–34,143–155`: sem paginação (teto de 1000 linhas do PostgREST) em `listarTodos`, `gerarCodigo` e `mediasAvaliacoes`.
+- **[Fio em curto]** `cadastros-clientes-store.js:170–177` / `cadastros.jsx:197–201`: DELETE físico de cliente; FKs (`leads`, `formularios_elevador`, `dossier_obra`, `contratos_sociais`) **não verificadas** — a trava de integridade relacional exigida deve ser conferida no banco (nesta etapa não inspecionado). Preferir `ativo = false`.
+- **[Fio em curto]** `cadastros-clientes-store.js:47–58`: `listarTodos` devolve resultado parcial em silêncio se uma página falhar.
+- **[Fio em curto]** `cadastros-clientes-store.js:216`: dedup Lead→Cliente por razão social exata; homônimos reaproveitam o primeiro.
+- **[Fio em curto]** `cadastros.jsx:205–209`: busca por CNPJ/CPF não ignora pontuação.
+- **Estado/F5:** abrir/editar/histórico refletem a URL (`useRotaId`/`useRotaItem`); id inexistente na URL abre formulário "Novo" sem aviso (`cadastros.jsx:173`).
