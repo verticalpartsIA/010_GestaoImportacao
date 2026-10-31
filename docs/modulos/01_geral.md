@@ -35,9 +35,9 @@ Regra comum: o roteador (`router.js`) usa só o 2º segmento como rota; 3º/4º 
 - "Abrir origem" navega pelo campo `alertas.rota` (preenchido pelo produtor ou, na falta, pelo trigger `trg_alertas_rota_padrao`/`alertas_rota_por_id` pelo prefixo do id). **Novo produtor de alerta com prefixo de id novo → acrescentar em `alertas_rota_por_id`.** Módulos sem rota própria caem em `ROTA_POR_MODULO`.
 - Expiração automática: cron `alertas-expirar-diario` (10:30 UTC) — `info` > 14 dias e demais > 45 dias viram `resolved = true`.
 
-### 2.3 Central de Decisões — `/geral/decisoes[/<id da decisão>[/<tipo de modal>]]`
-- `DecisoesPage({ setRoute, setSubsel })` (`decisoes.jsx:296`), `app.jsx:419`.
-- Abas **Pendentes / Decididas** vivem em `useState` (`decisoes.jsx:297`), **não** na URL; o modal de aprovar/reprovar/cancelar vem de `useRotaId('decisoes')` + `useRotaItem('decisoes', rotaId)` (linhas 307–308).
+### 2.3 Central de Decisões — `/geral/decisoes[/<id da decisão>/<tipo de modal> | /decididas[/<id>]][?tipo=&q=]`
+- `DecisoesPage({ setRoute, setSubsel })` (`decisoes.jsx`), `app.jsx:419`.
+- Desde 31/10/2026 a aba **Decididas** (`/decididas`, Pendentes deixa a URL limpa), o cartão destacado (`/decididas/<id>`), o filtro por tipo (`?tipo=`) e a busca (`?q=`) ficam na URL; o modal de aprovar/reprovar/cancelar vem de `useRotaId('decisoes')` + `useRotaItem('decisoes', rotaId)` desde 09/10.
 - Busca, filtro por tipo, atualização a cada 60 s, modal de aprovação com resumo + comentário opcional, **Cancelar** (só Administrador, motivo obrigatório), **Solicitar novamente** (reabre a MESMA linha; histórico em `contexto.reaberturas`).
 - Tipos de decisão (`decisoes-store.js`): `envio_proposta_gestor`, `envio_proposta_ceo` (CEO só quando `margemEfetivaPct < 0,15` ou desconhecida — `LIMITE_MARGEM_SEM_CEO`), `compra_equipamento_ceo`, `desconto_proposta`, varejo (`pedidos_compra_varejo`), `contratacao_mao_obra_ceo`, RH de montadores (aprovadores → Arilene), `inbox_decisao` ("Pedir decisão" a partir de um e-mail).
 - Status: `pendente`, `bloqueada`, `aprovada`, `reprovada`, `cancelada`. Reprovar cancela quem dependia (`MOTIVO_DEPENDENCIA_REPROVADA`); aprovar/reprovar são atômicos (`.eq('status','pendente')`).
@@ -200,4 +200,5 @@ Auditoria read-only seguida de correções, uma issue por tela. Cada correção 
   - O link de decisão já decidida abre "Decididas" com aviso; o de decisão não encontrada avisa; nos dois casos o modal sai da URL.
   - "Ver documento": erro na consulta da proposta e falha de rede avisam. **A navegação blindada (`setSubsel` + `setRoute`, resolução de `numero_cotacao` → id, `tabelaPagina`) não mudou**, e o teste confere que continua abrindo a proposta.
   - `criarDecisaoSeNaoExiste` usa `.is` para cotação nula e pega a primeira existente.
+  - (31/10/2026, item 3 do prompt de debug: F5 e link; área blindada, autorizado pelo Gelson) Aba, tipo e busca na URL (`/geral/decisoes/decididas?tipo=&q=`). Link de decisão já decidida (`/<id>/aprovar` antigo ou `/decididas/<id>`) abre "Decididas", rola até o cartão e o destaca por 4 s; id que não está nas decididas avisa e fica só na aba. Nenhum id é a palavra "decididas" (uuid), então os links antigos valem. **"Ver documento", os modais e `setSubsel`+`setRoute` não mudaram** (o teste do caminho feliz continua passando).
   - Falha ao ler as alçadas de decisão mantém os aprovadores gravados.

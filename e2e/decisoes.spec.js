@@ -53,13 +53,14 @@ test('C.1 — o histórico é filtrado por pessoa no banco (antes do limite)', a
   expect(u).toContain('aprovadores_esperados.cs.{"' + EU + '"}');
 });
 
-test('C.2 — link de decisão já decidida avisa, abre "Decididas" e limpa o modal da URL', async ({ page }) => {
+test('C.2 — link de decisão já decidida avisa, abre "Decididas" com o cartão destacado e tira o modal da URL', async ({ page }) => {
   const erros = coletarErros(page);
   await preparar(page, {});
   await page.goto('/geral/decisoes/' + DEC + '/aprovar');
   await expect(page.getByText(/Esta decisão já foi decidida/)).toBeVisible({ timeout: 45_000 });
   await expect(page.getByText('Cliente Decidido')).toBeVisible();
-  await expect(page).toHaveURL(/\/geral\/decisoes\/?$/);
+  await expect(page).toHaveURL(new RegExp('/geral/decisoes/decididas/' + DEC + '$'));
+  await expect(page.locator('#decisao-' + DEC + '[data-destacada="1"]')).toBeVisible();
   expect(erros).toEqual([]);
 });
 
@@ -91,4 +92,35 @@ test('Ver documento (área blindada) continua abrindo a proposta da cotação', 
   await expect(page.getByText('Cliente Pendente')).toBeVisible({ timeout: 45_000 });
   await page.getByRole('button', { name: 'Ver documento' }).first().click();
   await expect(page).toHaveURL(/\/proposta-editor\/prop-e2e-9101/);
+});
+
+test('URL — aba, tipo e busca sobrevivem ao F5; link de decidida destaca o cartão', async ({ page }) => {
+  const erros = coletarErros(page);
+  await preparar(page, {});
+  await page.goto('/geral/decisoes');
+  await expect(page.getByText('Cliente Pendente')).toBeVisible({ timeout: 45_000 });
+
+  await page.getByRole('button', { name: /^Decididas/ }).click();
+  await expect(page).toHaveURL(/\/geral\/decisoes\/decididas$/);
+  await page.locator('select.input').selectOption('envio_proposta_gestor');
+  await page.getByPlaceholder('Buscar cotação, cliente, pessoa…').fill('9102');
+  await expect(page).toHaveURL(/\/geral\/decisoes\/decididas\?.*tipo=envio_proposta_gestor/);
+  await expect(page).toHaveURL(/q=9102/);
+
+  await page.reload();
+  await expect(page.getByText('Cliente Decidido')).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByText('Cliente Pendente')).toHaveCount(0);
+  await expect(page.locator('select.input')).toHaveValue('envio_proposta_gestor');
+  await expect(page.getByPlaceholder('Buscar cotação, cliente, pessoa…')).toHaveValue('9102');
+
+  await page.getByRole('button', { name: /^Pendentes/ }).click();
+  await expect(page).toHaveURL(/\/geral\/decisoes\?.*tipo=envio_proposta_gestor/);
+
+  await page.goto('/geral/decisoes/decididas/' + DEC);
+  await expect(page.locator('#decisao-' + DEC + '[data-destacada="1"]')).toBeVisible({ timeout: 45_000 });
+
+  await page.goto('/geral/decisoes/decididas/cccccccc-cccc-4ccc-8ccc-cccccccccccc');
+  await expect(page.getByText(/Decisão não encontrada entre as decididas/)).toBeVisible({ timeout: 45_000 });
+  await expect(page).toHaveURL(/\/geral\/decisoes\/decididas$/);
+  expect(erros).toEqual([]);
 });

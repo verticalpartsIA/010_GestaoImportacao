@@ -270,7 +270,6 @@ São abas de formulário/modal, filtros, modos de visualização e passos de ass
 | `analise-tecnica.jsx:7` | AnaliseTecnicaWizard | `step` | `0` | (modal/componente interno) |
 | `comercial.jsx:643` | LeadsPage | `view` | `"lista"` | `leads` |
 | `cotacoes-fornecedor.jsx:76` | CotacoesFornecedorPage | `tab` | `'todos'` | `cotacoes-fornecedor` |
-| `decisoes.jsx:302` | DecisoesPage | `aba` | `'pendentes'` | `decisoes` |
 | `decisoes.jsx:306` | DecisoesPage | `modoAdmin` | `false` | `decisoes` |
 | `dossier-obra.jsx:939` | TermoEntregaPanel | `modo` | `'self_service'` | `dossier-obra`, `status-obras` |
 | `dossier-obra.jsx:1622` | FormAdicionarItemTemplate | `etapa` | `''` | `dossier-obra`, `status-obras` |

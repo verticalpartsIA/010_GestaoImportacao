@@ -152,7 +152,7 @@ function DecModalCancelar({ decisao, onClose, onSaved }) {
 const DEC_STATUS_LABEL = { pendente: 'Pendente', bloqueada_por_dependencia: 'Bloqueada', aprovada: 'Aprovada', reprovada: 'Reprovada', cancelada: 'Cancelada' };
 const DEC_STATUS_COR = { aprovada: 'var(--vp-success, #1a7f37)', reprovada: 'var(--vp-danger, #c62828)', cancelada: 'var(--fg3)' };
 
-function DecCard({ decisao, onReload, setRoute, setSubsel, modoAdmin, historico, modalAberto, onAbrirModal, onFecharModal }) {
+function DecCard({ decisao, onReload, setRoute, setSubsel, modoAdmin, historico, modalAberto, onAbrirModal, onFecharModal, destacado }) {
   // Qual modal (aprovar/reprovar/cancelar) está aberto vem da URL
   // (/geral/decisoes/<id>/<tipo>) — ver DecisoesPage. Antes era só useState
   // local, então abrir um modal nunca aparecia no endereço do navegador.
@@ -255,7 +255,8 @@ function DecCard({ decisao, onReload, setRoute, setSubsel, modoAdmin, historico,
   if (solicitante) linhas.push(`Pedido por ${solicitante}`);
 
   return (
-    <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 6, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+    <div id={'decisao-' + decisao.id} data-destacada={destacado ? '1' : undefined}
+      style={{ background: '#fff', border: destacado ? '2px solid var(--vp-yellow, #f5c400)' : '1px solid var(--border)', boxShadow: destacado ? '0 0 0 4px rgba(245,196,0,.25)' : 'none', transition: 'box-shadow .4s, border-color .4s', borderRadius: 6, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
       <div style={{ flex: 1, minWidth: 240 }}>
         <div className="up-eyebrow muted">{window.DecisoesStore.TIPO_LABEL[decisao.tipo] || decisao.tipo}</div>
         <div style={{ fontSize: 15, fontWeight: 800 }}>{titulo}</div>
@@ -299,20 +300,34 @@ function DecCard({ decisao, onReload, setRoute, setSubsel, modoAdmin, historico,
 }
 
 function DecisoesPage({ setRoute, setSubsel }) {
-  const [aba, setAba] = React.useState('pendentes');
   const [pendentes, setPendentes] = React.useState(null);
   const [decididas, setDecididas] = React.useState(null);
   const [erro, setErro] = React.useState(false);
   const [modoAdmin, setModoAdmin] = React.useState(false);
-  const [busca, setBusca] = React.useState('');
-  const [tipo, setTipo] = React.useState('');
-  // Modal aberto (aprovar/reprovar/cancelar) de uma decisão específica,
-  // refletido na URL (/geral/decisoes/<id da decisão>/<tipo>) — antes
-  // ficava só em useState dentro de cada DecCard, sem aparecer no endereço.
+  /* URL da tela (31/10/2026, F5 e link compartilhado):
+       /geral/decisoes                         aba Pendentes
+       /geral/decisoes/<id>/<modal>            modal aprovar/reprovar/cancelar de uma pendente (desde 09/10)
+       /geral/decisoes/decididas[/<id>]        aba Decididas; com id, rola até o cartão e o destaca
+       ?tipo=<tipo>&q=<busca>                  filtros (valem nas duas abas)
+     Nenhum id de decisão é a palavra "decididas" (são uuid), então os links antigos continuam valendo.
+     "Ver documento" (área blindada) não passa por aqui. */
+  const [busca, setBusca] = window.useQueryParam('q', '');
+  const [tipo, setTipo] = window.useQueryParam('tipo', '');
   const [rotaId] = window.useRotaId('decisoes');
-  const [tipoModal] = window.useRotaItem('decisoes', rotaId);
-  const abrirModalDecisao = (decisaoId, tipo) => { if (window.VpRouter) window.VpRouter.navigate('decisoes', decisaoId, tipo); };
-  const fecharModalDecisao = () => { if (window.VpRouter) window.VpRouter.navigate('decisoes', null); };
+  const [itemRota] = window.useRotaItem('decisoes', rotaId);
+  const aba = rotaId === 'decididas' ? 'decididas' : 'pendentes';
+  const tipoModal = aba === 'pendentes' ? itemRota : '';
+  const destaqueId = aba === 'decididas' ? itemRota : '';
+  // navigate() troca só o caminho: devolve ?tipo=&q= depois de cada troca.
+  const irDecisoes = (id, item, opts) => {
+    if (!window.VpRouter) return;
+    const query = window.location.search;
+    window.VpRouter.navigate('decisoes', id || null, item || null, opts);
+    if (query) { try { window.history.replaceState(window.history.state, '', window.location.pathname + query); } catch (_) { /* segue sem os filtros */ } }
+  };
+  const setAba = (a) => irDecisoes(a === 'decididas' ? 'decididas' : null, null);
+  const abrirModalDecisao = (decisaoId, tipo) => irDecisoes(decisaoId, tipo);
+  const fecharModalDecisao = () => irDecisoes(null, null);
 
   /* "Ver tudo" pra Administrador — pedido explícito do usuário (criador do
      site): precisa entender/instruir qualquer decisão do sistema, mesmo
@@ -337,17 +352,36 @@ function DecisoesPage({ setRoute, setSubsel }) {
   const avisouRota = React.useRef(null);
   React.useEffect(() => {
     if (!rotaId || pendentes === null || decididas === null || erro) return;
+    if (rotaId === 'decididas') {
+      // /decididas/<id>: o cartão destacado precisa existir em "Decididas"; senão avisa e fica só na aba.
+      if (!destaqueId || (decididas || []).some((d) => String(d.id) === destaqueId)) return;
+      if (avisouRota.current === destaqueId) return;
+      avisouRota.current = destaqueId;
+      window.toast?.('Decisão não encontrada entre as decididas (pode ter sido cancelada ou não é para você).', 'warning');
+      irDecisoes('decididas', null, { replace: true });
+      return;
+    }
     if ((pendentes || []).some((d) => String(d.id) === rotaId)) return;
     if (avisouRota.current === rotaId) return;
     avisouRota.current = rotaId;
     if ((decididas || []).some((d) => String(d.id) === rotaId)) {
-      setAba('decididas');
       window.toast?.('Esta decisão já foi decidida — veja em "Decididas".', 'info');
-    } else {
-      window.toast?.('Decisão não encontrada entre as suas (pode ter sido cancelada ou não é para você decidir).', 'warning');
+      irDecisoes('decididas', rotaId, { replace: true });   // abre "Decididas" com o cartão dela destacado
+      return;
     }
+    window.toast?.('Decisão não encontrada entre as suas (pode ter sido cancelada ou não é para você decidir).', 'warning');
     fecharModalDecisao();
-  }, [rotaId, pendentes, decididas, erro]);
+  }, [rotaId, destaqueId, pendentes, decididas, erro]);
+  /* Destaque do cartão vindo do link: rola até ele e o realça por alguns segundos (o link continua apontando para ele). */
+  const [realce, setRealce] = React.useState('');
+  React.useEffect(() => {
+    if (!destaqueId || decididas === null) return;
+    if (!(decididas || []).some((d) => String(d.id) === destaqueId)) return;
+    setRealce(destaqueId);
+    const t1 = setTimeout(() => document.getElementById('decisao-' + destaqueId)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60);
+    const t2 = setTimeout(() => setRealce(''), 4000);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [destaqueId, decididas]);
   /* Atualiza sozinha: a cada 60 s e ao voltar para a aba do navegador (decisão nova de outra pessoa aparece sem F5). */
   React.useEffect(() => {
     const t = setInterval(() => { if (!document.hidden) reload(); }, 60000);
@@ -416,6 +450,7 @@ function DecisoesPage({ setRoute, setSubsel }) {
           {lista.map((d) => (
             <DecCard key={d.id} decisao={d} onReload={reload} setRoute={setRoute} setSubsel={setSubsel} modoAdmin={modoAdmin} historico={historico}
               modalAberto={rotaId === String(d.id) ? tipoModal : null}
+              destacado={historico && realce === String(d.id)}
               onAbrirModal={(tipo) => abrirModalDecisao(d.id, tipo)}
               onFecharModal={fecharModalDecisao}/>
           ))}
