@@ -58,6 +58,16 @@ const COMISSAO_PADRAO_PCT = 2;
 const comissaoDoLead = (lead) => (lead && lead.comissao_pct != null && Number.isFinite(Number(lead.comissao_pct)) ? Number(lead.comissao_pct) : COMISSAO_PADRAO_PCT);
 const LEAD_STATUSES = ['Em qualificação', 'Aguardando cotação', 'Proposta enviada', 'Negociação', 'Convertido', 'Sem retorno'];
 
+/* Link do WhatsApp (wa.me) — fonte única (Leads/Detalhe/Canais, issue #1202). Até 11 dígitos = número do Brasil sem DDI
+   (prefixa 55); 12+ dígitos já trazem o DDI (inclusive número estrangeiro) e ficam como estão. Sem telefone → null. */
+function waLink(phone, nome) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return null;
+  const numero = digits.length <= 11 ? '55' + digits : digits;
+  const msg = encodeURIComponent('Olá' + (nome ? ' ' + nome : '') + ', tudo bem? Aqui é da VerticalParts.');
+  return 'https://wa.me/' + numero + '?text=' + msg;
+}
+
 /* "Está no Omie desde" (26/09) — a data pertence ao CLIENTE (CNPJ/CPF),
    guardada em clientes.omie_cadastrado_desde (+ codigo_cliente_omie,
    omie_verificado_em). Grava o resultado de uma consulta ao Omie:
@@ -779,6 +789,8 @@ function LeadsPage({ setRoute, setSubsel }) {
 
   const stats = {
     total: allLeads.length,
+    // "Leads ativos" = em aberto: os convertidos já moram em Cadastros › Clientes e a lista "Em aberto" os esconde (issue #1202).
+    abertos: allLeads.filter(l => l.status !== "Convertido").length,
     qualif: allLeads.filter(l => l.status === "Em qualificação").length,
     proposta: allLeads.filter(l => l.status === "Proposta enviada").length,
     // pipeline = só o que ainda está em aberto (Convertido e Sem retorno já saíram do funil — issue #663)
@@ -806,7 +818,7 @@ function LeadsPage({ setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>CRM · Leads</div>
           <h1 className="page-head__title">Pipeline de Leads</h1>
-          <p className="page-head__sub">{allLeads.length} leads ativos · pipeline {fmtBRL(stats.valor)} · {stats.convertidos} convertido{stats.convertidos === 1 ? "" : "s"} ({stats.total ? Math.round((stats.convertidos / stats.total) * 100) : 0}%)</p>
+          <p className="page-head__sub">{stats.abertos} leads em aberto · pipeline {fmtBRL(stats.valor)} · {stats.convertidos} convertido{stats.convertidos === 1 ? "" : "s"} ({stats.total ? Math.round((stats.convertidos / stats.total) * 100) : 0}%)</p>
         </div>
         <div className="page-head__r">
           <div className="seg" role="group" aria-label="Modo de visualização">
@@ -823,7 +835,7 @@ function LeadsPage({ setRoute, setSubsel }) {
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
         {/* Sem "variação" inventada: não há comparação com mês anterior nesta tela (issue #663). */}
-        <KPI label="Leads ativos" value={stats.total} sub="no total" icon="flag"/>
+        <KPI label="Leads ativos" value={stats.abertos} sub="em aberto" icon="flag"/>
         <KPI label="Em qualificação" value={stats.qualif} sub="em avaliação" icon="zap"/>
         <KPI label="Propostas no ar" value={stats.proposta} sub="aguardando o cliente" icon="fileText"/>
         <KPI label="Valor pipeline" value={fmtBRL(stats.valor)} sub="em aberto" icon="dollar"/>
@@ -834,7 +846,7 @@ function LeadsPage({ setRoute, setSubsel }) {
           <>
             <div className="seg">
               {statuses.map(s => (
-                <button key={s} className={status === s ? "is-active" : ""} onClick={() => setStatus(s)}
+                <button key={s} className={status === s ? "is-active" : ""} onClick={() => { setStatus(s); setPage(0); }}
                   title={s === "Todos" ? "Leads em aberto — os convertidos já estão em Cadastros › Clientes (use o filtro Convertido para ver o histórico)" : undefined}>{s === "Todos" ? "Em aberto" : s}</button>
               ))}
             </div>
@@ -853,7 +865,7 @@ function LeadsPage({ setRoute, setSubsel }) {
         <div className="spacer"/>
         <div className="search">
           <Icon.search size={12} color="var(--fg3)"/>
-          <input placeholder="Buscar prédio, contato…" value={search} onChange={(e) => setSearch(e.target.value)}/>
+          <input placeholder="Buscar prédio, contato…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }}/>
         </div>
       </div>
 
@@ -1091,6 +1103,11 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
     return () => { alive = false; };
   }, [lead.cliente_id]);
 
+  const abrirWhatsApp = () => {
+    const link = waLink(lead.phone, lead.contact);
+    link ? window.open(link, '_blank', 'noopener') : window.toast('Telefone não cadastrado.', 'warning');
+  };
+
   const abrirFormulario = () => {
     setSubsel({ __prefillFromLead: lead });
     setRoute('formulario-elevador');
@@ -1217,7 +1234,7 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
           </div>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="message" onClick={() => { const p0 = (lead.phone || '').replace(/\D/g,''); const p = (p0.length > 11 && p0.startsWith('55')) ? p0.slice(2) : p0; p ? window.open('https://wa.me/55'+p,'_blank') : window.toast('Telefone não cadastrado.','warning'); }}>WhatsApp</Button>
+          <Button variant="outline" icon="message" onClick={abrirWhatsApp}>WhatsApp</Button>
           <Button variant="outline" icon="mail" onClick={() => { lead.email ? window.open('mailto:'+lead.email) : window.toast('Email não cadastrado.','warning'); }}>Email</Button>
           <Button variant="outline" icon="edit" onClick={() => setShowEditLead(true)}>Editar Lead</Button>
           <Button variant="outline" icon="ruler" onClick={abrirFormulario}>Abrir Formulário</Button>
@@ -1293,7 +1310,7 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
             <KvBlock label="Telefone" value={lead.phone} mono/>
             <KvBlock label="Email" value={lead.email} mono/>
             <div className="row gap-2" style={{ marginTop: 14 }}>
-              <Button variant="secondary" size="sm" icon="message" onClick={() => { const p0 = (lead.phone || '').replace(/\D/g,''); const p = (p0.length > 11 && p0.startsWith('55')) ? p0.slice(2) : p0; p ? window.open('https://wa.me/55'+p,'_blank') : window.toast('Telefone não cadastrado.','warning'); }}>WhatsApp</Button>
+              <Button variant="secondary" size="sm" icon="message" onClick={abrirWhatsApp}>WhatsApp</Button>
               <Button variant="outline" size="sm" icon="mail" onClick={() => { lead.email ? window.open('mailto:'+lead.email) : window.toast('Email não cadastrado.','warning'); }}>Email</Button>
             </div>
           </Card>
@@ -1407,4 +1424,4 @@ function FormulariosPage({ setRoute, setSubsel }) {
   );
 }
 
-Object.assign(window, { LeadsPage, LeadDetail, comercialSb, LEAD_STATUSES });
+Object.assign(window, { LeadsPage, LeadDetail, comercialSb, LEAD_STATUSES, waLink });
