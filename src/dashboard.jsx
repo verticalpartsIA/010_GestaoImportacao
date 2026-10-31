@@ -244,7 +244,8 @@ function Dashboard({ role, setRoute, setSubsel }) {
   }, [rotaProjetoId, loading, sbData, falhou, detalheProjeto]);
 
   const u         = (window.ROLE_MAP || {})[role] || { name: 'VP Gestão', initials: 'VP', title: 'Sistema' };
-  const firstName = (u.name || 'Usuário').split(" ")[0];
+  // Saudação pelo e-mail do login (gelson.simoes@… → "Gelson Simões"); sem login, "VP Gestão" (docs/modulos/01_geral.md 1.1.3).
+  const nomeSaudacao = window.DashboardSaudacao ? window.DashboardSaudacao.nomeDaSaudacao((window.__VP_USER || {}).email) : ((u.name || 'VP Gestão'));
   const hour      = new Date().getHours();
   const greet     = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
 
@@ -260,7 +261,7 @@ function Dashboard({ role, setRoute, setSubsel }) {
             <span className="vp-rule" style={{ display: "inline-block", width: 24, height: 3, background: "var(--vp-yellow)" }}/>
             Dashboard {role}
           </div>
-          <h1 className="page-head__title">{greet}, {firstName.toUpperCase()}.</h1>
+          <h1 className="page-head__title">{greet}, {nomeSaudacao}.</h1>
           <p className="page-head__sub">
             {!sbData
               ? <>{dateLabel}. {falhou ? 'Não foi possível carregar seus números agora.' : demorando ? 'Ainda carregando seus números — o banco está demorando…' : 'Carregando seus números…'}</>
