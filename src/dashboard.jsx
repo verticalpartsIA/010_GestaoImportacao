@@ -172,7 +172,17 @@ function ModalNovaTask({ role, onClose, onSaved }) {
   );
 }
 
-function Dashboard({ role, setRoute, setSubsel }) {
+function Dashboard({ role: roleEscolhido, setRoute, setSubsel }) {
+  /* Quem vê o quê (decisão do Gelson, 31/10/2026; docs/modulos/01_geral.md 1.1.10): o departamento da pessoa escolhe o
+     conjunto de KPIs e a alçada dela dá o limite. Administrador escolhe a visão; falha de leitura = visão completa. */
+  const dadosVisao = window.DashboardVisaoStore ? window.DashboardVisaoStore.useVisao() : { pronto: true, semDados: true };
+  const DV = window.DashboardVisao;
+  const role = dadosVisao && DV
+    ? DV.perfilEfetivo({ ehAdmin: dadosVisao.ehAdmin, departamento: dadosVisao.departamento, escolhido: roleEscolhido, semDados: dadosVisao.semDados })
+    : (dadosVisao ? roleEscolhido : null);
+  const visao = dadosVisao && DV
+    ? DV.visao({ ehAdmin: dadosVisao.ehAdmin, semDados: dadosVisao.semDados, caps: dadosVisao.caps })
+    : { limitado: false, pode: () => true };
   const [sbData, setSbData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   // Visão dos Projetos em Andamento na URL: /geral/dashboard (Gantt, padrão), /geral/dashboard/lista, /geral/dashboard/kanban.
@@ -200,6 +210,7 @@ function Dashboard({ role, setRoute, setSubsel }) {
   const cargaRef = React.useRef(0);
   const carregadoEm = React.useRef(0);
   const reloadDashboard = React.useCallback(() => {
+    if (!role) return Promise.resolve();   // ainda lendo departamento e alçadas
     if (!window.__VP_SB) { setLoading(false); return Promise.resolve(); }
     const minha = ++cargaRef.current;
     const atual = () => minha === cargaRef.current;
@@ -226,17 +237,22 @@ function Dashboard({ role, setRoute, setSubsel }) {
     return () => document.removeEventListener('visibilitychange', vis);
   }, [reloadDashboard]);
 
-  const kpis        = sbData?.kpis?.[role] || [];
+  const kpisTodos   = sbData?.kpis?.[role] || [];
+  const filtrados   = DV ? DV.filtrarCartoes(kpisTodos, visao) : { visiveis: kpisTodos, ocultos: 0 };
+  const kpis        = filtrados.visiveis;
+  const verBloco    = (b) => (DV ? DV.blocoVisivel(b, visao) : true);
+  const blocosOcultos = ['pipeline', 'origem', 'ondeParou', 'projetos'].filter((b) => !verBloco(b)).length;
+  const totalOcultos = filtrados.ocultos + blocosOcultos;
   const tasks       = sbData?.tarefas || [];
   const projetos    = sbData?.ganttProjetos || [];
   const alertasCrit = sbData?.alertasCriticos ?? 0;
-  const detalheProjeto = rotaProjetoId ? projetos.find((p) => String(p.id) === rotaProjetoId) || null : null;
+  const detalheProjeto = rotaProjetoId && verBloco('projetos') ? projetos.find((p) => String(p.id) === rotaProjetoId) || null : null;
   const errosCarga = (sbData && sbData.erros) || [];
   /* #1216 A.4: link /geral/dashboard/<id> de projeto que não está (mais) na esteira — avisa e limpa a URL, em vez de
      não abrir nada sem explicação. Só depois de a carga terminar (antes disso a lista ainda está vazia). */
   const avisouSemProjeto = React.useRef(null);
   React.useEffect(() => {
-    if (!rotaProjetoId || loading || !sbData || falhou || detalheProjeto) return;
+    if (!rotaProjetoId || loading || !sbData || falhou || detalheProjeto || !verBloco('projetos')) return;
     if (avisouSemProjeto.current === rotaProjetoId) return;
     avisouSemProjeto.current = rotaProjetoId;
     window.toast?.('Este projeto não está mais entre os projetos em andamento.', 'warning');
@@ -298,6 +314,11 @@ function Dashboard({ role, setRoute, setSubsel }) {
           <Button variant="outline" size="sm" onClick={reloadDashboard} disabled={loading}>Tentar novamente</Button>
         </div>
       )}
+      {visao.limitado && totalOcultos > 0 && (
+        <div className="small muted" style={{ marginBottom: 12 }} data-testid="dash-ocultos">
+          {totalOcultos} cartão{totalOcultos !== 1 ? 'ões' : ''}/bloco{totalOcultos !== 1 ? 's' : ''} oculto{totalOcultos !== 1 ? 's' : ''} por falta de alçada. Peça ao administrador em Administração › Alçadas.
+        </div>
+      )}
       <div className="grid-5" style={{ marginBottom: 20 }}>
         {kpis.map((k, i) => (
           <KPI key={i} {...k}
@@ -308,7 +329,7 @@ function Dashboard({ role, setRoute, setSubsel }) {
       </div>
 
       <div className="split" style={{ marginBottom: 20 }}>
-        <Card title="Projetos em Andamento" sub={projetos.length + " projetos · 5 fases · timeline 200 dias"}
+        {verBloco('projetos') && <Card title="Projetos em Andamento" sub={projetos.length + " projetos · 5 fases · timeline 200 dias"}
           action={<>
             <div className="seg">
               <button className={projectView === 'gantt'  ? 'is-active' : ''} onClick={() => setProjectView('gantt')}>Gantt</button>
@@ -326,7 +347,7 @@ function Dashboard({ role, setRoute, setSubsel }) {
           {projectView === 'gantt'  && <GanttChart projetos={projetos} onClick={abrirProjeto} today={sbData?.ganttToday ?? 60}/>}
           {projectView === 'lista'  && <ProjectList projetos={projetos} onClick={abrirProjeto}/>}
           {projectView === 'kanban' && <ProjectKanban projetos={projetos} onClick={abrirProjeto}/>}
-        </Card>
+        </Card>}
 
         <Card title="Tarefas de Hoje" sub={tasks.length + " pendentes"} action={<Button variant="ghost" size="sm" icon="plus" onClick={() => setShowTask(true)}/>}>
           <div className="stack">
@@ -370,13 +391,13 @@ function Dashboard({ role, setRoute, setSubsel }) {
       )}
 
       <div className="grid-3">
-        <Card title="Pipeline Comercial" sub="acumulado">
+        {verBloco('pipeline') && <Card title="Pipeline Comercial" sub="acumulado">
           <PipelineFunnel stages={sbData?.pipelineStages}/>
-        </Card>
-        <Card title="Conversão por Origem" sub="leads marcados como Convertido">
+        </Card>}
+        {verBloco('origem') && <Card title="Conversão por Origem" sub="leads marcados como Convertido">
           <OriginBars data={sbData?.originBars}/>
-        </Card>
-        <OndeParouWidget gatilhos={sbData?.gatilhos || []} setRoute={setRoute} setSubsel={setSubsel}/>
+        </Card>}
+        {verBloco('ondeParou') && <OndeParouWidget gatilhos={sbData?.gatilhos || []} setRoute={setRoute} setSubsel={setSubsel}/>}
       </div>
     </div>
   );
