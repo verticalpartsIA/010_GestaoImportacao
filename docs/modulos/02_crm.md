@@ -1,6 +1,6 @@
 # Módulo CRM — especificação técnica
 
-> Mapeamento read-only feito em 30/10/2026 a partir de `src/comercial.jsx`, `src/crm.jsx`, `src/shell.jsx`, `src/app.jsx` e `src/router.js`. Nenhum código da aplicação foi alterado. Complementa as seções do `CLAUDE.md` sobre Leads (26/09, 04/10/2026).
+> Atualizado em 31/10/2026: as correções do diagnóstico (#1200–#1203) já estão em `main`; ver seção 7. Mapeamento read-only feito em 30/10/2026 a partir de `src/comercial.jsx`, `src/crm.jsx`, `src/shell.jsx`, `src/app.jsx` e `src/router.js`. Nenhum código da aplicação foi alterado. Complementa as seções do `CLAUDE.md` sobre Leads (26/09, 04/10/2026).
 
 ## 1. Visão geral
 
@@ -52,19 +52,21 @@ Status (`LEAD_STATUSES`, fonte única de campo, filtros, Kanban e Análise):
 
 ## 5. Mapeamento de telas, rotas e botões
 
-**Leads** — lista com busca, filtros por status/prioridade, indicadores, Kanban por `LEAD_STATUSES` (arrastar muda status), colunas incluindo "Está no Omie desde", botão Novo Lead, Exportar, lixeira por linha. Clique na linha: `setSubsel(l); setRoute('lead-detail')`.
+**Leads** — lista com busca, filtros por status/responsável, indicadores, Kanban por `LEAD_STATUSES` (arrastar muda status), colunas incluindo "Está no Omie desde", botão Novo Lead, Exportar, lixeira por linha. Clique na linha: `setSubsel(l); setRoute('lead-detail')`. Trocar status, responsável ou busca volta à página 1. O KPI "Leads ativos" e o subtítulo contam só os leads **em aberto** (sem Convertido, que moram em Cadastros › Clientes); a taxa de conversão continua sobre o total. Mover card no Kanban confere a gravação (`.select('id')`, 0 linhas = erro) e reverte o card se falhar.
 
-**Detalhe do Lead** — a URL `/crm/lead-detail/<id>` é resolvida por `ASYNC_FETCH_ROUTES['lead-detail']` (`app.jsx`), que busca o lead por id (deep-link e F5 funcionam). Ações: Voltar (`setRoute('leads')`), Editar, abrir Formulário, "Qualificar → Dossier"/"Abrir Dossier", histórico (`vp_logs`), cliente vinculado, card de especificação técnica (quando há), comissão prevista.
+**Detalhe do Lead** — a URL `/crm/lead-detail/<id>` é resolvida por `ASYNC_FETCH_ROUTES['lead-detail']` (`app.jsx`), que busca o lead por id (deep-link e F5 funcionam). Ações: Voltar (`setRoute('leads')`), Editar, abrir Formulário, "Qualificar → Dossier"/"Abrir Dossier" (a consulta usa `limit(1)`: com 2+ dossiês abre o primeiro; se a consulta falhar, não cria nada), histórico (`vp_logs`, recarrega depois de editar), cliente vinculado, card de especificação técnica (quando há), comissão prevista.
 
-**Canais** — leads com telefone ou e-mail; botão WhatsApp abre `wa.me` (sem DDI assume 55) com mensagem pronta; e-mail não é enviado aqui (Inbox cuida). Clique na linha abre o detalhe. Escopo decidido em 26/09/2026: só e-mail e WhatsApp.
+**Canais** — leads com telefone ou e-mail; botão WhatsApp abre `wa.me` pelo helper único `waLink` (definido em `comercial.jsx`, exposto em `window`; até 11 dígitos prefixa 55, 12+ ficam como estão) com mensagem pronta — o detalhe do lead usa o mesmo helper; e-mail não é enviado aqui (Inbox cuida). Clique na linha abre o detalhe. Escopo decidido em 26/09/2026: só e-mail e WhatsApp.
 
-**Conversão** — contagem de leads por `origin` com barras; card informativo da captura do site.
+**Conversão** — contagem de leads por `origin` com barras; card informativo da captura do site (texto "falta configurar o Webhook no Elementor" **mantido de propósito**: o webhook ainda não está no ar; issue #1204 aberta).
 
-**Automação** — documenta a regra "Convertido → Cliente" e lista convertidos com badge Vinculado/Sem vínculo; "Vincular agora" chama `criarOuVincularDeLead` e recarrega a página. Não é motor de disparo em massa.
+**Automação** — documenta a regra "Convertido → Cliente" e lista convertidos com badge Vinculado/Sem vínculo; "Vincular agora" chama `criarOuVincularDeLead` e atualiza só aquela linha no estado local (sem recarregar a página). Não é motor de disparo em massa.
 
-**Análise** — KPIs (total, convertidos, taxa de conversão, sem retorno), funil por status e contagem por responsável (`owner`).
+**Análise** — KPIs (total, convertidos, taxa de conversão, sem retorno), funil por status (com a linha "Outros (status antigo)" para status fora de `LEAD_STATUSES`, para a soma bater com o total) e contagem por responsável (`owner`).
 
 **Navegação** — sempre `setSubsel` + `setRoute` recebidos do `App` (`VpRouter.navigate` sozinho só reescreve a URL e não renderiza). As 4 telas do `crm.jsx` recebem `setRoute/setSubsel` como props.
+
+**Leitura de leads nas 4 telas do `crm.jsx`** — hook `useLeadsBase()` devolve `{ leads, erro, recarregar, atualizarLead }`: lê em páginas de 1000 (`.range()`, ordem por `date` e `id`), com `excluido_em is null`; `leads === null` = carregando; `erro` mostra o cartão "Não foi possível carregar os leads" com "Tentar de novo" (nunca vira lista vazia); `atualizarLead(id, patch)` altera uma linha sem recarregar.
 
 ## 6. Regras de negócio
 
@@ -72,17 +74,25 @@ Status (`LEAD_STATUSES`, fonte única de campo, filtros, Kanban e Análise):
 2. **Documento**: o tipo escolhido na lista define o documento — PF exige CPF (11 dígitos), PJ exige CNPJ (14), ambos com dígito verificador (`EnderecoAPI.validarDocumento`); vazio é aceito com "documento pendente". Contribuinte de ICMS (Sim/Não) é obrigatório.
 3. **Comissão**: campo manual 0–100%; em branco vale **2%** (`COMISSAO_PADRAO_PCT`) sem gravar o padrão (grava `null`). Não se liga a `regras_comissionamento`.
 4. **Exclusão = soft-delete obrigatório** (`excluido_em`/`excluido_por`), sempre com confirmação em `ModalExcluirLead`. Não usar DELETE: FKs de `cotacoes`/`formularios_elevador` bloqueiam, `dossier_obra.lead_id` ficaria órfão, e `leads` não tem policy de DELETE para anon (voltaria sem erro e sem apagar). O update usa `.select('id')` e trata 0 linhas como erro. O filtro `excluido_em is null` vale só nas listagens (lista, busca global, Dashboard, `crm.jsx`); Precificação, histórico do cliente e buscas por id não filtram de propósito. Reverter: `update leads set excluido_em = null, excluido_por = null where id = '…'`.
-5. **Acesso ao Supabase** apenas via `comercialSb()` (null se não carregou); falhas viram lista vazia + toast, nunca "Carregando…" eterno.
+5. **Acesso ao Supabase** apenas via `comercialSb()` (null se não carregou); na lista de Leads falhas viram lista vazia + toast e nas telas do `crm.jsx` viram cartão de erro com retry — nunca "Carregando…" eterno. Gravações em `leads` conferem o resultado (`.select('id')`, 0 linhas = erro).
 6. **Hooks**: `LeadDetail` é só o estado vazio; todos os hooks ficam em `LeadDetailView`, e cada efeito zera o estado ao trocar de lead (evita mostrar dados do lead anterior ou abrir dossiê errado).
 7. **Omie**: nunca exigir sessão de usuário Supabase em Edge Function (login é o SSO do vpsistema; requests saem com a anon key). Falha de consulta (`encontrado: null`) não grava nada em `clientes`.
 8. **Datas** `aaaa-mm-dd` formatadas por `isoParaDataBR()`, nunca `new Date('aaaa-mm-dd')` (cai um dia no fuso do Brasil).
+9. **Auditoria**: criar/editar lead grava "Lead criado"/"Lead editado" em `vp_logs` (só nomes dos campos alterados e status de→para; nunca telefone, e-mail ou valores), além de mover no Kanban, excluir e criar dossiê.
+10. **Leitura de `leads` com mais de 1000 linhas** exige paginação por `.range()` com ordem estável (o PostgREST corta em 1000).
 
-## 7. Achados e riscos do diagnóstico
+## 7. Diagnóstico: corrigido e em aberto
 
-- **Texto possivelmente desatualizado em Conversão**: o card "Captura automática do site" diz que "falta só configurar o Webhook no Elementor". Não verifiquei se isso já foi feito; confirmar com o usuário antes de manter ou remover o texto.
-- **Automação/"Vincular agora" usa `window.location.reload()`** em vez de atualizar o estado local; funciona, mas perde filtros/posição.
+**Corrigido em 31/10/2026 (issues fechadas, PRs mergeados em `main`)**
+- **#1200 / PR #1205** — Kanban confere a gravação e reverte o card se falhar; checagem de dossiê duplicado com `limit(1)` e sem criar nada se a consulta falhar.
+- **#1201 / PR #1206** — log de criação/edição do lead e histórico que recarrega depois de editar.
+- **#1202 / PR #1207** — página volta à 1 ao filtrar; KPI conta só leads em aberto; `waLink` único (detalhe e Canais).
+- **#1203 / PR #1208** — telas do `crm.jsx` com estado de erro e retry, leitura paginada, "Outros" no funil e Automação sem `window.location.reload()`.
+- Versões em `index.html`: `comercial.jsx` v45, `crm.jsx` v3. Validado por `npm test` (869/869), `check-cache-bust` e compilação Babel; **não testado com clique real no navegador** (o e2e de fumaça roda no CI).
+
+**Em aberto**
+- **#1204 (aberta)** — texto do card de Conversão ("falta configurar o Webhook no Elementor"): o webhook **ainda não está no ar** (confirmado pelo usuário em 31/10/2026), então o texto fica. Quando entrar: conferir leads com origem "Site verticalparts.com.br", trocar para "Captura ativa", subir `crm.jsx?v=` e pedir à sessão de tutoriais para regenerar o tutorial "Conversão".
 - **Canais, Conversão, Automação e Análise não filtram por dono/vendedor**: qualquer usuário com acesso ao módulo vê todos os leads. A restrição por vendedor (`formularios.ver_de_outros`) existe só no Formulário. Segurança real depende da issue #571 (RLS aberta a anon em `leads`).
-- **Análise e Conversão calculam no navegador** sobre `select('*')` de todos os leads ativos, sem paginação; adequado hoje, a reavaliar se o volume crescer (limite padrão de 1000 linhas do PostgREST pode truncar em silêncio — usar paginação por `.range()` se passar disso).
 - **Sem Realtime** em `leads` (diferente de Embarques/Proposta/Inbox): as telas só atualizam ao recarregar.
-- **Tutoriais** de Leads, Canais, Conversão, Automação, Análise e do módulo CRM existem em `TreinamentoVP/`; mudanças nestas telas exigem regenerá-los pela sessão de tutoriais (não editar o HTML à mão).
-- Não testado com clique real no navegador nesta etapa (inspeção por leitura de código).
+- **Prioridade legada** (ex.: "Alta" com maiúscula) pode aparecer como campo alterado no log "Lead editado" mesmo sem o usuário mexer nela.
+- **Tutoriais** de Leads, Canais, Conversão, Automação, Análise e do módulo CRM existem em `TreinamentoVP/`; mudanças nestas telas (KPI, WhatsApp do detalhe, cartão de erro) exigem regenerá-los pela sessão de tutoriais (não editar o HTML à mão).
