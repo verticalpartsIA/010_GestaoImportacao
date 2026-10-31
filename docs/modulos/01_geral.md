@@ -81,11 +81,11 @@ Tela inicial do sistema ("Visão Geral"). Mostra, para um perfil, indicadores (K
 ### 1.1.3 Perfil e acesso
 - Os KPIs e as tarefas dependem do perfil: comercial, engenharia, financeiro ou admin.
 - **Hoje (código):** o perfil é uma escolha da interface, guardada no navegador (`localStorage "vpprd.role"`, padrão `admin`; `readLS/writeLS` prefixam `vpprd.`) e trocável pelo seletor **"Visualizando como"** do cabeçalho (`RoleSwitch`, `shell.jsx`), visível a todos. **Não vem do login:** qualquer pessoa vê os números de qualquer perfil. O mesmo perfil decide também as rotas restritas (`RESTRICTED` em `app.jsx`) e o menu: quem troca para Admin abre as rotas restritas (ver 1.4.3). `juridico` está em `RESTRICTED` mas não em `ROLE_MAP`.
-- **Decisão do Gelson (31/10/2026):** o perfil deve vir do **usuário logado** (não de uma escolha livre). Administrador continua podendo trocar de visão. **Não implementado** — a regra proposta de ligação usuário → perfil está em `2026-10-31-dashboard-kpis-por-perfil.md`, aguardando aprovação. Segurança real de dados continua dependendo da issue #571.
-- **Decisão do Gelson (31/10/2026) — saudação:** o cabeçalho chama a pessoa pelo **primeiro nome tirado do e-mail do login**: `almoxarifado@verticalparts.com.br` → "Almoxarifado"; `bianca@verticalparts.com.br` → "Bianca"; `gelson.simoes@…` → "Gelson". Regra: parte antes do `@`, cortada no primeiro `.`, `_` ou `-`, com a primeira letra maiúscula. Sem login (ambiente local), "VP Gestão". **Não implementado** (hoje mostra o nome do perfil).
+- **Decisão do Gelson (31/10/2026):** o perfil deve vir do **usuário logado** (não de uma escolha livre). Administrador continua podendo trocar de visão. **Não implementado** — a regra proposta de ligação usuário → perfil está em `2026-10-31-dashboard-kpis-por-perfil.md`, aguardando aprovação. **Em 01/11/2026 o Gelson pediu que "o que a pessoa pode ver" siga as alçadas dela (Administração › Alçadas), em vez do departamento. [Aberto — não implementado]: conferido no banco que gatear por `ver` esconderia dados de quase todos (ver 1.1.10).** Segurança real de dados continua dependendo da issue #571.
+- **Saudação (decisão do Gelson, 31/10 e 01/11/2026) — implementada em 01/11/2026:** o cabeçalho chama a pessoa pelo que vem **antes do `@` do e-mail do login**, cada parte separada por `.`, `_` ou `-` vira uma palavra com inicial maiúscula: `bianca@…` → "Bianca"; `almoxarifado@…` → "Almoxarifado"; `gelson.simoes@…` → "Gelson Simões". O e-mail e o cadastro (`perfis.nome`, conferido: "Gelson Simoes") não trazem acento; o acento vem do dicionário `ACENTOS` e das regras de final de palavra (-ção, -ções, -ões) em `src/dashboard-saudacao.js` (`window.DashboardSaudacao`, 5 testes unitários; e2e C.1). **Palavra fora do dicionário fica sem acento:** para acrescentar, uma linha em `ACENTOS`. Sem login (e-mail vazio ou `@localhost`) mostra "VP Gestão". O nome aparece como escrito (não mais em maiúsculas). **Conferido em 01/11/2026:** testes unitários; o e2e C.1 roda no CI.
 
 ### 1.1.4 O que a tela mostra (de cima para baixo)
-1. **Cabeçalho:** saudação por horário e **nome do perfil** ("Bom dia, ADMIN."; vem de `ROLE_MAP`, **não é o nome da pessoa logada**), data, e a frase "Você tem N alertas críticos e N tarefas hoje". O nº de alertas vira link para Notificações quando é maior que zero.
+1. **Cabeçalho:** saudação por horário e **nome da pessoa tirado do e-mail do login** ("Bom dia, Gelson Simões."; ver 1.1.3), data, e a frase "Você tem N alertas críticos e N tarefas hoje". O nº de alertas vira link para Notificações quando é maior que zero.
 2. **Aviso de falha:** faixa vermelha com "Tentar novamente" quando a carga inteira falha ou alguma consulta não carregou (lista quais).
 3. **KPIs** (grade de 5; ver definição de cada um em 1.1.8).
 4. **Projetos em Andamento:** Gantt, Lista ou Kanban dos projetos da esteira, com 5 fases e linha do tempo de 200 dias com marcador "Hoje". Clicar num projeto abre o modal de detalhe (ID, cliente, fase atual, início, previsão de término, valor, responsável).
@@ -152,8 +152,8 @@ Tela inicial do sistema ("Visão Geral"). Mostra, para um perfil, indicadores (K
 - **Cache:** se um arquivo do Dashboard muda sem subir o `?v=` no `index.html`, quem já tem o arquivo continua vendo o antigo.
 
 ### 1.1.9 Testes
-- 62 testes unitários em `dashboard-metrics-*.test.js` (rodados em 31/10/2026: 62 passam).
-- E2E em `e2e/dashboard.spec.js` (4 testes, o B.1 cobre as visões Gantt/Lista/Kanban na URL; Supabase simulado, nunca toca produção).
+- 62 testes unitários em `dashboard-metrics-*.test.js` (rodados em 31/10/2026: 62 passam) e 5 em `dashboard-saudacao.test.js` (01/11/2026: passam).
+- E2E em `e2e/dashboard.spec.js` (5 testes, o C.1 cobre a saudação; o B.1 cobre as visões Gantt/Lista/Kanban na URL; Supabase simulado, nunca toca produção).
 
 ### 1.1.10 Pendências e decisões
 **Decisões do Gelson (31/10/2026)**
@@ -165,7 +165,7 @@ Tela inicial do sistema ("Visão Geral"). Mostra, para um perfil, indicadores (K
 3. **Período padrão é "Hoje":** no perfil admin (padrão) Faturamento e Comissões mostram só o recorte de hoje, sem aviso (Projetos ativos não é filtrado pelo período: ver 1.1.6).
 4. **Meta de 25%** da conversão está fixa no código.
 5. A tabela `comissoes` está vazia (0 linhas): os dois KPIs de comissão mostram zero.
-6. A saudação do cabeçalho mostra o nome do **perfil** ("Bom dia, ADMIN"), não o da pessoa logada; some quando o perfil passar a vir do usuário (item da decisão acima).
+6. ~~A saudação mostrava o nome do perfil~~ — corrigido em 01/11/2026 (1.1.3).
 
 **Proposta, aguardando aprovação:** manter poucos KPIs por perfil, cada um com nome, definição única, fonte e período explícitos; tirar a meta do código; corrigir 1 e 2 antes de qualquer outra mudança.
 
@@ -173,7 +173,7 @@ Tela inicial do sistema ("Visão Geral"). Mostra, para um perfil, indicadores (K
 
 **Achados da revisão de 31/10/2026 (sem correção; conferidos no código):**
 - **Alertas críticos:** a frase do cabeçalho e o KPI usam uma conta que ignora lidas, arquivadas, Preferências e a retenção da Central; quem clica em "N alertas críticos" pode ver menos ou nenhum na Central.
-- **Textos que enganam no cartão:** "Leads do mês" mostra delta `+N` igual ao valor e subtítulo "vs. mês anterior" sem comparar; "Fichas técnicas" mostra o total como valor e o do mês só no delta; "Embarques em trânsito" tem subtítulo fixo "Santos+Itaguaí"; o funil tem subtítulo "acumulado" e rodapé "Contratos ÷ Leads (volume)"; "Previsão de término" do projeto é sempre "—"; o "eyebrow" mostra o texto cru "Dashboard admin" e a saudação usa o nome do perfil em maiúsculas.
+- **Textos que enganam no cartão:** "Leads do mês" mostra delta `+N` igual ao valor e subtítulo "vs. mês anterior" sem comparar; "Fichas técnicas" mostra o total como valor e o do mês só no delta; "Embarques em trânsito" tem subtítulo fixo "Santos+Itaguaí"; o funil tem subtítulo "acumulado" e rodapé "Contratos ÷ Leads (volume)"; "Previsão de término" do projeto é sempre "—"; o "eyebrow" mostra o texto cru "Dashboard admin" (a saudação foi corrigida em 01/11/2026).
 - **Botões:** "Tela cheia" é só ícone, sem texto nem `title`; "Ver Prazos & Pendências" aparece também para Comercial e Engenharia, cujo menu não tem a tela (a rota os redireciona).
 - **"Onde Parou"** exclui etapas opcionais e lembretes (`LEMBRETE__`); só entram as de prazo efetivo vencido. Existem duas cópias de `fmtBRL` (`dashboard-metrics-financeiro.js` e `-admin.js`).
 - **Leitura de `leads` sem paginação (doação do CRM, 31/10/2026):** a carga do Dashboard (`loadDashboardData` em `supabase.js`) lê `leads` com `select('*')` e sem `range`. Hoje são 13 leads ativos; acima de 1000 o PostgREST cortaria em silêncio e os indicadores de lead subestimariam. As outras consultas da carga **não** foram conferidas quanto a isso (Não verificado). Ver PC-9.
@@ -185,7 +185,10 @@ Tela inicial do sistema ("Visão Geral"). Mostra, para um perfil, indicadores (K
 - *Seis regras de KPI:* nome + pergunta + fonte + período; período explícito no rótulo (estado = "agora", fluxo = usa o botão); todo KPI clicável e filtrado; sem dado = traço, não zero; meta fora do código (tabela editável); no máximo 5 KPIs por perfil.
 - *Fases:* 0 corrigir o que está errado (A receber, Contratos abertos, Propostas enviadas, período padrão 30 dias); 1 perfil pelo usuário e saudação pelo e-mail; 2 KPIs de Comercial, Financeiro, Engenharia e Diretoria; 3 perfis Logística e Importação. Cada fase é uma entrega com "Confirmo" para migration.
 
+**Visão do Dashboard pelas alçadas (pedido de 01/11/2026, [Aberto]).** Dados conferidos no banco em 01/11/2026 (34 perfis não administradores ativos), nº com a alçada `ver` do módulo de origem do cartão: `dashboard` 27, `notificacoes` 27, `ficha-tecnica` 16, `contrato-venda-equipamentos` 11, `ncm-catalogo` 9, `cotacoes-fornecedor` 8, `eng-projeto-elevadores` 7, `importacao` 6, `leads` 6, `financeiro` 4 e **`propostas` 0**. Ou seja, gatear cada cartão por `ver` esconderia, por exemplo, Faturamento, Propostas enviadas e o Pipeline de todos os não administradores, e os cartões de Prazos & Pendências de 30 de 34. Antes de implementar é preciso decidir (a) quais alçadas valem para cada cartão (hoje `propostas` usa `ver_todas`/`criar`, não `ver`), (b) o que fazer com quem não tem nenhuma, (c) se isto substitui o plano por departamento da spec `2026-10-31-dashboard-kpis-por-perfil.md`.
+
 ### 1.1.11 Histórico (só o que ainda ensina)
+- **01/11/2026:** saudação pelo nome do e-mail (`DashboardSaudacao`); Gantt/Lista/Kanban com URL própria (PR #1257).
 - **#274 (23/08/2026):** "projetos" passou a vir da esteira real; a tabela antiga `projetos` tinha 0 linhas. Desde então não há "mover fase" manual.
 - **03/10/2026:** KPI "Cot. em China" deixou de ler a tabela `cotacoes` (vazia) e passou a ler os gatilhos. A conversão Lead→Proposta deixou de dividir populações sem relação (dava 2575%).
 - **03/10/2026:** alertas do Dashboard passaram a seguir o destinatário, como na Central.

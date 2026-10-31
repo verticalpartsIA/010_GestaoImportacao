@@ -63,3 +63,12 @@ test('B.1 — Gantt, Lista e Kanban têm URL própria e sobrevivem ao F5', async
   await page.getByRole('button', { name: 'Gantt' }).click();
   await expect(page).toHaveURL(/\/geral\/dashboard\/?$/);
 });
+
+test('C.1 — a saudação usa o nome tirado do e-mail do login', async ({ page }) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem('vpprd_sso_ok', '1');
+    sessionStorage.setItem('vpprd_user', JSON.stringify({ nome: 'Gelson Simoes', email: 'gelson.simoes@verticalparts.com.br', iniciais: 'GS', id: 't' }));
+  });
+  await page.goto('/geral/dashboard');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(/^(Bom dia|Boa tarde|Boa noite), Gelson Simões\.$/, { timeout: 45_000 });
+});
