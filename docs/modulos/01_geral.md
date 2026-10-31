@@ -707,6 +707,11 @@ Esta tabela lista os 6 jobs **das telas de Geral**. Em 31/10/2026 o banco tinha 
   - **Hooks antes de qualquer `return` antecipado:** a tela de estado vazio fica num componente à parte e todos os hooks no componente de dentro, senão o React quebra ao alternar entre vazio e preenchido (padrão `LeadDetail` → `LeadDetailView`).
   - **Atualizar uma linha sem recarregar a tela:** devolver `atualizarLead(id, patch)` do hook de leitura evita o recarregamento total e a perda de rolagem e de janelas abertas.
 
+- **Benefícios vindos de Cadastros Mestres (doados em 31/10/2026, Art. 49; valem para qualquer tela de Geral que grave um cadastro, gere um código ou abra um registro pelo link). Selo: Conferido em 31/10/2026 no código das duas stores e nos índices do banco; detalhe em `03_cadastros_mestres.md` (PC-4, 3.1.6 e 3.1.8):**
+  - **Gravar com conferência prévia de duplicidade:** a store procura o dado único (ex.: CNPJ/CPF) em **outro** registro antes de gravar, para dizer **qual** registro já o usa; o banco reforça com **índice único parcial** (para valer com duas pessoas ao mesmo tempo ou fora da tela) e o erro `23505` do índice vira a mesma mensagem clara. Falha ao conferir = não grava; na criação a conferência roda **antes** de gerar o código, para não gastar número.
+  - **Código humano pela sequência do banco, sem reserva fixa:** nunca "maior código + 1" lido no navegador (duas pessoas ao mesmo tempo geram o mesmo) nem um código constante quando o banco falha (colide sempre); a falha vira erro claro. Exemplos: `gerar_codigo_cliente` e `gerar_codigo_fornecedor`.
+  - **Link para um registro que não existe:** mostrar aviso ("não encontrado", com "Voltar à lista") em vez de abrir a tela como se fosse "Novo"; se a lista veio incompleta, o aviso diz isso.
+
 ### PC-10 Menu "?" (Ajuda, Treinamento, Enviar feedback)
 *(Migrado do CLAUDE.md em 31/10/2026; arquivos conferidos agora, regras vindas do CLAUDE.md.)*
 - Círculo "?" no canto superior direito de **todas as telas** (`AjudaSuporte` em `src/ajuda-suporte.jsx`, desenhado pelo `Header` de `shell.jsx`). Dica nativa "Suporte". Itens: **Ajuda** (texto da tela em `HELP_TOPICS[rota]`, mais perguntas frequentes), **Treinamento** (abre o tutorial da tela; sem tutorial na lista `TUTORIAIS`, fica apagado "Em breve") e **Enviar feedback**.
