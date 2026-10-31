@@ -122,7 +122,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 
 ### Índice deste arquivo
 - **A. Leis e travas permanentes:** a **Constituição** (Títulos I a IX, 50 artigos),  áreas blindadas (Cadastros Mestres, E-mail/Inbox, Ver documento, Containers, Mão de obra, Assinatura digital, PDF assinado), trava por "Confirmo" (Atualização de Custos).
-- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM e Cadastros Mestres).
+- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres e Comercial | Pré-venda).
 - **C. Procedimentos:** acessos, cache-busting, stack e testes, `pdf-bundle/`, fluxo de trabalho, método (SDD), pendências.
 - **D. Resíduo por módulo:** seções de entregas ainda não absorvidas pelo documento do seu módulo (ver marcas "→ módulo N").
 - **E. Research Base (hyperresearch).**
@@ -149,7 +149,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 | 1 | Geral (Dashboard, Notificações, Central de Decisões, Prazos & Pendências, Inbox) | `docs/modulos/01_geral.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta |
 | 2 | CRM (Leads, Canais, Conversão, Automação, Análise) | `docs/modulos/02_crm.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta |
 | 3 | Cadastros Mestres (Clientes, Fornecedores) | `docs/modulos/03_cadastros_mestres.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta; a área blindada de exclusão (lei) continua aqui |
-| 4 | Comercial \| Pré-venda | `04_comercial_pre_venda.md` | A criar (hoje: Formulário, Proposta, Tratativas, Contratos Social) |
+| 4 | Comercial \| Pré-venda (Formulários, Controle de Cotações, Cotações a Fornecedor, Cotação Quadro de Comando, Propostas, Contratos Social) | `docs/modulos/04_comercial_pre_venda.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta |
 | 5 | Financeiro & Preços | `05_financeiro_precos.md` | A criar (hoje: Precificação, Atualização de Custos, Avais) |
 | 6 | Contratos & Jurídico | `06_contratos_juridico.md` | A criar (hoje: Contrato de Venda, assinatura digital) |
 | 7 | Suprimentos & Importação | `07_suprimentos_importacao.md` | A criar (hoje: P.I., Embarques, Cotações de Varejo, Importação Varejo) |
@@ -188,6 +188,13 @@ O **WhatsApp**, o **gi-avisos** (o serviço que envia os avisos) e o **Copiloto 
 - **3.1 Clientes** (lista, formulário Novo/Editar, lixeira e modal Histórico) · **3.2 Fornecedores** (lista, formulário, lixeira, Avaliações e NPS) · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, como nasce um cadastro, consulta de CNPJ "Omie primeiro", CPF/CNPJ e documento único, nunca excluir com transação, segurança, gatilhos, tabelas, tutoriais, documentos concatenados e benefícios trocados com os outros módulos).
 - Mudança, regra ou decisão nova de Cadastros entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário daquele documento. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
 - Ficam **neste arquivo** só a lei (Art. 16 e a Área Blindada logo abaixo) e as seções mistas, que ganharam uma nota "→ parte já migrada para Cadastros Mestres". Matérias-Primas e Produtos (hoje no grupo Fabricação), Empresas Instaladoras, Atualização de Custos e Catálogo Siscomex **não** são deste módulo. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
+
+## Módulo 4 — Comercial | Pré-venda → `docs/modulos/04_comercial_pre_venda.md` (fonte da verdade; aprovado em 31/10/2026)
+
+**Aqui não se escreve mais nada sobre o Comercial | Pré-venda.** Quem for trabalhar nele **lê, entende e atende** o documento do módulo. É por aqui que as cotações **nascem** (o Nº da cotação é a chave de todos os módulos seguintes):
+- **4.1 Formulários** (hub, Formulário de Equipamento, Quadro de Comando e páginas públicas) · **4.2 Controle de Cotações** · **4.3 Cotações a Fornecedor** (detalhe, Tratativas, Imagens, Documentos e portal do fornecedor) · **4.4 Cotação Quadro de Comando** · **4.5 Propostas** (lista, editor e envio) · **4.6 Contratos Social** · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, como nasce uma cotação, RFQ, trava e revisões, regras de preço, segurança, gatilhos, tabelas, tutoriais, documentos concatenados e benefícios trocados).
+- Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
+- Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (cada uma ganhou uma nota "→ parte já migrada") até o Gelson aprovar o documento; as seções **mistas** (outros módulos) nunca se apagam. As áreas blindadas de E-mail/Inbox, Assinatura digital e "Ver documento" continuam valendo e **não** são afetadas. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
 
 ## 🔒 ÁREA BLINDADA — Cadastros Mestres: cliente/fornecedor com transação NUNCA é excluído (31/10/2026, regra do Gelson)
 
@@ -336,6 +343,8 @@ Corrigido em 4 rodadas (PR #432, #438, #441, #457 — squash `26ff590`, `4ea3308
 - **(28/09, PR #460 / issue #461) Logs de Atividade (`vp_logs`) — só chamada de log adicionada, autorizada explicitamente pelo usuário**: `acrescentarEquipamento`, `removerEquipamento`, `restaurarEquipamentoMO` e `aprovar()` agora chamam `window.VPLog.registrar(...)` no fim, sem alterar a lógica de `moExcluidos`/`quantidade` acima. Se mexer nessas funções de novo, mantenha as chamadas de log.
 
 ## Envio de Proposta ao Cliente — investigação + correção de erro engolido (28/09/2026, PR #464 / issue #465)
+
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do usuário: comparar o envio de Proposta a clientes com o RFQ a fornecedores (área blindada de E-mail/Inbox acima, PR #450). **Não é o mesmo padrão** — ver comparativo completo na issue #465. Resumo do que importa pra não reabrir sem contexto:
 
@@ -533,6 +542,8 @@ Resultado final, confirmado via `ListarCaractProduto` real e o toast da própria
 
 ## Alçadas — Envio de Proposta: CEO só decide quando a margem sai da regra de 15% (28/09/2026, PR #473, squash `b4bf0de`, issue fechada #474) [gate já em 01_geral.md · regra → módulo 4]
 
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 > **→ Parte já migrada.** O gate está em `docs/modulos/01_geral.md` §1.3.8. A regra de negócio da Proposta será absorvida no módulo 4.
 
 Usuário reportou olhando a Central de Decisões (`/geral/decisoes`) que a cotação Nº 955 foi aprovada pelo Gestor Comercial mas também foi parar na alçada do CEO (Diego) — pedido explícito: "nem todas devem ir para Diego, CEO é pessoa sem tempo, somente quando sair da regra" de markup de 15%.
@@ -546,6 +557,8 @@ Usuário reportou olhando a Central de Decisões (`/geral/decisoes`) que a cota�
 - Não testado com clique real no navegador nesta sessão — validado só pela leitura direta dos dados reais da precificação 955 no Supabase e por `node -c` (sintaxe).
 
 ## Envio de Proposta por E-mail — trocado de `mailto:` pra SMTP direto (28/09/2026, PR #476, squash `3787338`, issue fechada #477)
+
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido explícito do usuário (o que faltava na investigação de PR #464/#465, ver bullet acima): "as propostas devem sair de dentro do site para o cliente e as respostas dele de fora pra dentro do site, a proposta deverá aparecer pra ele em forma de link público, isso já acontece quando é enviado pelo whatsapp". Ou seja: o canal E-mail devia se comportar como o WhatsApp/Link (que já enviam o link público `/assinar/:token` direto do site) — não como hoje, que abria o Outlook/cliente local.
 
@@ -796,6 +809,8 @@ Usuário pediu pra investigar quem vendeu `VPMP-586`/produtos `VPB` (fornecedor 
 
 ## Contrato de Venda — "Criar contrato" a partir da Proposta 955: investigação + correções (29/09/2026)
 
+> **→ Parte já migrada para Comercial | Pré-venda.** O trecho do Formulário/Proposta/Cotação desta seção está em `docs/modulos/04_comercial_pre_venda.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
+
 Pedido do usuário: investigar o clique em "Criar contrato" (fila "Propostas assinadas aguardando contrato") da Proposta 955 (assinada 29/09, 2 elevadores GEP-MRL de 1050 kg, R$ 435.214,74) — herança de dados, quantidade exata e rota do e-mail até o Inbox — e corrigir os itens 1–5, 7 e 8 (o 6 = decisão jurídica dele, ver abaixo). **Antes do clique não existe contrato salvo — é o esperado**; a fila só mostra a proposta assinada.
 
 - **Dossiê duplicado (item 1)**: a assinatura da Proposta já cria o Dossiê da cotação (`DossierStore.criarDeProposta`, idempotente). `CVStore.garantirDossier` (assistente, passo Revisão) só olhava `formState.dossier_id` e criava um 2º dossiê pra mesma cotação, com rua+nº no campo cidade — e `.maybeSingle()` por `numero_cotacao` (ex.: Linha do Tempo) dá erro com 2 linhas. Agora reaproveita o dossiê da cotação (por `numero_cotacao`), extrai só a cidade/UF certa (ou usa `obraCidade`/`obraUf` herdados). `criarDeProposta` e a Linha do Tempo usam `limit(1)` em vez de `maybeSingle()`.
@@ -886,6 +901,8 @@ Pedido do usuário: substituir **exatamente** o texto do contrato do site (`/jur
 
 ## Comercial | Pré-venda › Contratos Social — repositório de PDF por cliente (30/09/2026, PR #522/#523/#529)
 
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário: 6º submódulo de Comercial | Pré-venda (`/comercial/contratos-sociais`, rota `contratos-sociais`, item "Contratos Social" — nome exato escolhido por ele) como repositório de PDFs: o vendedor identifica o cliente e salva o contrato social. **Confirmado em produção pelo usuário (já há PDF salvo).**
 
 - **Arquivos**: `src/contratos-sociais-store.js` (`window.ContratosSociaisStore`: `listar`/`salvar`/`excluir`) e `src/contratos-sociais.jsx` (`ContratosSociaisPage` + `ContratoSocialModal`). Rota registrada em `router.js` (`KNOWN_ROUTES`), `app.jsx` (`case` + `ROUTE_TITLE`), `shell.jsx` (menu + `BREADCRUMB_MAP`) e `colaboradores-admin-store.js` (catálogo de permissões, grupo Comercial, sem ações customizadas).
@@ -973,6 +990,8 @@ Caso real: a SCVP260522 (Ningbo Senchen) não coube num container; o restante vi
 
 ## Proposta de Elevador — duas modalidades de entrega: 120 × 90 dias (01/10/2026)
 
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 > **SUPERADO em 10/10/2026 (decisão do Financeiro):** a Precificação não calcula mais o cenário de 90 dias (`resultado_v2_expresso` fica vazio), então a Proposta nova **não oferece** a escolha 120 × 90; o texto abaixo descreve o que existe no código para propostas antigas que já tenham `opcao90`.
 
 Pedido do Financeiro: com **1 equipamento**, a Precificação gera 2 preços (120 dias compartilhado, o menor; 90 dias exclusivo) e a **Proposta apresenta as duas**, cada uma com suas características, tabela de preços, cronograma de pagamento e um campo de escolha. **O cliente escolhe na assinatura (`/assinar/:token`) e a modalidade não escolhida deixa de aparecer.** Com 2+ equipamentos só existe 1 preço (nada muda).
@@ -988,6 +1007,8 @@ Pedido do Financeiro: com **1 equipamento**, a Precificação gera 2 preços (12
 
 ## Proposta de Elevador — tensão, tração e dimensões da cabine por equipamento (06/10/2026, issue #704)
 
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Issue aberta pelo ChatGPT Codex Connector: `montarEspecificacoes()` já herdava id/modelo/capacidade/velocidade/paradas/dimensões da caixa por equipamento, mas nunca repassava `tensao_principal` nem `tracao` — campos reais, obrigatórios no Formulário (`formulario-elevador.jsx`) — nem as dimensões internas da cabine (`cabina_largura_mm`/`cabina_profundidade_mm`, diferente da "Caixa de Corrida" = poço/hoistway, que já existia). Investigação confirmou a lacuna; implementado em 4 passos com TDD (teste antes de cada mudança).
 
 - **`proposta-heranca.js` (`montarEspecificacoes`)**: 3 campos novos no objeto por equipamento — `tensao` (`u.tensao_principal || tec.tensao_principal`), `tracao` (idem), `dimensoesCabine` (mesmo formato `"L x Pmm"` de `dimensoesCaixa`, a partir de `cabina_largura_mm`/`cabina_profundidade_mm`). Mesmo fallback `|| ''` dos campos vizinhos — cotação antiga sem esses dados não quebra, só sai vazio. Testes: `proposta-heranca-campos-tecnicos.test.js` (4).
@@ -999,6 +1020,8 @@ Issue aberta pelo ChatGPT Codex Connector: `montarEspecificacoes()` já herdava 
 - Não testado com clique real no navegador nesta sessão — validado por `node:test` (12 testes novos) + build real do bundle.
 
 ## Cotação 982 — proposta de outro vendedor colada + trava de Nº sem Precificação (02/10/2026, PR #593)
+
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Usuário (via navegador, passo a passo) achou que a cotação Nº 982 do Vagner mostrava "Proposta pronta — aguardando envio manual" sem o fornecedor ter respondido, que a proposta era do vendedor **Victor Caruso**, e que clicar em "Formulário preenchido" abria um formulário em branco.
 
@@ -1014,6 +1037,8 @@ Usuário (via navegador, passo a passo) achou que a cotação Nº 982 do Vagner 
 - Não testado com clique real: validado por `node --check`, suíte 200/203 (3 falhas já existentes em `instalacao-obra-store.test.js`) e `?v=19` conferido em produção.
 
 ## Formulário/Cotação — dono permanente, Nº travado e visão por vendedor (02/10/2026)
+
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do usuário: o vendedor que cria um formulário (mesmo rascunho) é dono dele pra sempre — nunca sobrescrito nem apagado —, cada vendedor só vê/edita o que criou (travável em Administração › Alçadas), vale do **VPCT-0983 em diante e pros que já existem**, e o Nº sequencial fica travado.
 
@@ -1158,6 +1183,8 @@ Pedido do usuário: a tela `/logistica/compras` é "o motivo de existência da V
 - **Não feito**: especificação de gravação para o app de contagem (usuário pediu para esperar); Edge Function `list-importacao-varejo` ainda calcula a sugestão antiga (o front a recalcula); `criar-requisicao-compra-importacao-varejo` não foi tocada. Testes: `src/importacao-varejo-contagem.test.js` (16). Pegadinha de teste local: apagar o IndexedDB `vp-jsx-cache` ao mudar o código sem mudar o `?v=`.
 
 ## Consulta de CNPJ "Omie primeiro" — Clientes, Fornecedores, Formulário e Leads (13/10/2026, PR #881, squash `7fa5e55`)
+
+> **→ Parte já migrada para Comercial | Pré-venda.** O trecho do Formulário/Proposta/Cotação desta seção está em `docs/modulos/04_comercial_pre_venda.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 > **→ Parte já migrada para o CRM.** O trecho de Leads (consulta própria `buscarClienteOmie`, coluna "Está no Omie desde") está em `docs/modulos/02_crm.md` PC-4. Clientes, Fornecedores e Formulário seguem aqui até os módulos 3 e 4 terem documento.
 
@@ -1304,6 +1331,8 @@ Investigação do usuário em `/logistica/separacao`: a tela só tinha links do 
 
 ## Quadro de Comando — BOM lê a estrutura do produto no Omie (28/10/2026, PR #1121, squash `f06dac2`)
 
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário: conferir a aba "BOM / lista de corte / checklist" (`/comercial/formulario-quadro-comando/<id>/resultado`) contra a estrutura do `VPEL-710a` exportada do Omie (PDF, 68 linhas). **Não batia**: a lista de materiais vinha de uma tabela fixa no código (`VARIANTES` em `quadro-comando-bom-engine.js`, planilha NICE3000) e divergia em 23 SKUs mesmo na variante certa (ex. `VPMP-057` 75 m × 77 m; `VPMP-159` 11 × 17; só no Omie: `842`, `793`, `918`, `921`, `302`, `043`, `067`, `702`, `887`). O quadro conferido (pedido 1094) era 7,5 kW/380 V, não 15 kW/220 V.
 - **Regra nova (`gerarBomECortes`, `quadro-comando-store.js` v16):** variante (potência × tensão, agora também 30 kW, `chaveVarianteQuadro`) → produto em `pcp_quadro_variante` → filhos de `pcp_estrutura` (`codigo_pai`) = BOM (`montarBomDaEstrutura`, engine v10: soma códigos repetidos, descrição/unidade de `pcp_produtos`, "Caixa para QC…" vai para o grupo `caixa`). Itens saem com `origem='fixo_variante'` e `confianca='confirmado'` — **de propósito** (o CHECK de `quadros_comando_bom_itens.origem` só aceita `fixo_variante`/`calculado_geometria`; nenhuma migration). A origem aparece no aviso de sucesso ("lista de materiais: Omie VPEL-710a") e em `vp_logs` (`fonteBom`).
 - **A lista fixa antiga só vale se a variante não tem produto/estrutura no Omie** (hoje 7,5 kW/380 V e 30 kW/220 V, `codigo_produto` nulo em `pcp_quadro_variante`; o quadro 1094 segue com ela). Para passar a usar o Omie: cadastrar o produto no Omie e preencher `pcp_quadro_variante`. Não apague as listas de `VARIANTES` sem isso.
@@ -1314,6 +1343,8 @@ Pedido do usuário: conferir a aba "BOM / lista de corte / checklist" (`/comerci
 
 ## Quadro de Comando — formulário público v2 + códigos do Omie no Escopo (28/10/2026)
 
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Spec em `docs/superpowers/specs/2026-10-28-formulario-quadro-publico-v2.md`. Pedido do Gelson: o link público (`/formulario-quadro-comando-publico.html`) não pede o que o modelo já define e o hub mostra o código do Omie de cada item.
 - **Link público (`formulario-quadro-comando-publico.jsx` v5):** só 5 modelos sem código VPEL (7,5/15 kW × 220/380 V, 30 kW/380 V). Saíram potência/tensão do motor, corrente, atendimento, aplicação e nº de botoeiras (o campo "HP" era gravado como kW). Fica a tensão da rede, com aviso se diferir da do modelo. Perguntas guiadas: COP (display), LOP (material vidro/aço escovado, 1 ou 2 botões, display, logo), porta oposta com os andares (total de LOP = frente + oposta), cor do display, Máquina de Tração (25 VPMAC) e Portas de Cabina/Pavimento do catálogo do Omie — **marcou o item e não escolheu modelo = não avança**.
 - **Edge Function `capturar-lead-quadro-comando` (v9, `verify_jwt:false`):** ação `{acao:'catalogo'}` (só código+descrição de `importacao_varejo_produtos`, limite próprio 60/IP), upload da logo (PNG/JPG/WebP ≤ 2 MB, **SVG recusado de propósito**, bucket `engenharia/quadro-comando-publico/logos/`; o base64 nunca é gravado), porta oposta → `abertura_traseira`/`qtd_lop_traseira`, escopo ganha `codigo`/`codigo_pavimento`. Na aba Máquina, `tensao_v` agora é a tensão da REDE e `potencia_kw` a do modelo. Deploy testado antes numa cópia (apagada).
@@ -1322,6 +1353,8 @@ Spec em `docs/superpowers/specs/2026-10-28-formulario-quadro-publico-v2.md`. Ped
 - **Não resolvido:** face traseira com 1 só parada continua sem botoeira no motor de LOP; não testado com envio real do formulário nem clique no hub.
 
 ## Quadro de Comando — fases padrão 3, chicotes VPEL automáticos e fio até a UA (28–29/10/2026, PRs #1127, #1128, #1129, #1133)
+
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 - **Fases = 3 sempre (#1127):** "Número de fases" deixou de ser obrigatório (`validarFormulario` em `quadro-comando.jsx`); vazio vale 3, o seletor abre em Trifásico e `salvarMaquina` grava `fases: '3'` quando vazio. Os 15 quadros com `fases` vazio foram atualizados para `'3'` no banco (autorizado com CONFIRMO). **A Edge Function `capturar-lead-quadro-comando` ainda não grava `fases`** (quadro do link público nasce vazio; a tela trata como 3) — redeploy só com CONFIRMO e teste numa cópia.
 - **Chicotes VPEL automáticos no BOM (#1128/#1129):** `montarItensChicotes` (`quadro-comando-bom-engine.js`), chamado no fim de `gerarBomECortes` (store), depois de todos os itens; nunca repete um sku. Regra da Engenharia: `VPB-209` (botoeira do poço) no BOM → `VPEL-732a` PT1 + `VPEL-733a` PT2; `VPB-193` (caixa de topo de cabine Monarch) → `VPEL-727a` EDP1, `723a` FAN, `721a` GS1, `725a` SOS, `728a` SL; **todo quadro** → `VPEL-730a` HW, `731a` MT, `729a` OS (saem direto do quadro para a última altura, "UA"). **PT2 NÃO é do quadro** (só da `VPB-209`). `VPB-380` (poço P5Y) só se comunica com o quadro e **não** dispara chicote; `VPB-280` é de escada/esteira e nunca entra em elevador. Os chicotes não existem no Omie/PCP (descrições vêm do motor). **Padrão de inspeção trocado (29/10/2026, PR #1137, squash `eb41b23`): poço = `VPB-209`, topo de cabine = `VPB-193` (Monarch, confirmado como padrão pelo Gelson)** — antes era `VPB-380`/`VPB-208`; assim os chicotes de poço/cabine entram sozinhos. Motor v15, `quadro-comando-codigos.js` v3, `quadro-comando.jsx` v35. **`capturar-lead-quadro-comando` v10 passou a gravar `fases: "3"` em `quadros_comando_maquina` (29/10/2026, PR #1140, squash `eb7d327`)** — redeployada direto (sem imports remotos, boot/catálogo conferidos por curl; a gravação só será vista no próximo quadro real do link público); a cópia de teste `-next` foi apagada. **UA padrão = 4.500 mm (decisão do Gelson, 29/10/2026):** o limite "fora do padrão" da Última altura (K) e os textos da aba Geometria passaram de 4.400 para 4.500 mm (motor v16, `quadro-comando.jsx` v36). A caixa "usar padrão comercial" só marca a origem como estimada, não preenche valor. **Copiloto atualizado para 4.500 mm (29/10/2026, PR #1145, squash `9e26ae9`; sem pendência aberta nesta seção):** o texto da tela mora agora também na tabela `vp_copiloto_docs` (id `rota:formulario-quadro-comando`, linha nova, com CONFIRMO) — a tabela tem prioridade sobre o `ROUTE_DOCS` embutido, então **ajustar essa tela = UPDATE nessa linha, sem redeploy**; o texto embutido em `supabase/functions/vp-copiloto/index.ts` também foi trocado para 4500 (sem redeploy, só para o repo não divergir). Desfazer: apagar a linha (CONFIRMO_DESTRUTIVO) e o Copiloto volta ao texto embutido. `VPB-193` entrou na lista suspensa de inspeção de cabina (`quadro-comando-codigos.js`).
@@ -1342,6 +1375,8 @@ Spec em `docs/superpowers/specs/2026-10-28-formulario-quadro-publico-v2.md`. Ped
   - Testes em `quadro-comando-codigos.test.js` (+2: 47 m, 41 m, piso de 4 m, seio/pontas editáveis, casa de máquinas com e sem distância, sem percurso). O documento de origem (`elevator_traveling_cable_calculation_instructions.md`, fórmula (poço + curso/2) × 2 + π × diâmetro + subida + pontas) **não foi seguido**: dava ~45 m + seio + pontas para o mesmo caso, bem acima do cabo real.
 
 ## Formulário de Escada/Esteira Rolante — URL por tipo de equipamento + planilha técnica (29/10/2026)
+
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do usuário via `formularioEscadas.md` (planilha técnica de Escaladores/Esteiras) + um ciclo SPECIFY→IMPLEMENT já rascunhado por ele. Spec completa em `docs/superpowers/specs/2026-10-29-formulario-escada-esteira-url-planilha.md` (segue o método da seção abaixo). **Não é tela nova** — é o mesmo `src/formulario-elevador.jsx` "camaleão" (comentário de 15/08: "cotação pode ter elevador + escada + esteira juntos"), que já existia e já atendia escada/esteira com `especificacoes` (jsonb) em texto livre.
 
@@ -1700,6 +1735,8 @@ Na aba Necessidade, tabela "A produzir": caixas de seleção + botão **Gerar OP
 
 ## Segurança real (#571) — andamento (04/10/2026, local, não commitado) [resumo já em 01_geral.md · detalhe → módulo 14]
 
+> **→ Parte já migrada para Comercial | Pré-venda.** O trecho do Formulário/Proposta/Cotação desta seção está em `docs/modulos/04_comercial_pre_venda.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
+
 > **→ Parte já migrada.** Resumo em `docs/modulos/01_geral.md` PC-3 e PC-6. O detalhe técnico será absorvido no módulo 14 (Administração).
 > **[SUPERADO quanto ao modo de autenticação.]** Onde esta seção diz "modo sombra", vale o histórico de 04/10/2026. Em 31/10/2026 a tabela `vp_auth_piloto` tem o coringa `*`, então todo usuário com sessão nativa está em `on`. Ver `docs/modulos/01_geral.md` PC-6.
 
@@ -1708,6 +1745,8 @@ Plano completo em `docs/superpowers/plans/2026-10-02-autenticacao-e-rls-571.md` 
 - **Falta (precisa do usuário):** decisões **D1–D7** do plano (fonte de identidade, modelo de permissão, quem exclui, buckets públicos, dev local, ensaio, páginas públicas) e as **[AÇÃO DO USUÁRIO]** de Auth no painel do Supabase (break-glass da API de gerenciamento está desligado — não contornar). Sem isso, a Fase 1 (funções de autorização, aditiva) pode começar, mas **nenhuma tabela é fechada antes da Fase 3** (caminhos públicos saírem das tabelas), senão quebra assinatura de proposta/contrato e formulário do fornecedor.
 
 ## CPF/CNPJ de verdade + comissão manual do lead (04/10/2026, local, não commitado; coluna do banco JÁ criada)
+
+> **→ Parte já migrada para Comercial | Pré-venda.** O trecho do Formulário/Proposta/Cotação desta seção está em `docs/modulos/04_comercial_pre_venda.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 > **→ Parte já migrada para o CRM.** A comissão manual do lead (2% se em branco) e o documento pelo tipo escolhido no lead estão em `docs/modulos/02_crm.md` (2.1.6 e 2.1.8, regras 6 e 7). Clientes, Fornecedores e Formulário seguem aqui até os módulos 3 e 4 terem documento.
 
@@ -1735,12 +1774,16 @@ Pedido do usuário (resolve os itens 6 e 7 da issue #663): "o usuário precisa e
 
 ## Formulário de Elevador — opções de aço nos campos de porta/cabina (06/10/2026, PR #715, squash `92fd710`)
 
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário: **Modelo de porta**, **Aço da Cabina**, **Acabamento porta cabina** e **Acabamento porta pavimento** (`/comercial/formulario-elevador`, `src/formulario-elevador.jsx`) passam a oferecer sempre as 3 opções **Aço 304, Aço 430 e Pintado**, via constante `FE_OPCOES_ACO`.
 - **Modelo de porta deixou de usar `opcoes.porta`** (catálogo por modelo de elevador) — agora é a lista fixa, sem depender do modelo escolhido, a pedido explícito do usuário. `opcoes.porta` continua sendo carregado, só não alimenta mais esse campo.
 - Formulários já salvos mantêm o valor gravado; não foi conferido como a tela mostra um valor fora da nova lista.
 - `index.html`: `formulario-elevador.jsx` v9→v10. Não testado com clique real no navegador.
 
 ## RFQ ao fornecedor — PT-BR / EN-US / 中文 (06/10/2026, PR #718, squash `c74425e`)
+
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do usuário: o formulário/cotação enviado a fornecedores fora do Brasil precisa chegar nos 3 idiomas. Auditoria (só leitura) mostrou que só o rodapé do e-mail e um cabeçalho do portal tinham chinês; o resto era PT/EN. Corrigido (decisão do usuário: "faça os três itens", incluindo o bloco de envio do RFQ, que fica na área blindada do e-mail — `send-email`/`read-inbox`/vínculo **não** foram tocados).
 - **Portal público** (`cotacao-elevador-fornecedor.jsx` v14 + store v24/v21): rótulos das 71 linhas de especificação e títulos de seção ganharam `中文` (dicionários `CEF_ZH_LABEL`/`CEF_ZH_SECAO` no store, chaveados pela `key` estável); campos de resposta, botões, avisos e telas de erro em "PT · EN · 中文". `unitSpecSecoes(u, tipo, categoria, { i18n: true })` devolve linhas `[key, pt, en, valor, zh]` **só pro portal** — sem a opção, a visão interna (`formulario-elevador.jsx`, revisão de divergência) continua `[key, pt, en, valor]` e sem chinês. **Não mude o formato das 4 primeiras posições** (outros consumidores desestruturam).
@@ -1752,6 +1795,8 @@ Pedido do usuário: o formulário/cotação enviado a fornecedores fora do Brasi
 - **Ainda em PT/EN apenas (fora desta entrega):** PDF do RFQ de peças (`pedido-fornecedor-reactpdf`), Tratativas (`tratativas-store.js`) e a tela interna de revisão da cotação.
 
 ## Tratativas ⇄ Inbox — mão dupla (07/10/2026, autorizada pelo usuário; toca a área blindada de E-mail só no front) [lado do Inbox já em 01_geral.md · Tratativa → módulo 4]
+
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 > **→ Parte já migrada.** O lado do Inbox está em `docs/modulos/01_geral.md` §1.5.6. O restante (Tratativa, histórico interno de preço e decisões) será absorvido no módulo 4 (Comercial | Pré-venda).
 
@@ -1809,6 +1854,8 @@ Pedido do usuário (cotação 955: Aval Financeiro e Jurídico OK, faltava a ass
 
 ## Formulário público de orçamento — Quadro de Comando (07/10/2026, PRs #749/#752/#753, issue fechada #754)
 
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário: investigar um link de formulário público de orçamento de outro fornecedor (Suitelet do NetSuite, empresa `12090193`) e avaliar se dava pra "substituir o nosso" (`/comercial/formulario-quadro-comando`) por algo assim.
 
 **Investigação (100% por leitura do código-fonte servido — sem navegador interativo, que não estava disponível nesta sessão)**: o link era um wizard de 7 passos (Início/Escopo → Identificação → Elevador → Acionamento → Acessórios → Fiação → Revisão) com CNPJ auto-lookup (NetSuite + BrasilAPI), condicionais, resumo antes de enviar e submissão por POST direto ao mesmo Suitelet. Testado só o **lookup de CNPJ** (endpoint de leitura, uso normal do formulário) com o CNPJ da própria VerticalParts — **achado real**: a VerticalParts já é cliente cadastrado no NetSuite daquele fornecedor (id 8760). **Nunca cliquei em enviar** nem sondei `opp_lookup` com IDs arbitrários (exporia dados de outros clientes dele).
@@ -1827,6 +1874,8 @@ Pedido do usuário: investigar um link de formulário público de orçamento de 
 - `index.html`/`server.js`: sem mudança de versão (`formulario-quadro-comando-publico.jsx` é carregado com `?v=1` fixo no HTML standalone, fora do app principal).
 
 ## Tratativas — botão "Enviar documentos ao fornecedor" + avais visíveis (08/10/2026, PR #775, squash `29dd0ba`, issue fechada #776)
+
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do usuário (cotação 955): depois de "Decidir comprar", enviar ao fornecedor num clique a cotação dele, o Projeto de Instalação assinado e as ID-TAGs.
 - **`src/enviar-documentos-fornecedor.jsx`** (`CfEnviarDocumentosModal`, `?v=1`), aberto por um botão na aba Tratativas (`CfTratativas`, `cotacoes-fornecedor.jsx` v17); **só habilita com a cotação em `em_analise`/`aprovada`** (depois de "Decidir comprar"). Lista com caixas: anexos que o fornecedor subiu (`cotacoes_elevador_fornecedor_anexos`, bucket privado → copiados p/ o bucket `tratativas` com link permanente), Projeto de Instalação (**com a página de assinaturas** via `ProjetoAssinadoPdf.gerarBlob` quando assinado; se não assinado vai o original com aviso) e ID-TAGs (link público da Engenharia). Casa pelo `numero_cotacao` de `projetos_elevador_desenhos`. Mensagem pronta em EN/PT/中文 (chinês gerado por IA — revisar). Envio = `TratativasStore.enviar` (registra + e-mail real + Inbox); **`send-email`/`read-inbox` intocados**.
@@ -1856,6 +1905,8 @@ Validado por `npm test` (411/411 em cada um dos 7 commits) e `node scripts/check
 - `index.html`: `gatilhos-engine.js` v16→18, `decisoes.jsx` v6→8, `dashboard.jsx` v22→23, `cadastros.jsx` v9→10, `colaboradores-admin.jsx` v5→6, `vistorias-obras.jsx` v15→17, `logistica.jsx` v68→70, `vistorias-envio.jsx` v16→18, `vistorias-questionarios-store.js` v15→16, `almoxarifado.jsx` v28→29, `engenharia-elevador.jsx` v9→10, `emissao-nf.jsx` v4→5, `expedicao.jsx` v3→4, `importacao-varejo.jsx` v8→9, `financeiro.jsx` v43→44, `controle-cotacoes.jsx` v9→10, `quadro-comando.jsx` v22→24. `assinar.html`: `gatilhos-engine.js` v16→17. `cotacao-elevador-fornecedor.html`/`formulario-cliente.html`: `gatilhos-engine.js` v11→18. `vistoria-execucao.html`: `vistorias-questionarios-store.js` v14→16.
 
 ## Auditoria de amarrações entre telas — correções 1 a 3 (11/10/2026) [roteador já em 01_geral.md · resto → módulos 4, 7, 9 e 12]
+
+> **→ Parte já migrada para Comercial | Pré-venda.** O trecho do Formulário/Proposta/Cotação desta seção está em `docs/modulos/04_comercial_pre_venda.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 > **→ Parte já migrada.** A parte do roteador (modais pela URL) está em `docs/modulos/01_geral.md` PC-9. O restante será absorvido nos módulos 4, 7, 9 e 12.
 
@@ -1895,6 +1946,8 @@ Varredura (só leitura) das ~80 telas, procurando "fios rompidos/em curto". Rela
 
 ## Trava do Formulário e da Proposta + destrave pelo Líder (12/10/2026, local — não aplicado em produção)
 
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Regra do usuário: o vendedor só edita o Formulário **antes da 1ª Precificação**; depois, e na Proposta desde o envio ao cliente, só o **Líder (hoje só a Regiane)** destrava, **com motivo obrigatório (≥ 10 letras)**. A visibilidade dos formulários de outros vendedores **não foi mexida** (decisão do usuário: "não mexer agora").
 - **Formulário** (`formulario-elevador-store.js` v25): `estadoTrava` (travado = existe `precificacoes_elevador` da cotação ou `envio_direto_precificacao_em`, e não destravado; leitura falha = não trava), `destravar(id, motivo)`, `pedirDestrave` (avisa quem tem a alçada), `travarNovamente` (chamada ao `enviar`/`enviarDiretoParaPrecificacao`). Os guardas só valem quando a chamada passa `{ origem: 'formulario' }` — o "Trocar" da Precificação (`precificacao-elevador.jsx`, área blindada) **não foi tocado** e segue funcionando. Tela com banner 🔒/🔓, campos desabilitados e modal de motivo. Nova alçada `formularios.destravar`.
 - **Proposta** (`proposta-store.js` v25, `proposta-editor.jsx` v51): `STATUS_TRAVADOS` = enviada, visualizada, revisão pedida, aprovada; `destravar(id, motivo)` exige motivo + alçada `propostas.destravar_aprovada`, grava no `log` e em `vp_logs`; o próximo Salvar retrava.
@@ -1905,6 +1958,8 @@ Regra do usuário: o vendedor só edita o Formulário **antes da 1ª Precificaç
 - **#843 B4 (12/10/2026)**: a policy de DELETE de rascunho do Contrato de Venda foi recriada **só para `authenticated` + `vp_usuario_ativo()`** (migration `20261012130000`, aplicada); a versão anterior (`delete_rascunho_anon`) deixava a chave pública apagar rascunhos. **#843 D1 NÃO aplicado**: `contratos_venda_equipamentos` ainda tem `leitura_publica`/`update_anon`/`escrita_anon` abertas a `public`. Fechar com `vp_fechar_tabela('contratos_venda_equipamentos','interno','D1')` derruba quem ainda usa a chave pública: em 12/10 só 14 dos 26 perfis ativos tinham sessão em `auth.users` (modo `on` para todos desde 09/10, mas sem evidência de que todos já entraram). Fechar depois que todos os perfis ativos tiverem sessão (conferir `auth.users` × `perfis`) — a página `/assinar` usa RPC `SECURITY DEFINER` e não é afetada.
 
 ## Auditoria #843 — o que foi resolvido em 12/10/2026 (não refazer) [→ módulo 14]
+
+> **→ Parte já migrada para Comercial | Pré-venda.** O trecho do Formulário/Proposta/Cotação desta seção está em `docs/modulos/04_comercial_pre_venda.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 > **→ Parte já migrada.** Será absorvida no módulo 14 (Administração).
 
@@ -1922,6 +1977,8 @@ Regra do usuário: o vendedor só edita o Formulário **antes da 1ª Precificaç
 
 ## Proposta de Elevador — cada equipamento é único, com o SEU código (10/10/2026)
 
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Regra do Financeiro (cotação 963, 27 equipamentos em 10 Unidades): em **qualquer** menção a equipamento na Proposta (abertura "Prezados Senhores(as)", especificações, valores) cada equipamento físico aparece pelo código dele — `VPEL-EL0963-1 … -27`, a numeração corrida da Precificação (`mo_lookup`, ordenada por paradas). **Nunca** use o identificador da Unidade do Formulário como se fosse código quando a Unidade tem quantidade > 1, e **nunca** invente numeração tipo "(1/6)". Vale para 1, 2 ou 1.000 equipamentos.
 - **Herança** (`proposta-heranca.js`): cada especificação ganha `codigos[]` + `unidadeId`; `valores.itens` vira **1 item por equipamento físico** (quantidade 1, `equipamento` = código), em ordem de código. Proposta antiga sem códigos cai em 1 linha agregada "nome — N un." (`PropostaOpcoes.linhasUnitarias`).
 - **Helpers únicos** em `proposta-opcoes.js` (usados por PDF e preview): `linhasUnitarias`, `totaisValores`, `ordenarEspecs`, `resumoEquipamentos`, `paradasDe`, `modelosDistintos`. Não duplique essa lógica nos renderizadores.
@@ -1933,12 +1990,16 @@ Regra do Financeiro (cotação 963, 27 equipamentos em 10 Unidades): em **qualqu
 
 ## Proposta de Elevador — tudo o que o menu lateral grava tem que sair no PDF e no preview (13/10/2026)
 
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Caso real (VPPR-0985, Vagner): os acabamentos digitados apareciam no preview mas o PDF saía em branco — o PDF lia o formato antigo fixo (`elevador.acabamentos`) e o editor grava em `elevador.acabamentosCats` (categorias/campos com checkbox "ativo"). **Regra:** PDF (`pdf-bundle/proposta-reactpdf.entry.js`) e preview (`proposta-preview.jsx`) leem do MESMO helper em `proposta-opcoes.js` — `linhasAcabamento`, `blocosAjustes`, `resumoEquipamentos`, `linhasUnitarias`… Seção nova/campo novo no editor = acrescentar no helper, não num renderizador só.
 - **Auditoria feita** (marcador em cada campo, PDF gerado e lido com pdf.js): cliente, obra, vendedor, texto, especificações, acabamentos, conteúdo (benefícios/características/recursos/infraestrutura/responsabilidades), fotos, valores, condições de pagamento, ajustes, prazo e garantia entram no PDF. Lacunas fechadas: **Telefone/E-mail do cliente**, **celular + fixo do vendedor** na capa, **"Forma de pagamento"** (texto) acima do cronograma e, em "Ajustes e Impostos", **Reajuste** e **Taxa de Câmbio de Referência** (que não saíam). Na página de Ajustes, o campo "da página" (`clausulaCambial`, `faturamentoTexto`, `taxasInclusas`, `taxasExcluidas`) vence; vazio, vale o geral (`faturamento`, `taxasIn`, `taxasOut`) — nunca os dois.
 - **Fica de fora de propósito:** `ajustes.preset` (Fora do Estado/SP/Diferenciado — só interno do DIFAL) e `valores.equipamento` (resumo interno).
 - **Atenção:** a "Taxa de Câmbio de Referência (USD)" agora é impressa para o cliente quando preenchida — se o Financeiro não quiser isso, tirar `cambio` de `blocosAjustes`.
 
 ## Proposta de Elevador — acabamentos e texto comercial POR TIPO de equipamento (20/10/2026, PR #991, squash `f0e8b81`)
+
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Caso real: proposta da cotação **990** (5 cargas + 1 passageiro + 3 panorâmicos) saiu com UM bloco de acabamentos/texto para todos — digitado a partir do passageiro (VP-200, COP-05, "Mármore Resinado") e valendo para as cargas — e com "Elevador de Passageiros" fixo na saudação e no título. Os 9 equipamentos e a numeração (`VPEL-EL0990-1…9`, ordenada por paradas pela Precificação) estavam certos; o que faltava era individualizar acabamentos/texto, que antes só existia nos valores e nas especificações.
 
@@ -1956,6 +2017,8 @@ Caso real: proposta da cotação **990** (5 cargas + 1 passageiro + 3 panorâmic
 - Testes: `src/proposta-perfis.test.js` (15). Versões: `proposta-opcoes.js` v15, `proposta-form.jsx` v22, `proposta-preview.jsx` v34 (index) / v30 (assinar), `proposta-heranca.js` v26, `proposta-conteudo-engine.js` v2, `proposta-textos-base.js` v1, bundle do PDF v29 (index) / v28 (assinar).
 
 ## Proposta — DIFAL NÃO aparece e valores fecham no centavo (13/10/2026)
+
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Decisão do Financeiro: o preço de venda da Precificação (R$ 8.961.402,72 na 963) **já contém o DIFAL** (no motor o DIFAL é custo da VerticalParts, abatido do lucro, nunca somado ao preço). **A proposta nunca mostra nem soma DIFAL**: sem campo/linha no editor, sem quadro "TOTAL + DIFAL" no preview/PDF, a herança (`proposta-heranca.js`) não copia mais `valores.difal` e os totais ignoram o que estiver gravado (`proposta-opcoes.js › totaisValores`/`visao`). Isto **supera** o texto antigo da seção "cada equipamento é único" ("DIFAL isolado em quadro à parte").
 - **Centavos exatos**: itens guardam `valorUnit` no formato pt-BR sem milhar ("257024,57", `PropostaOpcoes.textoBR`); o último equipamento de quantidade 1 absorve a diferença de arredondamento para a soma ser exatamente `precoVendaProposta`. Parcelas vêm de `PropostaOpcoes.parcelasPadrao` (sinal 40% + iguais, a **última absorve o centavo**) — usada na herança, no "Recalcular" do editor e na opção de 90 dias. Não volte a arredondar item a item nem a calcular parcelas fora desse helper.
@@ -2006,6 +2069,8 @@ Tela nova `/engenharia/mapa-obras` (item "Mapa de Obras", logo abaixo de "Instal
 
 ## Cotação a fornecedor — abas "Imagens" e "Documentos" (fase 1, só leitura) (20/10/2026)
 
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário (cotação 990, Glarie): repositório de tudo o que o FORNECEDOR mandou, separado em imagens e documentos. A tela `/comercial/cotacao-fornecedor-detail/<id>` passou a ter **Detalhes | Tratativas | Imagens | Documentos** (links `/…/imagens` e `/…/documentos`).
 - **Só leitura, nada é copiado nem gravado.** `TratativasStore.listarArquivosFornecedor` (`tratativas-store.js` v8) junta: anexos do formulário do link (`cotacoes_elevador_fornecedor_anexos`, bucket privado `cotacao-fornecedor-anexos`, link assinado de 1 h) + anexos dos e-mails de ENTRADA ligados à cotação (`emails_projeto.anexos`, bucket `emails-anexos`, link pela Edge Function `sign-email-anexos`). O vínculo e-mail→cotação usa **a mesma regra de `listarEmails`** (referencia_id, ou Nº da cotação só com 1 fornecedor e remetente contato do RFQ). E-mail de entrada de `@verticalparts.com.br`/`@vpsistema.com` não conta como do fornecedor. **`read-inbox`, `send-email` e o vínculo não foram tocados** (área blindada).
 - **Regras** (`src/cotacao-fornecedor-arquivos-calc.js`, `window.CfArquivosCalc`, 4 testes): imagem × documento pela **extensão** (PDF de e-mail chega como `application/octet-stream`); versões agrupadas pela "família" do nome (sem data na frente, sem `_Updated`/`(1)`/`_v2`); a mais recente = **Vigente** (regra do usuário), as anteriores recolhidas; imagem repetida (mesmo tamanho em bytes) aparece uma vez com "recebida Nx"; imagem < 5 KB fica oculta ("mostrar").
@@ -2015,6 +2080,8 @@ Pedido do usuário (cotação 990, Glarie): repositório de tudo o que o FORNECE
 - `index.html`: `cotacao-fornecedor-arquivos-calc.js` v1, `tratativas-store.js` v8, `cotacoes-fornecedor.jsx` v18, `cotacao-fornecedor-arquivos.jsx` v1.
 
 ## RFQ ao fornecedor — letra de revisão em todo reenvio (20/10/2026, autorizado na área blindada do RFQ)
+
+> **→ Parte já migrada para Comercial | Pré-venda.** O conteúdo desta seção está concatenado em `docs/modulos/04_comercial_pre_venda.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Investigação do formulário FE-MV86EUBZ (cotação 990): a letra (`VPEL-EL0990-A`, `-B`…) já existia em `gerar()`, mas só nascia no botão "Pedir nova revisão"; "Reenviar" reaproveitava o mesmo documento/link. **Regra do usuário:** do 2º envio em diante o fornecedor recebe documento NOVO com letra e um aviso em PT/EN/中文 de que é nova versão (da cotação já precificada, ou do envio anterior sem resposta).
 - `enviar()` (`formulario-elevador.jsx` v21): cotação já enviada (`sent_at` ou status ≠ rascunho) → confirma, chama `gerar()` (letra nova + link novo) e passa `novaVersao` a `mensagemRfq` (`cotacao-elevador-fornecedor-store.js` v27: bloco de aviso + sufixo "(Revisão A / Revision A / 修订 A)" no assunto, que continua começando com "Cotação técnica <nº>"). Rascunho de revisão que falhou ao enviar é reaproveitado (não gasta outra letra). Não mexeu em `send-email`/`read-inbox`.

@@ -19,7 +19,7 @@
    &nbsp;&nbsp;&nbsp;3.2.1 O que é · 3.2.2 Rota e arquivos · 3.2.3 Perfil e acesso · 3.2.4 O que a tela mostra · 3.2.5 Botões e controles · 3.2.6 Comportamento · 3.2.7 Dados (lê/grava) · 3.2.8 Regras e armadilhas · 3.2.9 Testes · 3.2.10 Pendências e decisões · 3.2.11 Histórico
    Parte comum de Cadastros Mestres (sem número de tela)
    &nbsp;&nbsp;&nbsp;PC-1 Mapa de ligações · PC-2 Como nasce um cadastro (todos os caminhos) · PC-3 Consulta de CNPJ "Omie primeiro" · PC-4 CPF/CNPJ de verdade e documento único · PC-5 Nunca excluir cadastro com transação (🔒) · PC-6 Identidade, alçadas e segurança · PC-7 Gatilhos e rotinas · PC-8 Tabelas · PC-9 Navegação, cache e testes · PC-10 Menu "?" e tutoriais · PC-11 Documentos soltos e destino do que foi concatenado · PC-12 Benefícios trocados com os outros módulos
-4. Comercial | Pré-venda → `04_comercial_pre_venda.md` (a criar)
+4. Comercial | Pré-venda → `04_comercial_pre_venda.md` (em revisão)
 
 ## Glossário (módulo Cadastros Mestres)
 Termos gerais (soft-delete, alerta, alçada, Nº da cotação) estão no glossário de `01_geral.md`; **Convertido**, **Contribuinte de ICMS** e **Documento pendente** estão no de `02_crm.md`. Não se repetem aqui.
@@ -260,6 +260,7 @@ Achados, sem correção, salvo onde dito.
 8. **Média de avaliação sem aviso de erro** (3.2.6, item 5).
 9. **Sem validação de e-mail, telefone e CEP**; sem busca por CEP (igual à 3.1).
 10. **Ajuda curta e tutorial desatualizado** (PC-10).
+11. **Nenhum gatilho de identidade em `fornecedores`** (e em `clientes`): só há os de exclusão (e o evento "cliente cadastrado"); `id` e código "nunca mudam" só por convenção do front. **Conferido** (lista de gatilhos, 31/10/2026; não testei um UPDATE). Benefício vindo de Comercial | Pré-venda (`01_geral.md` PC-9). Achado, sem correção (vale também para 3.1).
 
 ### 3.2.11 Histórico (só o que ainda ensina)
 - **31/10/2026 (T3):** o código `VPFOR` era "maior código + 1" lido no navegador, com `VPFOR-0001` fixo se o banco falhasse; passou para a sequência do banco (RPC `gerar_codigo_fornecedor`). Sequência em 82, próximo `VPFOR-0083`.
@@ -382,6 +383,7 @@ A **lei** está no `CLAUDE.md` (Art. 16 e a seção "🔒 ÁREA BLINDADA — Cad
 - **Recebido do Geral (`01_geral.md`) e aplicado aqui:** os 11 temas por tela, o selo de verificação, o glossário próprio, a Parte comum, "achado, sem correção", a contagem de testes rodados de verdade e os padrões de PC-9: leitura paginada com cartão de erro (já existia), hooks antes do `return` (**Conferido**: respeitado em `cadastros.jsx`).
 - **Recebido do CRM (`02_crm.md`) e aplicado aqui:** a regra da **data pura `aaaa-mm-dd`** (gerou o achado 3.1.10, item 4: a frase do Score) e a de **atualizar uma linha sem recarregar** (gerou o item 6); as colunas do Omie em `clientes` são gravadas pela tela de Leads (`gravarOmieNoCliente`, `02_crm.md` PC-4): encontrado grava data e código do Omie; não encontrado grava a data vazia e marca como verificado; **falha de consulta (`null`) não grava nada**. Quem mexer nessas colunas aqui deve respeitar essas três regras.
 - **Duas implementações da mesma regra (a corrigir quando o Gelson decidir):** a consulta "Omie primeiro" existe em `enderecos-api.js` (`consultarCnpjOmieFirst`, usada por Clientes, Fornecedores e Formulário) e em `comercial.jsx` (`buscarClienteOmie`, usada por Leads). **Não feito:** unificar.
+- **Recebido de Comercial | Pré-venda (31/10/2026, `01_geral.md` PC-9):** gatilho de identidade no banco (achado 3.2.10, item 11), trava com destrave por motivo e o cuidado com lista cortada. Nenhuma mudança de código.
 - **Doado ao Geral e ao CRM (texto completo em `01_geral.md` PC-9; o CRM aponta):**
   - **Gravar com conferência prévia de duplicidade, índice único parcial e mensagem clara:** a store confere o documento antes de gravar (para dizer **qual** cadastro já usa), o banco reforça com índice único parcial (para valer com dois cadastros ao mesmo tempo ou fora da tela) e o erro `23505` do índice vira a mesma mensagem; falha ao conferir = não grava; na criação a conferência roda antes de gerar o código.
   - **Código humano pela sequência do banco, sem reserva fixa:** nunca "maior código + 1" no navegador nem um código constante quando o banco falha; falha vira erro claro. Para o CRM: o `id` do lead (`LD-` + 6 dígitos do relógio, gerado no navegador) é do tipo que a regra desencoraja; ver `02_crm.md` 2.1.10.

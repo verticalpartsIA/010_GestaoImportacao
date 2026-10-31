@@ -743,6 +743,10 @@ Esta tabela lista os 6 jobs **das telas de Geral**. Em 31/10/2026 o banco tinha 
   - **Gravar com conferência prévia de duplicidade:** a store procura o dado único (ex.: CNPJ/CPF) em **outro** registro antes de gravar, para dizer **qual** registro já o usa; o banco reforça com **índice único parcial** (para valer com duas pessoas ao mesmo tempo ou fora da tela) e o erro `23505` do índice vira a mesma mensagem clara. Falha ao conferir = não grava; na criação a conferência roda **antes** de gerar o código, para não gastar número.
   - **Código humano pela sequência do banco, sem reserva fixa:** nunca "maior código + 1" lido no navegador (duas pessoas ao mesmo tempo geram o mesmo) nem um código constante quando o banco falha (colide sempre); a falha vira erro claro. Exemplos: `gerar_codigo_cliente` e `gerar_codigo_fornecedor`.
   - **Link para um registro que não existe:** mostrar aviso ("não encontrado", com "Voltar à lista") em vez de abrir a tela como se fosse "Novo"; se a lista veio incompleta, o aviso diz isso.
+- **Benefícios vindos de Comercial | Pré-venda (doados em 31/10/2026, Art. 49; texto completo em `04_comercial_pre_venda.md` 4.1.8, 4.5.10 e PC-4). Selo: Conferido em 31/10/2026 no código e na lista de gatilhos do banco:**
+  - **Identidade protegida por gatilho do banco:** o Formulário fixa `id`, Nº, data, dono e vendedor num gatilho `BEFORE UPDATE` (`fn_formularios_elevador_protege`), não só pela tela. Vale para toda tabela cujo código/`id` "nunca muda".
+  - **Trava com destrave por motivo:** ação travada por regra de negócio; destrave só por alçada de Líder, motivo obrigatório de 10 letras ou mais, aviso ao dono e registro em `vp_logs` (Formulário e Proposta).
+  - **Lista cortada em silêncio:** a lista de Propostas pede 300 linhas e o banco tem 340. Ler em páginas de 1.000 e avisar quando a lista veio incompleta.
 
 ### PC-10 Menu "?" (Ajuda, Treinamento, Enviar feedback)
 *(Migrado do CLAUDE.md em 31/10/2026; arquivos conferidos agora, regras vindas do CLAUDE.md.)*
