@@ -1294,6 +1294,15 @@ Diagnóstico read-only (12 fios rompidos, 7 em curto) e plano em `docs/superpowe
 - **T14 (todos os containers no espelho do mapa) segue adiado (C4):** exige coluna nova em `embarques` (migration, CONFIRMO).
 - **T15:** texto de apoio na aba Entrega: as datas alimentam "Chegou na obra" da Evolução (`embarques-importacao.jsx` v19). T14 segue adiado. Testes: +1 em `evolucao-equipamentos-calc.test.js` (868/868). Não testado com clique real. Tutoriais de Embarques/Mapa de Obras podem estar desatualizados.
 
+## CRM — mapeamento e diagnóstico do módulo (30/10/2026, PR #1197, squash `b024ff4`, issue fechada #1198)
+
+Mapeamento **read-only** (só inspeção; nenhum código alterado). Documento completo em `docs/modulos/02_crm.md` — **leia-o antes de mexer no CRM**.
+- **Telas:** Leads e Detalhe do Lead em `comercial.jsx` (`/crm/leads`, `/crm/lead-detail/<id>`, resolvido por id em `ASYNC_FETCH_ROUTES` de `app.jsx`); Canais, Conversão, Automação e Análise em `crm.jsx` (`/crm/crm-canais|conversao|automacao|analise`), **somente leitura** sobre `leads` (hook `useLeadsBase`), exceto "Vincular agora" da Automação (`criarOuVincularDeLead` + `window.location.reload()`).
+- **Ciclo:** Em qualificação → Aguardando cotação → Proposta enviada → Negociação → Convertido | Sem retorno (`LEAD_STATUSES`, fonte única). **Convertido → Cliente** por qualquer caminho (Proposta assinada, edição, Kanban), idempotente.
+- **Herda:** leads do site (`capturar-lead-verticalparts`) e do formulário público do Quadro de Comando (`capturar-lead-quadro-comando`); CNPJ/CPF no Omie (`omie-buscar-cliente`) com BrasilAPI de reserva. **Doa:** Cliente (`leads.cliente_id`), Formulário de Elevador (`__prefillFromLead`), Dossiê da Obra, `vp_logs`.
+- **Regras já documentadas acima neste arquivo e confirmadas no mapeamento:** exclusão só por soft-delete; documento conforme o tipo escolhido, com dígito verificador; comissão manual (2% se em branco); acesso ao banco só por `comercialSb()`; navegação por `setSubsel`+`setRoute`.
+- **Pontos em aberto:** o card de Conversão diz que "falta configurar o Webhook no Elementor" (não verificado se já foi feito); as 4 telas do `crm.jsx` não filtram por vendedor (segurança real = #571), leem todos os leads sem paginação (cap de 1000 linhas do PostgREST) e não têm Realtime. Tutoriais do CRM ficam desatualizados se as telas mudarem (regenerar pela sessão de tutoriais).
+
 ## Método de trabalho (regra do Gelson, 24/10/2026) — este CLAUDE.md é a CONSTITUIÇÃO
 
 Para trabalho novo de produto/telas/banco: **SPECIFY → CLARIFY → PLAN → TASKS → ANALYZE → IMPLEMENT**. Este arquivo é a constituição (regras permanentes e limites); os demais passos vão em `docs/superpowers/specs/<data>-<assunto>.md` (um arquivo por assunto, não arquivos soltos). Não se implementa antes de Specify/Clarify; migration/cron/deploy só com "CONFIRMO" dele depois de descrever o que será aplicado. Correção pequena e óbvia não precisa do ciclo inteiro.
