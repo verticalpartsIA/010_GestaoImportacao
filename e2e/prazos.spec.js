@@ -76,7 +76,43 @@ test('D.3 — Aval de Pagamento sem os outros avais avisa o que falta (não diz 
   await page.locator('.modal, [role="dialog"]').getByRole('button', { name: 'Dar Aval de Pagamento' }).click();
 
   await expect(page.getByText(/Para liberar a compra ainda falta: .*Aval Jurídico/)).toBeVisible();
-  await expect(page.getByText(/compra ao fornecedor liberada/i)).toHaveCount(0);
+  await expect(page.getByText(/Aval de Pagamento confirmado — compra ao fornecedor liberada/)).toHaveCount(0);
   expect(state.av.aval_pagamento_confirmado).toBe(true);
   expect(erros).toEqual([]);
+});
+
+const btnAval = (page) => page.getByRole('button', { name: 'Dar Aval de Pagamento' });
+
+test('D.5 — filtro e cotação aberta ficam na URL (link direto, F5 e Voltar)', async ({ page }) => {
+  const erros = coletarErros(page);
+  await preparar(page, { av: {} });
+  await page.goto('/adm-financeiro/financeiro/atrasada/' + COT);
+  await expect(btnAval(page).first()).toBeVisible({ timeout: 45_000 });
+
+  await page.reload();
+  await expect(btnAval(page).first()).toBeVisible({ timeout: 45_000 });
+  await expect(page).toHaveURL(new RegExp('/financeiro/atrasada/' + COT + '$'));
+
+  await page.getByRole('button', { name: /^Todas/ }).click();
+  await expect(page).toHaveURL(/\/financeiro\/todas$/);
+  await expect(btnAval(page)).toHaveCount(0);
+  await page.getByText('Cotação Nº ' + COT).click();
+  await expect(page).toHaveURL(new RegExp('/financeiro/todas/' + COT + '$'));
+  await expect(btnAval(page).first()).toBeVisible();
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/financeiro\/todas$/);
+  await expect(btnAval(page)).toHaveCount(0);
+  expect(erros).toEqual([]);
+});
+
+test('D.5 — link com filtro errado abre a cotação no filtro dela; cotação inexistente avisa', async ({ page }) => {
+  await preparar(page, { av: {} });
+  await page.goto('/adm-financeiro/financeiro/andamento/' + COT);
+  await expect(page).toHaveURL(new RegExp('/financeiro/atrasada/' + COT + '$'), { timeout: 45_000 });
+  await expect(btnAval(page).first()).toBeVisible();
+
+  await page.goto('/adm-financeiro/financeiro/atrasada/9999');
+  await expect(page.getByText(/Cotação Nº 9999 não tem cadeia de etapas/)).toBeVisible({ timeout: 45_000 });
+  await expect(page).toHaveURL(/\/financeiro\/atrasada$/);
 });

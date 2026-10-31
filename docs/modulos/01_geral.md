@@ -42,8 +42,8 @@ Regra comum: o roteador (`router.js`) usa só o 2º segmento como rota; 3º/4º 
 - Tipos de decisão (`decisoes-store.js`): `envio_proposta_gestor`, `envio_proposta_ceo` (CEO só quando `margemEfetivaPct < 0,15` ou desconhecida — `LIMITE_MARGEM_SEM_CEO`), `compra_equipamento_ceo`, `desconto_proposta`, varejo (`pedidos_compra_varejo`), `contratacao_mao_obra_ceo`, RH de montadores (aprovadores → Arilene), `inbox_decisao` ("Pedir decisão" a partir de um e-mail).
 - Status: `pendente`, `bloqueada`, `aprovada`, `reprovada`, `cancelada`. Reprovar cancela quem dependia (`MOTIVO_DEPENDENCIA_REPROVADA`); aprovar/reprovar são atômicos (`.eq('status','pendente')`).
 
-### 2.4 Prazos & Pendências — `/adm-financeiro/financeiro`
-- `FinanceiroPage({ setRoute, setSubsel })` (`financeiro.jsx:68`), `app.jsx:410`. Sem abas na URL.
+### 2.4 Prazos & Pendências — `/adm-financeiro/financeiro[/<filtro>[/<Nº da cotação>]]`
+- `FinanceiroPage({ setRoute, setSubsel })` (`financeiro.jsx`), `app.jsx:410`. Sem abas; o 2º segmento é o filtro das cadeias (`atrasada`, `andamento`, `rascunho`, `fim`, `todas`) e o 3º a cotação aberta (desde 31/10/2026, #1214 D.5).
 - KPIs reais (etapas em andamento, com prazo estourado, ação do Financeiro, formulários sem envio), cadeias por cotação com filtros (Atrasadas / Em andamento / Formulário sem envio / Concluídas / Todas) e busca por Nº, ordenadas pelas mais atrasadas; alertas abrem `alertas.rota` via `urlSegura`.
 - Ações do Financeiro: **"Dar Aval de Pagamento"** (`ModalConfirmarAvalPagamento` → evento `AVAL_PAGAMENTO_CONFIRMADO`), "Confirmar Boleto Pago", gatilhos avulsos (card só aparece se houver), "Exportar fluxo" (todas as etapas).
 - Motor: `gatilhos-engine.js` (ver seção 4).
@@ -181,7 +181,8 @@ Auditoria read-only seguida de correções, uma issue por tela. Cada correção 
 - **Prazos & Pendências:**
   - A carga tem `try/catch` e mostra aviso com "Tentar novamente" (nunca "Carregando…" eterno).
   - Após "Dar Aval de Pagamento", a tela confere `AvalFinanceiroStore.podeIniciarCompra` e diz o que ainda falta. **As regras de avais não mudaram** (confirmado pelo Gelson): três avais (Pagamento, Jurídico, Projeto de Instalação assinado) + CEO se margem < 15%.
-  - D.4 (alçada no botão) aguarda a #571; D.5 (filtro/modais na URL) sem decisão.
+  - D.5 (31/10/2026, decisão do Gelson: opções a + b): o filtro das cadeias e a cotação aberta ficam na URL (`/adm-financeiro/financeiro/<filtro>/<Nº>`). F5, link compartilhado e Voltar/Avançar mantêm a tela. **Só uma cotação aberta por vez** (a do link). Link com filtro que não é o da cotação abre no filtro dela (troca sem criar entrada no Voltar); cotação sem cadeia avisa e volta à lista. **Busca e janelas de confirmação ficam fora da URL de propósito** (reabrir uma confirmação no F5 arriscaria confirmar duas vezes). Filtro novo = incluir em `FILTROS_CADEIA`. O modal de cadeia do Controle de Cotações (mesmo componente, sem `onAlternar`) continua abrindo/fechando só na tela.
+  - D.4 (alçada no botão) aguarda a #571.
 - **Dashboard:**
   - `loadDashboardData` devolve `erros` (consultas que falharam) e a tela avisa.
   - Não há mais "vazio aos 3 s": a tela segue carregando e avisa a demora.

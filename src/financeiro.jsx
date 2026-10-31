@@ -65,6 +65,8 @@ function ModalNovoGatilho({ onClose, onSaved }) {
   );
 }
 
+const FILTROS_CADEIA = ['atrasada', 'andamento', 'rascunho', 'fim', 'todas'];
+
 function FinanceiroPage({ setRoute, setSubsel }) {
   const [gatilhos, setGatilhos] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -72,7 +74,17 @@ function FinanceiroPage({ setRoute, setSubsel }) {
   const [confirmarSinalDe, setConfirmarSinalDe] = React.useState(null);
   const [confirmarAvalDe, setConfirmarAvalDe] = React.useState(null);
   const [alertas, setAlertas] = React.useState([]);
-  const [filtroCadeia, setFiltroCadeia] = React.useState(null);   // null = escolhe sozinho (atrasadas, se houver)
+  /* #1214 D.5: filtro e cotação aberta moram na URL — /adm-financeiro/financeiro/<filtro>/<Nº da cotação>.
+     F5, link compartilhado e Voltar/Avançar mantêm o que estava na tela. Sem filtro na URL = escolhe sozinho
+     (atrasadas, se houver). Só uma cotação aberta por vez (é a que está no link). A busca e as janelas de
+     confirmação ficam fora da URL de propósito (reabrir uma confirmação no F5 arriscaria confirmar duas vezes). */
+  const [filtroUrl] = window.useRotaId ? window.useRotaId('financeiro') : [''];
+  const locPrazos = (window.VpRouter && window.VpRouter.parseLocation()) || {};
+  const filtroCadeia = FILTROS_CADEIA.includes(filtroUrl) ? filtroUrl : null;
+  const cotacaoAberta = filtroCadeia && locPrazos.route === 'financeiro' ? String(locPrazos.tab || '') : '';
+  const cadeiasRef = React.useRef(null);
+  const irPara = (filtro, cotacao, opts) => { if (window.VpRouter) window.VpRouter.navigate('financeiro', filtro || null, cotacao || null, opts); };
+  const setFiltroCadeia = (k) => irPara(k, null);
   const [buscaCadeia, setBuscaCadeia] = React.useState('');
   const [erroCarga, setErroCarga] = React.useState(null);   // #1214 D.1/D.2: falha de leitura vira aviso, nunca "Carregando…" eterno nem lista vazia muda
 
@@ -179,6 +191,21 @@ function FinanceiroPage({ setRoute, setSubsel }) {
   };
   React.useEffect(() => { reloadGatilhos(); reloadAlertas(); }, []);
 
+  /* Link de cotação que não está no filtro do link: abre no filtro certo; cotação sem cadeia: avisa e volta à lista. */
+  React.useEffect(() => {
+    const ref = cadeiasRef.current;
+    if (loading || !ref || !cotacaoAberta) return;
+    const c = ref.cadeias.find((x) => String(x.numero) === cotacaoAberta);
+    if (!c) {
+      window.toast?.(`Cotação Nº ${cotacaoAberta} não tem cadeia de etapas — mostrando a lista.`, 'warning');
+      irPara(filtroCadeia, null, { replace: true });
+      return;
+    }
+    const filtroDela = ['concluida', 'encerrada'].includes(c.tipo) ? 'fim' : c.tipo;
+    if (filtroCadeia !== 'todas' && filtroCadeia !== filtroDela) irPara(filtroDela, cotacaoAberta, { replace: true });
+    else setTimeout(() => document.getElementById('cadeia-' + cotacaoAberta)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  }, [loading, gatilhos, cotacaoAberta, filtroCadeia]);
+
   if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
 
   /* Cadeia automática (nasce/fecha sozinha via GatilhosEngine, correlacionada
@@ -214,6 +241,7 @@ function FinanceiroPage({ setRoute, setSubsel }) {
   const cadeias = Object.entries(cadeiasPorCotacao).map(([numero, nos]) => ({ numero, nos, ...resumoDaCadeia(nos) }));
   const contagem = cadeias.reduce((acc, c) => { acc[c.tipo] = (acc[c.tipo] || 0) + 1; return acc; }, {});
   const filtroAtivo = filtroCadeia || (contagem.atrasada ? 'atrasada' : 'andamento');
+  cadeiasRef.current = { cadeias };
   const termoCadeia = buscaCadeia.trim().replace(/\D/g, '');
   const cadeiasVisiveis = cadeias
     .filter(c => filtroAtivo === 'todas' || (filtroAtivo === 'fim' ? ['concluida', 'encerrada'].includes(c.tipo) : c.tipo === filtroAtivo))
@@ -334,6 +362,8 @@ function FinanceiroPage({ setRoute, setSubsel }) {
           )}
           {cadeiasVisiveis.map((c) => (
             <CadeiaGatilhosCotacao key={c.numero} numeroCotacao={c.numero} nos={c.nos}
+              aberta={cotacaoAberta === String(c.numero)}
+              onAlternar={() => irPara(filtroAtivo, cotacaoAberta === String(c.numero) ? null : c.numero)}
               onConfirmarSinal={setConfirmarSinalDe} onConfirmarAval={setConfirmarAvalDe}
               onFecharLembrete={fecharLembrete} onAbrirGatilho={abrirGatilho} onFecharComMotivo={reloadGatilhos}/>
           ))}
@@ -472,8 +502,11 @@ function ModalFecharComMotivo({ g, onClose, onSaved }) {
    número inventado) até chegar a vez. Etapas com `fecha: null` (sem
    ponto de ação real no código ainda, ver gatilhos-engine.js) ganham
    rótulo "sem rastreio automático" em vez de fingir monitoramento. */
-function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirmarAval, onFecharLembrete, onAbrirGatilho, onFecharComMotivo, defaultOpen }) {
-  const [aberta, setAberta] = React.useState(!!defaultOpen);
+function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirmarAval, onFecharLembrete, onAbrirGatilho, onFecharComMotivo, defaultOpen, aberta: abertaProp, onAlternar }) {
+  const [abertaLocal, setAbertaLocal] = React.useState(!!defaultOpen);
+  const controlada = typeof onAlternar === 'function';   // Prazos & Pendências: a cotação aberta vem da URL (#1214 D.5)
+  const aberta = controlada ? !!abertaProp : abertaLocal;
+  const setAberta = controlada ? () => onAlternar() : setAbertaLocal;
   const [fechandoMotivo, setFechandoMotivo] = React.useState(null);
   const engine = window.GatilhosEngine;
   const NODES = engine?.NODES || [];
@@ -494,7 +527,7 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
   const statusVariant = encerrada ? 'neutral' : concluida ? 'success' : atrasada ? 'danger' : 'warning';
 
   return (
-    <div>
+    <div id={"cadeia-" + numeroCotacao}>
       <div className="row sb" style={{ cursor: 'pointer', padding: '4px 0' }} onClick={() => setAberta((v) => !v)}>
         <div className="row gap-3" style={{ alignItems: 'center' }}>
           <Icon.chevRight size={12} style={{ transform: aberta ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}/>
