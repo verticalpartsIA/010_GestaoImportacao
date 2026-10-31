@@ -694,10 +694,18 @@ function LeadsPage({ setRoute, setSubsel }) {
       setLeads((prev) => (prev || []).map((l) => (l.id === lead.id ? { ...l, status: anterior } : l)));
       return;
     }
-    const { error } = await sb.from("leads").update({ status: novoStatus }).eq("id", lead.id);
-    if (error) {
+    // .select('id') confirma que a linha foi mesmo alterada: update barrado por RLS volta sem erro e sem linhas.
+    let falha = null;
+    try {
+      const { data, error } = await sb.from("leads").update({ status: novoStatus }).eq("id", lead.id).select("id");
+      if (error) falha = error.message || String(error);
+      else if (!data || !data.length) falha = "nenhum registro foi alterado";
+    } catch (e) {
+      falha = (e && e.message) || String(e);
+    }
+    if (falha) {
       setLeads((prev) => (prev || []).map((l) => (l.id === lead.id ? { ...l, status: anterior } : l)));
-      window.toast("Erro ao mover lead: " + error.message, "error");
+      window.toast("Erro ao mover lead: " + falha, "error");
       return;
     }
     window.VPLog && window.VPLog.registrar({
@@ -1115,14 +1123,21 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
      prontuário da obra. Agora checa por lead_id antes de criar; se já
      existe, o botão abre o existente em vez de criar outro. */
   const [dossierExistente, setDossierExistente] = React.useState(undefined); // undefined = carregando, null = não existe
+  const [dossierErro, setDossierErro] = React.useState(false); // consulta falhou: não dá pra saber se existe (não liberar a criação)
   React.useEffect(() => {
     let alive = true;
     setDossierExistente(undefined); // E11: senão "Abrir Dossier" abriria o dossier do lead anterior
+    setDossierErro(false);
     const sb = comercialSb();
     if (!sb || lead.id == null) { setDossierExistente(null); return; }
-    Promise.resolve(sb.from('dossier_obra').select('id').eq('lead_id', lead.id).maybeSingle())
-      .then(({ data }) => { if (alive) setDossierExistente(data || null); })
-      .catch(() => { if (alive) setDossierExistente(null); });
+    // limit(1) em vez de maybeSingle(): dossier_obra.lead_id não é único e maybeSingle() dá erro com 2+ dossiês.
+    Promise.resolve(sb.from('dossier_obra').select('id').eq('lead_id', lead.id).order('id').limit(1))
+      .then(({ data, error }) => {
+        if (!alive) return;
+        if (error) { setDossierErro(true); setDossierExistente(null); return; }
+        setDossierExistente((data && data[0]) || null);
+      })
+      .catch(() => { if (alive) { setDossierErro(true); setDossierExistente(null); } });
     return () => { alive = false; };
   }, [lead.id]);
 
@@ -1130,6 +1145,7 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
     // Checagem de dossier existente ainda em andamento — criar agora podia
     // duplicar o prontuário (mesma proteção do achado de 14/09).
     if (dossierExistente === undefined) return window.toast('Verificando se este lead já tem Dossier… tente de novo em instantes.', 'info');
+    if (dossierErro) return window.toast('Não foi possível verificar se este lead já tem Dossier. Recarregue a página e tente de novo.', 'error');
     if (dossierExistente) {
       setSubsel?.(dossierExistente.id);
       setRoute('dossier-obra');
