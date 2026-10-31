@@ -75,7 +75,7 @@ Ordem por risco: Onda 1 não muda nenhum dado gravado; Onda 2 só acrescenta bot
 |---|---|---|---|
 | **T12** | #1 e #2 Presença de carga sem consumidor; 4 datas de chegada | Definir hierarquia (C1): chegada real = `presenca_carga`; estimativa = `eta_atual`. Evolução (etapa "porto") e Linha do Tempo usam a real quando existe e rotulam "previsto" quando vem da estimativa. `eta_santos` segue sincronizado com `eta_atual` por compatibilidade | `evolucao-equipamentos-calc.js` (+teste), `linha-do-tempo-store.js`, `.jsx` |
 | **T13** | #3 AIS não volta; salvar apaga o ETA do AIS | Primeiro passo **só front**: `_sincronizarRastreio` não sobrescreve `embarques.eta` se o AIS atualizou depois do último ETA digitado. Segundo passo (CONFIRMO + teste em cópia): `ais-sync` grava o ETA no embarque de origem com `historico_eta` motivo "AIS" | `embarques-importacao-store.js`; `supabase/functions/ais-sync` |
-| **T14** | #15 só o 1º container no espelho | **Adiado (C4).** Se aprovado: coluna `containers_lista` em `embarques` (migration, CONFIRMO) | — |
+| **T14** | #15 só o 1º container no espelho | **FEITO (31/10/2026, PR #1235, squash `d2b9f84`).** Migration `20261031100000_embarques_containers_lista.sql` (coluna `containers_lista jsonb not null default '[]'` em `embarques`, aplicada em produção com CONFIRMO **antes** do merge). `_sincronizarRastreio` (`embarques-importacao-store.js` v18) grava `[{numero, tipo_tamanho, lacre}]`; o card "Navio & Container" (`logistica.jsx` v77) mostra todos quando há mais de um. `container_number`/`container_type` do 1º seguem como antes. Embarques antigos ficam com `[]` até serem salvos de novo. Não testado com clique real no navegador | `embarques-importacao-store.js`, `logistica.jsx`, migration |
 | **T15** | #19 edição na Entrega muda a Evolução sem aviso | Texto de apoio nos campos `data_entrega`/`data_limite_entrega`: "alimenta a Evolução dos Equipamentos" | `.jsx` |
 
 ---
@@ -95,7 +95,7 @@ Ordem por risco: Onda 1 não muda nenhum dado gravado; Onda 2 só acrescenta bot
 | Concorrência com outras sessões | Antes de cada PR: `git fetch`, comparar com `origin/main`, não sobrescrever arquivo alheio |
 
 **Testes novos previstos:** `embarques-sugestoes-calc.test.js` (modalidade, free time, status, transit time, ETA após rolagem); `resumoPIs` (moedas mistas, cotações divergentes); `evolucao-equipamentos-calc.test.js` (presença de carga real × previsto).
-**Sem migration** nas Ondas 1 e 2. Onda 3: nenhuma obrigatória (T14 adiado).
+**Sem migration** nas Ondas 1 e 2. Onda 3: só o T14 teve migration (`containers_lista`, aplicada em 31/10/2026). **Status: Ondas 1, 2 e 3 concluídas.**
 
 ---
 
