@@ -52,6 +52,21 @@ async function cadExcluirOuInativar(store, item, rotulo, reload) {
   catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
 }
 
+/* T4 #1224 (31/10/2026): leitura falhou no meio = aviso visível, nunca lista parcial calada. */
+function CadAvisoLeitura({ erro, qtd, rotulo, onRetry }) {
+  if (!erro) return null;
+  return (
+    <div className="card" style={{ border: '1px solid var(--vp-danger, #c62828)', background: '#fff5f5', padding: 12, marginBottom: 14 }}>
+      <div className="row sb" style={{ alignItems: 'center', gap: 12 }}>
+        <div className="small">
+          <b>Lista incompleta:</b> não foi possível ler todos os {rotulo} ({erro}). {qtd > 0 ? `Mostrando só os ${qtd} que chegaram.` : 'Nada foi carregado.'}
+        </div>
+        <Button variant="outline" size="sm" onClick={onRetry}>Tentar de novo</Button>
+      </div>
+    </div>
+  );
+}
+
 /* ============================================================
    CLIENTES
    ============================================================ */
@@ -176,6 +191,7 @@ function ClienteForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
 
 function CadastroClientesPage() {
   const [items, setItems] = React.useState(null);
+  const [erroLeitura, setErroLeitura] = React.useState(null);
   const [search, setSearch] = React.useState('');
   const [saving, setSaving] = React.useState(false);
   const ord = window.useOrdenacao(); // 23/10 (pedido do usuário) — ordenação por coluna
@@ -203,7 +219,11 @@ function CadastroClientesPage() {
     if (showForm && formRef.current) formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [showForm, editing]);
 
-  const reload = React.useCallback(() => { window.CadastrosClientesStore.listarTodos().then(setItems).catch(() => setItems([])); }, []);
+  const reload = React.useCallback(() => {
+    window.CadastrosClientesStore.listarTodosDetalhado()
+      .then((r) => { setItems(r.itens); setErroLeitura(r.erro); })
+      .catch((e) => { setItems([]); setErroLeitura(e.message || 'falha de leitura'); });
+  }, []);
   React.useEffect(() => { reload(); }, [reload]);
 
   const salvar = async (form) => {
@@ -252,6 +272,7 @@ function CadastroClientesPage() {
       )}
 
       <input className="input" style={{ marginBottom: 14 }} placeholder="Buscar por código, nome ou CNPJ/CPF…" value={search} onChange={(e) => setSearch(e.target.value)}/>
+      <CadAvisoLeitura erro={erroLeitura} qtd={items.length} rotulo="clientes" onRetry={reload}/>
       <div className="small muted" style={{ marginBottom: 10 }}>{filtered.length} cliente(s) encontrado(s)</div>
 
       <div className="table-wrap table-wrap--sticky">
@@ -543,6 +564,7 @@ function FornecedorForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
 
 function CadastroFornecedoresPage() {
   const [items, setItems] = React.useState(null);
+  const [erroLeitura, setErroLeitura] = React.useState(null);
   const [search, setSearch] = React.useState('');
   const [filterCategoria, setFilterCategoria] = React.useState('Todas');
   const [saving, setSaving] = React.useState(false);
@@ -566,7 +588,9 @@ function CadastroFornecedoresPage() {
   const [medias, setMedias] = React.useState({});
 
   const reload = React.useCallback(() => {
-    window.CadastrosFornecedoresStore.listarTodos().then(setItems).catch(() => setItems([]));
+    window.CadastrosFornecedoresStore.listarTodosDetalhado()
+      .then((r) => { setItems(r.itens); setErroLeitura(r.erro); })
+      .catch((e) => { setItems([]); setErroLeitura(e.message || 'falha de leitura'); });
     window.CadastrosFornecedoresStore.mediasAvaliacoes().then(setMedias).catch(() => setMedias({}));
   }, []);
   React.useEffect(() => { reload(); }, [reload]);
@@ -626,6 +650,7 @@ function CadastroFornecedoresPage() {
           {window.CadastrosFornecedoresStore.CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
+      <CadAvisoLeitura erro={erroLeitura} qtd={items.length} rotulo="fornecedores" onRetry={reload}/>
       <div className="small muted" style={{ marginBottom: 10 }}>{filtered.length} fornecedor(es) encontrado(s)</div>
 
       <div className="table-wrap table-wrap--sticky">

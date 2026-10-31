@@ -53,3 +53,53 @@ for (const [arquivo, chave, tipo] of [['cadastros-clientes-store.js', 'Cadastros
     assert.strictEqual(chamadas.update.ativo, false);
   });
 }
+
+/* T3 #1223 e T4 #1224 */
+function montarLeitura(arquivo, { paginas, erroNaPagina, rpc }) {
+  let chamadaRange = 0;
+  const sb = {
+    rpc: async () => rpc || { data: null, error: { message: 'sem função' } },
+    from() {
+      const q = {
+        select() { return q; }, order() { return q; }, eq() { return q; }, contains() { return q; },
+        range: async () => {
+          const i = chamadaRange++;
+          if (erroNaPagina === i) return { data: null, error: { message: 'timeout' } };
+          return { data: paginas[i] || [], error: null };
+        },
+      };
+      return q;
+    },
+  };
+  const window = { __VP_SB: { sb }, VPLog: { registrar() {} } };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, arquivo), 'utf8'), { window, console });
+  return window;
+}
+const mil = (n) => Array.from({ length: n }, (_, i) => ({ id: 'x' + i, fornecedor_id: 'f', nota: 4 }));
+
+test('fornecedores: lista passa de 1000 linhas', async () => {
+  const w = montarLeitura('cadastros-fornecedores-store.js', { paginas: [mil(1000), mil(5)] });
+  const r = await w.CadastrosFornecedoresStore.listarTodosDetalhado();
+  assert.strictEqual(r.itens.length, 1005); assert.strictEqual(r.erro, null);
+});
+test('fornecedores: falha no meio vira aviso, não lista calada', async () => {
+  const w = montarLeitura('cadastros-fornecedores-store.js', { paginas: [mil(1000)], erroNaPagina: 1 });
+  const r = await w.CadastrosFornecedoresStore.listarTodosDetalhado();
+  assert.strictEqual(r.itens.length, 1000); assert.strictEqual(r.erro, 'timeout');
+});
+test('clientes: falha no meio vira aviso', async () => {
+  const w = montarLeitura('cadastros-clientes-store.js', { paginas: [mil(1000)], erroNaPagina: 1 });
+  const r = await w.CadastrosClientesStore.listarTodosDetalhado();
+  assert.strictEqual(r.itens.length, 1000); assert.strictEqual(r.erro, 'timeout');
+});
+test('fornecedores: média soma as avaliações das duas páginas', async () => {
+  const w = montarLeitura('cadastros-fornecedores-store.js', { paginas: [mil(1000), mil(2)] });
+  const m = await w.CadastrosFornecedoresStore.mediasAvaliacoes();
+  assert.strictEqual(m.f.qtd, 1002);
+});
+test('fornecedores: código vem do banco; falha não inventa VPFOR-0001', async () => {
+  const ok = montarLeitura('cadastros-fornecedores-store.js', { paginas: [], rpc: { data: 'VPFOR-0083', error: null } });
+  assert.strictEqual(await ok.CadastrosFornecedoresStore.gerarCodigo(), 'VPFOR-0083');
+  const falha = montarLeitura('cadastros-fornecedores-store.js', { paginas: [] });
+  await assert.rejects(falha.CadastrosFornecedoresStore.gerarCodigo(), /gerar_codigo_fornecedor/);
+});

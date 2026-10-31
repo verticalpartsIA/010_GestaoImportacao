@@ -13,25 +13,43 @@
 
   const CATEGORIAS = ['Fornecedor', 'Agente de Carga', 'Transportador', 'Prestador IMS'];
 
-  /* Deriva do MAIOR código já usado, não de count(*): com contagem, excluir
-     um fornecedor fazia o próximo cadastro reusar um código existente e
-     estourar o índice único (bug pego em teste ao vivo). */
+  /* T3 #1223 (31/10/2026): o código vem da sequência do banco (RPC gerar_codigo_fornecedor), igual ao de
+     clientes. Antes era calculado no navegador (maior código + 1): dois cadastros ao mesmo tempo podiam gerar
+     o mesmo código, e sem banco caía num 'VPFOR-0001' fixo, que colide sempre. Falha = erro claro, sem chute. */
   async function gerarCodigo() {
-    const c = sb(); if (!c) return 'VPFOR-0001';
-    const { data } = await c.from('fornecedores').select('codigo');
-    const maior = (data || []).reduce((max, r) => {
-      const n = parseInt(String(r.codigo || '').replace(/\D/g, ''), 10);
-      return isNaN(n) ? max : Math.max(max, n);
-    }, 0);
-    return 'VPFOR-' + String(maior + 1).padStart(4, '0');
+    const c = sb();
+    if (!c) throw new Error('Não foi possível gerar o código do fornecedor: conexão com o banco indisponível.');
+    const { data, error } = await c.rpc('gerar_codigo_fornecedor');
+    if (error) {
+      console.error('[CadastrosFornecedoresStore] gerarCodigo — RPC gerar_codigo_fornecedor falhou', error);
+      throw new Error('Não foi possível gerar o código do fornecedor agora. Tente novamente em instantes; se persistir, avise o suporte (função gerar_codigo_fornecedor indisponível).');
+    }
+    if (!data) throw new Error('Não foi possível gerar o código do fornecedor: resposta vazia do banco.');
+    return data;
   }
 
-  async function listarTodos() {
-    const c = sb(); if (!c) return [];
-    const { data, error } = await c.from('fornecedores').select('*').order('criado_em', { ascending: false });
-    if (error) { console.warn('[CadastrosFornecedoresStore] listarTodos falhou', error); return []; }
-    return data || [];
+  /* T4 #1224 (31/10/2026): lê de 1000 em 1000 (o PostgREST corta em 1000 linhas sem avisar) e devolve o erro,
+     para a tela avisar "lista incompleta" em vez de mostrar uma lista parcial como se fosse a inteira. */
+  async function lerPaginado(montar) {
+    const PAGE = 1000;
+    let todos = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await montar().range(from, from + PAGE - 1);
+      if (error) return { itens: todos, erro: error.message || 'falha de leitura' };
+      todos = todos.concat(data || []);
+      if (!data || data.length < PAGE) break;
+    }
+    return { itens: todos, erro: null };
   }
+
+  async function listarTodosDetalhado() {
+    const c = sb(); if (!c) return { itens: [], erro: 'Banco de dados indisponível — recarregue a página.' };
+    const r = await lerPaginado(() => c.from('fornecedores').select('*').order('criado_em', { ascending: false }).order('id'));
+    if (r.erro) console.warn('[CadastrosFornecedoresStore] listarTodos falhou', r.erro);
+    return r;
+  }
+
+  async function listarTodos() { return (await listarTodosDetalhado()).itens; }
 
   async function obter(id) {
     const c = sb(); if (!c) return null;
@@ -167,10 +185,10 @@
   /* Média + contagem por fornecedor, pra mostrar na lista sem N+1 query. */
   async function mediasAvaliacoes() {
     const c = sb(); if (!c) return {};
-    const { data, error } = await c.from('fornecedores_avaliacoes').select('fornecedor_id, nota');
-    if (error) return {};
+    const r = await lerPaginado(() => c.from('fornecedores_avaliacoes').select('id, fornecedor_id, nota').order('id'));
+    if (r.erro) return {};
     const map = {};
-    (data || []).forEach((a) => {
+    r.itens.forEach((a) => {
       const m = map[a.fornecedor_id] || { soma: 0, qtd: 0 };
       m.soma += a.nota; m.qtd += 1;
       map[a.fornecedor_id] = m;
@@ -180,7 +198,7 @@
   }
 
   window.CadastrosFornecedoresStore = {
-    CATEGORIAS, gerarCodigo, listarTodos, listarAtivos, obter, criar, atualizar, remover, vinculos, inativar,
+    CATEGORIAS, gerarCodigo, listarTodos, listarTodosDetalhado, listarAtivos, obter, criar, atualizar, remover, vinculos, inativar,
     listarAvaliacoes, avaliar, removerAvaliacao, mediasAvaliacoes,
   };
 }());
