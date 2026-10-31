@@ -167,10 +167,35 @@
     return data;
   }
 
+  /* 🔒 ÁREA BLINDADA (CLAUDE.md, 31/10/2026): cliente com transação nunca é excluído — só inativado.
+     A lista de transações vem do banco (cadastro_vinculos), a mesma regra da trava BEFORE DELETE.
+     Falha ao conferir = lança erro (nunca deixa apagar sem conferir). Devolve [{ fonte, qtd }]. */
+  async function vinculos(id) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.rpc('cadastro_vinculos', { p_tipo: 'cliente', p_id: id });
+    if (error) throw new Error('Não foi possível conferir as transações deste cliente — nada foi excluído. (' + (error.message || 'erro') + ')');
+    return Array.isArray(data) ? data : [];
+  }
+
+  async function inativar(id) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.from('clientes').update({ ativo: false, atualizado_em: new Date().toISOString() }).eq('id', id).select('id, razao_social').single();
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Cadastros', acao: 'Inativou cliente', alvo: data.razao_social, alvo_id: id });
+    return data;
+  }
+
   async function remover(id) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const { error } = await c.from('clientes').delete().eq('id', id);
+    const lista = await vinculos(id);
+    if (lista.length > 0) {
+      const err = new Error('Cliente com transação não pode ser excluído: ' + lista.map((v) => `${v.fonte} (${v.qtd})`).join(', ') + '. Inative o cadastro.');
+      err.vinculos = lista;
+      throw err;
+    }
+    const { data: apagados, error } = await c.from('clientes').delete().eq('id', id).select('id');
     if (error) throw error;
+    if (!apagados || apagados.length === 0) throw new Error('O cliente não foi excluído (nenhuma linha apagada).');
     if (window.VPLog) window.VPLog.registrar({
       modulo: 'Cadastros', acao: 'Excluiu cliente', alvo_id: id,
     });
@@ -229,5 +254,5 @@
     return cliente.id;
   }
 
-  window.CadastrosClientesStore = { gerarCodigo, listarTodos, obter, criar, atualizar, remover, criarOuVincularDeLead, vincularQuadrosDoLead, historicoCliente };
+  window.CadastrosClientesStore = { gerarCodigo, listarTodos, obter, criar, atualizar, remover, vinculos, inativar, criarOuVincularDeLead, vincularQuadrosDoLead, historicoCliente };
 }());

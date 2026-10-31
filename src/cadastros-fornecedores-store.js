@@ -100,10 +100,35 @@
     return data;
   }
 
+  /* 🔒 ÁREA BLINDADA (CLAUDE.md, 31/10/2026): fornecedor com transação (inclusive citado pelo nome ou com
+     e-mails trocados) nunca é excluído — só inativado. Regra no banco (cadastro_vinculos), a mesma da trava
+     BEFORE DELETE. Falha ao conferir = lança erro. Devolve [{ fonte, qtd }]. */
+  async function vinculos(id) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.rpc('cadastro_vinculos', { p_tipo: 'fornecedor', p_id: id });
+    if (error) throw new Error('Não foi possível conferir as transações deste fornecedor — nada foi excluído. (' + (error.message || 'erro') + ')');
+    return Array.isArray(data) ? data : [];
+  }
+
+  async function inativar(id) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.from('fornecedores').update({ ativo: false, atualizado_em: new Date().toISOString() }).eq('id', id).select('id, razao_social').single();
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Cadastros', acao: 'Inativou fornecedor', alvo: data.razao_social, alvo_id: id });
+    return data;
+  }
+
   async function remover(id) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const { error } = await c.from('fornecedores').delete().eq('id', id);
+    const lista = await vinculos(id);
+    if (lista.length > 0) {
+      const err = new Error('Fornecedor com transação não pode ser excluído: ' + lista.map((v) => `${v.fonte} (${v.qtd})`).join(', ') + '. Inative o cadastro.');
+      err.vinculos = lista;
+      throw err;
+    }
+    const { data: apagados, error } = await c.from('fornecedores').delete().eq('id', id).select('id');
     if (error) throw error;
+    if (!apagados || apagados.length === 0) throw new Error('O fornecedor não foi excluído (nenhuma linha apagada).');
     if (window.VPLog) window.VPLog.registrar({
       modulo: 'Cadastros', acao: 'Excluiu fornecedor', alvo_id: id,
     });
@@ -155,7 +180,7 @@
   }
 
   window.CadastrosFornecedoresStore = {
-    CATEGORIAS, gerarCodigo, listarTodos, listarAtivos, obter, criar, atualizar, remover,
+    CATEGORIAS, gerarCodigo, listarTodos, listarAtivos, obter, criar, atualizar, remover, vinculos, inativar,
     listarAvaliacoes, avaliar, removerAvaliacao, mediasAvaliacoes,
   };
 }());

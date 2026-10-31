@@ -379,3 +379,11 @@ Números: 1.239 clientes (134 com vínculo por id; 1.050 com código do Omie; 1 
 - (a) Cliente que **veio do Omie** (tem `codigo_cliente_omie`) conta como "com transação" mesmo sem vínculo no site?
 - (b) Fornecedor citado **só por nome** (P.I., embarque, cotação) conta como transação?
 - (c) Aplicar a trava também no banco (passo 3), além da tela?
+
+**Clarify — respostas do Gelson (31/10/2026).** (a) Cliente vindo do Omie conta como transação. (b) Fornecedor citado só pelo nome conta como transação — principalmente se houve troca de e-mails, o que também trava a saída. (c) Travar também no banco.
+
+**Implementação (branch `claude/confident-einstein-nqzyq4`).**
+- Banco: migration `20261031120000_cadastros_nunca_excluir_com_transacao.sql` — função `cadastro_vinculos(tipo, id)` (fonte única das transações, inclui Omie, nome aproximado e e-mails em `emails_projeto`, para clientes e fornecedores), gatilho `BEFORE DELETE` em `clientes` e `fornecedores`, e FKs `propostas`/`quadros_comando`/`fornecedores_avaliacoes` trocadas para `RESTRICT`. **Aplicada só com o "CONFIRMO" do Gelson.**
+- Stores: `vinculos(id)` e `inativar(id)`; `remover` recusa com transação ou falha ao conferir (sem a função no banco, nenhuma exclusão passa).
+- Tela: a lixeira mostra as transações e oferece Inativar; sem transação, pede confirmação e exclui.
+- Testes: `src/cadastros-nunca-excluir.test.js` (8).
