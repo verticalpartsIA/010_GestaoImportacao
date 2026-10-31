@@ -25,6 +25,10 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
   const [pagamentosPorObra, setPagamentosPorObra] = React.useState({});
   const [naoVinculados, setNaoVinculados] = React.useState(null);
   const [ultimoSync, setUltimoSync] = React.useState(null);
+  const [docsPorEmpresa, setDocsPorEmpresa] = React.useState({});
+  React.useEffect(() => {
+    window.RHHomologacao.resumoDocumentosPorEmpresa().then(setDocsPorEmpresa).catch(() => setDocsPorEmpresa({}));
+  }, []);
   const [sincronizando, setSincronizando] = React.useState(false);
 
   const reloadEmpresas = React.useCallback(() => {
@@ -71,8 +75,30 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
 
   const selectEmpresa = async (emp) => {
     setSelected(emp);
+    if (window.VpRouter) window.VpRouter.navigate('cadastro-instaladores', emp.id);
     await Promise.all([reloadColaboradores(emp.id), reloadObras(emp.id)]);
   };
+
+  /* Deep link direto (vindo da Central de Decisões — "Ver documento" de uma
+     decisão de montador, tabela parceiros_instaladores — ou de um link
+     compartilhado): essa página nunca recebia `subsel` de app.jsx, então o
+     2º segmento da URL (/cadastro-instaladores/<id>) era escrito mas nunca
+     lido — "Ver documento" abria a lista sem abrir a empresa certa. Lê a
+     URL de verdade (não um snapshot de render) quando a lista termina de
+     carregar, que é quando o `pushState` já aconteceu. */
+  const [idUrl] = window.useRotaId('cadastro-instaladores');
+  React.useEffect(() => {
+    if (!empresas) return;
+    // Voltar/Avançar do navegador: a URL sem id fecha a empresa aberta.
+    if (!idUrl) {
+      if (selected) { setSelected(null); setColaboradores([]); setObras(null); }
+      return;
+    }
+    if (selected && selected.id === idUrl) return;
+    const emp = empresas.find((e) => e.id === idUrl);
+    if (emp) selectEmpresa(emp);
+    else window.toast?.('Empresa instaladora não encontrada (pode ter sido excluída).', 'warning');
+  }, [empresas, idUrl]);
 
   const abrirObra = (obraId) => {
     setSubsel && setSubsel(obraId);
@@ -84,7 +110,7 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
     try {
       await window.RHHomologacao.excluirMontador(emp.id);
       window.toast?.('Empresa excluída.', 'success');
-      if (selected?.id === emp.id) { setSelected(null); setColaboradores([]); setObras(null); }
+      if (selected?.id === emp.id) { setSelected(null); setColaboradores([]); setObras(null); if (window.VpRouter) window.VpRouter.navigate('cadastro-instaladores', null); }
       reloadEmpresas();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
   };
@@ -174,6 +200,12 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
                 <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 8, display: 'flex', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 6, flexWrap: 'wrap' }}>
                   <span>👥 Funcionários: <b>{estatisticas[e.id]?.funcionarios ?? 0}</b></span>
                   <span>🛗 Elevadores: <b>{estatisticas[e.id]?.elevadores ?? 0}</b></span>
+                  {docsPorEmpresa[e.id] && docsPorEmpresa[e.id].vencido > 0 && (
+                    <a href="/rh/rh-homologacao" title="Abrir a Homologação de Instaladores" onClick={(ev) => { ev.stopPropagation(); ev.preventDefault(); window.pcpIrParaUrl && window.pcpIrParaUrl('/rh/rh-homologacao'); }}
+                      style={{ color: 'var(--vp-danger)', fontWeight: 600, textDecoration: 'none' }}>
+                      ⚠ {docsPorEmpresa[e.id].vencido} doc(s) vencido(s)
+                    </a>
+                  )}
                   <span>
                     💰 Pagamentos: {pagamentosPorEmpresa[e.id] ? (
                       <b>{window.OmiePagamentosStore.fmtMoeda(pagamentosPorEmpresa[e.id].valorPago)} pago · {window.OmiePagamentosStore.fmtMoeda(pagamentosPorEmpresa[e.id].valorTotal)} previsto</b>
@@ -277,6 +309,7 @@ const COL_ENDERECO_EMPTY = {
 function ModalColaborador({ empresaId, initialData, isEdit, onClose, onSaved }) {
   const [f, setF] = React.useState(() => ({
     nome_completo: '', cpf: '', rg: '', cnh: '', tipo_vinculo: '', status: 'Ativo', observacao: '',
+    nacionalidade: '', estado_civil: '', profissao: '',
     ...COL_ENDERECO_EMPTY,
     ...(initialData || {}),
   }));
@@ -320,8 +353,13 @@ function ModalColaborador({ empresaId, initialData, isEdit, onClose, onSaved }) 
           {fld('CNH', 'cnh')}
         </div>
         <div className="grid-2" style={{ gap: 12 }}>
-          {fld('Tipo de vínculo', 'tipo_vinculo', 'text', 'CLT, MEI, autônomo…')}
+          {fld('Tipo de vínculo', 'tipo_vinculo', 'text', 'Proprietário ou Sócio = responsável legal')}
           <PIField label="Status"><PISelect value={f.status} onChange={setField('status')} options={['Ativo', 'Inativo', 'A_CONFIRMAR']} /></PIField>
+        </div>
+        <div className="grid-3" style={{ gap: 12 }}>
+          {fld('Nacionalidade', 'nacionalidade', 'text', 'brasileiro(a)')}
+          {fld('Estado civil', 'estado_civil', 'text', 'casado(a)')}
+          {fld('Profissão', 'profissao', 'text', 'empresário(a)')}
         </div>
         <div>
           <h4 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700 }}>Endereço</h4>

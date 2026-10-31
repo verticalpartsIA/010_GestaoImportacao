@@ -142,13 +142,62 @@ function QcCabosAcoCard({ escopo, onChange, disabled }) {
   );
 }
 
-function QcEscopoSecao({ escopo, onChange, disabled }) {
+/* Código do Omie por item do Escopo (lista suspensa + sugestão automática a partir das respostas do cliente). */
+function QcCodigoOmie({ chave, v, campo, catalogo, disabled, onPick, sugestao }) {
+  const K = window.QuadroComandoCodigos;
+  const opcoes = K ? K.opcoes(campo === 'codigo_pavimento' ? 'portas_pavimento' : chave, catalogo) : [];
+  if (!K || !K.ITENS[campo === 'codigo_pavimento' ? 'portas_pavimento' : chave]) return <span className="small muted">—</span>;
+  const atual = v[campo || 'codigo'] || '';
+  const ativo = v.decisao === 'fornecer';
+  return (
+    <div>
+      <QcSelect value={atual} disabled={disabled || !ativo} placeholder={opcoes.length ? 'Código do Omie…' : '(sem produto no Omie)'}
+        options={opcoes.map((o) => ({ value: o.codigo, label: `${o.codigo} — ${o.descricao.slice(0, 70)}` }))}
+        onChange={(val) => onPick(val)}/>
+      {ativo && !atual && sugestao && (
+        <div className="small" style={{ marginTop: 4 }}>Sugerido: <strong>{sugestao}</strong>{' '}
+          <a href="#" onClick={(e) => { e.preventDefault(); onPick(sugestao); }}>usar</a></div>
+      )}
+      {ativo && v.codigo_sugerido && atual && <div className="small muted" style={{ marginTop: 4 }}>código sugerido pelo sistema — confira</div>}
+    </div>
+  );
+}
+
+function QcEscopoSecao({ escopo, onChange, disabled, paradasCount, lopPublico, resp, paradasRows }) {
+  const K = window.QuadroComandoCodigos;
+  const [catalogo, setCatalogo] = React.useState([]);
+  React.useEffect(() => {
+    const sb = window.__VP_SB && window.__VP_SB.sb;
+    if (!K || !sb) return;
+    K.carregarCatalogo(sb).then(setCatalogo).catch(() => {});
+  }, []);
+  /* Sugestão automática (COP pelas paradas e display; LOP pela família/botões): preenche sozinha o que ainda está vazio,
+     marcado como "sugerido pelo sistema" — o vendedor confirma ou troca. */
+  React.useEffect(() => {
+    if (!K || disabled || !catalogo.length) return;
+    let novo = escopo; let mudou = false;
+    Object.keys(K.ITENS).forEach((chave) => {
+      if (chave === 'portas_pavimento') return;
+      const v = escopo[chave] || {};
+      if (v.decisao !== 'fornecer' || v.codigo) return;
+      const sug = K.sugerir(chave, { paradas: paradasCount, resp }, catalogo);
+      if (sug) { novo = { ...novo, [chave]: { ...(novo[chave] || {}), codigo: sug, codigo_sugerido: true } }; mudou = true; }
+    });
+    if (mudou) onChange(novo);
+    // eslint-disable-next-line
+  }, [catalogo, escopo, paradasCount]);
+  const pickCodigo = (chave, campo) => (val) => {
+    const v = escopo[chave] || {};
+    const { codigo_sugerido, ...resto } = v;
+    onChange({ ...escopo, [chave]: { ...resto, [campo || 'codigo']: val } });
+  };
+  const qtdPadrao = (chave) => (K ? K.quantidadePadrao(chave, paradasRows).qtd : 1);
   return (
     <>
       <Card title="Escopo do pedido" sub="Para cada item: fornecer / reutilizar existente / fornecido por terceiro / não se aplica.">
         <div className="table-wrap" style={{ border: 0 }}>
           <table className="t">
-            <thead><tr><th>Item</th><th>Decisão</th><th>Qtd/modelo</th></tr></thead>
+            <thead><tr><th>Item</th><th>Decisão</th><th>Código (Omie)</th><th>Qtd</th><th>Detalhe</th></tr></thead>
             <tbody>
               {QC_ESCOPO_ITENS.map((it) => {
                 const v = escopo[it.key] || {};
@@ -159,14 +208,48 @@ function QcEscopoSecao({ escopo, onChange, disabled }) {
                       <QcSelect value={v.decisao} disabled={disabled} options={QC_ESCOPO_OPCOES}
                         onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, decisao: val } })}/>
                     </td>
+                    <td style={{ minWidth: 240, maxWidth: 300 }}>
+                      {it.key === 'portas'
+                        ? <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <QcCodigoOmie chave="portas" v={v} campo="codigo" catalogo={catalogo} disabled={disabled} onPick={pickCodigo('portas', 'codigo')}/>
+                            <QcCodigoOmie chave="portas" v={v} campo="codigo_pavimento" catalogo={catalogo} disabled={disabled} onPick={pickCodigo('portas', 'codigo_pavimento')}/>
+                          </div>
+                        : K && K.ITENS[it.key]
+                          ? <QcCodigoOmie chave={it.key} v={v} catalogo={catalogo} disabled={disabled} onPick={pickCodigo(it.key)} sugestao={K.sugerir(it.key, { paradas: paradasCount, resp }, catalogo)}/>
+                          : <span className="small muted">—</span>}
+                    </td>
+                    <td style={{ width: 90 }}>
+                      {it.key === 'lop' || it.especial === 'variante' || it.especial === 'cabos_aco' || !(K && K.ITENS[it.key])
+                        ? <span className="small muted">{it.key === 'lop' ? 'calculada' : '—'}</span>
+                        : it.key === 'portas'
+                          ? <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              <QcInput type="number" value={v.quantidade} disabled={disabled || v.decisao !== 'fornecer'} placeholder={String(qtdPadrao('portas'))} onChange={(val) => onChange({ ...escopo, portas: { ...v, quantidade: val } })}/>
+                              <QcInput type="number" value={v.quantidade_pavimento} disabled={disabled || v.decisao !== 'fornecer'} placeholder={String(qtdPadrao('portas_pavimento'))} onChange={(val) => onChange({ ...escopo, portas: { ...v, quantidade_pavimento: val } })}/>
+                            </div>
+                          : <QcInput type="number" value={v.quantidade} disabled={disabled || v.decisao !== 'fornecer'} placeholder={String(qtdPadrao(it.key))} onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, quantidade: val } })}/>}
+                    </td>
                     <td style={{ maxWidth: 220 }}>
                       {it.especial === 'variante'
                         ? <QcSelect value={v.detalhe} disabled={disabled || v.decisao !== 'fornecer'} placeholder="Modelo…" options={QC_VARIANTES_QUADRO}
                             onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, detalhe: val } })}/>
+                        : it.key === 'lop'
+                          ? <div>
+                              <QcSelect value={v.botoes_intermediarios || lopPublico || '2'} disabled={disabled || v.decisao !== 'fornecer'}
+                                options={[{ value: '2', label: 'LOP com 2 botões (▲ e ▼) nos intermediários' }, { value: '1', label: 'LOP com 1 botão nos intermediários' }]}
+                                onChange={(val) => onChange({ ...escopo, lop: { ...v, botoes_intermediarios: val } })}/>
+                              <label className="small" style={{ display: 'block', marginTop: 4 }}><input type="checkbox" checked={!!v.com_display} disabled={disabled || v.decisao !== 'fornecer'}
+                                onChange={(e) => onChange({ ...escopo, lop: { ...v, com_display: e.target.checked } })}/> Com display (VTP)</label>
+                              {v.decisao === 'fornecer' && (() => {
+                                const lop = window.QuadroComandoBomEngine && window.QuadroComandoBomEngine.calcularLop(paradasCount, v.botoes_intermediarios || lopPublico || '2');
+                                return <div className="small muted" style={{ marginTop: 4 }}>{lop
+                                  ? `${lop.paradas} paradas: térreo ▲ + último ▼${lop.intermediarios ? ` + ${lop.intermediarios} intermediária(s) com ${lop.doisBotoes ? '2 botões' : '1 botão'}` : ''}`
+                                  : 'Informe as paradas na aba Paradas para calcular as botoeiras.'}</div>;
+                              })()}
+                            </div>
                         : it.especial === 'cabos_aco'
                           ? <span className="small muted">{v.decisao === 'fornecer' ? 'preencha o card abaixo' : '—'}</span>
                           : <QcInput value={v.detalhe} disabled={disabled || v.decisao === 'nao_aplica' || !v.decisao}
-                              placeholder="qtd/modelo" onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, detalhe: val } })}/>}
+                              placeholder={it.key === 'botoeira_inspecao_cabina' ? 'BST VPB-193 (Monarch)' : it.key === 'botoeira_inspecao_poco' ? 'BST VPB-209' : 'qtd/modelo'} onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, detalhe: val } })}/>}
                     </td>
                   </tr>
                 );
@@ -380,7 +463,7 @@ function QcMaquinaSecao({ maquina, onChange, disabled, varianteLabel, errosVisiv
             options={[{ value: '220', label: '220V' }, { value: '380', label: '380V' }]}
             style={{borderColor: errosVisiveis?.tensao_v ? '#d32f2f' : undefined}}
             onChange={(v) => set({ tensao_v: v ? Number(v) : null })}/></QcField>
-          <QcField label="Número de fases"><QcSelect value={maquina.fases} disabled={disabled} data-field="fases"
+          <QcField label="Número de fases"><QcSelect value={maquina.fases || '3'} disabled={disabled} data-field="fases"
             options={[{ value: '1', label: 'Monofásico (1Ø)' }, { value: '3', label: 'Trifásico (3Ø)' }]}
             style={{borderColor: errosVisiveis?.fases ? '#d32f2f' : undefined}}
             onChange={(v) => set({ fases: v })}/></QcField>
@@ -458,7 +541,12 @@ function QcComponentesSecao({ componentes, onChange, disabled }) {
 }
 
 /* ---------- Geometria para fiação (item 4/5) ---------- */
-function QcGeometriaSecao({ geometria, intervalos, onGeom, onIntervalos, disabled }) {
+const QC_FIACAO_POCO_ROTULOS = [
+  ['l1', 'L1 — Quadro → entrada do poço'], ['ua', 'UA — Entrada do poço → botoeira'], ['tr', 'TR — Contato de TRICO → calha'],
+  ['bp', 'BP — Botoeira → calha'], ['lim', 'LIM — Limites → calha'], ['fp', 'FP — PAP → calha'],
+];
+
+function QcGeometriaSecao({ geometria, intervalos, config, onGeom, onIntervalos, disabled }) {
   const set = (patch) => onGeom({ ...geometria, ...patch });
   const addIntervalo = () => onIntervalos([...intervalos, { de_parada: '', para_parada: '', distancia_mm: null, origem: 'medido' }]);
   const updIntervalo = (i, patch) => onIntervalos(intervalos.map((it, idx) => idx === i ? { ...it, ...patch } : it));
@@ -470,7 +558,7 @@ function QcGeometriaSecao({ geometria, intervalos, onGeom, onIntervalos, disable
 
   return (
     <>
-      <Card title="Geometria da caixa (medida em mm)" sub="Sempre a medida real da obra — os padrões comerciais de estimativa (poço 1500mm, intervalo 3000mm, K 4400mm) só entram se você marcar explicitamente 'estimado'.">
+      <Card title="Geometria da caixa (medida em mm)" sub="Sempre a medida real da obra — os padrões comerciais de estimativa (poço 1500mm, intervalo 3000mm, K 4500mm) só entram se você marcar explicitamente 'estimado'.">
         <div className="grid-3" style={{ gap: 12 }}>
           <QcField label="Profundidade do poço (S)">
             <QcInput type="number" value={geometria.poco_mm} disabled={disabled} onChange={(v) => set({ poco_mm: v })}/>
@@ -480,7 +568,7 @@ function QcGeometriaSecao({ geometria, intervalos, onGeom, onIntervalos, disable
           <QcField label="Última altura (K)">
             <QcInput type="number" value={geometria.ultima_altura_mm} disabled={disabled} onChange={(v) => set({ ultima_altura_mm: v })}/>
             <label className="small muted"><input type="checkbox" checked={geometria.ultima_altura_origem === 'estimado'} disabled={disabled}
-              onChange={(e) => set({ ultima_altura_origem: e.target.checked ? 'estimado' : 'medido' })}/> usar padrão comercial (4400mm)</label>
+              onChange={(e) => set({ ultima_altura_origem: e.target.checked ? 'estimado' : 'medido' })}/> usar padrão comercial (4500mm)</label>
           </QcField>
           <QcField label="Largura da caixa de corrida"><QcInput type="number" value={geometria.caixa_largura_mm} disabled={disabled} onChange={(v) => set({ caixa_largura_mm: v })}/></QcField>
           <QcField label="Profundidade da caixa de corrida"><QcInput type="number" value={geometria.caixa_profundidade_mm} disabled={disabled} onChange={(v) => set({ caixa_profundidade_mm: v })}/></QcField>
@@ -488,10 +576,20 @@ function QcGeometriaSecao({ geometria, intervalos, onGeom, onIntervalos, disable
         <div className="small muted" style={{ marginTop: 4 }}>Largura/profundidade/altura da cabina agora ficam na aba "Cabina".</div>
         <div className="small muted" style={{ marginTop: 6 }}>
           Percurso (soma dos intervalos): <b>{calc.percurso_mm} mm</b> · Altura total: <b>{calc.altura_total_mm} mm</b>
-          {calc.ultima_altura_fora_do_padrao && <span style={{ color: '#a11d1d', fontWeight: 600 }}> · fora do padrão (K &gt; 4400mm) — encaminhar pra análise da engenharia.</span>}
+          {calc.ultima_altura_fora_do_padrao && <span style={{ color: '#a11d1d', fontWeight: 600 }}> · fora do padrão (K &gt; 4500mm) — encaminhar pra análise da engenharia.</span>}
           {perimetro != null && <> · Perímetro da caixa: <b>{perimetro} mm</b> (referência de contorno, não lançar automaticamente num ramal específico)</>}
         </div>
       </Card>
+
+      {config && config.fiacao_poco_cliente_m && (
+        <Card title="Fiação de poço informada pelo cliente (metros)" sub="Medidas do formulário público, só leitura. A L1 também já foi levada para a distância 'quadro → entrada da caixa'; as demais ainda não têm campo próprio no cálculo da lista de corte — confira antes de gerar.">
+          <div className="grid-3" style={{ gap: 10 }}>
+            {QC_FIACAO_POCO_ROTULOS.filter(([k]) => config.fiacao_poco_cliente_m[k] != null).map(([k, l]) => (
+              <div key={k}><span className="small muted">{l}</span><div style={{ fontWeight: 600 }}>{config.fiacao_poco_cliente_m[k]} m</div></div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Card title="Distância entre pisos por intervalo" sub="Um valor por intervalo — não multiplicar um mínimo presumido se os intervalos forem diferentes entre si."
         action={!disabled && <Button variant="outline" size="sm" icon="plus" onClick={addIntervalo}>Adicionar intervalo</Button>}>
@@ -531,18 +629,10 @@ function QcGeometriaSecao({ geometria, intervalos, onGeom, onIntervalos, disable
         </div>
       </Card>
 
-      <Card title="Cabo de manobra — seio e folga" sub="Definições ainda pendentes de confirmação da engenharia (ver instrução original) — sem confirmar, o corte fica travado como pendente.">
+      <Card title="Cabo de manobra — comprimento" sub="Comprimento = soma dos pisos + seio + subida até a caixa de inspeção (3 m) + pontas + saída do quadro até a caixa (10 m, fixo), mais a distância do quadro até a descida da laje quando há casa de máquinas (campo acima). Deixe em branco para usar o padrão.">
         <div className="grid-3" style={{ gap: 12 }}>
-          <QcField label="Seio do cabo (mm)"><QcInput type="number" value={geometria.seio_cabo_mm} disabled={disabled} onChange={(v) => set({ seio_cabo_mm: v })}/></QcField>
-          <QcField label="Definição do seio confirmada pela engenharia?">
-            <label className="small"><input type="checkbox" checked={!!geometria.seio_definicao_confirmada} disabled={disabled}
-              onChange={(e) => set({ seio_definicao_confirmada: e.target.checked })}/> Confirmado</label>
-          </QcField>
-          <QcField label="Folga (mm)"><QcInput type="number" value={geometria.folga_mm} disabled={disabled} onChange={(v) => set({ folga_mm: v })}/></QcField>
-          <QcField label="Regra de folga confirmada pela engenharia?">
-            <label className="small"><input type="checkbox" checked={!!geometria.folga_regra_confirmada} disabled={disabled}
-              onChange={(e) => set({ folga_regra_confirmada: e.target.checked })}/> Confirmado</label>
-          </QcField>
+          <QcField label="Seio / volta do cabo (mm) — padrão 3000"><QcInput type="number" value={geometria.seio_cabo_mm} disabled={disabled} onChange={(v) => set({ seio_cabo_mm: v })}/></QcField>
+          <QcField label="Pontas — soma das duas (mm) — padrão 4000"><QcInput type="number" value={geometria.folga_mm} disabled={disabled} onChange={(v) => set({ folga_mm: v })}/></QcField>
         </div>
       </Card>
     </>
@@ -550,7 +640,7 @@ function QcGeometriaSecao({ geometria, intervalos, onGeom, onIntervalos, disable
 }
 
 /* ---------- Resultado: BOM + lista de corte + checklist ---------- */
-function QcResultadoSecao({ quadroId, podeGerar }) {
+function QcResultadoSecao({ quadroId, podeGerar, salvarAntes }) {
   const [bom, setBom] = React.useState([]);
   const [cortes, setCortes] = React.useState([]);
   const [checklist, setChecklist] = React.useState([]);
@@ -570,9 +660,15 @@ function QcResultadoSecao({ quadroId, podeGerar }) {
   const gerarBom = async () => {
     setGerando(true);
     try {
+      // Grava o que está na tela antes: o BOM é calculado do que está SALVO no banco.
+      if (salvarAntes && !(await salvarAntes())) return;
       const r = await window.QuadroComandoStore.gerarBomECortes(quadroId);
       if (r.erroVariante) window.toast?.(r.erroVariante, 'warning');
-      else window.toast?.('BOM e lista de corte gerados.', 'success');
+      else window.toast?.('BOM e lista de corte gerados' + (r.fonteBom ? ' — lista de materiais: ' + r.fonteBom : '') + '.', 'success');
+      if (r.pendentesCodigo && r.pendentesCodigo.length) {
+        const nomes = r.pendentesCodigo.map((k) => (QC_ESCOPO_ITENS.find((it) => it.key === k) || { label: k }).label);
+        window.toast?.('Faltam códigos do Omie no Escopo (não entraram no BOM): ' + nomes.join(', ') + '.', 'warning');
+      }
       reload();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setGerando(false); }
@@ -614,7 +710,7 @@ function QcResultadoSecao({ quadroId, podeGerar }) {
     <>
       <Card title="Especificação de fabricação / compra"
         action={<Button variant="primary" size="sm" disabled={gerando || !podeGerar} onClick={gerarBom}>{gerando ? 'Gerando…' : 'Gerar BOM + lista de corte'}</Button>}>
-        <div className="small muted" style={{ marginBottom: 10 }}>Recalcula do zero a partir do que está preenchido acima — não altera o que já foi digitado no formulário.</div>
+        <div className="small muted" style={{ marginBottom: 10 }}>Salva o formulário e recalcula do zero a partir do que está preenchido — não altera o que já foi digitado.</div>
         {!bom.length && !cortes.length && <div className="small muted" style={{ padding: 16, textAlign: 'center' }}>Nada gerado ainda.</div>}
         {!!bom.length && (
           <>
@@ -844,6 +940,92 @@ function QcRamoBComprado({ quadro, setQuadro, quadroId }) {
   );
 }
 
+/* ---------- Respostas do cliente (formulário público) ----------
+   Mostra, só leitura, exatamente o que o cliente/instalador respondeu na página
+   pública (quadro.respostas_publico). Os campos estruturados das outras abas já
+   vêm pré-preenchidos pela Edge Function quando deu para mapear; este card é a
+   fonte fiel do que foi dito. */
+const QC_RESP_VALORES = {
+  modernizacao: 'Modernização', elevador_novo: 'Elevador novo',
+  residencial: 'Residencial', comercial: 'Comercial', hospitalar: 'Hospitalar', industrial: 'Industrial',
+  simplex: 'Simplex', duplex: 'Duplex', triplex: 'Triplex', quadriplex: 'Quadriplex',
+  manual: 'Manual', eixo_vertical: 'Eixo vertical', simultanea: 'Simultânea', pantografica: 'Pantográfica',
+  vvvf: 'VVVF', trifasico: 'Trifásico', monofasico: 'Monofásico', corr_continua: 'Corr. contínua',
+  bobina_tensao: 'Bobina — tensão', tipo_bs: 'Tipo BS', moto_freio: 'Moto freio', nao_possui: 'Não possui',
+  vf: 'VVVF — inversor de frequência', ca: 'CA — por contatores', hd: 'HD — hidráulico',
+  com_casa: 'Com casa de máquinas', sem_casa: 'Sem casa de máquinas',
+  sem_encoder: 'Sem encoder', com_encoder: 'Com encoder',
+};
+const QC_RESP_BLOCOS = [
+  { titulo: 'Quem preencheu', campos: [['solicitante', 'Solicitante'], ['empresa', 'Empresa'], ['cnpj', 'CNPJ'], ['telefone', 'Telefone'], ['email', 'E-mail']] },
+  { titulo: 'Obra', campos: [['tipo_servico', 'Tipo de serviço'], ['identificacao', 'Identificação da obra'], ['num_paradas', 'Nº de paradas']] },
+  { titulo: 'Quadro', campos: [['variante_quadro', 'Modelo do quadro'], ['tensao_rede', 'Tensão da rede (V)'], ['tensao_rede_outro', 'Tensão da rede — outra'], ['potencia_motor', 'Potência do motor (kW) — formulário antigo'], ['tensao_motor', 'Tensão do motor (V) — formulário antigo'], ['corrente_nominal', 'Corrente nominal (A) — formulário antigo'], ['aplicacao', 'Aplicação — formulário antigo'], ['atendimento', 'Atendimento — formulário antigo'], ['num_botoeiras', 'Nº de botoeiras — formulário antigo']] },
+  { titulo: 'Porta e acionamento', campos: [['tipo_porta', 'Tipo de porta'], ['operador_porta', 'Operador de porta'], ['tipo_freio', 'Tipo de freio'], ['tensao_freio', 'Tensão do freio (V)'], ['acionamento', 'Acionamento'], ['encoder', 'Encoder'], ['engrenagem', 'Engrenagem'], ['casa_maquinas', 'Casa de máquinas']] },
+  { titulo: 'Acessórios', campos: [['acessorios', 'Acessórios solicitados'], ['cop_display', 'COP — display'], ['lop_material', 'LOP — material'], ['lop_botoes', 'LOP — botões nos intermediários (1 ou 2)'], ['lop_display', 'LOP — display'], ['total_lop', 'LOP — total de botoeiras'], ['logo_url', 'Logo para a botoeira (arquivo)'], ['porta_oposta', 'Porta oposta'], ['porta_oposta_paradas', 'Andares da porta oposta'], ['ind_cor', 'Cor do indicador'], ['maquina_codigo', 'Máquina de tração escolhida'], ['porta_cabina_codigo', 'Porta de cabina escolhida'], ['porta_pavimento_codigo', 'Porta de pavimento escolhida'], ['observacoes', 'Observações']] },
+  { titulo: 'Fiação (metros)', campos: [['f_l1', 'L1'], ['f_ua', 'UA'], ['f_tr', 'TR'], ['f_bp', 'BP'], ['f_lim', 'LIM'], ['f_fp', 'FP'], ['obs_fiacao', 'Observações da fiação']] },
+];
+
+function QcRespostasPublico({ quadro }) {
+  const r = quadro.respostas_publico;
+  const [aberto, setAberto] = React.useState(true);
+  if (!r || typeof r !== 'object') return null;
+  const fmt = (k, v) => {
+    if (v == null || v === '') return null;
+    if (k === 'cnpj') {
+      const d = String(v).replace(/\D/g, '');
+      return d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : d;
+    }
+    if (k === 'variante_quadro') return String(v).replace('_', ' kW / ') + ' V';
+    if (k === 'cop_display' || k === 'lop_display') return v === 'com' ? 'Com display' : 'Sem display';
+    if (k === 'lop_material') return v === 'vidro' ? 'Espelho em vidro' : 'Aço escovado';
+    if (k === 'porta_oposta') return v === 'sim' ? 'Sim' : 'Não';
+    if (Array.isArray(v)) return v.length ? v.join(', ') : null;
+    if (k === 'logo_url') return String(v);
+    return QC_RESP_VALORES[v] || String(v);
+  };
+  const dist = Array.isArray(r.dist) ? r.dist.filter((x) => x && x.m) : [];
+  const irParaLead = () => {
+    window.history.pushState({}, '', '/comercial/leads');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+  return (
+    <Card title="Respostas enviadas pelo cliente"
+      sub={`Preenchido na página pública · protocolo ${quadro.lead_id || ('QC-' + quadro.numero_pedido)}${quadro.lead_id ? '' : ' · cliente já cadastrado no Omie (não é lead)'}${quadro.created_at ? ` · ${new Date(quadro.created_at).toLocaleString('pt-BR')}` : ''}. Somente leitura — o que deu para mapear já foi levado para as abas abaixo.`}
+      action={<Button variant="ghost" size="sm" onClick={() => setAberto(!aberto)}>{aberto ? 'Recolher' : 'Expandir'}</Button>}>
+      {aberto && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {QC_RESP_BLOCOS.map((b) => {
+            const linhas = b.campos.map(([k, l]) => [l, fmt(k, r[k])]).filter(([, v]) => v);
+            if (!linhas.length) return null;
+            return (
+              <div key={b.titulo}>
+                <h4 className="small muted" style={{ textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>{b.titulo}</h4>
+                <div className="grid-3" style={{ gap: 10 }}>
+                  {linhas.map(([l, v]) => (
+                    <div key={l}><span className="small muted">{l}</span><div style={{ fontWeight: 600, whiteSpace: 'pre-wrap' }}>{v}</div></div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          {dist.length > 0 && (
+            <div>
+              <h4 className="small muted" style={{ textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>Distâncias entre pavimentos</h4>
+              <div className="table-wrap" style={{ border: 0 }}>
+                <table className="t"><thead><tr><th>De</th><th>Até</th><th>Metros</th></tr></thead>
+                  <tbody>{dist.map((x, i) => <tr key={i}><td>{x.de}</td><td>{x.ate}</td><td>{x.m}</td></tr>)}</tbody></table>
+              </div>
+            </div>
+          )}
+          {quadro.lead_id && (
+            <div><Button variant="outline" size="sm" onClick={irParaLead}>Ver lead {quadro.lead_id} em Comercial · Leads</Button></div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /* ---------- Página principal ---------- */
 function QuadroComandoDetail({ quadroId, onClose }) {
   const [quadro, setQuadro] = React.useState(null);
@@ -868,7 +1050,6 @@ function QuadroComandoDetail({ quadroId, onClose }) {
     const errosMap = {};
     if (!quadro.maquina?.potencia_kw) errosMap.potencia_kw = 'Obrigatório';
     if (!quadro.maquina?.tensao_v) errosMap.tensao_v = 'Obrigatório';
-    if (!quadro.maquina?.fases) errosMap.fases = 'Obrigatório';
     if (!quadro.maquina?.frequencia_hz) errosMap.frequencia_hz = 'Obrigatório';
     if (!quadro.maquina?.freio_tipo) errosMap.freio_tipo = 'Obrigatório';
     return errosMap;
@@ -890,7 +1071,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
       const primeiroErro = Object.keys(errosMap)[0];
       window.toast?.(`Campo obrigatório: ${primeiroErro.replace(/_/g, ' ')}`, 'warning');
       setTimeout(() => scrollParaCampoComErro(primeiroErro), 100);
-      return;
+      return false;
     }
     setErrosVisiveis({});
     setSaving(true);
@@ -908,7 +1089,8 @@ function QuadroComandoDetail({ quadroId, onClose }) {
       await window.QuadroComandoStore.salvarComponentes(quadroId, quadro.componentes);
       window.toast?.('Quadro de comando salvo.', 'success');
       reload();
-    } catch (e) { window.toast?.('Erro ao salvar: ' + e.message, 'error'); }
+      return true;
+    } catch (e) { window.toast?.('Erro ao salvar: ' + e.message, 'error'); return false; }
     finally { setSaving(false); }
   };
 
@@ -927,6 +1109,8 @@ function QuadroComandoDetail({ quadroId, onClose }) {
           <Button variant="primary" disabled={saving} onClick={salvarTudo}>{saving ? 'Salvando…' : 'Salvar'}</Button>
         </div>
       </div>
+
+      <QcRespostasPublico quadro={quadro}/>
 
       <Card title="Origem de fabricação" sub="Decide se este quadro é fabricado pela VerticalParts (Ramo A) ou comprado pronto de um fornecedor (Ramo B, mesmo fluxo do RFQ de elevadores).">
         <div className="row gap-3" style={{ alignItems: 'center' }}>
@@ -961,16 +1145,16 @@ function QuadroComandoDetail({ quadroId, onClose }) {
             { key: 'resultado', label: 'BOM / lista de corte / checklist' },
           ]} active={tab} onChange={setTab}/>
           <div style={{ marginTop: 16 }}>
-            {tab === 'escopo' && <QcEscopoSecao escopo={quadro.escopo_fornecimento || {}} onChange={(v) => setQuadro({ ...quadro, escopo_fornecimento: v })}/>}
+            {tab === 'escopo' && <QcEscopoSecao resp={quadro.respostas_publico || {}} paradasRows={quadro.paradas || []} lopPublico={(quadro.respostas_publico || {}).lop_botoes} paradasCount={(quadro.paradas || []).length || parseInt((quadro.respostas_publico || {}).num_paradas, 10) || 0} escopo={quadro.escopo_fornecimento || {}} onChange={(v) => setQuadro({ ...quadro, escopo_fornecimento: v })}/>}
             {tab === 'configuracao' && <QcConfiguracaoSecao config={quadro.configuracao || {}} paradas={quadro.paradas} onChange={(v) => setQuadro({ ...quadro, configuracao: v })}/>}
             {tab === 'cabina' && <QcCabinaSecao geometria={quadro.geometria} config={quadro.configuracao || {}}
               onGeom={(v) => setQuadro({ ...quadro, geometria: v })}/>}
             {tab === 'paradas' && <QcParadasSecao paradas={quadro.paradas} onChange={(v) => setQuadro({ ...quadro, paradas: v })}/>}
             {tab === 'maquina' && <QcMaquinaSecao maquina={quadro.maquina} varianteLabel={varianteLabel} errosVisiveis={errosVisiveis} onChange={(v) => setQuadro({ ...quadro, maquina: v })}/>}
             {tab === 'componentes' && <QcComponentesSecao componentes={quadro.componentes || {}} onChange={(v) => setQuadro({ ...quadro, componentes: v })}/>}
-            {tab === 'geometria' && <QcGeometriaSecao geometria={quadro.geometria} intervalos={quadro.intervalos}
+            {tab === 'geometria' && <QcGeometriaSecao geometria={quadro.geometria} intervalos={quadro.intervalos} config={quadro.configuracao || {}}
               onGeom={(v) => setQuadro({ ...quadro, geometria: v })} onIntervalos={(v) => setQuadro({ ...quadro, intervalos: v })}/>}
-            {tab === 'resultado' && <QcResultadoSecao quadroId={quadroId} podeGerar={true}/>}
+            {tab === 'resultado' && <QcResultadoSecao quadroId={quadroId} podeGerar={true} salvarAntes={salvarTudo}/>}
           </div>
         </>
       )}
@@ -978,10 +1162,28 @@ function QuadroComandoDetail({ quadroId, onClose }) {
   );
 }
 
+/* URL fixa da página pública de levantamento técnico (sem login) — ver
+   formulario-quadro-comando-publico.html/.jsx e a Edge Function
+   capturar-lead-quadro-comando. Só texto/clipboard, sem chamada nenhuma
+   ao backend — por isso não precisa de store próprio. */
+const QC_LINK_PUBLICO = 'https://hub.vpsistema.com/formulario-quadro-comando-publico.html';
+
 function QuadroComandoPage({ setRoute, subsel }) {
   const initialId = typeof subsel === 'string' ? subsel : ((window.VpRouter && window.VpRouter.parseLocation().id) || null);
   const [abertoId, setAbertoId] = React.useState(() => initialId);
   const [criando, setCriando] = React.useState(false);
+
+  /* Bug real (varredura de URLs, 09/10): `abertoId` só era inicializado uma
+     vez no mount (`initialId`) — Voltar/Avançar do navegador muda `subsel`
+     (via App, popstate) sem remontar este componente, então o detalhe nunca
+     fechava/trocava sozinho, ficando preso na 1ª cotação aberta enquanto a
+     URL já mostrava outra coisa. `novo()` abaixo navega direto via
+     `VpRouter.navigate` (sem passar por `setSubsel`, que esta tela nem
+     recebe), então este efeito nunca reage a esse caso — só a mudanças reais
+     de `subsel` vindas do App. */
+  React.useEffect(() => {
+    setAbertoId(typeof subsel === 'string' ? subsel : null);
+  }, [subsel]);
 
   // Sem número de cotação fixo aqui: lista geral (por cotação) fica pra uma
   // fase futura — hoje o ponto de entrada real é "Novo quadro de comando"
@@ -997,6 +1199,11 @@ function QuadroComandoPage({ setRoute, subsel }) {
     finally { setCriando(false); }
   };
 
+  const copiarLinkPublico = async () => {
+    try { await navigator.clipboard.writeText(QC_LINK_PUBLICO); } catch (e) {}
+    window.toast?.('Link copiado — envie pro cliente/instalador solicitar orçamento.', 'success');
+  };
+
   if (abertoId) {
     return <QuadroComandoDetail quadroId={abertoId} onClose={() => { setAbertoId(null); setRoute && setRoute('formularios'); }}/>;
   }
@@ -1009,7 +1216,10 @@ function QuadroComandoPage({ setRoute, subsel }) {
           <h1 className="page-head__title">Quadro de Comando</h1>
           <p className="page-head__sub">Coleta de dados pra fabricação/cotação do quadro de comando — fabricar interno ou comprar pronto de fornecedor.</p>
         </div>
-        <Button variant="primary" disabled={criando} onClick={novo}>{criando ? 'Criando…' : 'Novo quadro de comando'}</Button>
+        <div className="page-head__r">
+          <Button variant="outline" icon="copy" onClick={copiarLinkPublico}>Copiar link público (cliente)</Button>
+          <Button variant="primary" disabled={criando} onClick={novo}>{criando ? 'Criando…' : 'Novo quadro de comando'}</Button>
+        </div>
       </div>
     </div>
   );

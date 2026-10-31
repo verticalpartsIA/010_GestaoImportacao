@@ -219,6 +219,12 @@ function ContratoEditorPage({ contrato, setRoute, onSaved }) {
   };
 
   const save = async (novoStatus) => {
+    /* Contrato do fluxo novo (tem token de assinatura): este editor legado grava status 'Assinado'/'Em assinatura digital' direto,
+       sem RPC, evento, D0 nem gates — e poderia rebaixar um contrato já assinado (auditoria de 11/10). Bloqueia a gravação;
+       o caminho certo é Contratos & Jurídico › Contrato Venda de Equipamentos. */
+    if (contrato && contrato.token) {
+      return window.toast('Este contrato é do fluxo novo e não pode ser alterado por este editor antigo. Use "Contrato Venda de Equipamentos".', 'warning');
+    }
     setSaving(true);
     const upd = {
       dados, client: dados.razaoSocial || contrato?.client,

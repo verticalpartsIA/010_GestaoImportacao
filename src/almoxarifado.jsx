@@ -27,6 +27,17 @@ async function almErroFuncao(error, data) {
   } catch (e) { /* corpo não era JSON */ }
   return (error && error.message) || 'Erro desconhecido';
 }
+// Endereço na tabela única de contagem (só as colunas enviadas mudam: a contagem já feita é preservada).
+/* Um produto pode ter VÁRIOS endereços ("R2I8 / R2H8 / H23"): porta-palete (compartilhado por vários produtos, normal) e/ou caixa bin
+   nas prateleiras do MEZANINO (letra B–I + número, uma caixa por produto). Só a caixa bin repetida merece aviso de conflito. */
+const binsDoEndereco = (txt) => (window.EtiquetasCalc?.listaEnderecos?.(txt) || []).filter((e) => e.tipo === 'prateleira').map((e) => e.codigo);
+const temMezanino = (txt) => binsDoEndereco(txt).length > 0;
+function upsertEndereco(c, codigo, endereco, quem) {
+  return c.from('importacao_varejo_contagem').upsert({
+    codigo: String(codigo).toUpperCase(), endereco, atualizado_em: new Date().toISOString(), atualizado_por: quem,
+  }, { onConflict: 'codigo' }).select('codigo');
+}
+
 function almSolicitante() {
   return (window.__VP_USER && window.__VP_USER.email) || '';
 }
@@ -343,9 +354,10 @@ function AlmModalHistoricoContagem({ prod, onClose }) {
   React.useEffect(() => {
     const c = window.__VP_SB && window.__VP_SB.sb;
     if (!c) { setLinhas([]); return; }
-    c.from('pcp_estoque_contagens').select('quantidade_fisica, quantidade_omie, diferenca, contado_por, contado_em')
-      .eq('codigo', prod.codigo).order('contado_em', { ascending: false }).limit(50)
-      .then(({ data }) => setLinhas(data || []));
+    // Fonte única (fase 3): importacao_varejo_contagem_hist — a mesma que a Compras e o app de estoque usam.
+    c.from('importacao_varejo_contagem_hist').select('quantidade, saldo_sistemico, diferenca, registrado_por, registrado_em')
+      .eq('codigo', String(prod.codigo).toUpperCase()).order('registrado_em', { ascending: false }).limit(50)
+      .then(({ data }) => setLinhas((data || []).map((h) => ({ quantidade_fisica: h.quantidade, quantidade_omie: h.saldo_sistemico, diferenca: h.diferenca, contado_por: h.registrado_por, contado_em: h.registrado_em }))));
   }, [prod.codigo]);
   return (
     <Modal title={'Histórico de contagens — ' + prod.codigo} onClose={onClose} width={620} footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
@@ -403,8 +415,8 @@ function AlmModalAcerto({ prod, onClose, onDone }) {
   React.useEffect(() => {
     const c = window.__VP_SB && window.__VP_SB.sb;
     if (!c) { setUltima(null); return; }
-    c.from('pcp_estoque_contagens').select('quantidade_omie, contado_em').eq('codigo', prod.codigo).order('contado_em', { ascending: false }).limit(1)
-      .then(({ data }) => setUltima((data && data[0]) || null));
+    c.from('importacao_varejo_contagem_hist').select('saldo_sistemico, registrado_em').eq('codigo', String(prod.codigo).toUpperCase()).order('registrado_em', { ascending: false }).limit(1)
+      .then(({ data }) => setUltima((data && data[0]) ? { quantidade_omie: data[0].saldo_sistemico, contado_em: data[0].registrado_em } : null));
   }, [prod.codigo]);
 
   // Prévia: a função monta o ajuste e devolve, sem gravar em lugar nenhum (simular: true). Refaz ao informar o valor unitário.
@@ -495,22 +507,26 @@ function AlmModalImportarEnderecos({ linhas, onClose, onDone }) {
   const [saving, setSaving] = React.useState(false);
   const porCodigo = React.useMemo(() => Object.fromEntries(linhas.map((l) => [l.codigo.toUpperCase(), l])), [linhas]);
   const itens = React.useMemo(() => texto.split(/\r?\n/).map((x) => x.trim()).filter(Boolean).map((x) => {
-    const [cod, ...resto] = x.split(/[;\t]/); const end = resto.join(' ').trim().toUpperCase().slice(0, 60);
+    const [cod, ...resto] = x.split(/[;\t]/); const end = (resto.length > 1 ? resto[resto.length - 1] : resto.join(' ')).trim().toUpperCase().slice(0, 200);   // código;descrição;endereço usa o último campo
     const l = porCodigo[String(cod || '').trim().toUpperCase()];
-    return { cod: String(cod || '').trim(), end, l };
+    const v = end && window.EtiquetasCalc?.validarEnderecoNovo ? window.EtiquetasCalc.validarEnderecoNovo(end, l && l.endereco) : { ok: true, codigo: end };
+    return { cod: String(cod || '').trim(), end: v.ok && v.codigo ? v.codigo : end, l, endInvalido: !v.ok, endMsg: v.msg };
   }), [texto, porCodigo]);
-  const validos = itens.filter((i) => i.l && i.end);
+  const validos = itens.filter((i) => i.l && i.end && !i.endInvalido);
   const usos = {};      // endereço (normalizado) -> códigos, somando os já cadastrados e os do arquivo
-  linhas.forEach((l) => { const e = String(l.endereco || '').trim().toUpperCase(); if (e) (usos[e] = usos[e] || new Set()).add(l.codigo); });
-  validos.forEach((i) => { (usos[i.end] = usos[i.end] || new Set()).add(i.l.codigo); });
-  validos.forEach((i) => { const antes = String(i.l.endereco || '').trim().toUpperCase(); if (antes && antes !== i.end && usos[antes]) usos[antes].delete(i.l.codigo); });
-  const repetido = (i) => (usos[i.end] && usos[i.end].size > 1) ? Array.from(usos[i.end]).filter((c) => c !== i.l.codigo) : [];
+  linhas.forEach((l) => binsDoEndereco(l.endereco).forEach((b) => { (usos[b] = usos[b] || new Set()).add(l.codigo); }));
+  validos.forEach((i) => {
+    const novos = binsDoEndereco(i.end);
+    binsDoEndereco(i.l.endereco).forEach((b) => { if (!novos.includes(b) && usos[b]) usos[b].delete(i.l.codigo); });
+    novos.forEach((b) => { (usos[b] = usos[b] || new Set()).add(i.l.codigo); });
+  });
+  const repetido = (i) => { const out = new Set(); binsDoEndereco(i.end).forEach((b) => { if (usos[b] && usos[b].size > 1) usos[b].forEach((c) => { if (c !== i.l.codigo) out.add(c); }); }); return Array.from(out); };
   const aplicar = async () => {
     const c = window.__VP_SB && window.__VP_SB.sb; if (!c) return;
     setSaving(true); let ok = 0, falhas = 0;
     for (const i of validos) {
       if (String(i.l.endereco || '').trim().toUpperCase() === i.end) { ok++; continue; }
-      const r = await c.from('pcp_produtos').update({ endereco: i.end }).eq('codigo', i.l.codigo).select('codigo');
+      const r = await upsertEndereco(c, i.l.codigo, i.end, (window.__VP_USER && window.__VP_USER.email) || null);
       if (r.error || !r.data || !r.data.length) falhas++; else ok++;
     }
     window.VPLog?.registrar?.({ modulo: 'Almoxarifado', acao: 'Importou endereços em massa', alvo: `${ok} item(ns) gravado(s)${falhas ? ', ' + falhas + ' falha(s)' : ''}` });
@@ -521,8 +537,8 @@ function AlmModalImportarEnderecos({ linhas, onClose, onDone }) {
     <Modal title="Importar endereços" onClose={onClose} width={640}
       footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" disabled={!validos.length || saving} onClick={aplicar}>{saving ? 'Gravando…' : `Gravar ${validos.length} endereço(s)`}</Button></>}>
       <div className="stack" style={{ gap: 10 }}>
-        <div className="small muted">Cole uma linha por item: <b>código;endereço</b> (também aceita o que vem copiado de uma planilha, com tab). O endereço é só do PCP — nada vai ao Omie.</div>
-        <textarea className="input" rows={7} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={'VPMP-178;A-01-02\nVPEL-229;B-03-01'} style={{ fontFamily: 'monospace', fontSize: 12 }}/>
+        <div className="small muted">Cole uma linha por item: <b>código;endereço</b> ou <b>código;descrição;endereço</b> — vários endereços do mesmo item separados por <b>/</b>, ex.: <b>R2I8 / R2H8 / H23</b> (o que vem do botão "Copiar lista sem endereço"; também aceita o que vem copiado de uma planilha, com tab). O endereço é só do PCP — nada vai ao Omie.</div>
+        <textarea className="input" rows={7} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={'VPMP-178;R2A4\nVPEL-229;R3B1'} style={{ fontFamily: 'monospace', fontSize: 12 }}/>
         {itens.length > 0 && (
           <div className="table-wrap" style={{ maxHeight: 220, overflowY: 'auto', border: 0 }}>
             <table className="t pcp-grid">
@@ -532,8 +548,8 @@ function AlmModalImportarEnderecos({ linhas, onClose, onDone }) {
                 return (
                   <tr key={k}>
                     <td className="mono">{i.cod}</td><td>{i.end || '—'}</td>
-                    <td style={{ fontSize: 12, color: !i.l || !i.end ? 'var(--vp-danger)' : rep.length ? 'var(--vp-warning-ink, #b45309)' : undefined }}>
-                      {!i.l ? 'código não encontrado' : !i.end ? 'sem endereço na linha' : rep.length ? `⚠ já usado por ${rep.slice(0, 3).join(', ')}${rep.length > 3 ? '…' : ''} (grava mesmo assim)` : (String(i.l.endereco || '').trim() ? `troca "${i.l.endereco}"` : 'novo')}
+                    <td style={{ fontSize: 12, color: !i.l || !i.end || i.endInvalido ? 'var(--vp-danger)' : rep.length ? 'var(--vp-warning-ink, #b45309)' : undefined }}>
+                      {!i.l ? 'código não encontrado' : !i.end ? 'sem endereço na linha' : i.endInvalido ? 'endereço não existe no galpão (use ex.: R2A4) — não grava' : rep.length ? `⚠ já usado por ${rep.slice(0, 3).join(', ')}${rep.length > 3 ? '…' : ''} (grava mesmo assim)` : (String(i.l.endereco || '').trim() ? `troca "${i.l.endereco}"` : 'novo')}
                     </td>
                   </tr>
                 );
@@ -569,11 +585,23 @@ function AlmoxarifadoEstoque() {
   const [podeEscrever, setPodeEscrever] = React.useState(false);
   const [podeContar, setPodeContar] = React.useState(false);     // registra o estoque físico (contagem real)
   const [podeVerCusto, setPodeVerCusto] = React.useState(null); // null = ainda verificando
-  const [modalReq, setModalReq] = React.useState(null);
-  const [modalMov, setModalMov] = React.useState(null);
-  const [modalEd, setModalEd] = React.useState(null);
-  const [modalHist, setModalHist] = React.useState(null);
-  const [modalAcerto, setModalAcerto] = React.useState(null);
+  /* Bug real (varredura de URLs, 09/10): os 5 modais de ação por produto
+     (Requisitar/Movimentar/Editar/Histórico/Acertar) eram só useState — F5,
+     link direto ou Voltar/Avançar sempre voltavam pra lista, mesmo com um
+     modal aberto. A URL só tem 1 segmento livre sob a aba "estoque"
+     (/logistica/almoxarifado/estoque/<acao>:<código>), então as 5 ações
+     dividem o mesmo slot via useRotaItem — o código do produto só é
+     resolvido depois que `linhas` carrega. */
+  const [itemUrl, setItemUrl] = window.useRotaItem('almoxarifado', 'estoque');
+  const [acaoUrl, codigoUrl] = itemUrl ? (() => { const i = itemUrl.indexOf(':'); return i < 0 ? [itemUrl, ''] : [itemUrl.slice(0, i), itemUrl.slice(i + 1)]; })() : ['', ''];
+  const prodUrl = (linhas && codigoUrl) ? linhas.find((l) => l.codigo === codigoUrl) || null : null;
+  const abrirModal = (acao, l) => setItemUrl(acao + ':' + l.codigo);
+  const fecharModal = () => setItemUrl(null);
+  const modalReq = acaoUrl === 'requisitar' ? prodUrl : null;
+  const modalMov = acaoUrl === 'mover' ? prodUrl : null;
+  const modalEd = acaoUrl === 'editar' ? prodUrl : null;
+  const modalHist = acaoUrl === 'historico' ? prodUrl : null;
+  const modalAcerto = acaoUrl === 'acertar' ? prodUrl : null;
   // Colunas secundárias (Família, Mínimo, Custo, Lead time) ficam recolhidas para a tela caber; preferência por pessoa no navegador.
   const [maisCols, setMaisCols] = React.useState(() => { try { return localStorage.getItem('vp_alm_cols') === '1'; } catch (e) { return false; } });
   const alternarCols = () => setMaisCols((v) => { try { localStorage.setItem('vp_alm_cols', v ? '0' : '1'); } catch (e) { /* sem storage */ } return !v; });
@@ -598,14 +626,18 @@ function AlmoxarifadoEstoque() {
     if (!c) { setErro('Supabase não carregou.'); setLinhas([]); return; }
     // Sem a alçada "ver_custo" o custo real nem é pedido ao banco: a coluna mostra só um valor de enfeite borrado.
     const pProdutos = c.from('pcp_produtos')
-      .select('codigo, codigo_produto_omie, descricao, unidade, familia, estoque_minimo, leadtime_dias, endereco, observacao_interna, pcp_estoque(quantidade), pcp_estoque_fisico(quantidade, contado_em, contado_por)' + (podeVerCusto ? ', preco_custo, custo_manual, custo_compra, custo_compra_fonte, custo_compra_em' : ''))
+      .select('codigo, codigo_produto_omie, descricao, unidade, familia, estoque_minimo, leadtime_dias, endereco, observacao_interna, pcp_estoque(quantidade)' + (podeVerCusto ? ', preco_custo, custo_manual, custo_compra, custo_compra_fonte, custo_compra_em' : ''))
       .eq('ativo', true).order('familia').order('codigo');
     const pPosicao = c.from('pcp_posicao_compra').select('codigo, reservado, pendente, atualizado_em').range(0, 4999);
     // "A caminho" = o que falta chegar nos pedidos de compra em aberto (lidos 2x/dia); a posição do Omie (1x/dia) fica de reserva.
     const pCompras = c.from('pcp_compras_itens').select('codigo, numero_pedido, data_pedido, data_previsao, quantidade, qtde_recebida, atualizado_em').range(0, 4999);
     c.from('alertas').select('title').like('id', 'pcp-reposicao-%').eq('resolved', false).order('created_at', { ascending: false }).limit(1)
       .then(({ data }) => setAlertaRepos(data && data[0] ? data[0].title : null));
-    Promise.all([pProdutos, pPosicao, pCompras]).then(([rp, rq, rc]) => {
+    // Contagem física e endereço: tabela única da Compras/app de estoque (fase 3) — o que se conta aqui aparece lá e vice-versa.
+    const pContagem = c.from('importacao_varejo_contagem').select('codigo, quantidade, contado_em, contado_por, endereco').range(0, 4999);
+    Promise.all([pProdutos, pPosicao, pCompras, pContagem]).then(([rp, rq, rc, rt]) => {
+      const cont = {};
+      ((rt && rt.data) || []).forEach((x) => { cont[String(x.codigo).toUpperCase()] = x; });
       if (rp.error) { setErro(rp.error.message); setLinhas([]); return; }
       const pos = {};
       let maisRecente = null;
@@ -622,22 +654,23 @@ function AlmoxarifadoEstoque() {
       });
       setComprasEm(comprasMais);
       setLinhas((rp.data || []).map((p) => {
-        const f = Array.isArray(p.pcp_estoque_fisico) ? p.pcp_estoque_fisico[0] : p.pcp_estoque_fisico;   // 1:1, mas tolera as duas formas
+        const ct = cont[String(p.codigo).toUpperCase()];
+        const f = ct && ct.quantidade != null ? ct : null;   // linha só de endereço não é contagem
         const saldo = (p.pcp_estoque || []).reduce((s, e) => s + Number(e.quantidade || 0), 0);
         const ps = pos[p.codigo];
         const cm = cam[p.codigo];
-        const pendOmie = ps && ps.pendente != null ? Number(ps.pendente) : null;
         const reservado = ps && ps.reservado != null ? Number(ps.reservado) : null;
         return {
           ...p,
+          endereco: (ct && ct.endereco) || p.endereco || '',
           saldo,
           temSaldo: (p.pcp_estoque || []).length > 0,
           reservado,
-          pendente: cm || pendOmie != null ? Math.max(cm ? cm.qtd : 0, pendOmie || 0) : null,
+          pendente: cm ? cm.qtd : 0,   // só pedidos de compra: o nPendente do Omie é de pedidos de venda (#843 A2)
           pedidosAbertos: cm ? cm.pedidos : [],
           disponivel: reservado != null ? saldo - reservado : null,
           fisico: f ? Number(f.quantidade) : null,
-          fisicoEm: f ? f.contado_em : null,
+          fisicoEm: f ? f.contado_em : null,   // data (aaaa-mm-dd) da contagem
           fisicoPor: f ? f.contado_por : null,
           dif: f ? Number(f.quantidade) - saldo : null,
           custo: podeVerCusto ? rpCustoEfetivo(p) : null,   // Omie → compras → manual (relatorios-pcp-custos.jsx)
@@ -663,11 +696,16 @@ function AlmoxarifadoEstoque() {
     if (!(q >= 0)) { window.toast?.('Quantidade inválida.'); return; }
     if (l.fisico != null && Math.abs(q - l.fisico) < 1e-9) return;
     const quem = (window.__VP_USER && window.__VP_USER.email) || null;
-    const agora = new Date().toISOString();
-    const r1 = await c.from('pcp_estoque_fisico').upsert({ codigo: l.codigo, quantidade: q, contado_em: agora, contado_por: quem }, { onConflict: 'codigo' });
+    const hoje = new Date().toISOString().slice(0, 10);
+    const codigo = String(l.codigo).toUpperCase();
+    const r1 = await c.from('importacao_varejo_contagem').upsert({
+      codigo, quantidade: q, saldo_sistemico: l.saldo, contado_em: hoje, contado_por: quem,
+      endereco: l.endereco || null, atualizado_em: new Date().toISOString(), atualizado_por: quem,
+    }, { onConflict: 'codigo' });
     if (r1.error) { window.toast?.('Não foi possível salvar a contagem: ' + r1.error.message); carregar(); return; }
-    const r2 = await c.from('pcp_estoque_contagens').insert({
-      codigo: l.codigo, quantidade_fisica: q, quantidade_omie: l.saldo, diferenca: q - l.saldo, contado_por: quem, contado_em: agora,
+    const r2 = await c.from('importacao_varejo_contagem_hist').insert({
+      codigo, quantidade: q, saldo_sistemico: l.saldo, diferenca: q - l.saldo, contado_em: hoje, contado_por: quem,
+      endereco: l.endereco || null, origem: 'almoxarifado', registrado_por: quem,
     });
     if (r2.error) window.toast?.('Contagem salva, mas o histórico não foi gravado: ' + r2.error.message);
     window.VPLog?.registrar?.({ modulo: 'Almoxarifado', acao: 'Registrou estoque físico', alvo: `${l.codigo}: físico ${q} × Omie ${l.saldo}` });
@@ -678,9 +716,13 @@ function AlmoxarifadoEstoque() {
   const salvarEndereco = async (l, valor) => {
     const c = window.__VP_SB && window.__VP_SB.sb;
     if (!c) return;
-    const novo = String(valor || '').trim().slice(0, 60);
+    let novo = String(valor || '').trim().slice(0, 200);
     if (novo === String(l.endereco || '').trim()) return;
-    const r = await c.from('pcp_produtos').update({ endereco: novo || null }).eq('codigo', l.codigo).select('codigo');
+    const v = window.EtiquetasCalc?.validarEnderecoNovo?.(novo, l.endereco);
+    if (v && !v.ok) { window.toast?.(v.msg, 'error'); carregar(); return; }
+    if (v && v.codigo) novo = v.codigo;
+    const quem = (window.__VP_USER && window.__VP_USER.email) || null;
+    const r = await upsertEndereco(c, l.codigo, novo || null, quem);
     if (r.error || !r.data || r.data.length === 0) { window.toast?.('Não foi possível salvar o endereço' + (r.error ? ': ' + r.error.message : '.')); carregar(); return; }
     window.VPLog?.registrar?.({ modulo: 'Almoxarifado', acao: 'Definiu o endereço do item', alvo: `${l.codigo}: ${novo || '(vazio)'}` });
     carregar();
@@ -691,7 +733,7 @@ function AlmoxarifadoEstoque() {
     if (!c) return;
     setSincronizando(true);
     try {
-      const { data, error } = await c.functions.invoke('sync-pcp-omie', { body: { escopo: 'tudo' } });
+      const { data, error } = await c.functions.invoke('sync-estoque-omie', { body: {} });
       if (error) throw error;
       if (data && data.ok === false) {
         // Os dados foram gravados; só alguns itens deram aviso (ex.: produto sem vínculo no Omie).
@@ -707,6 +749,15 @@ function AlmoxarifadoEstoque() {
 
   linhas.forEach((l) => { l.faltas = almFaltas(l, podeVerCusto); });   // campo derivado (não vem do banco)
   const EPS = 1e-9;
+  // Facilita o preenchimento dos endereços: sugere só posições que existem no galpão e ainda não têm item.
+  const usadosEnd = new Set(linhas.flatMap((l) => (window.EtiquetasCalc?.listaEnderecos?.(l.endereco) || []).map((e) => e.codigo)));
+  const enderecosLivres = (window.EtiquetasCalc?.todosEnderecos?.() || []).map((e) => e.codigo).filter((c) => !usadosEnd.has(c));
+  const semEndereco = linhas.filter((l) => !String(l.endereco || '').trim());
+  const copiarSemEndereco = () => {
+    const txt = semEndereco.map((l) => `${l.codigo};${String(l.descricao || '').replace(/[;\t\r\n]+/g, ' ').replace(/\s+/g, ' ').trim()};`).join('\n');
+    const ok = () => window.toast?.(`${semEndereco.length} itens copiados. Cole na planilha, preencha a 3ª coluna e cole em "Importar endereços".`, 'success');
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(txt).then(ok).catch(() => window.prompt('Copie a lista:', txt)); else window.prompt('Copie a lista:', txt);
+  };
   const abaixoMin = (l) => l.temSaldo && l.estoque_minimo != null && l.saldo < Number(l.estoque_minimo);
   const FILTROS = [
     { id: 'todos', label: 'Todos', fn: () => true },
@@ -746,8 +797,8 @@ function AlmoxarifadoEstoque() {
       {children}{ordem.chave === chave ? (ordem.dir === 1 ? ' ▲' : ' ▼') : ''}
     </th>
   );
-  const porEnd = {}; linhas.forEach((l) => { const e = String(l.endereco || '').trim().toUpperCase(); if (e) (porEnd[e] = porEnd[e] || []).push(l.codigo); });
-  const mesmoEnd = (l) => { const e = String(l.endereco || '').trim().toUpperCase(); return e && porEnd[e] && porEnd[e].length > 1 ? porEnd[e].filter((c) => c !== l.codigo) : []; };
+  const porEnd = {}; linhas.forEach((l) => binsDoEndereco(l.endereco).forEach((b) => { (porEnd[b] = porEnd[b] || []).push(l.codigo); }));
+  const mesmoEnd = (l) => { const out = new Set(); binsDoEndereco(l.endereco).forEach((b) => { if (porEnd[b] && porEnd[b].length > 1) porEnd[b].forEach((c) => { if (c !== l.codigo) out.add(c); }); }); return Array.from(out); };
   const nZerados = linhas.filter((l) => !l.temSaldo || l.saldo <= 0).length;
   const valorEstoque = podeVerCusto ? linhas.reduce((s, l) => s + (l.temSaldo && l.saldo > 0 && l.custo > 0 ? l.saldo * l.custo : 0), 0) : null;
   const semCustoComSaldo = podeVerCusto ? linhas.filter((l) => l.temSaldo && l.saldo > 0 && !(l.custo > 0)).length : 0;
@@ -789,7 +840,7 @@ function AlmoxarifadoEstoque() {
             <span title={'A sincronização terminou, mas com avisos de cadastro no Omie:\n' + ultimaSync.avisos.join('\n')}>{ultimaSync.avisos.length} aviso(s) de cadastro</span>
           </Badge>
         )}
-        <Button variant="primary" disabled={sincronizando} onClick={sincronizar}>{sincronizando ? 'Sincronizando…' : 'Sincronizar com Omie'}</Button>
+        <Button variant="primary" disabled={sincronizando} onClick={sincronizar}>{sincronizando ? 'Sincronizando…' : 'Sincronizar estoque (Omie)'}</Button>
       </div>
       <div className="pcp-toolbar" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
         <div className="card pcp-total" onClick={() => setFiltro('zerados')} style={{ padding: 14, flex: '1 1 170px', cursor: 'pointer', borderLeft: nZerados ? '4px solid var(--vp-yellow)' : undefined }}>
@@ -810,7 +861,9 @@ function AlmoxarifadoEstoque() {
         ))}
         <span style={{ flex: 1 }}/>
         <Button size="sm" variant={mostrarContar ? 'primary' : 'ghost'} title="Os 20 itens que mais precisam de contagem hoje" onClick={() => setMostrarContar((v) => !v)}>Contar hoje ({fila.length})</Button>
+        {podeContar && semEndereco.length > 0 && <Button size="sm" variant="ghost" title="Copia 'código;descrição;' dos itens sem endereço. Cole numa planilha, preencha a 3ª coluna e cole de volta em Importar endereços." onClick={copiarSemEndereco}>Copiar lista sem endereço ({semEndereco.length})</Button>}
         {podeContar && <Button size="sm" variant="ghost" title="Gravar endereços de muitos itens de uma vez (código;endereço)" onClick={() => setModalEnd(true)}>Importar endereços</Button>}
+        {podeContar && <datalist id="alm-enderecos-livres">{enderecosLivres.map((c) => <option key={c} value={c}/>)}</datalist>}
         <Button size="sm" variant="ghost" title="Mostrar ou esconder Família, Mínimo, Custo e Lead time" onClick={alternarCols}>{maisCols ? '◂ Menos colunas' : 'Mais colunas ▸'}</Button>
         <span className="muted" style={{ fontSize: 12 }}>
           <span title="Cadastro completo = vínculo com o Omie e endereço (e custo, para quem vê custos). Lead time e mínimo do Omie não contam.">Cadastro completo: {nCompletos} de {linhas.length}</span> · Contagem: {nContados} de {linhas.length}{nDif > 0 ? ` · ${nDif} com diferença` : ''}
@@ -839,8 +892,8 @@ function AlmoxarifadoEstoque() {
         </Card>
       )}
       <Card title="Estoque do PCP" sub="Saldo do Omie × contagem real da prateleira · clique no título da coluna para ordenar">
-        <div className="table-wrap" style={{ border: 0 }}>
-          <table className="t pcp-grid pcp-estoque">
+        <div className="table-wrap pcp-rolagem" style={{ border: 0 }}>
+          <table className="t pcp-grid pcp-estoque pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
             <thead>
               <tr>
                 <Th chave="codigo">Código</Th><Th chave="descricao">Descrição</Th>{maisCols && <Th chave="familia">Família</Th>}<th>Un.</th>
@@ -889,9 +942,9 @@ function AlmoxarifadoEstoque() {
                           <span style={Math.abs(l.dif) > EPS ? { color: 'var(--vp-danger)', fontWeight: 600 } : { color: 'var(--fg3)' }}
                             title={Math.abs(l.dif) > EPS ? 'A contagem não bate com o Omie' : 'Bate com o Omie'}>{Math.abs(l.dif) > EPS ? (l.dif > 0 ? '+' : '') + almFmt(l.dif, 2) : 'ok'}</span>
                           {podeEscrever && Math.abs(l.dif) > EPS && (
-                            <>{' '}<Button variant="primary" size="sm" title="Acertar o saldo do Omie com esta contagem (grava no Omie, com prévia e confirmação)" onClick={() => setModalAcerto(l)}>Acertar</Button></>
+                            <>{' '}<Button variant="primary" size="sm" title="Acertar o saldo do Omie com esta contagem (grava no Omie, com prévia e confirmação)" onClick={() => abrirModal('acertar', l)}>Acertar</Button></>
                           )}
-                          {' '}<Button variant="ghost" size="sm" title="Histórico de contagens deste item" onClick={() => setModalHist(l)}>↺</Button>
+                          {' '}<Button variant="ghost" size="sm" title="Histórico de contagens deste item" onClick={() => abrirModal('historico', l)}>↺</Button>
                         </>
                       )}
                     </td>
@@ -906,9 +959,13 @@ function AlmoxarifadoEstoque() {
                     </td>}
                     <td>
                       {podeContar
-                        ? <input className="input" type="text" maxLength={60} placeholder="falta" key={l.codigo + '-end-' + (l.endereco || '')}
-                            defaultValue={l.endereco || ''} style={{ width: 76 }} title="Endereço na prateleira (só do PCP)" onBlur={(e) => salvarEndereco(l, e.target.value)}/>
+                        ? <input className="input" type="text" maxLength={200} placeholder="falta" key={l.codigo + '-end-' + (l.endereco || '')}
+                            defaultValue={l.endereco || ''} style={{ width: 150 }} list="alm-enderecos-livres" data-end-input="1"
+                            title="Endereços do item. Vários: separe com / (ex.: R2I8 / R2H8 / H23). Porta-palete: R2A4. Prateleira do mezanino: Letra-Nº (G23). Enter grava e vai para o próximo item."
+                            onKeyDown={(e) => { if (e.key !== 'Enter') return; e.preventDefault(); const todos = Array.from(document.querySelectorAll('input[data-end-input]')); const i = todos.indexOf(e.target); e.target.blur(); const prox = todos[i + 1]; if (prox) setTimeout(() => prox.focus(), 0); }}
+                            onBlur={(e) => salvarEndereco(l, e.target.value)}/>
                         : (l.endereco || <span style={{ color: 'var(--fg3)' }}>falta</span>)}
+                      {temMezanino(l.endereco) && <span className="small muted" style={{ marginLeft: 4 }} title="Tem caixa bin nas prateleiras do mezanino">mezanino</span>}
                       {mesmoEnd(l).length > 0 && <span style={{ color: 'var(--vp-warning-ink, #b45309)', cursor: 'help', marginLeft: 4 }} title={'Mesmo endereço de: ' + mesmoEnd(l).slice(0, 6).join(', ')}>⚠</span>}
                     </td>
                     {maisCols && <td className="text-right">{almFmt(l.leadtime_dias)}</td>}
@@ -931,19 +988,19 @@ function AlmoxarifadoEstoque() {
       {menuAcao && (
         <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'fixed', left: menuAcao.x, top: menuAcao.y, width: 196, zIndex: 60, background: 'var(--vp-white, #fff)', border: '1px solid var(--vp-gray-200, #d9dce1)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,.18)', padding: 4, display: 'flex', flexDirection: 'column' }}>
           <div className="small muted" style={{ padding: '4px 10px', fontFamily: 'monospace' }}>{menuAcao.l.codigo}</div>
-          <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { setModalReq(menuAcao.l); setMenuAcao(null); }}>Requisitar compra</Button>
-          <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { setModalMov(menuAcao.l); setMenuAcao(null); }}>Movimentar estoque</Button>
-          <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { setModalEd(menuAcao.l); setMenuAcao(null); }}>Editar cadastro</Button>
+          <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { abrirModal('requisitar', menuAcao.l); setMenuAcao(null); }}>Requisitar compra</Button>
+          <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { abrirModal('mover', menuAcao.l); setMenuAcao(null); }}>Movimentar estoque</Button>
+          <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { abrirModal('editar', menuAcao.l); setMenuAcao(null); }}>Editar cadastro</Button>
           {menuAcao.l.fisico != null && Math.abs(menuAcao.l.dif) > EPS && (
-            <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { setModalAcerto(menuAcao.l); setMenuAcao(null); }}>Acertar saldo pela contagem</Button>
+            <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { abrirModal('acertar', menuAcao.l); setMenuAcao(null); }}>Acertar saldo pela contagem</Button>
           )}
         </div>
       )}
-      {modalReq && <AlmModalRequisicao prod={modalReq} onClose={() => setModalReq(null)} onDone={carregar}/>}
-      {modalMov && <AlmModalMovimento prod={modalMov} onClose={() => setModalMov(null)} onDone={carregar}/>}
-      {modalEd && <AlmModalEditarProduto prod={modalEd} onClose={() => setModalEd(null)} onDone={carregar}/>}
-      {modalHist && <AlmModalHistoricoContagem prod={modalHist} onClose={() => setModalHist(null)}/>}
-      {modalAcerto && <AlmModalAcerto prod={modalAcerto} onClose={() => setModalAcerto(null)} onDone={carregar}/>}
+      {modalReq && <AlmModalRequisicao prod={modalReq} onClose={fecharModal} onDone={carregar}/>}
+      {modalMov && <AlmModalMovimento prod={modalMov} onClose={fecharModal} onDone={carregar}/>}
+      {modalEd && <AlmModalEditarProduto prod={modalEd} onClose={fecharModal} onDone={carregar}/>}
+      {modalHist && <AlmModalHistoricoContagem prod={modalHist} onClose={fecharModal}/>}
+      {modalAcerto && <AlmModalAcerto prod={modalAcerto} onClose={fecharModal} onDone={carregar}/>}
       {modalEnd && <AlmModalImportarEnderecos linhas={linhas} onClose={() => setModalEnd(false)} onDone={carregar}/>}
     </>
   );
@@ -1109,20 +1166,21 @@ function AlmoxarifadoCustos() {
 }
 
 function AlmoxarifadoPage() {
-  const [aba, setAba] = window.useRouteTab('almoxarifado', 'estoque', ['estoque', 'estrutura', 'custos', 'reposicao', 'necessidade', 'pedidos'], false, true);
+  const [aba, setAba] = window.useRouteTab('almoxarifado', 'estoque', ['estoque', 'estrutura', 'custos', 'reposicao', 'necessidade', 'ajustes', 'pedidos'], false, true);
 
   const emEstoque = aba === 'estoque';
   const emEstrutura = aba === 'estrutura';
   const emCustos = aba === 'custos';
   const emReposicao = aba === 'reposicao';
   const emNecessidade = aba === 'necessidade';
+  const emAjustes = aba === 'ajustes';
 
   const cabecalho = (
     <>
       <div className="page-head">
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Almoxarifado</div>
-          <h1 className="page-head__title">{emEstoque ? 'Estoque' : emEstrutura ? 'Estrutura dos produtos' : emCustos ? 'Custos' : emReposicao ? 'Reposição' : emNecessidade ? 'Necessidade de materiais' : 'Pedidos de compra'}</h1>
+          <h1 className="page-head__title">{emEstoque ? 'Estoque' : emEstrutura ? 'Estrutura dos produtos' : emCustos ? 'Custos' : emReposicao ? 'Reposição' : emNecessidade ? 'Necessidade de materiais' : emAjustes ? 'Ajustes de estoque' : 'Pedidos de compra'}</h1>
           <p className="page-head__sub">{emEstoque
             ? 'Estoque do PCP — cabos de aço, cabos de manobra, corrimãos e componentes dos Quadros de Comando.'
             : emEstrutura
@@ -1133,7 +1191,9 @@ function AlmoxarifadoPage() {
                   ? 'O que comprar e quando: consumo médio real × prazo de chegada (importado ≈ 90 dias), não estoque mínimo.'
                   : emNecessidade
                     ? 'O que falta de material para atender os pedidos já vendidos (carteira) e até quando comprar.'
-                    : 'Compras em andamento no Omie, requisições enviadas pelo PCP e pedidos internos de varejo (com aprovação do Chefe de Logística).'}</p>
+                    : emAjustes
+                      ? 'Ajustes gerados pelas contagens: confirme ou descarte, item a item. Nada é enviado ao Omie nesta etapa.'
+                      : 'Compras em andamento no Omie, requisições enviadas pelo PCP e pedidos internos de varejo (com aprovação do Chefe de Logística).'}</p>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
@@ -1142,6 +1202,7 @@ function AlmoxarifadoPage() {
         <Button variant={emCustos ? 'primary' : 'ghost'} onClick={() => setAba('custos')}>Custos</Button>
         <Button variant={emReposicao ? 'primary' : 'ghost'} onClick={() => setAba('reposicao')}>Reposição</Button>
         <Button variant={emNecessidade ? 'primary' : 'ghost'} onClick={() => setAba('necessidade')}>Necessidade</Button>
+        <Button variant={emAjustes ? 'primary' : 'ghost'} onClick={() => setAba('ajustes')}>Ajustes</Button>
         <Button variant={aba === 'pedidos' ? 'primary' : 'ghost'} onClick={() => setAba('pedidos')}>Pedidos de compra</Button>
       </div>
     </>
@@ -1152,6 +1213,7 @@ function AlmoxarifadoPage() {
   if (emCustos) return <div className="page fade-in">{cabecalho}<AlmoxarifadoCustos/></div>;
   if (emReposicao) return <div className="page fade-in">{cabecalho}<AlmoxarifadoReposicao/></div>;
   if (emNecessidade) return <div className="page fade-in">{cabecalho}<AlmoxarifadoNecessidade/></div>;
+  if (emAjustes) return <div className="page fade-in">{cabecalho}<AlmoxarifadoAjustes/></div>;
   return <div className="page fade-in">{cabecalho}<AlmoxarifadoPedidos/></div>;
 }
 

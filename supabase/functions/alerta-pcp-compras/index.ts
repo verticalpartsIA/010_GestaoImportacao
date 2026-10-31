@@ -257,14 +257,15 @@ Deno.serve(async (req) => {
     const hoje = hojeBrasilia();
     const semana = semanaDe(hoje);
     const prefixoId = email ? "pcp-teste" : "pcp";
-    const [cfgRows, prods, estr, movs, estoqueRows, posRows, pedidos, acomp, itens, ordens] = await Promise.all([
+    const [cfgRows, prods, estr, movs, estoqueRows, posRows, comprasRows, pedidos, acomp, itens, ordens] = await Promise.all([
       pgSelectAll<any>("pcp_reposicao_config", "select=*&id=eq.true"),
       pgSelectAll<any>("pcp_produtos", "select=codigo,descricao,unidade&ativo=eq.true&nao_repor=eq.false&order=codigo"),
       pgSelectAll<any>("pcp_estrutura", "select=codigo_pai,codigo_filho,quantidade,perda_pct&order=id"),
       pgSelectAll<any>("pcp_consumo_mov", "select=codigo,dt_mov,qtde,cod_origem&order=id_mov"),
       pgSelectAll<any>("pcp_estoque", "select=codigo,quantidade&order=codigo"),
-      pgSelectAll<any>("pcp_posicao_compra", "select=codigo,fisico,disponivel,pendente&order=codigo"),
-      pgSelectAll<any>("pcp_pedidos", "select=codigo_pedido,numero_pedido,etapa,data_previsao&faturado=eq.false&cancelado=eq.false&order=codigo_pedido"),
+      pgSelectAll<any>("pcp_posicao_compra", "select=codigo,fisico,disponivel&order=codigo"),
+      pgSelectAll<any>("pcp_compras_itens", "select=codigo,quantidade,qtde_recebida&order=pedido_id,item_id"),
+      pgSelectAll<any>("pcp_pedidos", "select=codigo_pedido,numero_pedido,etapa,data_previsao&faturado=eq.false&cancelado=eq.false&so_separacao=eq.false&order=codigo_pedido"),
       pgSelectAll<any>("pcp_pedido_acompanhamento", "select=numero_pedido,historico&order=numero_pedido"),
       pgSelectAll<any>("pcp_pedido_itens", "select=codigo_pedido,codigo,quantidade&item_pcp=eq.true&order=id"),
       pgSelectAll<any>("pcp_ordens", "select=id,numero,produto,quantidade,qtd_produzida,prazo_entrega,pedido_codigo,ordem_mae_id,observacao&status=not.in.(concluida,cancelada)&order=created_at"),
@@ -283,18 +284,23 @@ Deno.serve(async (req) => {
     const movsPor: Record<string, any[]> = {}; movs.forEach((m) => { (movsPor[m.codigo] = movsPor[m.codigo] || []).push(m); });
     const fisEst: Record<string, number> = {}; estoqueRows.forEach((e) => { fisEst[e.codigo] = (fisEst[e.codigo] || 0) + Number(e.quantidade || 0); });
     const posic: Record<string, any> = {}; posRows.forEach((p) => { posic[p.codigo] = p; });
+    // "A caminho" = o que falta chegar nos pedidos de compra abertos (mesma regra das telas); o nPendente do Omie é de pedidos de VENDA (#843 A2).
+    const caminho: Record<string, number> = {};
+    comprasRows.forEach((x) => { const f = Number(x.quantidade || 0) - Number(x.qtde_recebida || 0); if (f > 1e-9) caminho[x.codigo] = (caminho[x.codigo] || 0) + f; });
 
     /* ---- 1) Reposição ---- */
     const linhas = prods.filter((p) => !fabricados.has(p.codigo)).map((p) => {
       const ps = posic[p.codigo];
-      return Repo.calcularItem({ codigo: p.codigo, movs: movsPor[p.codigo], hoje, cfg, disponivel: ps ? ps.disponivel : (fisEst[p.codigo] || 0), pendente: ps ? ps.pendente : 0 });
+      return Repo.calcularItem({ codigo: p.codigo, movs: movsPor[p.codigo], hoje, cfg, disponivel: ps ? ps.disponivel : (fisEst[p.codigo] || 0), pendente: caminho[p.codigo] || 0 });
     });
     const crit = linhas.filter((l) => l.status === "critico").sort((a, b) => (a.coberturaProj ?? 1e9) - (b.coberturaProj ?? 1e9));
     const comp = linhas.filter((l) => l.status === "comprar").sort((a, b) => (a.coberturaProj ?? 1e9) - (b.coberturaProj ?? 1e9));
 
     /* ---- 2) Necessidade (mesma montagem da demanda da tela) ---- */
     const historico = new Set(acomp.filter((a) => a.historico).map((a) => a.numero_pedido));
-    const abertos = pedidos.filter((p) => !historico.has(p.numero_pedido) && p.etapa !== "00");
+    /* Carteira firme = etapas 20 a 59 (mesma regra da tela Necessidade, necEtapaFirme): 00/10 ainda não são venda firme e 60+ já saiu do estoque. */
+    const etapaFirme = (e: any) => { const n = Number(e); return n >= 20 && n < 60; };
+    const abertos = pedidos.filter((p) => !historico.has(p.numero_pedido) && etapaFirme(p.etapa));
     const porCodigo = new Map(abertos.map((p) => [p.codigo_pedido, p]));
     const demanda: any[] = [];
     itens.forEach((i) => {
@@ -311,7 +317,8 @@ Deno.serve(async (req) => {
     const filhos: Record<string, any[]> = {}; estr.forEach((l) => { (filhos[l.codigo_pai] = filhos[l.codigo_pai] || []).push(l); });
     const estoque: Record<string, any> = {};
     prods.forEach((p) => { estoque[p.codigo] = { fisico: fisEst[p.codigo] || 0, aCaminho: 0 }; });
-    posRows.forEach((p) => { estoque[p.codigo] = { fisico: Number(p.fisico || 0), aCaminho: Number(p.pendente || 0) }; });
+    posRows.forEach((p) => { estoque[p.codigo] = { fisico: Number(p.fisico || 0), aCaminho: 0 }; });
+    Object.keys(caminho).forEach((c) => { estoque[c] = { fisico: estoque[c] ? estoque[c].fisico : (fisEst[c] || 0), aCaminho: caminho[c] }; });
     const nec = Nec.calcular({ demanda, filhos, estoque, hoje, cfg });
     const limite = somarDias(hoje, 7);
     const atrasados = nec.comprados.filter((l) => l.status === "atrasado");

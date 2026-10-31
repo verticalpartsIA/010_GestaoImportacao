@@ -65,6 +65,8 @@ function ModalNovoGatilho({ onClose, onSaved }) {
   );
 }
 
+const FILTROS_CADEIA = ['atrasada', 'andamento', 'rascunho', 'fim', 'todas'];
+
 function FinanceiroPage({ setRoute, setSubsel }) {
   const [gatilhos, setGatilhos] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -72,8 +74,19 @@ function FinanceiroPage({ setRoute, setSubsel }) {
   const [confirmarSinalDe, setConfirmarSinalDe] = React.useState(null);
   const [confirmarAvalDe, setConfirmarAvalDe] = React.useState(null);
   const [alertas, setAlertas] = React.useState([]);
-  const [filtroCadeia, setFiltroCadeia] = React.useState(null);   // null = escolhe sozinho (atrasadas, se houver)
+  /* #1214 D.5: filtro e cotação aberta moram na URL — /adm-financeiro/financeiro/<filtro>/<Nº da cotação>.
+     F5, link compartilhado e Voltar/Avançar mantêm o que estava na tela. Sem filtro na URL = escolhe sozinho
+     (atrasadas, se houver). Só uma cotação aberta por vez (é a que está no link). A busca e as janelas de
+     confirmação ficam fora da URL de propósito (reabrir uma confirmação no F5 arriscaria confirmar duas vezes). */
+  const [filtroUrl] = window.useRotaId ? window.useRotaId('financeiro') : [''];
+  const locPrazos = (window.VpRouter && window.VpRouter.parseLocation()) || {};
+  const filtroCadeia = FILTROS_CADEIA.includes(filtroUrl) ? filtroUrl : null;
+  const cotacaoAberta = filtroCadeia && locPrazos.route === 'financeiro' ? String(locPrazos.tab || '') : '';
+  const cadeiasRef = React.useRef(null);
+  const irPara = (filtro, cotacao, opts) => { if (window.VpRouter) window.VpRouter.navigate('financeiro', filtro || null, cotacao || null, opts); };
+  const setFiltroCadeia = (k) => irPara(k, null);
   const [buscaCadeia, setBuscaCadeia] = React.useState('');
+  const [erroCarga, setErroCarga] = React.useState(null);   // #1214 D.1/D.2: falha de leitura vira aviso, nunca "Carregando…" eterno nem lista vazia muda
 
   const fecharLembrete = async (id) => {
     if (window.GatilhosEngine) await window.GatilhosEngine.fecharLembrete(id);
@@ -103,41 +116,66 @@ function FinanceiroPage({ setRoute, setSubsel }) {
         return;
       }
     }
+    /* Contrato de Venda guarda o item aberto no 3º segmento, dentro da aba
+       "painel" (/contrato-venda-equipamentos/painel/<id>) — o setSubsel
+       genérico abaixo só escreve o 2º segmento, então navega direto pro 3º
+       (mesmo padrão já usado em decisoes.jsx pro Almoxarifado). */
+    if (alvo.rota === 'contrato-venda-equipamentos' && alvo.subsel != null) {
+      setRoute?.(alvo.rota);
+      if (window.VpRouter) {
+        setTimeout(() => {
+          window.VpRouter.navigate(alvo.rota, 'painel', alvo.subsel);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }, 0);
+      }
+      return;
+    }
     if (alvo.subsel !== null) setSubsel?.(alvo.subsel);
     setRoute?.(alvo.rota);
   };
 
   const reloadGatilhos = async () => {
     setLoading(true);
-    const { data } = await window.__VP_SB.sb.from('gatilhos').select('*').order('numero_cotacao').order('nascido_em');
-    let rows = data || [];
-    /* Sem cron neste projeto — verifica lembretes/revisão de prazo toda vez
-       que a tela é aberta (ver instrucaocompra.md). */
-    if (window.GatilhosEngine) {
-      const mudou = await window.GatilhosEngine.verificarPrazos(rows);
-      if (mudou) {
-        const { data: data2 } = await window.__VP_SB.sb.from('gatilhos').select('*').order('numero_cotacao').order('nascido_em');
-        rows = data2 || rows;
+    try {
+      const { data, error } = await window.__VP_SB.sb.from('gatilhos').select('*').order('numero_cotacao').order('nascido_em');
+      if (error) throw error;
+      let rows = data || [];
+      /* Sem cron neste projeto — verifica lembretes/revisão de prazo toda vez
+         que a tela é aberta (ver instrucaocompra.md). Falha aqui não impede de mostrar as cadeias já lidas. */
+      if (window.GatilhosEngine) {
+        let mudou = false;
+        try { mudou = await window.GatilhosEngine.verificarPrazos(rows); }
+        catch (e) { console.warn('[Prazos] verificarPrazos falhou', e); }
+        if (mudou) {
+          const { data: data2, error: e2 } = await window.__VP_SB.sb.from('gatilhos').select('*').order('numero_cotacao').order('nascido_em');
+          if (!e2 && data2) rows = data2;
+        }
       }
+      /* Vistorias não agendadas dentro do prazo (23/08) — mesmo padrão sem
+         cron, roda toda vez que a tela abre. Não altera `rows`, só gera
+         alertas em `alertas` (recarregados por reloadAlertas logo abaixo). */
+      if (window.InstalacaoObraStore) window.InstalacaoObraStore.verificarPrazoVistorias().then(() => reloadAlertas())
+        .catch((e) => console.warn('[Prazos] verificarPrazoVistorias falhou', e));
+      /* Gatilhos manuais gravam days_left como número fixo na criação
+         (ver ModalNovoGatilho.save) e nada recalculava depois — "vence em
+         Xd"/"atrasado há Xd" e os KPIs de 7d/atrasados ficavam desatualizados
+         com o passar do tempo. Recalcula aqui, a cada carregamento da tela,
+         a partir de due_date — mesmo padrão que os gatilhos automáticos já
+         usam (recalculam via GanttBarMini/labelPrazo a cada render). Não
+         grava de volta no banco: é só a leitura que passa a ser fresca. */
+      rows = rows.map((g) => (
+        g.origem !== 'automatico' && g.due_date
+          ? { ...g, days_left: Math.round((new Date(g.due_date) - new Date()) / 86400000) }
+          : g
+      ));
+      setGatilhos(rows);
+      setErroCarga(null);
+    } catch (e) {
+      console.warn('[Prazos] falha ao carregar as etapas', e);
+      setErroCarga('Não foi possível carregar as etapas agora' + (e && e.message ? ' (' + e.message + ')' : '') + '.');
+    } finally {
+      setLoading(false);
     }
-    /* Vistorias não agendadas dentro do prazo (23/08) — mesmo padrão sem
-       cron, roda toda vez que a tela abre. Não altera `rows`, só gera
-       alertas em `alertas` (recarregados por reloadAlertas logo abaixo). */
-    if (window.InstalacaoObraStore) window.InstalacaoObraStore.verificarPrazoVistorias().then(() => reloadAlertas());
-    /* Gatilhos manuais gravam days_left como número fixo na criação
-       (ver ModalNovoGatilho.save) e nada recalculava depois — "vence em
-       Xd"/"atrasado há Xd" e os KPIs de 7d/atrasados ficavam desatualizados
-       com o passar do tempo. Recalcula aqui, a cada carregamento da tela,
-       a partir de due_date — mesmo padrão que os gatilhos automáticos já
-       usam (recalculam via GanttBarMini/labelPrazo a cada render). Não
-       grava de volta no banco: é só a leitura que passa a ser fresca. */
-    rows = rows.map((g) => (
-      g.origem !== 'automatico' && g.due_date
-        ? { ...g, days_left: Math.round((new Date(g.due_date) - new Date()) / 86400000) }
-        : g
-    ));
-    setGatilhos(rows);
-    setLoading(false);
   };
   const reloadAlertas = () => {
     // Mesma regra de destinatário da Central de Notificações: alerta dirigido a uma pessoa não aparece para as outras.
@@ -145,9 +183,28 @@ function FinanceiroPage({ setRoute, setSubsel }) {
     const baseAlertas = window.__VP_SB.sb.from('alertas').select('*').eq('resolved', false);
     (emailAlertas ? baseAlertas.or(`destinatario_email.is.null,destinatario_email.eq.${emailAlertas}`) : baseAlertas.is('destinatario_email', null))
       .order('created_at', { ascending: false })
-      .then(({ data }) => setAlertas((data || []).map(a => ({ ...a, time: window.__VP_SB.timeAgo(a.created_at) }))));
+      .then(({ data, error }) => {
+        if (error) { console.warn('[Prazos] falha ao carregar alertas', error); return; }   // mantém os que já estavam na tela
+        setAlertas((data || []).map(a => ({ ...a, time: window.__VP_SB.timeAgo(a.created_at) })));
+      })
+      .catch((e) => console.warn('[Prazos] falha ao carregar alertas', e));
   };
   React.useEffect(() => { reloadGatilhos(); reloadAlertas(); }, []);
+
+  /* Link de cotação que não está no filtro do link: abre no filtro certo; cotação sem cadeia: avisa e volta à lista. */
+  React.useEffect(() => {
+    const ref = cadeiasRef.current;
+    if (loading || !ref || !cotacaoAberta) return;
+    const c = ref.cadeias.find((x) => String(x.numero) === cotacaoAberta);
+    if (!c) {
+      window.toast?.(`Cotação Nº ${cotacaoAberta} não tem cadeia de etapas — mostrando a lista.`, 'warning');
+      irPara(filtroCadeia, null, { replace: true });
+      return;
+    }
+    const filtroDela = ['concluida', 'encerrada'].includes(c.tipo) ? 'fim' : c.tipo;
+    if (filtroCadeia !== 'todas' && filtroCadeia !== filtroDela) irPara(filtroDela, cotacaoAberta, { replace: true });
+    else setTimeout(() => document.getElementById('cadeia-' + cotacaoAberta)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  }, [loading, gatilhos, cotacaoAberta, filtroCadeia]);
 
   if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
 
@@ -184,6 +241,7 @@ function FinanceiroPage({ setRoute, setSubsel }) {
   const cadeias = Object.entries(cadeiasPorCotacao).map(([numero, nos]) => ({ numero, nos, ...resumoDaCadeia(nos) }));
   const contagem = cadeias.reduce((acc, c) => { acc[c.tipo] = (acc[c.tipo] || 0) + 1; return acc; }, {});
   const filtroAtivo = filtroCadeia || (contagem.atrasada ? 'atrasada' : 'andamento');
+  cadeiasRef.current = { cadeias };
   const termoCadeia = buscaCadeia.trim().replace(/\D/g, '');
   const cadeiasVisiveis = cadeias
     .filter(c => filtroAtivo === 'todas' || (filtroAtivo === 'fim' ? ['concluida', 'encerrada'].includes(c.tipo) : c.tipo === filtroAtivo))
@@ -231,6 +289,12 @@ function FinanceiroPage({ setRoute, setSubsel }) {
         </div>
       </div>
 
+      {erroCarga && (
+        <div className="small" style={{ padding: '10px 14px', marginBottom: 16, border: '1px solid var(--vp-danger, #c62828)', borderRadius: 6, background: 'rgba(198,40,40,.06)' }}>
+          {erroCarga} Os números abaixo podem estar incompletos.{' '}
+          <Button variant="outline" size="sm" onClick={reloadGatilhos}>Tentar novamente</Button>
+        </div>
+      )}
       <div className="grid-4" style={{ marginBottom: 20 }}>
         <KPI label="Cotações em andamento" value={(contagem.andamento || 0) + (contagem.atrasada || 0)} sub="já passaram do formulário, não encerradas" delta="—" deltaDir="up" icon="zap"/>
         <KPI label="Com prazo estourado" value={contagem.atrasada || 0} sub={`${etapasAtrasadas} etapa(s) atrasada(s)`} delta="—" deltaDir="down" icon="warning"/>
@@ -298,6 +362,8 @@ function FinanceiroPage({ setRoute, setSubsel }) {
           )}
           {cadeiasVisiveis.map((c) => (
             <CadeiaGatilhosCotacao key={c.numero} numeroCotacao={c.numero} nos={c.nos}
+              aberta={cotacaoAberta === String(c.numero)}
+              onAlternar={() => irPara(filtroAtivo, cotacaoAberta === String(c.numero) ? null : c.numero)}
               onConfirmarSinal={setConfirmarSinalDe} onConfirmarAval={setConfirmarAvalDe}
               onFecharLembrete={fecharLembrete} onAbrirGatilho={abrirGatilho} onFecharComMotivo={reloadGatilhos}/>
           ))}
@@ -436,8 +502,11 @@ function ModalFecharComMotivo({ g, onClose, onSaved }) {
    número inventado) até chegar a vez. Etapas com `fecha: null` (sem
    ponto de ação real no código ainda, ver gatilhos-engine.js) ganham
    rótulo "sem rastreio automático" em vez de fingir monitoramento. */
-function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirmarAval, onFecharLembrete, onAbrirGatilho, onFecharComMotivo, defaultOpen }) {
-  const [aberta, setAberta] = React.useState(!!defaultOpen);
+function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirmarAval, onFecharLembrete, onAbrirGatilho, onFecharComMotivo, defaultOpen, aberta: abertaProp, onAlternar }) {
+  const [abertaLocal, setAbertaLocal] = React.useState(!!defaultOpen);
+  const controlada = typeof onAlternar === 'function';   // Prazos & Pendências: a cotação aberta vem da URL (#1214 D.5)
+  const aberta = controlada ? !!abertaProp : abertaLocal;
+  const setAberta = controlada ? () => onAlternar() : setAbertaLocal;
   const [fechandoMotivo, setFechandoMotivo] = React.useState(null);
   const engine = window.GatilhosEngine;
   const NODES = engine?.NODES || [];
@@ -458,7 +527,7 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
   const statusVariant = encerrada ? 'neutral' : concluida ? 'success' : atrasada ? 'danger' : 'warning';
 
   return (
-    <div>
+    <div id={"cadeia-" + numeroCotacao}>
       <div className="row sb" style={{ cursor: 'pointer', padding: '4px 0' }} onClick={() => setAberta((v) => !v)}>
         <div className="row gap-3" style={{ alignItems: 'center' }}>
           <Icon.chevRight size={12} style={{ transform: aberta ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}/>
@@ -466,7 +535,7 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
           {!aberta && noAtual && (
             <>
               <span className="small muted">{engine?.nodeByKey(noAtual.evento_key)?.label || noAtual.trigger_name}</span>
-              <GanttBarMini nascidoEm={noAtual.nascido_em} prazoEm={engine?.prazoEfetivo(noAtual) || noAtual.prazo_em} concluidoEm={noAtual.concluido_em} encerrado={encerrada}/>
+              <GanttBarMini nascidoEm={noAtual.nascido_em} prazoEm={engine ? engine.prazoEfetivo(noAtual) : noAtual.prazo_em} concluidoEm={noAtual.concluido_em} encerrado={encerrada}/>
             </>
           )}
         </div>
@@ -525,7 +594,7 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
                   ) : cemiterio ? (
                     <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setFechandoMotivo(g); }}>Fechar com motivo</Button>
                   ) : (
-                    <GanttBarMini nascidoEm={g.nascido_em} prazoEm={engine?.prazoEfetivo(g) || g.prazo_em} concluidoEm={null} comLabel/>
+                    <GanttBarMini nascidoEm={g.nascido_em} prazoEm={engine ? engine.prazoEfetivo(g) : g.prazo_em} concluidoEm={null} comLabel/>
                   )}
                   {podeConfirmarSinal && (
                     <Button size="sm" variant="primary" icon="check"
@@ -533,7 +602,7 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
                   )}
                   {podeConfirmarAval && (
                     <Button size="sm" variant="primary" icon="check"
-                      onClick={(e) => { e.stopPropagation(); onConfirmarAval(g); }}>Dar Aval</Button>
+                      title="Um dos três avais que liberam a compra ao fornecedor (com o Aval Jurídico e a assinatura do Projeto de Instalação). Não é o aval de venda/score." onClick={(e) => { e.stopPropagation(); onConfirmarAval(g); }}>Dar Aval de Pagamento</Button>
                   )}
                 </div>
                 {cemiterio && (
@@ -616,7 +685,18 @@ function ModalConfirmarAvalPagamento({ g, onClose, onSaved }) {
       const av = await window.AvalFinanceiroStore.getByNumeroCotacao(g.numero_cotacao);
       if (!av) throw new Error('Registro de Aval Financeiro não encontrado para essa cotação.');
       await window.AvalFinanceiroStore.confirmarAvalPagamento(av.id, observacoes);
-      window.toast('Aval de Pagamento confirmado — Compra ao Fornecedor liberada.', 'success');
+      /* #1214 D.3: o Aval de Pagamento sozinho não libera a compra — antes o aviso dizia "liberada" sempre. Confere o
+         mesmo gate do botão "Decidir comprar" e diz o que ainda falta. */
+      let gate = null;
+      try { gate = await window.AvalFinanceiroStore.podeIniciarCompra(g.numero_cotacao); } catch (e) { console.warn('[Prazos] conferência do gate da compra falhou', e); }
+      if (gate && gate.ok) {
+        window.toast('Aval de Pagamento confirmado — compra ao fornecedor liberada.', 'success');
+      } else {
+        const faltam = ((gate && gate.checagens) || []).filter((ck) => !ck.ok).map((ck) => ck.rotulo);
+        window.toast('Aval de Pagamento confirmado. ' + (faltam.length
+          ? 'Para liberar a compra ainda falta: ' + faltam.join(', ') + '.'
+          : 'Confira em "Aval Financeiro" o que ainda falta para liberar a compra.'), 'warning');
+      }
       onSaved?.(); onClose();
     } catch (e) {
       window.toast('Erro: ' + e.message, 'error');
@@ -633,8 +713,9 @@ function ModalConfirmarAvalPagamento({ g, onClose, onSaved }) {
       </>}>
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
         <p className="muted" style={{ fontSize: 13 }}>
-          Checkpoint manual do Financeiro depois do sinal pago. Junto com o Aval Jurídico
-          (manual) e o contrato assinado, libera a compra ao Fornecedor.
+          Checkpoint manual do Financeiro depois do sinal pago. A compra ao fornecedor só é liberada com os
+          três avais: este Aval de Pagamento, o Aval Jurídico e a assinatura do Projeto de Instalação pelo
+          cliente — e, se a margem ficar abaixo de 15%, também a aprovação do CEO.
         </p>
         <div className="stack" style={{ gap: 4 }}>
           <label className="up-eyebrow muted">Observações (opcional)</label>
@@ -918,13 +999,34 @@ function ComissoesPage() {
 }
 
 /* ---------- NOTIFICAÇÕES ---------- */
+const NOTIF_ABAS = { todas: 'Todas', 'nao-lidas': 'Não lidas', arquivadas: 'Arquivadas' };
 function NotificacoesPage({ setRoute }) {
   const [alertasRaw, setAlertasRaw] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
-  const [filter, setFilter] = React.useState("Todas");
-  const [moduleFilter, setModuleFilter] = React.useState("Todos");
+  /* Aba, notificação aberta e filtro de módulo moram na URL: /geral/notificacoes/<aba>/<id do aviso>?modulo=<módulo>.
+     F5, link compartilhado e Voltar/Avançar mantêm a tela. "Todas" deixa a URL limpa. Abrir pelo link NÃO marca como
+     lida nem arquiva (só os botões fazem isso). A janela Preferências fica fora da URL de propósito. */
+  const [abaUrl] = window.useRotaId ? window.useRotaId('notificacoes') : [''];
+  const locNotif = (window.VpRouter && window.VpRouter.parseLocation()) || {};
+  const abaKey = NOTIF_ABAS[abaUrl] ? abaUrl : 'todas';
+  const filter = NOTIF_ABAS[abaKey];
+  const detalheId = locNotif.route === 'notificacoes' && NOTIF_ABAS[abaUrl] ? String(locNotif.tab || '') : '';
+  const [moduleFilter, setModuleFilterQ] = window.useQueryParam ? window.useQueryParam('modulo', 'Todos') : React.useState('Todos');
+  const moduloRef = React.useRef(moduleFilter);
+  moduloRef.current = moduleFilter;
+  // navigate() troca só o caminho: devolve o ?modulo= escolhido depois de cada troca.
+  const irNotif = (aba, id, opts) => {
+    if (!window.VpRouter) return;
+    window.VpRouter.navigate('notificacoes', aba === 'todas' && !id ? null : aba, id || null, opts);
+    const m = moduloRef.current;
+    if (m && m !== 'Todos') {
+      try { const u = new URL(window.location.href); u.searchParams.set('modulo', m); window.history.replaceState(window.history.state, '', u.pathname + u.search + u.hash); } catch (_) { /* segue sem o filtro na URL */ }
+    }
+  };
+  const setFilter = (rotulo) => { const k = Object.keys(NOTIF_ABAS).find((x) => NOTIF_ABAS[x] === rotulo) || 'todas'; irNotif(k, null); };
+  const setModuleFilter = (m) => setModuleFilterQ(m || 'Todos');   // 'Todos' = padrão, sai da URL
+  const [estadoCarregado, setEstadoCarregado] = React.useState(false);
   const [prefsOpen, setPrefsOpen] = React.useState(false);
-  const [details, setDetails] = React.useState(null);
   const [readIds, setReadIds] = React.useState([]);
   const [archivedIds, setArchivedIds] = React.useState([]);
   const [prefs, setPrefs] = React.useState(() => window.NotificacoesLidasStore.lerPreferencias());
@@ -936,15 +1038,31 @@ function NotificacoesPage({ setRoute }) {
   // uma não deve refazer a outra (candidato 2 da revisão de arquitetura —
   // antes o estado "lido" vinha do localStorage embutido na própria busca
   // de alertas, e reabria a query toda vez que uma notificação era marcada).
-  React.useEffect(() => {
-    setLoading(true);
-    // A leitura (globais + dirigidos ao e-mail + sintéticos do Dashboard) fica no store, a MESMA que o sino do cabeçalho usa.
-    LidasStore.carregarAlertas()
-      .then((lista) => { setAlertasRaw(lista); setLoading(false); })
-      .catch((err) => { window.toast('Erro ao carregar notificações: ' + (err.message || err), 'error'); setAlertasRaw([]); setLoading(false); });
+  /* A leitura (globais + dirigidos ao e-mail + sintéticos do Dashboard) fica no store, a MESMA que o sino do cabeçalho usa.
+     #1217 B.4: antes carregava só ao abrir a tela; agora também a cada 5 min (com a aba visível, mesmo intervalo do
+     sino) e ao voltar para a aba depois de 1 min. Falha numa recarga mantém a lista que já estava na tela.
+     #1217 B.3: `incompleto` = os avisos calculados não puderam ser montados (a tela avisa). */
+  const [incompleto, setIncompleto] = React.useState(false);
+  const carregadoEm = React.useRef(0);
+  const carregarAlertasTela = React.useCallback((primeira) => {
+    if (primeira) setLoading(true);
+    return LidasStore.carregarAlertas()
+      .then((lista) => { setAlertasRaw(lista); setIncompleto(!!lista.incompleto); carregadoEm.current = Date.now(); })
+      .catch((err) => {
+        window.toast('Erro ao carregar notificações: ' + (err.message || err), 'error');
+        if (primeira) setAlertasRaw([]);
+      })
+      .finally(() => { if (primeira) setLoading(false); });
   }, []);
+  React.useEffect(() => { carregarAlertasTela(true); }, [carregarAlertasTela]);
+  React.useEffect(() => {
+    const t = setInterval(() => { if (!document.hidden) carregarAlertasTela(false); }, 300000);
+    const vis = () => { if (!document.hidden && Date.now() - carregadoEm.current > 60000) carregarAlertasTela(false); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
+  }, [carregarAlertasTela]);
 
-  React.useEffect(() => { LidasStore.carregarEstado().then((e) => { setReadIds(e.lidas); setArchivedIds(e.arquivadas); }); }, []);
+  React.useEffect(() => { LidasStore.carregarEstado().then((e) => { setReadIds(e.lidas); setArchivedIds(e.arquivadas); }).finally(() => setEstadoCarregado(true)); }, []);
 
   // Preferências mudadas no modal (ou em outra aba do app) refletem aqui sem recarregar.
   React.useEffect(() => {
@@ -959,11 +1077,15 @@ function NotificacoesPage({ setRoute }) {
     setReadIds((prev) => [...prev, idStr]);
     LidasStore.marcarLida(id);
   };
-  const markAllRead = () => {
+  /* #1217 B.2: o aviso de sucesso só sai depois de o banco confirmar; se falhar, as notificações voltam a "não lidas"
+     (o store já mostra o erro). */
+  const markAllRead = async () => {
     const ids = notificationsVisiveis.map((n) => String(n.id));
+    const antes = readIds;
     setReadIds((prev) => Array.from(new Set([...prev, ...ids])));
-    LidasStore.marcarTodasLidas(ids);
-    window.toast("Notificações marcadas como lidas", "success");
+    const ok = await LidasStore.marcarTodasLidas(ids);
+    if (ok) window.toast("Notificações marcadas como lidas", "success");
+    else setReadIds(antes);
   };
   // Arquivar/restaurar é POR PESSOA (some só da lista de quem arquivou). Arquivar também conta como lida.
   const archive = async (ids) => {
@@ -990,11 +1112,30 @@ function NotificacoesPage({ setRoute }) {
   // Avisa o sino do cabeçalho na hora (sem esperar o intervalo de 5 min).
   React.useEffect(() => { if (!loading) LidasStore.avisar({ naoLidas: naoLidasCount }); }, [naoLidasCount, loading]);
   const modules = ["Todos", ...Array.from(new Set(notifications.map(n => n.module))).sort()];
+  /* #1217 B.1: o filtro de módulo ficava preso — ao trocar de aba (Todas / Não lidas / Arquivadas) o módulo escolhido
+     podia não existir na aba nova; o select mostrava "Todos" e a lista ficava vazia. Volta para "Todos" nesse caso. */
+  const moduloSumiu = !loading && moduleFilter !== "Todos" && !modules.includes(moduleFilter);
+  React.useEffect(() => { if (moduloSumiu) setModuleFilter("Todos"); }, [moduloSumiu]);
   const rows = notifications.filter(n => {
     if (filter === "Não lidas" && !n.unread) return false;
     if (moduleFilter !== "Todos" && n.module !== moduleFilter) return false;
     return true;
   });
+  /* Notificação aberta = a do link. Link de aviso que não existe mais (resolvido, expirado, de outra pessoa ou oculto
+     pelas Preferências) avisa e volta à lista; aviso arquivado aberto fora da aba Arquivadas (ou o contrário) troca de aba. */
+  const details = detalheId ? notificationsPref.find((n) => String(n.id) === detalheId) || null : null;
+  const setDetails = (n) => irNotif(abaKey, n ? n.id : null);
+  React.useEffect(() => {
+    if (loading || !estadoCarregado || !detalheId) return;
+    if (!details) {
+      window.toast?.('Esta notificação não está mais disponível (resolvida, arquivada há tempo ou oculta pelas Preferências).', 'warning');
+      irNotif(abaKey, null, { replace: true });
+      return;
+    }
+    const arquivada = archivedIds.includes(String(details.id));
+    if (arquivada && abaKey !== 'arquivadas') irNotif('arquivadas', detalheId, { replace: true });
+    else if (!arquivada && abaKey === 'arquivadas') irNotif('todas', detalheId, { replace: true });
+  }, [loading, estadoCarregado, detalheId, !!details, abaKey]);
   const archiveReadVisible = () => archive(notificationsVisiveis.filter((n) => !n.unread).map((n) => n.id));
   const groups = NP.agruparPorPeriodo(rows);
   const openNotification = (n) => {
@@ -1025,6 +1166,12 @@ function NotificacoesPage({ setRoute }) {
         </div>
       </div>
 
+      {incompleto && (
+        <div className="small" style={{ padding: '10px 14px', marginBottom: 12, border: '1px solid var(--vp-warning, #b26a00)', borderRadius: 6, background: 'rgba(245,158,11,.08)' }}>
+          Alguns avisos automáticos (proposta aprovada sem contrato, sinal pago etc.) não puderam ser calculados agora — a lista pode estar incompleta.{' '}
+          <Button variant="outline" size="sm" onClick={() => carregarAlertasTela(false)}>Tentar novamente</Button>
+        </div>
+      )}
       <div className="tbar">
         <div className="seg">
           {filters.map(f => <button key={f} className={filter === f ? "is-active" : ""} onClick={() => setFilter(f)}>{f}</button>)}
@@ -1373,69 +1520,43 @@ function ConfigPermissions() {
    capacidade pode dar QUALQUER uma das 4, inclusive essa mesma, pra
    qualquer pessoa (assim Diego/Gelson repassam o poder sem precisar de
    código novo). Card só aparece pra quem já tem essa capacidade — não é
-   um ajuste que qualquer um com acesso a Configurações consiga mexer. */
+   um ajuste que qualquer um com acesso a Configurações consiga mexer.
+   Desde 09/10/2026 (árvore de alçadas) o card é SÓ LEITURA: quem concede é
+   o vpsistema.com/administracao; "Concede alçadas" deixou de existir aqui. */
 const ALCADAS_PROPOSTAS = [
   { modulo: 'propostas', capacidade: 'ver_todas', label: 'Vê todas as propostas', hint: 'Sem isso, só vê as próprias.' },
   { modulo: 'propostas', capacidade: 'precificar_manual', label: 'Precifica manualmente', hint: 'Preço combinado por fora (CEO/Financeiro), sem depender de Cotação + Precificação formal.' },
   { modulo: 'propostas', capacidade: 'destravar_aprovada', label: 'Destrava proposta aprovada', hint: 'Reabre pra edição uma proposta já aprovada pelo cliente.' },
   { modulo: 'propostas', capacidade: 'excluir', label: 'Exclui propostas', hint: 'Apaga a proposta de vez — sem volta.' },
-  { modulo: 'admin', capacidade: 'conceder_alcadas', label: 'Concede alçadas', hint: 'Pode dar (ou tirar) qualquer uma destas capacidades pra qualquer pessoa.' },
   { modulo: 'quadro_comando', capacidade: 'decidir_fabricacao', label: 'Decide fabricar interno ou comprar pronto (Quadro de Comando)', hint: 'Sem isso, a Origem de Fabricação do Quadro de Comando fica travada em "Fabricar interno".' },
   { modulo: 'instalacao', capacidade: 'editar_status_obra', label: 'Edita status do Acompanhamento de Obra', hint: 'Pode desflegar uma atividade do Diário de Obra e avançar/reverter manualmente o status do card em Cadastro de Instaladores.' },
+  { modulo: 'fabricacao', capacidade: 'editar_status_quadro', label: 'Edita status da Evolução da Fabricação', hint: 'Pode desmarcar uma etapa da fabricação do quadro de comando marcada por engano.' },
   { modulo: 'decisoes', capacidade: 'ceo', label: 'Atua como CEO (Central de Decisões)', hint: 'Aprova/reprova qualquer decisão que hoje só o CEO decide (envio de proposta, desconto acima de 7%, etc.), além do e-mail fixo do Diego — uso normal: só pra teste. Só vale pra decisões criadas depois de conceder.' },
   { modulo: 'decisoes', capacidade: 'gestor_comercial', label: 'Atua como Gestor Comercial (Central de Decisões)', hint: 'Aprova/reprova qualquer decisão que hoje só o Gestor Comercial decide (liberar envio de proposta ao cliente, desconto até 7%, pagamento de parcela ao instalador), além dos e-mails fixos de Regiane/Guilherme. Só vale pra decisões criadas depois de conceder.' },
 ];
 
 function ConfigAlcadasPropostas() {
-  const sb = window.__VP_SB.sb;
-  const [autorizado, setAutorizado] = React.useState(null);
   const [perfis, setPerfis] = React.useState(null);
   const [concedidas, setConcedidas] = React.useState({});
-  const [salvandoChave, setSalvandoChave] = React.useState(null);
 
-  const load = React.useCallback(async () => {
-    const pode = await window.PropostaStore.podeConcederAlcadas();
-    setAutorizado(pode);
-    if (!pode) return;
-    const { perfis: p, concedidas: c } = await window.PropostaStore.listarAlcadas();
-    setPerfis(p);
-    const map = {};
-    c.forEach((row) => { map[row.perfil_id + '.' + row.modulo + '.' + row.capacidade] = true; });
-    setConcedidas(map);
+  React.useEffect(() => {
+    window.PropostaStore.listarAlcadas().then(({ perfis: p, concedidas: c }) => {
+      const map = {};
+      c.forEach((row) => { map[row.perfil_id + '.' + row.modulo + '.' + row.capacidade] = true; });
+      setConcedidas(map);
+      setPerfis(p);
+    });
   }, []);
-  React.useEffect(() => { load(); }, [load]);
 
-  const alternar = async (perfil, modulo, capacidade, conceder) => {
-    const chave = perfil.id + '.' + modulo + '.' + capacidade;
-    setSalvandoChave(chave);
-    try {
-      await window.PropostaStore.concederAlcada(perfil.id, modulo, capacidade, conceder);
-      if (window.VPLog) window.VPLog.registrar({ modulo: 'Admin', acao: 'Alçada alterada', alvo: perfil.email, detalhe: { modulo, capacidade, conceder } });
-      setConcedidas((prev) => { const n = { ...prev }; if (conceder) n[chave] = true; else delete n[chave]; return n; });
-    } catch (e) {
-      window.toast?.('Erro: ' + (e.message || e), 'error');
-    } finally {
-      setSalvandoChave(null);
-    }
-  };
-
-  if (autorizado === null || (autorizado && !perfis)) {
+  if (!perfis) {
     return <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
-  }
-  if (!autorizado) {
-    return (
-      <Card title="Alçadas de Propostas">
-        <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>
-          Você não tem a alçada "Concede alçadas" — peça pra quem já tem liberar essa tela pra você.
-        </div>
-      </Card>
-    );
   }
 
   return (
-    <Card title="Alçadas de Propostas" sub="Quem pode ver tudo, precificar manualmente, destravar aprovada ou conceder essas alçadas pra outros">
+    <Card title="Alçadas de Propostas" sub="Quem pode ver tudo, precificar manualmente, destravar aprovada…">
+      {window.AvisoAlcadasNoVpsistema ? <window.AvisoAlcadasNoVpsistema/> : null}
       <div style={{ padding: "10px 12px", marginBottom: 14, background: "var(--vp-warning-tint, #f8eed7)", border: "1px solid var(--border)", fontSize: 12, color: "var(--fg2)" }}>
-        Administradores sempre têm as 4 primeiras alçadas (traço = já tem, automático). <b>"Atua como CEO" e "Atua como Gestor Comercial" são diferentes</b> — nem Administrador tem isso de graça, precisa ligar o toggle mesmo sendo Admin (é a Central de Decisões que decide quem aprova o quê, não o nível de acesso).
+        Administradores sempre têm as alçadas fora da Central de Decisões (traço = já tem, automático). <b>"Atua como CEO" e "Atua como Gestor Comercial" são diferentes</b> — nem Administrador tem isso de graça, precisa estar marcado no vpsistema mesmo sendo Admin (é a Central de Decisões que decide quem aprova o quê, não o nível de acesso).
       </div>
       {/* Lista de colaboradores costuma passar de uma tela — cabeçalho fixo
          (sticky, relativo a este container com scroll próprio) e barra de
@@ -1475,8 +1596,7 @@ function ConfigAlcadasPropostas() {
                         {bypassAdmin ? (
                           <span className="small muted" title="Administrador sempre tem">—</span>
                         ) : (
-                          <input type="checkbox" checked={tem} disabled={salvandoChave === chave}
-                            onChange={(e) => alternar(p, a.modulo, a.capacidade, e.target.checked)}
+                          <input type="checkbox" checked={tem} disabled readOnly
                             style={{ width: 18, height: 18, accentColor: 'var(--vp-yellow)' }}/>
                         )}
                       </td>

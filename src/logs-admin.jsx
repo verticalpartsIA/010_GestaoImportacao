@@ -89,23 +89,22 @@ function LogsAdminPage() {
         <KPI label="Módulos" value={modulos.length} sub="origens de eventos" icon="grid"/>
       </div>
 
-      <div className="tbar">
-        <div className="seg">
-          {['Todos'].concat(modulos).map(m => (
-            <button key={m} className={fModulo === m ? 'is-active' : ''} onClick={() => setFModulo(m)}>{m}</button>
-          ))}
-        </div>
-        <div className="spacer"/>
-        <input className="input" type="date" value={de} onChange={e => setDe(e.target.value)} style={{ width: 140 }} title="De"/>
-        <input className="input" type="date" value={ate} onChange={e => setAte(e.target.value)} style={{ width: 140 }} title="Até"/>
-        <div className="search">
-          <Icon.search size={12} color="var(--fg3)"/>
-          <input placeholder="Buscar por pessoa, ação ou documento…" value={busca} onChange={e => setBusca(e.target.value)}/>
-        </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+        <input className="input" style={{ maxWidth: 340 }} placeholder="Buscar por pessoa, ação ou documento…" value={busca} onChange={e => setBusca(e.target.value)}/>
+        <input className="input" type="date" value={de} onChange={e => setDe(e.target.value)} style={{ width: 150 }} title="De"/>
+        <input className="input" type="date" value={ate} onChange={e => setAte(e.target.value)} style={{ width: 150 }} title="Até"/>
+        <span className="small" style={{ color: 'var(--fg3)' }}>{rows ? rows.length : '…'} registro(s)</span>
       </div>
 
-      <div className="table-wrap">
-        <table className="t la-table">
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+        {['Todos'].concat(modulos).map(m => (
+          <Button key={m} size="sm" variant={fModulo === m ? 'primary' : 'ghost'} onClick={() => setFModulo(m)}>{m}</Button>
+        ))}
+      </div>
+
+      <Card title="Registros" sub="Imutáveis — nenhum registro pode ser alterado ou apagado">
+      <div className="table-wrap" style={{ border: 0 }}>
+        <table className="t pcp-grid">
           <thead><tr>
             <th style={{ width: 150 }}>Data e hora</th>
             <th style={{ width: 130 }}>Quem</th>
@@ -139,6 +138,7 @@ function LogsAdminPage() {
           </tbody>
         </table>
       </div>
+      </Card>
     </div>
   );
 }

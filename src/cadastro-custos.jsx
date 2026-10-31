@@ -36,7 +36,7 @@ function CCInputNum({ value, onBlurSave, placeholder, width }) {
    (badge amarelo), nunca como preço confirmado. */
 function CCEstimativaSugestao({ row, tracao, onUsar, saving }) {
   const [estimativa, setEstimativa] = React.useState(null);
-  const capacidadeKg = ((Number(row.capacidade_min_kg) || 0) + (Number(row.capacidade_max_kg) || 0)) / 2;
+  const capacidadeKg = Number(row.capacidade_max_kg) || 0;
   const pronta = row.paradas > 0 && row.dias_montagem > 0 && row.qtd_montadores > 0 && capacidadeKg > 0;
 
   React.useEffect(() => {
@@ -89,7 +89,7 @@ function CCElevadorTab() {
 
   const rowsTracao = React.useMemo(() =>
     (rows || []).filter((r) => r.tracao === tracao)
-      .sort((a, b) => (a.capacidade_min_kg - b.capacidade_min_kg) || (a.paradas - b.paradas)),
+      .sort((a, b) => (a.capacidade_max_kg - b.capacidade_max_kg) || (a.paradas - b.paradas)),
     [rows, tracao]);
 
   /* 31/08 — bug real encontrado pelo usuário (paradas "travando" em 1):
@@ -147,7 +147,7 @@ function CCElevadorTab() {
     setAdicionando(true);
     try {
       await window.CadastroCustosStore.salvarCustoElevador({
-        tracao, capacidade_min_kg: 0, capacidade_max_kg: 0, paradas: 1,
+        tracao, capacidade_max_kg: 0, paradas: 1,
         dias_montagem: null, qtd_montadores: null, valor_reajustado_rs: 0, ativo: true,
       });
       await reload();
@@ -160,7 +160,7 @@ function CCElevadorTab() {
   };
 
   const removerLinha = async (row) => {
-    if (!window.confirm(`Remover a linha ${row.capacidade_min_kg}-${row.capacidade_max_kg}kg / ${row.paradas} paradas? Não afeta precificações que já buscaram esse valor antes — só buscas futuras.`)) return;
+    if (!window.confirm(`Remover a linha de até ${row.capacidade_max_kg}kg / ${row.paradas} paradas? Não afeta precificações que já buscaram esse valor antes — só buscas futuras.`)) return;
     setRemovendo(row.id);
     try {
       await window.CadastroCustosStore.removerCustoElevador(row.id);
@@ -187,7 +187,7 @@ function CCElevadorTab() {
       <div className="table-wrap" style={{ maxHeight: 560, overflowY: 'auto' }}>
         <table className="t">
           <thead style={{ position: 'sticky', top: 0, zIndex: 1, background: '#fff', boxShadow: '0 1px 0 var(--border, #e5e5e5)' }}><tr>
-            <th>Capacidade mín. (kg)</th><th>Capacidade máx. (kg)</th><th>Paradas</th>
+            <th>Capacidade máx. (kg)</th><th title="Capacidade máx. (kg) ÷ 75, arredondado para baixo. Calculado — não se digita.">Quant. passageiros</th><th>Paradas</th>
             <th>Dias p/ montagem</th><th>Qtd. montadores</th><th className="text-right">Valor reajustado (R$)</th><th></th>
           </tr></thead>
           <tbody>
@@ -196,8 +196,8 @@ function CCElevadorTab() {
             )}
             {rowsTracao.map((r) => (
               <tr key={r.id} style={{ opacity: saving === r.id || removendo === r.id ? .5 : 1 }}>
-                <td><CCInputNum value={r.capacidade_min_kg} width={100} onBlurSave={(v) => salvarCampo(r, 'capacidade_min_kg', v ?? 0)}/></td>
                 <td><CCInputNum value={r.capacidade_max_kg} width={100} onBlurSave={(v) => salvarCampo(r, 'capacidade_max_kg', v ?? 0)}/></td>
+                <td className="pl-calc-cell mono" title="Capacidade máx. (kg) ÷ 75, arredondado para baixo">{window.CapacidadePassageiros?.passageiros(r.capacidade_max_kg) ?? '—'}</td>
                 <td><CCInputNum value={r.paradas} width={80} onBlurSave={(v) => salvarCampo(r, 'paradas', v ?? 1)}/></td>
                 <td><CCInputNum value={r.dias_montagem} width={90} onBlurSave={(v) => salvarCampo(r, 'dias_montagem', v)}/></td>
                 <td><CCInputNum value={r.qtd_montadores} width={90} onBlurSave={(v) => salvarCampo(r, 'qtd_montadores', v)}/></td>
@@ -276,6 +276,12 @@ function CCEscadaEsteiraTab() {
    usuário: câmbio é sugestão, não trava o campo) — por isso o botão
    "Recalcular" ao lado, pra reaplicar o câmbio de hoje numa linha que já
    tinha USD/R$ preenchidos antes desta feature existir. */
+/* AFRMM (13/10/2026): Adicional ao Frete para Renovação da Marinha Mercante — sempre 8% de
+   Preço + Capatazia + GRI. Só exibição (automático, não gravado). */
+const CC_AFRMM_PCT = 0.08;
+const fmtUsdCC = (v) => 'US$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtBrlCC = (v) => 'R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 function CCContainersTab() {
   const [rows, setRows] = React.useState(null);
   const [saving, setSaving] = React.useState(null);
@@ -390,19 +396,23 @@ function CCContainersTab() {
       <div className="table-wrap">
         <table className="t">
           <thead><tr>
-            <th>Tipo</th><th>Compr. (m)</th><th>Altura</th><th>Capac. (m³)</th>
-            <th className="text-right">Preço (USD)</th><th className="text-right">Preço (R$)</th>
-            <th className="text-right">Capatazia (USD)</th><th className="text-right">Capatazia (R$)</th>
-            <th className="text-right">GRI (USD)</th><th className="text-right">GRI (R$)</th>
-            <th>Data cotação</th><th>Fornecedor</th><th>Observações</th><th></th>
+            {/* Larguras mínimas (13/10/2026): o valor digitado tem que caber inteiro na célula — antes as colunas
+                encolhiam e cortavam "6000.00", "1.827,77", "20HC (High Cube)" etc. */}
+            <th style={{ minWidth: 180 }}>Tipo</th><th style={{ minWidth: 90 }}>Compr. (m)</th><th style={{ minWidth: 140 }}>Altura</th><th style={{ minWidth: 90 }}>Capac. (m³)</th>
+            <th className="text-right" style={{ minWidth: 135 }}>Preço (USD)</th><th className="text-right" style={{ minWidth: 175 }}>Preço (R$)</th>
+            <th className="text-right" style={{ minWidth: 135 }}>Capatazia (USD)</th><th className="text-right" style={{ minWidth: 165 }}>Capatazia (R$)</th>
+            <th className="text-right" style={{ minWidth: 135 }}>GRI (USD)</th><th className="text-right" style={{ minWidth: 165 }}>GRI (R$)</th>
+            <th className="text-right" style={{ minWidth: 135 }} title="Adicional ao Frete para Renovação da Marinha Mercante: sempre 8% de Preço + Capatazia + GRI. Calculado automaticamente.">AFRMM (USD)</th>
+            <th className="text-right" style={{ minWidth: 150 }} title="8% de Preço + Capatazia + GRI em R$. Calculado automaticamente.">AFRMM (R$)</th>
+            <th style={{ minWidth: 150 }}>Data cotação</th><th style={{ minWidth: 150 }}>Fornecedor</th><th style={{ minWidth: 220 }}>Observações</th><th></th>
           </tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} style={{ opacity: saving === r.id || removendo === r.id ? .5 : 1 }}>
-                <td><input className="input" style={{ width: 130 }} defaultValue={r.tipo || ''}
+                <td><input className="input" style={{ width: '100%' }} defaultValue={r.tipo || ''}
                   onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== (r.tipo || '')) salvarCampo(r, 'tipo', v); }}/></td>
                 <td><CCInputNum value={r.comprimento_m} width={80} onBlurSave={(v) => salvarCampo(r, 'comprimento_m', v)}/></td>
-                <td><input className="input" style={{ width: 100 }} defaultValue={r.altura_desc || ''}
+                <td><input className="input" style={{ width: '100%' }} defaultValue={r.altura_desc || ''}
                   onBlur={(e) => { if (e.target.value !== (r.altura_desc || '')) salvarCampo(r, 'altura_desc', e.target.value || null); }}/></td>
                 <td><CCInputNum value={r.capacidade_m3} width={80} onBlurSave={(v) => salvarCampo(r, 'capacidade_m3', v)}/></td>
                 <td className="text-right"><PZCurrencyInput moeda="USD" value={r.preco_usd} onChange={(v) => salvarUsdComCambio(r, v)}/></td>
@@ -442,13 +452,20 @@ function CCContainersTab() {
                     </div>
                   )}
                 </td>
+                {/* AFRMM (13/10/2026): automático, sempre 8% de Preço + Capatazia + GRI — não é editável nem gravado. */}
+                <td className="text-right mono" style={{ background: 'var(--bg-subtle, #f3f4f6)' }}>
+                  {fmtUsdCC(CC_AFRMM_PCT * ((Number(r.preco_usd) || 0) + (Number(r.capatazia_usd) || 0) + (Number(r.gri_usd) || 0)))}
+                </td>
+                <td className="text-right mono" style={{ background: 'var(--bg-subtle, #f3f4f6)' }}>
+                  {fmtBrlCC(CC_AFRMM_PCT * ((Number(r.preco_rs) || 0) + (Number(r.capatazia_rs) || 0) + (Number(r.gri_rs) || 0)))}
+                </td>
                 <td>
-                  <input className="input" type="date" style={{ width: 140 }} value={r.data_cotacao || ''}
+                  <input className="input" type="date" style={{ width: '100%' }} value={r.data_cotacao || ''}
                     onChange={(e) => salvarCampo(r, 'data_cotacao', e.target.value || null)}/>
                 </td>
-                <td><input className="input" style={{ width: 120 }} defaultValue={r.fornecedor || ''}
+                <td><input className="input" style={{ width: '100%' }} defaultValue={r.fornecedor || ''}
                   onBlur={(e) => { if (e.target.value !== (r.fornecedor || '')) salvarCampo(r, 'fornecedor', e.target.value || null); }}/></td>
-                <td><input className="input" style={{ width: 180 }} defaultValue={r.observacoes || ''}
+                <td><input className="input" style={{ width: '100%' }} defaultValue={r.observacoes || ''}
                   onBlur={(e) => { if (e.target.value !== (r.observacoes || '')) salvarCampo(r, 'observacoes', e.target.value || null); }}/></td>
                 <td><Button variant="ghost" size="sm" icon="trash" title="Remover container" onClick={() => removerContainer(r)} disabled={removendo === r.id}/></td>
               </tr>
@@ -460,14 +477,278 @@ function CCContainersTab() {
   );
 }
 
+/* ---------- Frete interno (Santos → capitais) — 10/10/2026 ----------
+   Mesma tabela da aba FRETE da planilha do Financeiro (2 transportadoras,
+   carreta L = carga solta / LS = container fechado, valor POR CONTAINER).
+   A Precificação sugere o frete interno a partir daqui. Quem mantém atualiza
+   quando a transportadora mandar preço novo — cada célula salva ao sair do
+   campo. Preço em branco = "cotado caso a caso" (não vira opção na sugestão). */
+function CCFreteTab() {
+  const [rows, setRows] = React.useState(null);
+  const [obs, setObs] = React.useState([]);
+  const [saving, setSaving] = React.useState(null);
+
+  const reload = () => {
+    window.CadastroCustosStore.listarFrete().then(setRows);
+    window.CadastroCustosStore.listarFreteObservacoes().then(setObs);
+  };
+  React.useEffect(() => { reload(); }, []);
+
+  const salvarCampo = async (row, campo, valor) => {
+    setSaving(row.id);
+    try {
+      await window.CadastroCustosStore.atualizarCampoFrete(row.id, { [campo]: valor });
+      await reload();
+    } catch (e) {
+      window.toast?.('Erro ao salvar: ' + e.message, 'error');
+    } finally {
+      setSaving(null);
+    }
+  };
+  const salvarObs = async (o, texto) => {
+    const t = (texto || '').trim();
+    if (!t || t === o.texto) return;
+    try { await window.CadastroCustosStore.atualizarFreteObservacao(o.id, t); await reload(); }
+    catch (e) { window.toast?.('Erro ao salvar: ' + e.message, 'error'); }
+  };
+
+  if (rows === null) return <div className="muted small" style={{ padding: '24px 0' }}>Carregando…</div>;
+
+  const blocos = [
+    { id: 'geral', titulo: 'Observações gerais' },
+    { id: 'transportadora_1', titulo: 'Observações — Transportadora 1' },
+    { id: 'transportadora_2', titulo: 'Observações — Transportadora 2' },
+  ];
+  const descricao = rows[0]?.descricao;
+
+  return (
+    <>
+      <Card title="Tabela de Frete Interno — Contêiner 40' · Porto de Santos"
+        sub="Valor POR CONTAINER (ou por carga solta) até a capital. A Precificação sugere o frete interno a partir daqui.">
+        {descricao && <div className="pl-note"><b>Referência:</b> {descricao} · Valor da carga até R$ 250.000,00 · Carga geral</div>}
+        <div className="table-wrap">
+          <table className="t">
+            <thead>
+              <tr>
+                <th rowSpan={2}>Origem</th><th rowSpan={2}>Destino</th><th rowSpan={2}>UF</th>
+                <th colSpan={2}>Transportadora 1</th><th colSpan={2}>Transportadora 2</th>
+                <th rowSpan={2}>Valor da carga (R$)</th>
+              </tr>
+              <tr><th>Frete L (carga solta)</th><th>Frete LS (container)</th><th>Frete L (carga solta)</th><th>Frete LS (container)</th></tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} style={{ opacity: saving === r.id ? .5 : 1 }}>
+                  <td>{r.origem}</td>
+                  <td style={{ fontWeight: 600 }}>{r.destino}</td>
+                  <td style={{ textAlign: 'center' }}>{r.uf}</td>
+                  <td title={r.transp1_l_obs || ''}>
+                    <PZCurrencyInput moeda="BRL" value={r.transp1_l_rs} onChange={(v) => salvarCampo(r, 'transp1_l_rs', v)}/>
+                    {!(Number(r.transp1_l_rs) > 0) && r.transp1_l_obs && <div className="small muted" style={{ fontSize: 10, marginTop: 2 }}>caso a caso</div>}
+                  </td>
+                  <td><PZCurrencyInput moeda="BRL" value={r.transp1_ls_rs} onChange={(v) => salvarCampo(r, 'transp1_ls_rs', v)}/></td>
+                  <td><PZCurrencyInput moeda="BRL" value={r.transp2_l_rs} onChange={(v) => salvarCampo(r, 'transp2_l_rs', v)}/></td>
+                  <td><PZCurrencyInput moeda="BRL" value={r.transp2_ls_rs} onChange={(v) => salvarCampo(r, 'transp2_ls_rs', v)}/></td>
+                  <td><PZCurrencyInput moeda="BRL" value={r.valor_carga_rs} onChange={(v) => salvarCampo(r, 'valor_carga_rs', v)}/></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+      {blocos.map((b) => {
+        const itens = obs.filter((o) => o.bloco === b.id);
+        if (!itens.length) return null;
+        return (
+          <Card key={b.id} title={b.titulo} style={{ marginTop: 16 }}>
+            <div className="stack" style={{ gap: 6 }}>
+              {itens.map((o) => (
+                <input key={o.id + ':' + o.texto} className="input" defaultValue={o.texto} onBlur={(e) => salvarObs(o, e.target.value)}/>
+              ))}
+            </div>
+          </Card>
+        );
+      })}
+    </>
+  );
+}
+
+/* ---------- DIFAL por estado (10/10/2026) ----------
+   Tabela BASE do DIFAL.xlsx: categoria + alíquotas por estado. A Precificação calcula o DIFAL a partir
+   daqui (DifalEngine, origem SP). O simulador usa o MESMO motor, então o que aparece aqui é o que a
+   Precificação vai calcular. Cada célula salva ao sair do campo. */
+const CC_DIFAL_CATEGORIAS = ['Base Única', 'Base Única com FCP', 'Base Dupla Simples', 'Base Dupla Composta', 'Base Dupla com FCP'];
+
+function CCPctInput({ value, onSave, width = 90 }) {
+  const fmt = (v) => (v == null ? '' : String(+(Number(v) * 100).toFixed(3)).replace('.', ','));
+  const [txt, setTxt] = React.useState(fmt(value));
+  React.useEffect(() => { setTxt(fmt(value)); }, [value]);
+  return (
+    <input className="input" style={{ width, textAlign: 'right' }} inputMode="decimal" value={txt} onChange={(e) => setTxt(e.target.value)}
+      onBlur={() => {
+        const n = Number(String(txt).replace(',', '.'));
+        if (String(txt).trim() === '' || !Number.isFinite(n)) { setTxt(fmt(value)); return; }
+        const f = Math.round(n * 1e5) / 1e7;
+        if (f !== Number(value)) onSave(f);
+      }}/>
+  );
+}
+
+function CCDifalTab() {
+  const [rows, setRows] = React.useState(null);
+  const [saving, setSaving] = React.useState(null);
+  const [sim, setSim] = React.useState({ destino: 'DF', valor: 1000000, origemMercadoria: 'Estrangeira' });
+
+  const reload = () => window.CadastroCustosStore.listarDifalEstados().then(setRows);
+  React.useEffect(() => { reload(); }, []);
+
+  const salvar = async (uf, patch) => {
+    setSaving(uf);
+    try { await window.CadastroCustosStore.atualizarDifalEstado(uf, patch); await reload(); }
+    catch (e) { window.toast?.('Erro ao salvar: ' + e.message, 'error'); }
+    finally { setSaving(null); }
+  };
+
+  if (rows === null) return <div className="muted small" style={{ padding: '24px 0' }}>Carregando…</div>;
+
+  const estado = rows.find((r) => r.uf === sim.destino) || null;
+  const res = window.DifalEngine && estado
+    ? window.DifalEngine.calcular({ ufOrigem: 'SP', ufFaturamento: sim.destino, ufEntrega: sim.destino, finalidadeCompra: 'uso_consumo_ativo', contribuinteIcms: true, valorOperacao: Number(sim.valor) || 0, origemMercadoria: sim.origemMercadoria, estadoDestino: estado })
+    : null;
+  const brl = (v) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  return (
+    <>
+      <Card title="Simulador de DIFAL" sub="usa o mesmo motor da Precificação — origem fixa SP (sede da VerticalParts), finalidade uso/consumo/ativo">
+        <div className="grid-3" style={{ gap: 12 }}>
+          <div className="stack" style={{ gap: 4 }}>
+            <label className="up-eyebrow muted">Destino (UF)</label>
+            <select className="input" value={sim.destino} onChange={(e) => setSim((s) => ({ ...s, destino: e.target.value }))}>
+              {rows.map((r) => <option key={r.uf} value={r.uf}>{r.uf} — {r.estado}</option>)}
+            </select>
+          </div>
+          <div className="stack" style={{ gap: 4 }}>
+            <label className="up-eyebrow muted">Valor da operação (R$)</label>
+            <PZCurrencyInput moeda="BRL" value={sim.valor} onChange={(v) => setSim((s) => ({ ...s, valor: v }))}/>
+          </div>
+          <div className="stack" style={{ gap: 4 }}>
+            <label className="up-eyebrow muted">Origem da mercadoria</label>
+            <select className="input" value={sim.origemMercadoria} onChange={(e) => setSim((s) => ({ ...s, origemMercadoria: e.target.value }))}>
+              <option value="Estrangeira">Estrangeira (importada)</option>
+              <option value="Nacional">Nacional</option>
+            </select>
+          </div>
+        </div>
+        {res && (
+          <div className="pl-note">
+            <b>{res.difal_aplicavel ? `DIFAL devido: ${brl(res.valor_difal)}` : 'Sem DIFAL'}</b>
+            {estado && <> · {estado.categoria} · alíquota interna {((Number(estado.aliquota_interna) || 0) * 100).toFixed(2).replace('.', ',')}% · interestadual {(((sim.origemMercadoria === 'Estrangeira' ? Number(estado.aliquota_interestadual_estrangeira) : Number(estado.aliquota_interestadual_nacional)) || 0) * 100).toFixed(2).replace('.', ',')}%</>}
+            <div className="small muted" style={{ marginTop: 4 }}>{res.mensagem}</div>
+          </div>
+        )}
+      </Card>
+
+      <Card title="Tabela de DIFAL por estado" sub="categoria e alíquotas de cada UF (aba BASE do DIFAL.xlsx) — a Precificação lê daqui" style={{ marginTop: 16 }}>
+        <div className="table-wrap">
+          <table className="t">
+            <thead><tr>
+              <th>UF</th><th>Estado</th><th>Categoria</th><th>Alíq. interna</th><th>Interestadual nacional</th><th>Interestadual estrangeira</th><th>Fundo de combate</th>
+            </tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.uf} style={{ opacity: saving === r.uf ? .5 : 1 }}>
+                  <td style={{ fontWeight: 700, textAlign: 'center' }}>{r.uf}</td>
+                  <td>{r.estado}</td>
+                  <td>
+                    <select className="input" value={r.categoria || ''} onChange={(e) => salvar(r.uf, { categoria: e.target.value })}>
+                      {CC_DIFAL_CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </td>
+                  <td><CCPctInput value={r.aliquota_interna} onSave={(v) => salvar(r.uf, { aliquota_interna: v })}/></td>
+                  <td><CCPctInput value={r.aliquota_interestadual_nacional} onSave={(v) => salvar(r.uf, { aliquota_interestadual_nacional: v })}/></td>
+                  <td><CCPctInput value={r.aliquota_interestadual_estrangeira} onSave={(v) => salvar(r.uf, { aliquota_interestadual_estrangeira: v })}/></td>
+                  <td><CCPctInput value={r.fundo_combate} onSave={(v) => salvar(r.uf, { fundo_combate: v })}/></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="pl-note">As alíquotas mudam por lei estadual — o Financeiro atualiza aqui quando um estado alterar. Alíquotas em %, ex.: 20 = 20%.</div>
+      </Card>
+    </>
+  );
+}
+
+function CCIcmsTab() {
+  const [rows, setRows] = React.useState(null);
+  const [saving, setSaving] = React.useState(null);
+  const [nova, setNova] = React.useState({ uf_origem: 'SP', uf_destino: '', origem_mercadoria: 'Estrangeira', ncm: '', aliquota_pct: 0, fundamento: '' });
+  const reload = () => window.CadastroCustosStore.listarRegrasIcmsVenda().then(setRows);
+  React.useEffect(() => { reload(); }, []);
+  const salvar = async (regra, patch) => {
+    setSaving(regra.id || 'nova');
+    try { await window.CadastroCustosStore.salvarRegraIcmsVenda({ ...regra, ...patch }); await reload(); return true; }
+    catch (e) { window.toast?.('Erro ao salvar: ' + (e.message || e), 'error'); return false; }
+    finally { setSaving(null); }
+  };
+  if (rows === null) return <div className="muted small" style={{ padding: '24px 0' }}>Carregando…</div>;
+  return (
+    <>
+      <Card title="Regras de ICMS na venda" sub="a Precificação procura aqui a alíquota pela UF de destino da obra (origem fixa SP) — antes usava 4% fixo pra todos os clientes">
+        <div className="table-wrap">
+          <table className="t">
+            <thead><tr><th>Origem</th><th>Destino</th><th>Mercadoria</th><th>NCM</th><th>Alíquota efetiva</th><th>Fundamento</th><th>Ativa</th></tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} style={{ opacity: saving === r.id ? .5 : 1 }}>
+                  <td style={{ fontWeight: 700, textAlign: 'center' }}>{r.uf_origem}</td>
+                  <td style={{ fontWeight: 700, textAlign: 'center' }}>{r.uf_destino}</td>
+                  <td>{r.origem_mercadoria === 'Estrangeira' ? 'Importada' : 'Nacional'}</td>
+                  <td>{r.ncm || 'Qualquer'}</td>
+                  <td><CCPctInput value={r.aliquota_pct} onSave={(v) => salvar(r, { aliquota_pct: v })}/></td>
+                  <td style={{ minWidth: 320 }}>{r.fundamento || '—'}</td>
+                  <td><input type="checkbox" checked={!!r.ativo} onChange={(e) => salvar(r, { ativo: e.target.checked })}/></td>
+                </tr>
+              ))}
+              {rows.length === 0 && <tr><td colSpan={7} className="muted small" style={{ padding: 16 }}>Nenhuma regra cadastrada — a Precificação usa o ICMS venda global (aviso na Memória de cálculo).</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <div className="pl-note">Sem regra para a UF de destino, a Precificação cai no ICMS venda global (4%) e avisa na Memória de cálculo. Alíquotas em %, ex.: 12 = 12%.</div>
+      </Card>
+
+      <Card title="Nova regra" sub="uma linha por UF de destino (e NCM, se a alíquota mudar por produto)" style={{ marginTop: 16 }}>
+        <div className="grid-3" style={{ gap: 12 }}>
+          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">UF de destino</label>
+            <input className="input" maxLength={2} value={nova.uf_destino} onChange={(e) => setNova((n) => ({ ...n, uf_destino: e.target.value.toUpperCase() }))}/></div>
+          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Mercadoria</label>
+            <select className="input" value={nova.origem_mercadoria} onChange={(e) => setNova((n) => ({ ...n, origem_mercadoria: e.target.value }))}>
+              <option value="Estrangeira">Importada</option><option value="Nacional">Nacional</option></select></div>
+          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">NCM (opcional)</label>
+            <input className="input" value={nova.ncm} onChange={(e) => setNova((n) => ({ ...n, ncm: e.target.value }))}/></div>
+          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Alíquota efetiva</label>
+            <CCPctInput value={nova.aliquota_pct} onSave={(v) => setNova((n) => ({ ...n, aliquota_pct: v }))}/></div>
+          <div className="stack" style={{ gap: 4, gridColumn: 'span 2' }}><label className="up-eyebrow muted">Fundamento</label>
+            <input className="input" value={nova.fundamento} onChange={(e) => setNova((n) => ({ ...n, fundamento: e.target.value }))}/></div>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <Button size="sm" disabled={saving === 'nova'} onClick={async () => {
+            if (await salvar(nova, {})) setNova({ uf_origem: 'SP', uf_destino: '', origem_mercadoria: 'Estrangeira', ncm: '', aliquota_pct: 0, fundamento: '' });
+          }}>Adicionar regra</Button>
+        </div>
+      </Card>
+    </>
+  );
+}
+
 /* ---------- Página ----------
    Cada aba tem sua própria URL (/cadastros/cadastro-custos/<slug>) — rota
    registrada como SYNC_PASSTHROUGH em app.jsx, subsel É o slug (string),
    sem fetch nenhum. Link direto/recarregar/compartilhar já abre na aba
    certa; sem subsel ainda (1º acesso pelo menu), populamos o slug padrão
    na URL pra ela nunca ficar "sem aba" pra quem copiar o link depois. */
-const CC_SLUG_TO_ABA = { 'instalacao-elevadores': 'elevador', 'instalacao-escada-esteira': 'escada', 'containers': 'containers' };
-const CC_ABA_TO_SLUG = { elevador: 'instalacao-elevadores', escada: 'instalacao-escada-esteira', containers: 'containers' };
+const CC_SLUG_TO_ABA = { 'instalacao-elevadores': 'elevador', 'instalacao-escada-esteira': 'escada', 'containers': 'containers', 'frete': 'frete', 'difal': 'difal', 'regras-icms': 'icms' };
+const CC_ABA_TO_SLUG = { elevador: 'instalacao-elevadores', escada: 'instalacao-escada-esteira', containers: 'containers', frete: 'frete', difal: 'difal', icms: 'regras-icms' };
 
 function CadastroCustosPage({ setSubsel, subsel }) {
   const aba = CC_SLUG_TO_ABA[subsel] || 'elevador';
@@ -489,29 +770,40 @@ function CadastroCustosPage({ setSubsel, subsel }) {
   const irPara = (chave) => setSubsel?.(CC_ABA_TO_SLUG[chave]);
 
   return (
-    <div className="page fade-in">
+    <div className="page fade-in pl">
       <div className="page-head">
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Cadastros · Atualização de Custos</div>
           <h1 className="page-head__title">Atualização de Custos</h1>
           <p className="page-head__sub">
-            Tabelas de referência de custo — Instalação de Equipamentos e Containers. A Precificação herda
-            esses valores automaticamente conforme as specs escolhidas lá (paradas, capacidade, tração, container).
+            Tabelas de referência de custo — Instalação de Equipamentos, Containers, Frete interno, DIFAL e Regras de ICMS. A Precificação herda
+            esses valores automaticamente conforme as specs escolhidas lá (paradas, capacidade, tração, container, cidade da obra).
           </p>
         </div>
       </div>
 
-      <div className="tbar" style={{ marginBottom: 16 }}>
+      <div className="tbar" style={{ marginBottom: 12 }}>
         <div className="seg">
           <button className={aba === 'elevador' ? 'is-active' : ''} onClick={() => irPara('elevador')}>Instalação — Elevadores</button>
           <button className={aba === 'escada' ? 'is-active' : ''} onClick={() => irPara('escada')}>Instalação — Escada/Esteira</button>
           <button className={aba === 'containers' ? 'is-active' : ''} onClick={() => irPara('containers')}>Containers</button>
+          <button className={aba === 'frete' ? 'is-active' : ''} onClick={() => irPara('frete')}>Frete interno</button>
+          <button className={aba === 'difal' ? 'is-active' : ''} onClick={() => irPara('difal')}>DIFAL</button>
+          <button className={aba === 'icms' ? 'is-active' : ''} onClick={() => irPara('icms')}>Regras de ICMS</button>
         </div>
+      </div>
+
+      <div className="pl-legenda">
+        <span><i className="pl-l-edit"/> Campo editável (preenchimento do usuário)</span>
+        <span><i className="pl-l-calc"/> Campo calculado automaticamente</span>
       </div>
 
       {aba === 'elevador' && <CCElevadorTab/>}
       {aba === 'escada' && <CCEscadaEsteiraTab/>}
       {aba === 'containers' && <CCContainersTab/>}
+      {aba === 'frete' && <CCFreteTab/>}
+      {aba === 'difal' && <CCDifalTab/>}
+      {aba === 'icms' && <CCIcmsTab/>}
     </div>
   );
 }

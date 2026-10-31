@@ -7,21 +7,59 @@
 // Limites: dia a dia (não horas); não enxerga o texto dentro das imagens (prints) — esses exigem conferência humana;
 // arquivos alterados mas ainda não commitados contam como "agora".
 import fs from 'node:fs';
+import path from 'node:path';
 import { execSync } from 'node:child_process';
 
 const shell = fs.readFileSync('src/shell.jsx', 'utf8');
 const bloco = (shell.match(/const TUTORIAIS = \{([\s\S]*?)\};/) || [])[1] || '';
-const noMenu = Object.fromEntries([...bloco.matchAll(/(\w+):\s*"([^"]+)"/g)].map((m) => [m[2], m[1]]));   // pasta → rota
+const noMenu = Object.fromEntries([...bloco.matchAll(/(?:(\w+)|"([^"]+)"):\s*"([^"]+)"/g)].map((m) => [m[3], m[1] || m[2]]));   // pasta → rota
 
 // pasta do tutorial → arquivos que compõem a tela (acrescente aqui ao publicar um tutorial novo)
+// Chave = caminho do tutorial (pai/tela). Tela sem lista aqui aparece como aviso "desatualização não conferida".
 const TELAS = {
-  'central-de-decisoes': ['src/decisoes.jsx', 'src/decisoes-store.js'],
-  dashboard: ['src/dashboard.jsx'],
-  notificacoes: ['src/notificacoes-processamento.js', 'src/notificacoes-lidas-store.js'],
-  'prazos-e-pendencias': ['src/gatilhos-engine.js'],
-  inbox: ['src/logistica.jsx', 'src/inbox-gmail.jsx', 'src/inbox-triagem.jsx', 'src/inbox-organizar.jsx', 'src/inbox-conversas.jsx', 'src/inbox-decisao.jsx', 'src/inbox-preco.jsx', 'src/inbox-historico.jsx'],
-  leads: ['src/comercial.jsx', 'src/leads-tooltips.js'],
+  'geral/central-de-decisoes': ['src/decisoes.jsx', 'src/decisoes-store.js'],
+  'obras-instalacao/mapa-de-obras': ['src/mapa-obras.jsx', 'src/mapa-obras-calc.js', 'src/evolucao-equipamentos.jsx', 'src/evolucao-equipamentos-calc.js', 'src/rolagens-calc.js'],
+  'geral/dashboard': ['src/dashboard.jsx'],
+  'geral/notificacoes': ['src/notificacoes-processamento.js', 'src/notificacoes-lidas-store.js'],
+  'geral/prazos-e-pendencias': ['src/gatilhos-engine.js'],
+  'geral/inbox': ['src/logistica.jsx', 'src/inbox-gmail.jsx', 'src/inbox-triagem.jsx', 'src/inbox-organizar.jsx', 'src/inbox-conversas.jsx', 'src/inbox-decisao.jsx', 'src/inbox-preco.jsx', 'src/inbox-historico.jsx'],
+  'crm/leads': ['src/comercial.jsx', 'src/leads-tooltips.js'],
   geral: [],   // visão do módulo: depende dos tutoriais de cada tela
+  // CRM
+  'crm/canais': ['src/crm.jsx'],
+  'crm/conversao': ['src/crm.jsx'],
+  'crm/automacao': ['src/crm.jsx'],
+  'crm/analise': ['src/crm.jsx'],
+  crm: [],
+  // Cadastros Mestres
+  'cadastros-mestres/clientes': ['src/cadastros.jsx', 'src/cadastros-clientes-store.js'],
+  'cadastros-mestres/fornecedores': ['src/cadastros.jsx', 'src/cadastros-fornecedores-store.js'],
+  'cadastros-mestres/materias-primas': ['src/cadastro-itens.jsx'],
+  'cadastros-mestres/produtos': ['src/cadastro-itens.jsx'],
+  'cadastros-mestres': [],
+  // Comercial | Pré-venda
+  // a tela-hub (FormulariosPage) mora em src/comercial.jsx, junto com Leads: Leads mudando acende falso alerta aqui. O formulário do elevador (src/formulario-elevador.jsx) é OUTRA tela, sem tutorial ainda.
+  'comercial-pre-venda/formularios': ['src/comercial.jsx'],
+  'comercial-pre-venda/formulario-de-equipamento': ['src/formulario-elevador.jsx', 'src/formulario-elevador-store.js', 'src/capacidade-passageiros.js'],
+  'comercial-pre-venda/controle-de-cotacoes': ['src/controle-cotacoes.jsx'],
+  'comercial-pre-venda/cotacoes-a-fornecedor': ['src/cotacoes-fornecedor.jsx', 'src/cotacao-elevador-fornecedor-store.js'],
+  'comercial-pre-venda/cotacao-a-fornecedor-detalhe': ['src/cotacoes-fornecedor.jsx', 'src/cotacao-elevador-fornecedor-store.js'],
+  'comercial-pre-venda/cotacao-a-fornecedor-tratativas': ['src/cotacoes-fornecedor.jsx', 'src/tratativas-store.js'],
+  'comercial-pre-venda/cotacao-quadro-comando': ['src/cotacao-quadro-comando.jsx', 'src/cotacao-quadro-comando-store.js'],
+  'comercial-pre-venda/propostas': ['src/precificacao.jsx', 'src/proposta-heranca.js', 'src/proposta-store.js', 'src/proposta-editor.jsx', 'src/proposta-preview.jsx'],
+  'comercial-pre-venda/contratos-sociais': ['src/contratos-sociais.jsx', 'src/contratos-sociais-store.js'],
+  'comercial-pre-venda': [],
+  // Financeiro & Preços
+  'financeiro-precos/precificacao': ['src/precificacao.jsx', 'src/precificacao-elevador.jsx', 'src/precificacao-elevador-engine.js', 'src/precificacao-elevador-store.js', 'src/precificacao-memoria.jsx'],
+  'financeiro-precos/atualizacao-de-custos': ['src/cadastro-custos.jsx', 'src/cadastro-custos-store.js'],
+  'financeiro-precos/aval-financeiro': ['src/aval-financeiro.jsx', 'src/aval-financeiro-store.js'],
+  'financeiro-precos/comissoes': ['src/financeiro.jsx', 'src/comissionamento-store.js'],
+  'financeiro-precos': [],
+  // Contratos & Jurídico
+  'contratos-juridico/contrato-venda-equipamentos': ['src/contrato-venda.jsx', 'src/contrato-venda-store.js', 'src/contrato-venda-engine.js', 'src/contrato-venda-preview.jsx'],
+  'contratos-juridico/contratos-minutas': ['src/operacoes.jsx', 'src/contrato-editor.jsx'],
+  'contratos-juridico/aval-juridico': ['src/aval-juridico.jsx', 'src/aval-juridico-store.js'],
+  'contratos-juridico': [],
 };
 const EMAILS_PERMITIDOS = /^(suporte@verticalparts\.com\.br|suporte@vpsistema\.com)$/i;
 const meses = { janeiro: 0, fevereiro: 1, 'março': 2, abril: 3, maio: 4, junho: 5, julho: 6, agosto: 7, setembro: 8, outubro: 9, novembro: 10, dezembro: 11 };
@@ -30,7 +68,17 @@ const avisos = [];
 const git = (cmd) => { try { return execSync(cmd, { encoding: 'utf8' }).trim(); } catch (_) { return ''; } };
 const sujos = new Set(git('git status --porcelain').split('\n').map((l) => l.slice(3).trim()).filter(Boolean));
 
-const pastas = fs.readdirSync('TreinamentoVP', { withFileTypes: true }).filter((d) => d.isDirectory() && fs.existsSync(`TreinamentoVP/${d.name}/index.html`)).map((d) => d.name);
+// pasta = caminho relativo a TreinamentoVP: "geral" (visão do módulo) ou "geral/dashboard" (tela do módulo)
+const pastas = [];
+(function varrer(rel, nivel) {
+  const base = rel ? `TreinamentoVP/${rel}` : 'TreinamentoVP';
+  for (const d of fs.readdirSync(base, { withFileTypes: true })) {
+    if (!d.isDirectory() || d.name.startsWith('.') || d.name === 'img' || d.name === 'node_modules') continue;
+    const caminho = rel ? `${rel}/${d.name}` : d.name;
+    if (fs.existsSync(`TreinamentoVP/${caminho}/index.html`)) pastas.push(caminho);
+    if (nivel < 2) varrer(caminho, nivel + 1);
+  }
+})('', 1);
 for (const [pasta, rota] of Object.entries(noMenu)) if (!pastas.includes(pasta)) problemas.push(`${pasta}: a rota "${rota}" do menu "?" aponta para um tutorial que não existe`);
 
 for (const pasta of pastas) {
@@ -57,11 +105,14 @@ for (const pasta of pastas) {
   if (docs.length) problemas.push(`${pasta}: DADO REAL? CNPJ/CPF no texto: ${docs.slice(0, 5).join(', ')}`);
 
   // 3) links relacionados para tutoriais que não existem
-  const alvos = [...new Set([...html.matchAll(/href="\.\.\/([a-z0-9-]+)\/?"/gi)].map((m) => m[1]))];
-  for (const a of alvos) if (!pastas.includes(a)) problemas.push(`${pasta}: link para "../${a}/" que ainda não existe (404 até esse tutorial ser publicado)`);
+  const alvos = [...new Set([...html.matchAll(/href="(\.\.?\/[^"#?]*)"/g)].map((m) => m[1]))];
+  for (const h of alvos) {
+    const dir = path.posix.normalize(path.posix.join(pasta, h.replace(/index\.html$/, '')));
+    if (!fs.existsSync(`TreinamentoVP/${dir}/index.html`)) problemas.push(`${pasta}: link "${h}" aponta para um tutorial que ainda não existe (404 até ser publicado)`);
+  }
 
-  // 4) pronto mas fora do menu
-  if (pasta !== 'geral' && !noMenu[pasta]) avisos.push(`${pasta}: tutorial pronto, ainda não ligado ao menu "?" (falta 1 linha em TUTORIAIS no src/shell.jsx)`);
+  // 4) pronto mas fora do menu (visão do módulo não tem linha em TUTORIAIS: é ligada em MODULOS_TUTORIAL)
+  if (pasta.includes('/') && !noMenu[pasta]) avisos.push(`${pasta}: tutorial pronto, ainda não ligado ao menu "?" (falta 1 linha em TUTORIAIS no src/shell.jsx)`);
 }
 
 console.log(`Tutoriais encontrados: ${pastas.length} (${pastas.join(', ')}) · ligados ao menu "?": ${Object.keys(noMenu).length}`);

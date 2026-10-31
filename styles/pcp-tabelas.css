@@ -67,3 +67,17 @@ table.t.pcp-grid tbody tr:nth-child(even) td.pcp-acao { background: color-mix(in
 table.t.pcp-grid tbody tr:hover td.pcp-acao { background: color-mix(in srgb, var(--vp-yellow) 16%, var(--vp-gray-50)); }
 table.t.pcp-grid.pcp-estoque thead th, table.t.pcp-grid.pcp-estoque tbody td { padding-left: 8px; padding-right: 8px; }
 table.t.pcp-grid.pcp-estoque input.input[type="number"] { width: 78px !important; }
+
+/* Toda table.pcp-grid: coluna sob o mouse acende mais fraco que a linha; o cruzamento fica mais forte (mira). */
+table.t.pcp-grid tbody td.pcp-col-hot { background: color-mix(in srgb, var(--vp-yellow) 9%, var(--vp-gray-50)); }
+table.t.pcp-grid thead th.pcp-col-hot { background: color-mix(in srgb, var(--vp-yellow) 28%, var(--vp-gray-50)); color: var(--fg1, inherit); }
+table.t.pcp-grid tbody tr:hover td.pcp-col-hot { background: color-mix(in srgb, var(--vp-yellow) 34%, var(--vp-gray-50)); }
+
+/* Tabela larga: a rolagem (vertical e horizontal) fica dentro da janela, com a barra de baixo sempre visível; o cabeçalho acompanha. */
+/* Precisa vencer `html[data-ui="suave"] .table-wrap { overflow-y: hidden }` (ui-suave.css), senão a lista fica cortada e não rola. */
+.table-wrap.pcp-rolagem, html[data-ui="suave"] .table-wrap.pcp-rolagem { overflow: auto; max-height: calc(100vh - 190px); overscroll-behavior: contain; scrollbar-width: auto; scrollbar-color: var(--vp-gray-400, #9aa0a6) var(--vp-gray-100, #eceef1); }
+/* Barras sempre desenhadas (sem sumir como as "overlay" do Mac/Windows), grossas o bastante para achar com o mouse. */
+.pcp-rolagem::-webkit-scrollbar { width: 14px; height: 14px; }
+.pcp-rolagem::-webkit-scrollbar-track { background: var(--vp-gray-100, #eceef1); }
+.pcp-rolagem::-webkit-scrollbar-thumb { background: var(--vp-gray-400, #9aa0a6); border-radius: 8px; border: 3px solid var(--vp-gray-100, #eceef1); }
+.pcp-rolagem::-webkit-scrollbar-thumb:hover { background: var(--fg3, #6b7280); }

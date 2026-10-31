@@ -31,13 +31,17 @@ function EmissaoNFPage({ setRoute, setSubsel }) {
   const [filtro, setFiltro] = React.useState('aguardando');
   const [busy, setBusy] = React.useState(false);
   const [podeEditar, setPodeEditar] = React.useState(false);
-  const [aberto, setAberto] = React.useState(null);              // numero_pedido em conferência
+  /* Bug real (varredura de URLs, 09/10): a rota recebe setSubsel mas não está
+     em nenhum dos 3 mecanismos de deep-link de app.jsx — escreve/lê o 2º
+     segmento direto (/adm-financeiro/emissao-nf/<numero_pedido>), sem
+     depender de subsel, mesmo padrão do Mapa de Navios. */
+  const [aberto, setAberto] = window.useRotaId('emissao-nf');    // numero_pedido em conferência
   const [form, setForm] = React.useState({ conferencia: 'pendente', historico: false, observacao: '' });
 
   const carregar = React.useCallback(async () => {
     if (!sb) { setErro('Supabase indisponível.'); return; }
     const [p, o, e, a] = await Promise.all([
-      sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, cliente_nome, cliente_documento, data_pedido, data_previsao, entrada_em, faturado, data_faturamento, nf_autorizada, cancelado, valor_total, atualizado_em').eq('cancelado', false).order('data_previsao', { ascending: true }).limit(500),
+      sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, cliente_nome, cliente_documento, data_pedido, data_previsao, entrada_em, faturado, data_faturamento, nf_autorizada, cancelado, valor_total, atualizado_em').eq('cancelado', false).eq('so_separacao', false).order('data_previsao', { ascending: true }).limit(500),
       sb.from('pcp_ordens').select('id, numero, pedido_codigo, status, created_at, data_finalizacao, prazo_entrega').eq('frente', 'pedido').not('pedido_codigo', 'is', null),
       sb.from('pcp_expedicoes').select('pedido_codigo, status, data_saida').limit(1000),
       sb.from('pcp_pedido_acompanhamento').select('*').limit(1000),
@@ -58,6 +62,14 @@ function EmissaoNFPage({ setRoute, setSubsel }) {
     Promise.resolve(window.PropostaStore?.temCapacidade?.('emissao-nf', 'editar')).then(v => { if (vivo) setPodeEditar(!!v); }).catch(() => {});
     return () => { vivo = false; };
   }, []);
+  // Restaura o form de conferência ao chegar pela URL (deep-link/F5/Voltar-Avançar).
+  React.useEffect(() => {
+    if (!aberto || !dados) return;
+    const g = dados.grupos.find((x) => x.numero === aberto);
+    if (!g) return;
+    const ac = dados.acomp[g.numero] || null;
+    setForm({ conferencia: (ac && ac.conferencia) || 'pendente', historico: !!(ac && ac.historico), observacao: (ac && ac.observacao) || '' });
+  }, [dados, aberto]);
 
   const atualizarOmie = async () => {
     setBusy(true);
@@ -97,7 +109,11 @@ function EmissaoNFPage({ setRoute, setSubsel }) {
     else situacao = 'producao';
     return { mae, ac, fat, situacao, sla, valor: g.regs.reduce((s, r) => s + Number(r.valor_total || 0), 0), nfEm };
   };
-  const linhas = dados.grupos.map(g => ({ g, r: resumo(g) }));
+  // Proposta (etapa 00) e pedido só previsto (etapa 10) não são trabalho de NF: ficam em pcp_pedidos para os relatórios de
+  // vendas, mas aqui contariam como "em produção / sem OP" e atrasariam o SLA (mesma regra da Expedição e do alerta de prazos).
+  const ehAberto = (g) => g.regs.every(r => r.etapa === '00' || r.etapa === '10');
+  const ocultosAbertos = dados.grupos.filter(ehAberto).length;
+  const linhas = dados.grupos.filter(g => !ehAberto(g)).map(g => ({ g, r: resumo(g) }));
   const contagem = { aguardando: 0, producao: 0, parcial: 0, emitida: 0, atrasados: 0, historico: 0 };
   linhas.forEach(({ r }) => {
     if (r.sla.historico) contagem.historico++;
@@ -153,7 +169,7 @@ function EmissaoNFPage({ setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro · Fiscal</div>
           <h1 className="page-head__title">Emissão de NF</h1>
-          <p className="page-head__sub">Acompanha os pedidos fabricados, o SLA de cada etapa e a conferência proposta × NF. A nota é emitida no Omie. Leitura automática do Omie a cada 30 min (seg–sex, 7h–19h) · última: {ultimaLeitura ? new Date(ultimaLeitura).toLocaleString('pt-BR') : '—'}.</p>
+          <p className="page-head__sub">Acompanha os pedidos fabricados, o SLA de cada etapa e a conferência proposta × NF. A nota é emitida no Omie. Leitura automática do Omie a cada 30 min (seg–sex, 7h–19h) · última: {ultimaLeitura ? new Date(ultimaLeitura).toLocaleString('pt-BR') : '—'}.{ocultosAbertos > 0 ? ` ${ocultosAbertos} proposta(s)/pedido(s) em etapa 00/10 não entram aqui.` : ''}</p>
         </div>
       </div>
       <div className="pcp-toolbar" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
@@ -180,7 +196,7 @@ function EmissaoNFPage({ setRoute, setSubsel }) {
                   <td><b style={{ fontWeight: 500 }}>{g.numero}</b>{g.regs.length > 1 && <div style={{ fontSize: 10, color: 'var(--fg3)' }}>{g.regs.length} registros</div>}</td>
                   <td style={{ minWidth: 200 }}>{g.regs[0].cliente_nome || '—'}<div style={{ fontSize: 10, color: 'var(--fg3)' }}>{g.regs[0].cliente_documento || ''}</div></td>
                   <td className="text-right">{nfMoeda(r.valor)}</td>
-                  <td>{r.mae ? <><button className="pcp-cod" onClick={() => { try { sessionStorage.setItem('vp_pcp_op', r.mae.id); } catch (e) { /* ok */ } setSubsel && setSubsel(null); setRoute && setRoute('pcp'); }}>{r.mae.numero}</button><span className="pcp-tag" style={{ marginLeft: 6 }}>{r.mae.status === 'concluida' ? 'concluída' : r.mae.status.replace('_', ' ')}</span></> : <span style={{ color: 'var(--fg3)' }}>sem OP no PCP</span>}</td>
+                  <td>{r.mae ? <><button className="pcp-cod" onClick={() => { try { sessionStorage.setItem('vp_pcp_op', r.mae.id); } catch (e) { /* ok */ } setSubsel && setSubsel(null); setRoute && setRoute('pcp'); }}>{g.numero ? `${r.mae.numero}-${g.numero}` : r.mae.numero}</button><span className="pcp-tag" style={{ marginLeft: 6 }}>{r.mae.status === 'concluida' ? 'concluída' : r.mae.status.replace('_', ' ')}</span></> : <span style={{ color: 'var(--fg3)' }}>sem OP no PCP</span>}</td>
                   <td style={{ minWidth: 210 }}>
                     <span className="pcp-tag" style={cor[r.situacao] ? { background: cor[r.situacao] } : undefined}>{rotulo[r.situacao]}</span>
                     {g.regs.map(x => (

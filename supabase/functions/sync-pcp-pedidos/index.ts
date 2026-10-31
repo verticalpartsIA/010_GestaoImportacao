@@ -1,11 +1,13 @@
 /* ============================================================
    sync-pcp-pedidos — Edge Function (vpprd) · PCP, relatórios Pedidos e Clientes.
 
-   SÓ LÊ do Omie (ListarPedidos de produtos/pedido e ConsultarCliente de geral/clientes) e grava
+   SÓ LÊ do Omie (ListarPedidos de produtos/pedido, ConsultarCliente de geral/clientes e ListarNF de produtos/nfconsultar) e grava
    em pcp_pedidos / pcp_pedido_itens. Nada é escrito no Omie.
 
-   Guarda apenas os itens "do PCP": quadros de comando, corrimãos e cabos (aço / manobra),
-   identificados pela família em pcp_produtos. Pedido sem nenhum desses itens é ignorado.
+   Pedido com item "do PCP" (quadros de comando, corrimãos e cabos de aço / manobra, identificados pela família em
+   pcp_produtos) entra em pcp_pedidos como sempre. Pedido SEM nenhum item do PCP só entra se estiver na etapa 20
+   ("Separar Estoque"), marcado `so_separacao = true`: serve só à fila de separação do almoxarifado (VP Estoque) e
+   as telas/alertas do PCP (Emissão de NF, Expedição, SLA, relatórios) o ignoram.
 
    Body JSON: { numeros?: string[] }  → busca esses números de pedido (um número pode ter mais de
                                           um registro no Omie, p.ex. pedido parcial);
@@ -140,7 +142,7 @@ Deno.serve(async (req) => {
     // Atualizar abertos: relê no Omie os pedidos que já temos e ainda não foram entregues (para pegar NF emitida / mudança de etapa).
     if (atualizarAbertos) {
       const entregues = new Set((await pgSelect<{ pedido_codigo: number }>("pcp_expedicoes", "select=pedido_codigo&status=eq.entregue")).map((x) => Number(x.pedido_codigo)));
-      const abertos = (await pgSelect<{ codigo_pedido: number; numero_pedido: string }>("pcp_pedidos", "select=codigo_pedido,numero_pedido&cancelado=eq.false&order=atualizado_em.asc&limit=60"))
+      const abertos = (await pgSelect<{ codigo_pedido: number; numero_pedido: string }>("pcp_pedidos", `select=codigo_pedido,numero_pedido&cancelado=eq.false&or=(so_separacao.eq.false,and(etapa.eq.20,faturado.eq.false))&order=atualizado_em.asc&limit=60`))
         .filter((p) => !entregues.has(Number(p.codigo_pedido)));
       numeros = Array.from(new Set(abertos.map((p) => p.numero_pedido))).slice(0, 25);
       if (!numeros.length) return json({ ok: true, lidos: 0, gravados: 0, sem_item_do_pcp: 0, erros: [] });
@@ -233,14 +235,43 @@ Deno.serve(async (req) => {
       return json({ ok: erros.length === 0, ...resumo }, erros.length === 0 ? 200 : 207);
     }
 
-    // 2) Mantém só pedidos com item do PCP; resolve cliente; grava.
+    // 2) Pedido com item do PCP entra sempre. Sem item do PCP só entra na etapa 20 (fila de separação) ou se já foi gravado
+    //    assim (para continuar atualizando etapa/NF e sair da fila quando avançar). Resolve cliente; grava.
+    const soSeparacaoJa = new Set<number>(
+      (await pgSelect<{ codigo_pedido: number }>("pcp_pedidos", "select=codigo_pedido&so_separacao=eq.true")).map((r) => Number(r.codigo_pedido)));
     const clientes = new Map<number, any>();
     let gravados = 0, ignorados = 0;
+    // Pedido que JÁ está em pcp_pedidos e voltou para a etapa 10 segue o caminho normal (atualiza a etapa; a limpeza horária
+    // pcp_pedidos_tirar_etapa10 só enxerga linhas com etapa '10' gravada e preserva as com OP-mãe/expedição). Só o que ainda
+    // NÃO está gravado é descartado.
+    const codigosEtapa10 = pedidos.filter((p) => String(p.cabecalho?.etapa) === "10").map((p) => Number(p.cabecalho?.codigo_pedido)).filter((n) => n > 0);
+    const jaGravados = new Set<number>();
+    if (codigosEtapa10.length) {
+      const rows = await pgSelect<{ codigo_pedido: number }>("pcp_pedidos", `select=codigo_pedido&codigo_pedido=in.(${codigosEtapa10.join(",")})`);
+      for (const r of rows) jaGravados.add(Number(r.codigo_pedido));
+    }
+    // Vendedor do pedido: codVend → nome (geral/vendedores, uma leitura por execução; falha = sem nome, nunca derruba o sync).
+    let vendedores: Map<number, string> | null = null;
+    const nomeVendedor = async (cod: number): Promise<string | null> => {
+      if (!vendedores) {
+        vendedores = new Map();
+        try {
+          const r = await omie<any>("geral/vendedores", "ListarVendedores", { pagina: 1, registros_por_pagina: 100, apenas_importado_api: "N" });
+          for (const v of r.cadastro || []) vendedores.set(Number(v.codigo), String(v.nome || "").trim());
+        } catch (e) { erros.push(`vendedores: ${(e as Error).message}`); }
+      }
+      return vendedores.get(cod) || null;
+    };
     for (const p of pedidos) {
       const c = p.cabecalho || {};
+      // Etapa 10 é só previsão (pcp_previsao_pedidos, via {"etapa":"10"}): um pedido novo nessa etapa nunca entra em pcp_pedidos, em qualquer modo de leitura (#843 C4).
+      if (String(c.etapa) === "10" && !jaGravados.has(Number(c.codigo_pedido))) { ignorados++; continue; }
       const todos = (p.det || []).map((d: any, i: number) => ({ d: d.produto || {}, seq: i + 1 }));
       const itens = todos.filter((x: any) => ehPcp(x.d.codigo));
-      if (!itens.length) { ignorados++; continue; }       // só guardamos pedidos que têm item do PCP; nesses, o pedido inteiro (a Expedição envia tudo)
+      const soSeparacao = !itens.length;                  // sem item do PCP: só para a fila de separação do almoxarifado
+      if (soSeparacao && !todos.length) { ignorados++; continue; }
+      if (soSeparacao && String(c.etapa) !== "20" && !soSeparacaoJa.has(Number(c.codigo_pedido))) { ignorados++; continue; }
+      // Com item do PCP guardamos o pedido inteiro (a Expedição envia tudo).
       const ic = p.infoCadastro || {}, fr = p.frete || {};
 
       let cli = clientes.get(c.codigo_cliente);
@@ -251,6 +282,9 @@ Deno.serve(async (req) => {
       }
       const end = cli ? [cli.endereco, cli.endereco_numero, cli.bairro, [cli.cidade, cli.estado].filter(Boolean).join("/"), cli.cep].filter(Boolean).join(", ") : null;
       const fone = cli && cli.telefone1_numero ? `${cli.telefone1_ddd ? "(" + cli.telefone1_ddd + ") " : ""}${cli.telefone1_numero}` : null;
+
+      const vendedorCodigo = Number(p.informacoes_adicionais?.codVend) || null;
+      const vendedorNome = vendedorCodigo ? await nomeVendedor(vendedorCodigo) : null;
 
       // Nome da transportadora (no Omie ela é um cadastro de cliente/fornecedor); reaproveita o cache de consultas.
       let transpNome: string | null = null;
@@ -275,7 +309,8 @@ Deno.serve(async (req) => {
         faturado: ic.faturado === "S", data_faturamento: dataIso(ic.dFat), nf_autorizada: ic.autorizado === "S",
         cancelado: ic.cancelado === "S", volumes: fr.quantidade_volumes ?? null, peso_bruto: fr.peso_bruto ?? null,
         modalidade_frete: fr.modalidade != null ? String(fr.modalidade) : null, transportadora_codigo: fr.codigo_transportadora || null, transportadora_nome: transpNome,
-        atualizado_em: new Date().toISOString(),
+        so_separacao: soSeparacao, atualizado_em: new Date().toISOString(),
+        ...(vendedorCodigo ? { vendedor_codigo: vendedorCodigo, ...(vendedorNome ? { vendedor_nome: vendedorNome } : {}) } : {}),
       }], "codigo_pedido");
       await pgDelete("pcp_pedido_itens", `codigo_pedido=eq.${c.codigo_pedido}`);
       await pgInsert("pcp_pedido_itens", todos.map((x: any) => ({
@@ -287,7 +322,7 @@ Deno.serve(async (req) => {
       gravados++;
     }
     resumo.gravados = gravados;
-    resumo.sem_item_do_pcp = ignorados;
+    resumo.sem_item_do_pcp = ignorados;      // ignorados: sem item do PCP fora da etapa 20, etapa 10 nova, sem itens
 
     // Nº da NF: o pedido do Omie não traz o número; ele vem de produtos/nfconsultar ListarNF (compl.nIdPedido -> ide.nNF).
     // Só busca para pedidos faturados ainda sem número, por data de emissão (poucas chamadas), e ignora NF cancelada.

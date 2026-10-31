@@ -29,28 +29,144 @@ function CadEnderecoFields({ form, set }) {
   );
 }
 
+/* 🔒 ÁREA BLINDADA (CLAUDE.md, 31/10/2026): cadastro com transação nunca é excluído — a lixeira confere as
+   transações no banco e, se houver alguma, oferece INATIVAR. Falha ao conferir = não apaga nada. */
+async function cadExcluirOuInativar(store, item, rotulo, reload) {
+  let lista;
+  try { lista = await store.vinculos(item.id); }
+  catch (e) { window.toast?.(e.message, 'error'); return; }
+  const nome = item.razao_social || item.nome_fantasia || item.codigo || '';
+  if (lista.length > 0) {
+    const txt = lista.map((v) => `• ${v.fonte} (${v.qtd})`).join('\n');
+    if (item.ativo === false) {
+      window.alert(`O ${rotulo} "${nome}" tem transações e não pode ser excluído (regra da empresa). Ele já está inativo.\n\n${txt}`);
+      return;
+    }
+    if (!window.confirm(`O ${rotulo} "${nome}" tem transações e NÃO pode ser excluído (regra da empresa):\n\n${txt}\n\nDeseja INATIVAR o cadastro? Ele sai das listas de escolha, mas o histórico e o código continuam.`)) return;
+    try { await store.inativar(item.id); window.toast?.(`${rotulo[0].toUpperCase()}${rotulo.slice(1)} inativado.`, 'success'); reload(); }
+    catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    return;
+  }
+  if (!window.confirm(`O ${rotulo} "${nome}" não tem nenhuma transação. Excluir definitivamente?`)) return;
+  try { await store.remover(item.id); window.toast?.(`${rotulo[0].toUpperCase()}${rotulo.slice(1)} excluído.`, 'success'); reload(); }
+  catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+}
+
+/* T8 #1228 (31/10/2026): busca por CNPJ/CPF aceita o número com pontuação ("12.345.678/0001-90"):
+   o banco grava só dígitos, então compara também os dígitos do que foi digitado. */
+function cadCasaDocumento(item, q) {
+  const qd = String(q || '').replace(/\D/g, '');
+  if ((item.cnpj || '').includes(q) || (item.cpf || '').includes(q)) return true;
+  return qd.length >= 3 && ((item.cnpj || '').includes(qd) || (item.cpf || '').includes(qd));
+}
+
+/* T8 #1228: link para um cadastro que não está na lista (excluído, link antigo ou lista incompleta) —
+   antes abria o formulário como se fosse "Novo", sem aviso. */
+function CadNaoEncontrado({ rotulo, listaIncompleta, onVoltar }) {
+  return (
+    <div className="card" style={{ border: '1px solid var(--vp-yellow, #ffd400)', background: '#fffbe6', padding: 12, marginBottom: 14 }}>
+      <div className="row sb" style={{ alignItems: 'center', gap: 12 }}>
+        <div className="small">
+          <b>{rotulo} não encontrado.</b> O link pode ser antigo ou o cadastro foi excluído{listaIncompleta ? ' — ou a lista não carregou inteira (veja o aviso abaixo)' : ''}.
+        </div>
+        <Button variant="outline" size="sm" onClick={onVoltar}>Voltar à lista</Button>
+      </div>
+    </div>
+  );
+}
+
+/* T4 #1224 (31/10/2026): leitura falhou no meio = aviso visível, nunca lista parcial calada. */
+function CadAvisoLeitura({ erro, qtd, rotulo, onRetry }) {
+  if (!erro) return null;
+  return (
+    <div className="card" style={{ border: '1px solid var(--vp-danger, #c62828)', background: '#fff5f5', padding: 12, marginBottom: 14 }}>
+      <div className="row sb" style={{ alignItems: 'center', gap: 12 }}>
+        <div className="small">
+          <b>Lista incompleta:</b> não foi possível ler todos os {rotulo} ({erro}). {qtd > 0 ? `Mostrando só os ${qtd} que chegaram.` : 'Nada foi carregado.'}
+        </div>
+        <Button variant="outline" size="sm" onClick={onRetry}>Tentar de novo</Button>
+      </div>
+    </div>
+  );
+}
+
 /* ============================================================
    CLIENTES
    ============================================================ */
 const CLI_EMPTY = {
   razao_social: '', nome_fantasia: '', tipo_pessoa: 'PJ', cnpj: '', cpf: '', inscricao_estadual: '',
-  contribuinte_icms: false, email: '', telefone: '', contato: '', documento_pendente: false,
+  contribuinte_icms: null, email: '', telefone: '', contato: '', documento_pendente: false,
   endereco_logradouro: '', endereco_complemento: '', endereco_bairro: '', endereco_cep: '', endereco_cidade: '', endereco_estado: '',
   ativo: true,
 };
 
+/* Consulta de CNPJ "Omie primeiro" (cliente/fornecedor): preenche só o que está vazio, nunca sobrescreve o digitado.
+   Devolve { fonte, patch, erro }. fonte null = consulta falhou (não trava o cadastro). */
+async function cadConsultarCnpj(form) {
+  const api = window.EnderecoAPI;
+  if (!api?.consultarCnpjOmieFirst) return { fonte: null, patch: {}, erro: 'Módulo de consulta indisponível — recarregue a página.' };
+  const r = await api.consultarCnpjOmieFirst(form.cnpj);
+  if (!r.fonte) return { fonte: null, patch: {}, erro: r.erro };
+  const d = r.dados;
+  const vazio = (v) => !String(v ?? '').trim();
+  const patch = {};
+  const poe = (campo, valor) => { if (valor && vazio(form[campo])) patch[campo] = valor; };
+  poe('razao_social', d.razao_social); poe('nome_fantasia', d.nome_fantasia); poe('telefone', d.telefone); poe('email', d.email);
+  poe('endereco_logradouro', d.endereco.logradouro); poe('endereco_complemento', d.endereco.complemento); poe('endereco_bairro', d.endereco.bairro);
+  poe('endereco_cep', d.endereco.cep); poe('endereco_cidade', d.endereco.cidade); poe('endereco_estado', d.endereco.estado);
+  return { fonte: r.fonte, patch, erro: null };
+}
+
+/* Botão + regra "obrigatória": CNPJ informado precisa ter sido consultado antes de salvar. Se ainda não foi, a consulta roda
+   no salvar; se trouxe dados novos, para para a pessoa conferir (clicar de novo salva). Falha de consulta só avisa. */
+function useCnpjOmieFirst(form, setForm) {
+  const [buscando, setBuscando] = React.useState(false);
+  const consultadoRef = React.useRef('');
+  const digitos = window.EnderecoAPI?.sanitizeDigits(form.cnpj) || '';
+  const aplicar = async (silencioso) => {
+    setBuscando(true);
+    try {
+      const r = await cadConsultarCnpj(form);
+      if (!r.fonte) { window.toast?.(`Não foi possível consultar o CNPJ (${r.erro || 'serviço indisponível'}). Confira os dados manualmente.`, 'warning'); return { ok: false, mudou: false }; }
+      consultadoRef.current = digitos;
+      const mudou = Object.keys(r.patch).length > 0;
+      if (mudou) setForm((f) => ({ ...f, ...r.patch }));
+      window.toast?.(r.fonte === 'omie' ? 'CNPJ já cadastrado no ERP Omie — dados trazidos de lá.' : 'CNPJ não está no Omie — dados trazidos da consulta pública.', 'success');
+      return { ok: true, mudou };
+    } finally { setBuscando(false); }
+  };
+  /* Retorna true se pode salvar. */
+  const garantirConsulta = async () => {
+    if (form.tipo_pessoa === 'PF' || form.documento_pendente || !digitos) return true;
+    if (!window.EnderecoAPI?.isCnpjValido(digitos)) { window.toast?.('CNPJ inválido — confira os dígitos (ou marque "documento pendente").', 'warning'); return false; }
+    if (consultadoRef.current === digitos) return true;
+    const r = await aplicar(true);
+    if (r.ok && r.mudou) { window.toast?.('Dados preenchidos pela consulta de CNPJ. Confira e clique em salvar de novo.', 'info'); return false; }
+    return true;
+  };
+  return { buscando, buscar: () => (window.EnderecoAPI?.isCnpjValido(digitos) ? aplicar(false) : window.toast?.('Informe um CNPJ válido para buscar.', 'warning')), garantirConsulta };
+}
+
 function ClienteForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
   const [form, setForm] = React.useState(() => (initialData ? { ...CLI_EMPTY, ...initialData } : CLI_EMPTY));
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
-  const submit = () => {
+  const cnpjBusca = useCnpjOmieFirst(form, setForm);
+  const submit = async () => {
+    if (!(await cnpjBusca.garantirConsulta())) return;
     if (!form.razao_social.trim()) return window.toast?.('Informe a razão social / nome.', 'warning');
+    if (typeof form.contribuinte_icms !== 'boolean') return window.toast?.('Informe se o cliente é Contribuinte de ICMS (Sim ou Não) — é isso que define quem recolhe o DIFAL na venda.', 'warning');
     onSubmit(form);
   };
   return (
     <Card title={isEdit ? `Editar cliente ${initialData.codigo || ''}` : 'Novo cliente'}>
       <div className="grid-3" style={{ gap: 10 }}>
         <PIField label="Tipo de pessoa"><PISelect value={form.tipo_pessoa} onChange={set('tipo_pessoa')} options={['PJ', 'PF']}/></PIField>
-        <PIField label={form.tipo_pessoa === 'PF' ? 'CPF' : 'CNPJ'}><PIInput value={form.tipo_pessoa === 'PF' ? form.cpf : form.cnpj} onChange={set(form.tipo_pessoa === 'PF' ? 'cpf' : 'cnpj')}/></PIField>
+        <PIField label={form.tipo_pessoa === 'PF' ? 'CPF' : 'CNPJ'}>
+          <div className="row gap-2">
+            <div style={{ flex: 1 }}><PIInput value={form.tipo_pessoa === 'PF' ? form.cpf : form.cnpj} onChange={set(form.tipo_pessoa === 'PF' ? 'cpf' : 'cnpj')}/></div>
+            {form.tipo_pessoa !== 'PF' && <Button variant="outline" size="sm" onClick={cnpjBusca.buscar} disabled={cnpjBusca.buscando}>{cnpjBusca.buscando ? 'Buscando…' : 'Buscar CNPJ'}</Button>}
+          </div>
+        </PIField>
         <PIField label="Inscrição estadual"><PIInput value={form.inscricao_estadual} onChange={set('inscricao_estadual')}/></PIField>
         <PIField label="Razão social / Nome *" span={2}><PIInput value={form.razao_social} onChange={set('razao_social')}/></PIField>
         <PIField label="Nome fantasia"><PIInput value={form.nome_fantasia} onChange={set('nome_fantasia')}/></PIField>
@@ -58,10 +174,18 @@ function ClienteForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
         <PIField label="Telefone"><PIInput value={form.telefone} onChange={set('telefone')}/></PIField>
         <PIField label="Contato"><PIInput value={form.contato} onChange={set('contato')}/></PIField>
       </div>
-      <label className="row gap-2" style={{ cursor: 'pointer', margin: '10px 0' }}>
-        <input type="checkbox" checked={!!form.contribuinte_icms} onChange={(e) => set('contribuinte_icms')(e.target.checked)}/>
-        <span className="small">Contribuinte de ICMS</span>
-      </label>
+      <div className="grid-3" style={{ gap: 10, margin: '10px 0' }}>
+        <PIField label="Contribuinte de ICMS? *">
+          <select className="input" value={typeof form.contribuinte_icms === 'boolean' ? String(form.contribuinte_icms) : ''} onChange={(e) => set('contribuinte_icms')(e.target.value === '' ? null : e.target.value === 'true')}>
+            <option value="">Selecione…</option>
+            <option value="true">Sim — contribuinte (tem inscrição estadual)</option>
+            <option value="false">Não — não contribuinte</option>
+          </select>
+        </PIField>
+      </div>
+      <p className="small muted" style={{ margin: '-4px 0 10px' }}>
+        Obrigatório. Define quem paga o DIFAL nas vendas interestaduais: <b>não contribuinte</b> = a VerticalParts recolhe (entra como custo na Precificação); <b>contribuinte</b> = o próprio cliente recolhe.
+      </p>
       {/* 14/09 — achado real (auditoria do tour.md): documento_pendente já
           existia na tabela clientes, gravado por Leads e pelo Formulário
           (cliente criado sem CNPJ/CPF ainda), mas o cadastro mestre de
@@ -90,22 +214,40 @@ function ClienteForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
 
 function CadastroClientesPage() {
   const [items, setItems] = React.useState(null);
-  const [showForm, setShowForm] = React.useState(false);
-  const [editing, setEditing] = React.useState(null);
+  const [erroLeitura, setErroLeitura] = React.useState(null);
   const [search, setSearch] = React.useState('');
   const [saving, setSaving] = React.useState(false);
+  const ord = window.useOrdenacao(); // 23/10 (pedido do usuário) — ordenação por coluna
   /* 27/09 — achado real: "Editar" parecia não funcionar. O formulário abre
      no topo da página, mas a lista tem 1200+ linhas — clicando numa linha
      lá embaixo, nada visível mudava. Além disso, com o formulário já
      aberto, clicar "Editar" em outro registro não trocava os dados
      (useState só lê initialData na montagem) — por isso o key={id}. */
   const formRef = React.useRef(null);
+  /* Formulário (Novo/Editar) e o modal de Histórico refletidos na URL:
+     /cadastros-mestres/cadastro-clientes               → lista
+     /cadastros-mestres/cadastro-clientes/novo          → novo cliente
+     /cadastros-mestres/cadastro-clientes/<id>          → editar aquele cliente
+     /cadastros-mestres/cadastro-clientes/<id>/historico → modal de histórico */
+  const [rotaId] = window.useRotaId('cadastro-clientes');
+  const [sub] = window.useRotaItem('cadastro-clientes', rotaId);
+  const naoEncontrado = !!(items && rotaId && rotaId !== 'novo' && !items.some((c) => c.id === rotaId));
+  const showForm = rotaId === 'novo' || (!!rotaId && sub !== 'historico' && !naoEncontrado);
+  const editing = (items && rotaId && rotaId !== 'novo' && sub !== 'historico') ? (items.find((c) => c.id === rotaId) || null) : null;
+  const historicoDe = (items && rotaId && sub === 'historico') ? (items.find((c) => c.id === rotaId) || null) : null;
+  const abrirNovo = () => { if (window.VpRouter) window.VpRouter.navigate('cadastro-clientes', 'novo'); };
+  const abrirEditar = (c) => { if (window.VpRouter) window.VpRouter.navigate('cadastro-clientes', c.id); };
+  const abrirHistorico = (c) => { if (window.VpRouter) window.VpRouter.navigate('cadastro-clientes', c.id, 'historico'); };
+  const fecharModal = () => { if (window.VpRouter) window.VpRouter.navigate('cadastro-clientes', null); };
   React.useEffect(() => {
     if (showForm && formRef.current) formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [showForm, editing]);
-  const [historicoDe, setHistoricoDe] = React.useState(null);
 
-  const reload = React.useCallback(() => { window.CadastrosClientesStore.listarTodos().then(setItems).catch(() => setItems([])); }, []);
+  const reload = React.useCallback(() => {
+    window.CadastrosClientesStore.listarTodosDetalhado()
+      .then((r) => { setItems(r.itens); setErroLeitura(r.erro); })
+      .catch((e) => { setItems([]); setErroLeitura(e.message || 'falha de leitura'); });
+  }, []);
   React.useEffect(() => { reload(); }, [reload]);
 
   const salvar = async (form) => {
@@ -114,23 +256,24 @@ function CadastroClientesPage() {
       if (editing) await window.CadastrosClientesStore.atualizar(editing.id, form);
       else await window.CadastrosClientesStore.criar(form);
       window.toast?.(editing ? 'Cliente atualizado.' : 'Cliente cadastrado.', 'success');
-      setShowForm(false); setEditing(null); reload();
+      fecharModal(); reload();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setSaving(false); }
   };
 
-  const excluir = async (cli) => {
-    if (!window.confirm(`Excluir o cliente "${cli.razao_social}"? Isso pode afetar formulários/propostas já vinculados.`)) return;
-    try { await window.CadastrosClientesStore.remover(cli.id); window.toast?.('Cliente excluído.', 'success'); reload(); }
-    catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
-  };
+  const excluir = (cli) => cadExcluirOuInativar(window.CadastrosClientesStore, cli, 'cliente', reload);
 
   if (items === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   const filtered = items.filter((c) => {
     const q = search.toLowerCase();
     return !q || (c.razao_social || '').toLowerCase().includes(q) || (c.nome_fantasia || '').toLowerCase().includes(q)
-      || (c.codigo || '').toLowerCase().includes(q) || (c.cnpj || '').includes(q) || (c.cpf || '').includes(q);
+      || (c.codigo || '').toLowerCase().includes(q) || cadCasaDocumento(c, q);
+  });
+  const ordenados = ord.aplicar(filtered, {
+    codigo: (c) => c.codigo, razaoSocial: (c) => c.razao_social, doc: (c) => c.cnpj || c.cpf,
+    cidade: (c) => c.endereco_cidade, contato: (c) => c.contato || c.telefone,
+    status: (c) => (c.ativo === false ? 'Inativo' : 'Ativo'),
   });
 
   return (
@@ -142,25 +285,30 @@ function CadastroClientesPage() {
           <p className="page-head__sub">Cadastro central de clientes — inclui os criados automaticamente pelo Formulário.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="primary" icon="plus" onClick={() => { setEditing(null); setShowForm(true); }}>Novo cliente</Button>
+          <Button variant="primary" icon="plus" onClick={abrirNovo}>Novo cliente</Button>
         </div>
       </div>
 
+      {naoEncontrado && <CadNaoEncontrado rotulo="Cliente" listaIncompleta={!!erroLeitura} onVoltar={fecharModal}/>}
       {showForm && (
         <div ref={formRef} style={{ marginBottom: 20, scrollMarginTop: 16 }}>
-          <ClienteForm key={editing ? editing.id : 'novo'} initialData={editing} isEdit={!!editing} saving={saving} onSubmit={salvar} onCancel={() => { setShowForm(false); setEditing(null); }}/>
+          <ClienteForm key={editing ? editing.id : 'novo'} initialData={editing} isEdit={!!editing} saving={saving} onSubmit={salvar} onCancel={fecharModal}/>
         </div>
       )}
 
       <input className="input" style={{ marginBottom: 14 }} placeholder="Buscar por código, nome ou CNPJ/CPF…" value={search} onChange={(e) => setSearch(e.target.value)}/>
+      <CadAvisoLeitura erro={erroLeitura} qtd={items.length} rotulo="clientes" onRetry={reload}/>
       <div className="small muted" style={{ marginBottom: 10 }}>{filtered.length} cliente(s) encontrado(s)</div>
 
-      <div className="table-wrap">
+      <div className="table-wrap table-wrap--sticky">
         <table className="t">
-          <thead><tr><th>Código</th><th>Razão social</th><th>CNPJ/CPF</th><th>Cidade/UF</th><th>Contato</th><th>Status</th><th></th></tr></thead>
+          <thead><tr>
+            {ord.th('codigo', 'Código')}{ord.th('razaoSocial', 'Razão social')}{ord.th('doc', 'CNPJ/CPF')}
+            {ord.th('cidade', 'Cidade/UF')}{ord.th('contato', 'Contato')}{ord.th('status', 'Status')}<th></th>
+          </tr></thead>
           <tbody>
             {filtered.length === 0 && <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhum cliente encontrado.</td></tr>}
-            {filtered.map((c) => (
+            {ordenados.map((c) => (
               <tr key={c.id}>
                 <td className="mono">{c.codigo || '—'}</td>
                 <td><div className="cell-main">{c.razao_social}</div>{c.nome_fantasia ? <div className="cell-sub">{c.nome_fantasia}</div> : null}</td>
@@ -173,8 +321,8 @@ function CadastroClientesPage() {
                 <td>{c.ativo === false ? <span className="badge">Inativo</span> : <StatusBadge status="Ativo"/>}</td>
                 <td>
                   <div className="row gap-1">
-                    <Button variant="ghost" size="sm" icon="history" title="Histórico" onClick={() => setHistoricoDe(c)}/>
-                    <Button variant="ghost" size="sm" icon="edit" title="Editar" onClick={() => { setEditing(c); setShowForm(true); }}/>
+                    <Button variant="ghost" size="sm" icon="history" title="Histórico" onClick={() => abrirHistorico(c)}/>
+                    <Button variant="ghost" size="sm" icon="edit" title="Editar" onClick={() => abrirEditar(c)}/>
                     <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={() => excluir(c)}/>
                   </div>
                 </td>
@@ -184,7 +332,7 @@ function CadastroClientesPage() {
         </table>
       </div>
 
-      {historicoDe && <ClienteHistoricoModal cliente={historicoDe} onClose={() => setHistoricoDe(null)} />}
+      {historicoDe && <ClienteHistoricoModal cliente={historicoDe} onClose={fecharModal} />}
     </div>
   );
 }
@@ -292,6 +440,35 @@ function cadFmtEstrelas(media) {
   return '★'.repeat(cheias) + '☆'.repeat(5 - cheias) + ` (${media.toFixed(1)})`;
 }
 
+/* ---------- NPS das cotações (0 a 5 em 6 critérios) — alimentado em Cotações de Varejo ---------- */
+function FornecedorNPS({ fornecedorId, nome }) {
+  const [linhas, setLinhas] = React.useState(null);
+  React.useEffect(() => {
+    const S = window.CotacoesVarejoStore; if (!S) { setLinhas([]); return; }
+    S.avaliacoesDoFornecedor(fornecedorId, nome).then(setLinhas).catch(() => setLinhas([]));
+  }, [fornecedorId]);
+  if (linhas === null || !window.NpsMini) return null;
+  const S = window.CotacoesVarejoStore;
+  const resumo = linhas.length ? (() => { const r = { avaliacoes: linhas.length }; S.NPS_CRITERIOS.forEach(([k]) => { const v = linhas.map((h) => h['nota_' + k]).filter((n) => n != null); r[k] = v.length ? v.reduce((a, b) => a + Number(b), 0) / v.length : null; }); return r; })() : null;
+  return (
+    <Card title="Avaliação nas cotações (NPS 0–5)" sub={linhas.length ? 'Notas dadas pelo comprador ao fechar cada cotação de varejo.' : 'Nenhuma avaliação ainda — elas nascem em Cotações de Varejo, no cartão do fornecedor.'}>
+      {linhas.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 20 }}>
+          <window.NpsMini resumo={resumo} linhas={linhas} />
+          <div className="stack" style={{ gap: 6 }}>
+            {linhas.slice().reverse().slice(0, 8).map((a) => (
+              <div key={a.id} className="small" style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 8 }}>
+                <b>★ {a.nota_geral}</b> · {a.lote_numero || 'lote'}{a.comentario ? ' — ' + a.comentario : ''}
+                <div className="cell-sub">{a.avaliado_por || '—'} · {new Date(a.avaliado_em).toLocaleDateString('pt-BR')}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /* ---------- Avaliações de um fornecedor (só aparece editando) ---------- */
 function FornecedorAvaliacoes({ fornecedorId }) {
   const [avaliacoes, setAvaliacoes] = React.useState(null);
@@ -354,7 +531,9 @@ function FornecedorForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
   const [form, setForm] = React.useState(() => (initialData ? { ...FOR_EMPTY, ...initialData } : FOR_EMPTY));
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
   const toggleCategoria = (cat) => setForm((f) => ({ ...f, categorias: f.categorias.includes(cat) ? f.categorias.filter((x) => x !== cat) : [...f.categorias, cat] }));
-  const submit = () => {
+  const cnpjBusca = useCnpjOmieFirst(form, setForm);
+  const submit = async () => {
+    if (!(await cnpjBusca.garantirConsulta())) return;
     if (!form.razao_social.trim()) return window.toast?.('Informe a razão social / nome.', 'warning');
     if (form.categorias.length === 0) return window.toast?.('Selecione ao menos uma categoria.', 'warning');
     onSubmit(form);
@@ -374,7 +553,12 @@ function FornecedorForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
       </div>
       <div className="grid-3" style={{ gap: 10, marginTop: 14 }}>
         <PIField label="Tipo de pessoa"><PISelect value={form.tipo_pessoa} onChange={set('tipo_pessoa')} options={['PJ', 'PF']}/></PIField>
-        <PIField label={form.tipo_pessoa === 'PF' ? 'CPF' : 'CNPJ'}><PIInput value={form.tipo_pessoa === 'PF' ? form.cpf : form.cnpj} onChange={set(form.tipo_pessoa === 'PF' ? 'cpf' : 'cnpj')}/></PIField>
+        <PIField label={form.tipo_pessoa === 'PF' ? 'CPF' : 'CNPJ'}>
+          <div className="row gap-2">
+            <div style={{ flex: 1 }}><PIInput value={form.tipo_pessoa === 'PF' ? form.cpf : form.cnpj} onChange={set(form.tipo_pessoa === 'PF' ? 'cpf' : 'cnpj')}/></div>
+            {form.tipo_pessoa !== 'PF' && <Button variant="outline" size="sm" onClick={cnpjBusca.buscar} disabled={cnpjBusca.buscando}>{cnpjBusca.buscando ? 'Buscando…' : 'Buscar CNPJ'}</Button>}
+          </div>
+        </PIField>
         <PIField label="Razão social / Nome *"><PIInput value={form.razao_social} onChange={set('razao_social')}/></PIField>
         <PIField label="Nome fantasia"><PIInput value={form.nome_fantasia} onChange={set('nome_fantasia')}/></PIField>
         <PIField label="E-mail"><PIInput value={form.email} onChange={set('email')}/></PIField>
@@ -398,18 +582,30 @@ function FornecedorForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
         <Button variant="primary" onClick={submit} disabled={saving}>{saving ? 'Salvando…' : (isEdit ? 'Salvar alterações' : 'Cadastrar fornecedor')}</Button>
       </div>
       {isEdit && <div style={{ marginTop: 16 }}><FornecedorAvaliacoes fornecedorId={initialData.id}/></div>}
+      {isEdit && <div style={{ marginTop: 16 }}><FornecedorNPS fornecedorId={initialData.id} nome={initialData.razao_social || initialData.nome_fantasia}/></div>}
     </Card>
   );
 }
 
 function CadastroFornecedoresPage() {
   const [items, setItems] = React.useState(null);
-  const [showForm, setShowForm] = React.useState(false);
-  const [editing, setEditing] = React.useState(null);
+  const [erroLeitura, setErroLeitura] = React.useState(null);
   const [search, setSearch] = React.useState('');
   const [filterCategoria, setFilterCategoria] = React.useState('Todas');
   const [saving, setSaving] = React.useState(false);
-  /* Mesmo ajuste de CadastroClientesPage (rolar até o form + key={id}). */
+  const ord = window.useOrdenacao(); // 23/10 (pedido do usuário) — ordenação por coluna
+  /* Mesmo ajuste de CadastroClientesPage (rolar até o form + key={id}), e o
+     mesmo reflexo de Novo/Editar na URL:
+     /cadastros-mestres/cadastro-fornecedores        → lista
+     /cadastros-mestres/cadastro-fornecedores/novo   → novo fornecedor
+     /cadastros-mestres/cadastro-fornecedores/<id>   → editar aquele fornecedor */
+  const [rotaId] = window.useRotaId('cadastro-fornecedores');
+  const naoEncontrado = !!(items && rotaId && rotaId !== 'novo' && !items.some((f) => f.id === rotaId));
+  const showForm = rotaId === 'novo' || (!!rotaId && !naoEncontrado);
+  const editing = (items && rotaId && rotaId !== 'novo') ? (items.find((f) => f.id === rotaId) || null) : null;
+  const abrirNovo = () => { if (window.VpRouter) window.VpRouter.navigate('cadastro-fornecedores', 'novo'); };
+  const abrirEditar = (f) => { if (window.VpRouter) window.VpRouter.navigate('cadastro-fornecedores', f.id); };
+  const fecharForm = () => { if (window.VpRouter) window.VpRouter.navigate('cadastro-fornecedores', null); };
   const formRef = React.useRef(null);
   React.useEffect(() => {
     if (showForm && formRef.current) formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -418,7 +614,9 @@ function CadastroFornecedoresPage() {
   const [medias, setMedias] = React.useState({});
 
   const reload = React.useCallback(() => {
-    window.CadastrosFornecedoresStore.listarTodos().then(setItems).catch(() => setItems([]));
+    window.CadastrosFornecedoresStore.listarTodosDetalhado()
+      .then((r) => { setItems(r.itens); setErroLeitura(r.erro); })
+      .catch((e) => { setItems([]); setErroLeitura(e.message || 'falha de leitura'); });
     window.CadastrosFornecedoresStore.mediasAvaliacoes().then(setMedias).catch(() => setMedias({}));
   }, []);
   React.useEffect(() => { reload(); }, [reload]);
@@ -429,25 +627,27 @@ function CadastroFornecedoresPage() {
       if (editing) await window.CadastrosFornecedoresStore.atualizar(editing.id, form);
       else await window.CadastrosFornecedoresStore.criar(form);
       window.toast?.(editing ? 'Fornecedor atualizado.' : 'Fornecedor cadastrado.', 'success');
-      setShowForm(false); setEditing(null); reload();
+      fecharForm(); reload();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setSaving(false); }
   };
 
-  const excluir = async (f) => {
-    if (!window.confirm(`Excluir o fornecedor "${f.razao_social}"?`)) return;
-    try { await window.CadastrosFornecedoresStore.remover(f.id); window.toast?.('Fornecedor excluído.', 'success'); reload(); }
-    catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
-  };
+  const excluir = (f) => cadExcluirOuInativar(window.CadastrosFornecedoresStore, f, 'fornecedor', reload);
 
   if (items === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   const filtered = items.filter((f) => {
     const q = search.toLowerCase();
     const matchSearch = !q || (f.razao_social || '').toLowerCase().includes(q) || (f.nome_fantasia || '').toLowerCase().includes(q)
-      || (f.codigo || '').toLowerCase().includes(q) || (f.cnpj || '').includes(q) || (f.cpf || '').includes(q);
+      || (f.codigo || '').toLowerCase().includes(q) || cadCasaDocumento(f, q);
     const matchCat = filterCategoria === 'Todas' || (f.categorias || []).includes(filterCategoria);
     return matchSearch && matchCat;
+  });
+  const ordenados = ord.aplicar(filtered, {
+    codigo: (f) => f.codigo, razaoSocial: (f) => f.razao_social, categorias: (f) => (f.categorias || []).join(', '),
+    doc: (f) => f.cnpj || f.cpf, contato: (f) => f.contato || f.telefone,
+    avaliacao: (f) => (medias[f.id] ? Number(medias[f.id].media) : null),
+    status: (f) => (f.ativo === false ? 'Inativo' : 'Ativo'),
   });
 
   return (
@@ -459,13 +659,14 @@ function CadastroFornecedoresPage() {
           <p className="page-head__sub">Cadastro único — Fornecedor, Agente de Carga, Transportador e Prestador IMS, marcados por categoria.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="primary" icon="plus" onClick={() => { setEditing(null); setShowForm(true); }}>Novo fornecedor</Button>
+          <Button variant="primary" icon="plus" onClick={abrirNovo}>Novo fornecedor</Button>
         </div>
       </div>
 
+      {naoEncontrado && <CadNaoEncontrado rotulo="Fornecedor" listaIncompleta={!!erroLeitura} onVoltar={fecharForm}/>}
       {showForm && (
         <div ref={formRef} style={{ marginBottom: 20, scrollMarginTop: 16 }}>
-          <FornecedorForm key={editing ? editing.id : 'novo'} initialData={editing} isEdit={!!editing} saving={saving} onSubmit={salvar} onCancel={() => { setShowForm(false); setEditing(null); }}/>
+          <FornecedorForm key={editing ? editing.id : 'novo'} initialData={editing} isEdit={!!editing} saving={saving} onSubmit={salvar} onCancel={fecharForm}/>
         </div>
       )}
 
@@ -476,14 +677,18 @@ function CadastroFornecedoresPage() {
           {window.CadastrosFornecedoresStore.CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
+      <CadAvisoLeitura erro={erroLeitura} qtd={items.length} rotulo="fornecedores" onRetry={reload}/>
       <div className="small muted" style={{ marginBottom: 10 }}>{filtered.length} fornecedor(es) encontrado(s)</div>
 
-      <div className="table-wrap">
+      <div className="table-wrap table-wrap--sticky">
         <table className="t">
-          <thead><tr><th>Código</th><th>Razão social</th><th>Categorias</th><th>CNPJ/CPF</th><th>Contato</th><th>Avaliação</th><th>Status</th><th></th></tr></thead>
+          <thead><tr>
+            {ord.th('codigo', 'Código')}{ord.th('razaoSocial', 'Razão social')}{ord.th('categorias', 'Categorias')}
+            {ord.th('doc', 'CNPJ/CPF')}{ord.th('contato', 'Contato')}{ord.th('avaliacao', 'Avaliação')}{ord.th('status', 'Status')}<th></th>
+          </tr></thead>
           <tbody>
             {filtered.length === 0 && <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhum fornecedor encontrado.</td></tr>}
-            {filtered.map((f) => (
+            {ordenados.map((f) => (
               <tr key={f.id}>
                 <td className="mono">{f.codigo || '—'}</td>
                 <td><div className="cell-main">{f.razao_social}</div>{f.nome_fantasia ? <div className="cell-sub">{f.nome_fantasia}</div> : null}</td>
@@ -494,7 +699,7 @@ function CadastroFornecedoresPage() {
                 <td>{f.ativo === false ? <span className="badge">Inativo</span> : <StatusBadge status="Ativo"/>}</td>
                 <td>
                   <div className="row gap-1">
-                    <Button variant="ghost" size="sm" icon="edit" title="Editar" onClick={() => { setEditing(f); setShowForm(true); }}/>
+                    <Button variant="ghost" size="sm" icon="edit" title="Editar" onClick={() => abrirEditar(f)}/>
                     <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={() => excluir(f)}/>
                   </div>
                 </td>

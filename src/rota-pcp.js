@@ -21,7 +21,11 @@
     const [, setN] = React.useState(0);
     React.useEffect(() => {
       if (!R()) return undefined;
-      return R().subscribe((loc) => { if (loc && loc.route === rota) setN((n) => n + 1); });
+      const unsub = R().subscribe((loc) => { if (loc && loc.route === rota) setN((n) => n + 1); });
+      // navigate() chamado direto por outra parte da tela (não pelo setter deste hook) — ver router.js.
+      const onNav = () => { const loc = R().parseLocation(); if (loc && loc.route === rota) setN((n) => n + 1); };
+      window.addEventListener('vp:navigate', onNav);
+      return () => { unsub(); window.removeEventListener('vp:navigate', onNav); };
     }, []);
     return () => setN((n) => n + 1);
   }
@@ -44,6 +48,47 @@
     return [id, setId];
   }
 
+  /* Destaque da coluna sob o mouse nas tabelas do PCP (a linha é CSS). Uso: onMouseOver/onMouseLeave={window.pcpColHover}. */
+  function pcpColHover(e) {
+    const t = e.currentTarget; const c = e.target.closest ? e.target.closest('td,th') : null;
+    const i = c ? c.cellIndex : -1;
+    if (t.__hc === i) return;
+    t.querySelectorAll('.pcp-col-hot').forEach(x => x.classList.remove('pcp-col-hot'));
+    t.__hc = i;
+    if (i < 0) return;
+    t.querySelectorAll('tr').forEach(r => { if (r.cells.length > 2 && r.cells[i]) r.cells[i].classList.add('pcp-col-hot'); });
+  }
+
+  /* Filtro/busca da tela na query string (?chave=valor): F5 e link direto reabrem a tela filtrada.
+     Estado local inicializado da URL; o setter regrava com replaceState (não cria entrada no Voltar/Avançar e não
+     mexe no caminho, então o roteador e o App não reagem). Valor vazio ou igual ao padrão sai da URL. */
+  function useQueryParam(chave, padrao) {
+    const ler = () => {
+      try { const v = new URLSearchParams(window.location.search).get(chave); return v == null ? padrao : v; } catch (_) { return padrao; }
+    };
+    const [valor, setValor] = React.useState(ler);
+    const set = (novo) => {
+      const v = novo == null ? padrao : String(novo);
+      setValor(v);
+      try {
+        const u = new URL(window.location.href);
+        if (v === '' || v === padrao) u.searchParams.delete(chave); else u.searchParams.set(chave, v);
+        window.history.replaceState(window.history.state, '', u.pathname + u.search + u.hash);
+      } catch (_) { /* sem history: segue só em memória */ }
+    };
+    return [valor, set];
+  }
+
+  window.useQueryParam = useQueryParam;
   window.useRotaItem = useRotaItem;
   window.useRotaId = useRotaId;
+  window.pcpColHover = pcpColHover;
+
+  /* Vale para TODA table.pcp-grid e table.ci-table (inclusive as futuras), sem precisar ligar tabela por tabela. */
+  function pcpColDelegado(e) {
+    const t = e.target && e.target.closest ? e.target.closest('table.pcp-grid, table.ci-table, table.tab-cruz, table.t') : null;
+    if (t) { pcpColHover({ currentTarget: t, target: e.target }); return; }
+    document.querySelectorAll('table.pcp-grid, table.ci-table, table.tab-cruz, table.t').forEach(x => { if (x.__hc !== undefined && x.__hc !== -1) pcpColHover({ currentTarget: x, target: document.body }); });
+  }
+  document.addEventListener('mouseover', pcpColDelegado);
 }());

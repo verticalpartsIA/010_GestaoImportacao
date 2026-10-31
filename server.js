@@ -308,6 +308,20 @@ app.get('/cotacao-elevador-fornecedor/:token', (_req, res) => {
   res.sendFile(path.join(__dirname, 'cotacao-elevador-fornecedor.html'));
 });
 
+/* ---------- Portal público de Cotações de Varejo (fornecedor) ----------
+   /cotacao-varejo/<token> → entrega cotacao-varejo.html. O token é lido no client. */
+app.get('/cotacao-varejo/:token', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'cotacao-varejo.html'));
+});
+
+/* ---------- Painel TV da separação de pedidos ----------
+   /separacao-tv/<token> → entrega separacao-tv.html. O token é lido no client (RPC separacao_tv_dados). Sem SSO. */
+app.get('/separacao-tv/:token', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'separacao-tv.html'));
+});
+
 /* ---------- Execução de vistoria pelo técnico (Vistorias de Obras, Fase 3) ----------
    /vistoria/<token> → entrega vistoria-execucao.html. O token é lido no
    client (vistorias_atividades.token). Sem SSO — link enviado direto
@@ -344,6 +358,24 @@ app.get('/diario-obra/:token', (_req, res) => {
   res.sendFile(path.join(__dirname, 'diario-obra.html'));
 });
 
+/* ---------- Fabricação do Quadro de Comando (link do operador) ----------
+   /fabricacao-quadro/<token> → entrega fabricacao-quadro.html. O token é
+   lido no client (fabricacao_quadro_links.token). Link fixo por OP de
+   quadro, gerado pela tela interna (Evolução da Fabricação) — sem SSO,
+   quem tem o link flega as etapas e relata falta de material. */
+app.get('/fabricacao-quadro/:token', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'fabricacao-quadro.html'));
+});
+
+/* ---------- Fabricação Corrimão/Corte (link do chão de fábrica) ----------
+   /fabricacao-oficina/<token> → entrega fabricacao-oficina.html. Credencial =
+   token; a página só fala com o banco por RPC (public_fab_*). */
+app.get('/fabricacao-oficina/:token', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'fabricacao-oficina.html'));
+});
+
 /* ---------- Termo de Entrega (assinatura digital) ----------
    /termo-entrega/<token> → entrega termo-entrega.html. O token é lido no
    client (dossier_obra.termo_entrega_token). Cliente e/ou supervisor
@@ -351,6 +383,12 @@ app.get('/diario-obra/:token', (_req, res) => {
 app.get('/termo-entrega/:token', (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'termo-entrega.html'));
+});
+
+/* /recibo/<token> → recibo-instalador.html (recibo de pagamento ao montador; o montador assina sem login — RPCs por token). */
+app.get('/recibo/:token', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'recibo-instalador.html'));
 });
 
 /* ---------- Estáticos ----------
@@ -369,9 +407,9 @@ const NO_CACHE_EXT = ['.html', '.js', '.jsx', '.css', '.json'];
    as pastas do front (src/styles/assets) e os módulos do SPA (mesmos slugs de
    MODULE_SLUG em src/router.js). Todo o resto responde 404. */
 const PUBLIC_ROOT_FILES = new Set([
-  'index.html', 'index-print.html', 'assinar.html', 'cotacao.html', 'cotacao-elevador-fornecedor.html',
-  'diario-obra.html', 'formulario-cliente.html', 'status-obra.html', 'termo-entrega.html',
-  'vistoria-execucao.html', 'colors_and_type.css', 'favicon.ico',
+  'index.html', 'index-print.html', 'assinar.html', 'cotacao.html', 'cotacao-elevador-fornecedor.html', 'cotacao-varejo.html', 'separacao-tv.html',
+  'diario-obra.html', 'fabricacao-quadro.html', 'fabricacao-oficina.html', 'formulario-cliente.html', 'status-obra.html', 'termo-entrega.html',
+  'vistoria-execucao.html', 'formulario-quadro-comando-publico.html', 'recibo-instalador.html', 'colors_and_type.css', 'favicon.ico',
 ]);
 /* TreinamentoVP: tutoriais passo a passo (páginas HTML estáticas, uma pasta por tela). O botão "Ajuda" do
    app (HelpCenter, src/shell.jsx) abre /TreinamentoVP/<slug>/. Só vai o que estiver no Git. */
@@ -388,9 +426,9 @@ function naoEncontrado(req, res) {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not_found' });
   return res.status(404).type('text/plain').send('404 — página não encontrada');
 }
-/* O navegador pede /favicon.ico sozinho e o projeto não tem ícone: 204 (vazio)
-   em vez de 404 no console — antes caía no catch-all e recebia o HTML do app. */
-app.get('/favicon.ico', (_req, res) => res.status(204).end());
+/* O navegador pede /favicon.ico sozinho (aba, favoritos, histórico). Entrega o ícone do símbolo VerticalParts
+   (assets/favicon.ico, 16/32/48px); as páginas também apontam para ele via <link rel="icon">. */
+app.get('/favicon.ico', (_req, res) => res.sendFile(path.join(__dirname, 'assets', 'favicon.ico'), { maxAge: '1d' }));
 app.use((req, res, next) => {
   const { first, depth } = primeiroSegmento(req.path);
   if (!first || PUBLIC_DIRS.has(first) || SPA_MODULES.has(first)) return next();

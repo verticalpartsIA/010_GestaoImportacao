@@ -1,0 +1,8 @@
+{
+  "leads": [
+    {"id":"LD-1042","building":"Edifício Aurora Paulista","contact":"Mariana Teixeira","role":"Síndica","phone":"(11) 98888-1234","email":"mariana@exemplo.com","equip":"Elevador","origin":"Site","status":"Qualificação","owner":"Rafael","value":385000,"priority":"Alta","next_action":"Visita técnica","date":"2026-09-28"},
+    {"id":"LD-1041","building":"Shopping Vale Verde","contact":"Carlos Menezes","role":"Gerente de Facilities","phone":"(19) 97777-4321","email":"carlos@exemplo.com","equip":"Escada rolante","origin":"Indicação","status":"Proposta","owner":"Fernanda","value":1240000,"priority":"Alta","next_action":"Enviar proposta revisada","date":"2026-09-24"},
+    {"id":"LD-1040","building":"Residencial Jardins do Sul","contact":"Ana Ribeiro","role":"Administradora","phone":"(11) 96666-5555","email":"ana@exemplo.com","equip":"Elevador","origin":"Feira","status":"Novo","owner":"Rafael","value":210000,"priority":"Média","next_action":"Primeiro contato","date":"2026-09-22"},
+    {"id":"LD-1039","building":"Hospital Santa Clara","contact":"Dr. Paulo Lima","role":"Diretor Administrativo","phone":"(21) 95555-0000","email":"paulo@exemplo.com","equip":"Elevador hospitalar","origin":"WhatsApp","status":"Convertido","owner":"Fernanda","value":540000,"priority":"Alta","next_action":"Contrato assinado","date":"2026-09-15"}
+  ]
+}

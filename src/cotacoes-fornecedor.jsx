@@ -82,6 +82,8 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
   const [showExcluir, setShowExcluir] = React.useState(false);
   const [motivoExclusao, setMotivoExclusao] = React.useState('');
   const [excluindo, setExcluindo] = React.useState(false);
+  const [busca, setBusca] = React.useState(''); // 23/10 (pedido do usuário) — busca + ordenação
+  const ord = window.useOrdenacao();
 
   const carregar = React.useCallback(async () => {
     try {
@@ -121,18 +123,37 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
 
   const filtradas = React.useMemo(() => {
     if (!rows) return [];
+    const termo = busca.trim().toLowerCase();
     return rows.filter((r) => {
       if (tab === 'aguardando' && !CF_AGUARDANDO.includes(r.status)) return false;
       if (tab !== 'todos' && tab !== 'aguardando' && r.status !== tab) return false;
       if (fFornecedor !== 'Todos' && r.fornecedor !== fFornecedor) return false;
       if (fCategoria !== 'Todos' && r.categoria_produto !== fCategoria) return false;
-      return true;
+      if (!termo) return true;
+      const numCot = r.dados_envio?.header?.numero_cotacao ?? r.formularios_elevador?.numero_cotacao;
+      /* 23/10 — achado real do Codex (PR #1079): faltava o rótulo formatado
+         (ex. "VPCT-0950-B", com a letra de revisão) que a coluna "Nº
+         Cotação" mostra — só o número cru não acha o que está na tela. */
+      const numCotFormatado = numCot != null ? window.MasterIdEngine.etapaId('cotacao', numCot, r.revisao) : null;
+      return [r.numero_documento, cfPredioLabel(r), r.fornecedor, numCot != null ? String(numCot) : null, numCotFormatado]
+        .some((v) => (v || '').toString().toLowerCase().includes(termo));
     });
-  }, [rows, tab, fFornecedor, fCategoria]);
+  }, [rows, tab, fFornecedor, fCategoria, busca]);
+
+  const linhasOrdenadas = ord.aplicar(filtradas, {
+    numeroDocumento: (c) => c.numero_documento,
+    numeroCotacao: (c) => c.dados_envio?.header?.numero_cotacao ?? c.formularios_elevador?.numero_cotacao,
+    predio: (c) => cfPredioLabel(c),
+    fornecedor: (c) => c.fornecedor,
+    categoria: (c) => cfCategoriaLabel(c.categoria_produto),
+    enviadoEm: (c) => (c.sent_at ? new Date(c.sent_at).getTime() : null),
+    status: (c) => c.status,
+  });
 
   if (rows === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   const kpi = (pred) => rows.filter(pred).length;
+  const contagemTab = (key) => key === 'todos' ? rows.length : key === 'aguardando' ? kpi((r) => CF_AGUARDANDO.includes(r.status)) : kpi((r) => r.status === key);
 
   return (
     <div className="page fade-in">
@@ -151,19 +172,26 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
         <KPI label="Aprovadas" value={kpi((r) => r.status === 'aprovada')} sub="compra confirmada" icon="check"/>
       </div>
 
-      <div className="tbar">
-        <div className="seg">{CF_TABS.map((t) => (
-          <button key={t.key} className={tab === t.key ? 'is-active' : ''} onClick={() => setTab(t.key)}>{t.label}</button>
-        ))}</div>
-        <div className="spacer"/>
-        <select className="input" style={{ maxWidth: 180 }} value={fFornecedor} onChange={(e) => setFFornecedor(e.target.value)}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+        <select className="input" style={{ maxWidth: 220 }} value={fFornecedor} onChange={(e) => setFFornecedor(e.target.value)}>
           <option value="Todos">Todos os fornecedores</option>
           {fornecedores.map((f) => <option key={f} value={f}>{f}</option>)}
         </select>
-        <select className="input" style={{ maxWidth: 200 }} value={fCategoria} onChange={(e) => setFCategoria(e.target.value)}>
+        <select className="input" style={{ maxWidth: 220 }} value={fCategoria} onChange={(e) => setFCategoria(e.target.value)}>
           <option value="Todos">Todas as categorias</option>
           {store.CATEGORIAS_PRODUTO.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
         </select>
+        <input className="input" placeholder="Buscar Nº Documento, Nº Cotação, prédio/cliente ou fornecedor…" value={busca}
+          onChange={(e) => setBusca(e.target.value)} style={{ minWidth: 280 }}/>
+        <span className="small" style={{ color: 'var(--fg3)' }}>{filtradas.length} cotação(ões)</span>
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+        {CF_TABS.map((t) => (
+          <Button key={t.key} size="sm" variant={tab === t.key ? 'primary' : 'ghost'} onClick={() => setTab(t.key)}>
+            {t.label} <span style={{ opacity: .7 }}>({contagemTab(t.key)})</span>
+          </Button>
+        ))}
       </div>
 
       {selecionadas.size > 0 && (
@@ -175,21 +203,22 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
         </div>
       )}
 
-      <div className="table-wrap">
-        <table className="t">
+      <Card title="Cotações enviadas" sub="Clique numa linha para abrir o detalhe e as tratativas">
+      <div className="table-wrap table-wrap--sticky" style={{ border: 0 }}>
+        <table className="t pcp-grid">
           <thead><tr>
             <th style={{ width: 32 }}>
               <input type="checkbox" aria-label="Selecionar todas"
                 checked={filtradas.length > 0 && filtradas.every((c) => selecionadas.has(c.id))}
                 onChange={(e) => setSelecionadas(e.target.checked ? new Set(filtradas.map((c) => c.id)) : new Set())}/>
             </th>
-            <th>Nº Documento</th>
-            <th>Nº Cotação</th>
-            <th>Prédio / Cliente</th>
-            <th>Fornecedor</th>
-            <th>Categoria</th>
-            <th>Enviado em</th>
-            <th>Status</th>
+            {ord.th('numeroDocumento', 'Nº Documento')}
+            {ord.th('numeroCotacao', 'Nº Cotação')}
+            {ord.th('predio', 'Prédio / Cliente')}
+            {ord.th('fornecedor', 'Fornecedor')}
+            {ord.th('categoria', 'Categoria')}
+            {ord.th('enviadoEm', 'Enviado em')}
+            {ord.th('status', 'Status')}
             <th></th>
           </tr></thead>
           <tbody>
@@ -198,31 +227,32 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
                 Nenhum registro encontrado com os filtros atuais.
               </td></tr>
             )}
-            {filtradas.map((c) => (
+            {linhasOrdenadas.map((c) => (
               <tr key={c.id} style={{ cursor: 'pointer' }} onClick={() => { setSubsel(c); setRoute('cotacao-fornecedor-detail'); }}>
                 <td onClick={(e) => e.stopPropagation()}>
                   <input type="checkbox" aria-label={`Selecionar ${c.numero_documento}`}
                     checked={selecionadas.has(c.id)} onChange={() => toggleSelecionada(c.id)}/>
                 </td>
-                <td><span className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{c.numero_documento}</span></td>
-                <td><span className="mono small">{(() => {
+                <td style={{ whiteSpace: 'nowrap' }}><span className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{c.numero_documento}</span></td>
+                <td style={{ whiteSpace: 'nowrap' }}><span className="mono small">{(() => {
                   const n = c.dados_envio?.header?.numero_cotacao ?? c.formularios_elevador?.numero_cotacao;
-                  return n != null ? window.MasterIdEngine.etapaId('cotacao', n) : '—';
+                  return n != null ? window.MasterIdEngine.etapaId('cotacao', n, c.revisao) : '—';
                 })()}</span></td>
-                <td>
-                  <div className="cell-main">{cfPredioLabel(c)}</div>
+                <td style={{ maxWidth: 240 }}>
+                  <div className="cell-main" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={cfPredioLabel(c)}>{cfPredioLabel(c)}</div>
                   <div className="cell-sub">{c.formularios_elevador?.local_obra_cidade ? `${c.formularios_elevador.local_obra_cidade}/${c.formularios_elevador.local_obra_estado || ''}` : ''}</div>
                 </td>
-                <td>{c.fornecedor}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>{c.fornecedor}</td>
                 <td>{cfCategoriaLabel(c.categoria_produto)}</td>
-                <td><span className="cell-num">{fmtTimestamp(c.sent_at)}</span></td>
-                <td><FECefStatusChip status={c.status}/></td>
+                <td style={{ whiteSpace: 'nowrap' }}><span className="cell-num">{fmtTimestamp(c.sent_at)}</span></td>
+                <td style={{ whiteSpace: 'nowrap' }}><FECefStatusChip status={c.status}/></td>
                 <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      </Card>
 
       {showExcluir && (
         <Modal title={`Excluir ${selecionadas.size} cotação(ões)`}
@@ -252,56 +282,54 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
   );
 }
 
-/* ---------- Tratativas: histórico de conversa/negociação da cotação,
-   substitui o e-mail — thread único, correlacionado pelo Nº da Cotação.
-
-   01/10 — a sub mentia um pouco: "fica registrado aqui, não em e-mail"
-   deixava de propósito foi escrito antes de existir qualquer envio por
-   e-mail, mas desde que o aviso por e-mail (tratativas-store.js) passou
-   a existir, essa frase é enganosa — tem e-mail envolvido, e se o
-   fornecedor RESPONDER esse e-mail (em vez de esperar a VerticalParts
-   escrever de novo aqui), a resposta vai pro Inbox de E-mail (tabela
-   emails_projeto), não pra esta lista (tabela tratativas_cotacao) —
-   são tabelas/telas diferentes, sem sincronização entre si. Texto e o
-   badge abaixo existem só pra deixar isso visível pra quem usa a tela,
-   sem mudar nenhuma lógica de envio/vínculo. */
-function CfTratativasEmailRespondidoBadge({ cotacaoFornecedorId }) {
-  const [temResposta, setTemResposta] = React.useState(false);
-  React.useEffect(() => {
-    let cancelado = false;
-    setTemResposta(false);
-    const sb = window.__VP_SB && window.__VP_SB.sb;
-    if (!sb || !cotacaoFornecedorId) return;
-    sb.from('emails_projeto').select('id', { count: 'exact', head: true })
-      .eq('direcao', 'entrada').is('excluido_em', null)
-      .eq('referencia_id', String(cotacaoFornecedorId))
-      .then(({ count }) => { if (!cancelado) setTemResposta((count || 0) > 0); })
-      .catch(() => { if (!cancelado) setTemResposta(false); });
-    return () => { cancelado = true; };
-  }, [cotacaoFornecedorId]);
-  if (!temResposta) return null;
-  return (
-    <span className="badge badge--info" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-      title="Existe e-mail recebido vinculado a esta cotação/fornecedor — veja em Geral → Inbox">
-      <Icon.mail size={10}/> Fornecedor também respondeu por e-mail — ver no Inbox
-    </span>
-  );
+/* ---------- Tratativas: histórico ÚNICO da conversa com o fornecedor desta cotação.
+   07/10 — MÃO DUPLA com o Inbox (Geral → Inbox):
+   • SAÍDA: cada mensagem escrita aqui é gravada em tratativas_cotacao E enviada por e-mail ao
+     fornecedor (send-email), ficando também no Inbox (Enviados, rótulo "Tratativa").
+   • ENTRADA: o que chega no Inbox ligado a esta cotação (resposta do fornecedor, e-mails
+     enviados/respondidos pelo Inbox) aparece aqui, na ordem do tempo, ao lado das mensagens.
+   • Eventos da própria cotação (enviada, visualizada, respondida pelo formulário) entram na
+     mesma linha do tempo. Tudo só leitura, exceto as mensagens novas escritas aqui.
+   A tabela das mensagens (tratativas_cotacao) e a do Inbox (emails_projeto) continuam separadas;
+   a ligação é a referencia_id (= id desta cotação) e, quando só há 1 fornecedor, o Nº da cotação.
+   Nunca se mistura e-mail de outro fornecedor nem do cliente (regra em TratativasStore.listarEmails). */
+function irParaRota(caminho) {
+  try { window.history.pushState({}, '', caminho); window.dispatchEvent(new PopStateEvent('popstate')); } catch (e) { window.location.assign(caminho); }
 }
 
-function CfTratativas({ cotacaoFornecedorId, numeroCotacao }) {
+function CfTratativas({ cotacaoFornecedorId, numeroCotacao, cot }) {
   const store = window.TratativasStore;
   const [msgs, setMsgs] = React.useState([]);
+  const [emails, setEmails] = React.useState([]);
+  const [hist, setHist] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [texto, setTexto] = React.useState("");
+  const [cc, setCc] = React.useState(() => (window.EmailEnvioHelper ? window.EmailEnvioHelper.ccSalvo() : ''));
   const [anexos, setAnexos] = React.useState([]);
   const [enviando, setEnviando] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
+  const [aberto, setAberto] = React.useState({});
+  const [aviso, setAviso] = React.useState(null);
+  const [docsAberto, setDocsAberto] = React.useState(false);
+  const formularioId = cot && cot.formulario_elevador_id;
 
-  const reload = React.useCallback(() => {
-    setLoading(true);
-    return store.listarPorCotacao(cotacaoFornecedorId).then(data => { setMsgs(data); setLoading(false); });
-  }, [cotacaoFornecedorId]);
+  const reload = React.useCallback(async (silencioso) => {
+    if (!silencioso) setLoading(true);
+    const [m, e, h] = await Promise.all([
+      store.listarPorCotacao(cotacaoFornecedorId),
+      store.listarEmails({ cotacaoFornecedorId, numeroCotacao, formularioId }),
+      store.listarHistoricoInterno({ cotacaoFornecedorId, numeroCotacao }),
+    ]);
+    setMsgs(m); setEmails(e); setHist(h); setLoading(false);
+  }, [cotacaoFornecedorId, numeroCotacao, formularioId]);
   React.useEffect(() => { reload(); }, [reload]);
+  // E-mail novo chega pelo Inbox (cron a cada 10 min) → atualiza sozinho sem piscar a tela.
+  React.useEffect(() => {
+    const t = setInterval(() => { if (!document.hidden) reload(true); }, 60000);
+    const onVis = () => { if (!document.hidden) reload(true); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
+  }, [reload]);
 
   const onFiles = async (fileList) => {
     const files = Array.from(fileList || []);
@@ -316,48 +344,133 @@ function CfTratativas({ cotacaoFornecedorId, numeroCotacao }) {
     setUploading(false);
   };
 
+  const mostrarResultado = (r) => {
+    const em = r && r.__email;
+    if (em && em.ok) setAviso({ ok: true, txt: 'Registrado e enviado por e-mail para ' + em.para.join(', ') + '. A resposta dele chega aqui e no Inbox.' });
+    else setAviso({ ok: false, txt: 'Mensagem registrada, mas o e-mail NÃO foi enviado' + (em && em.motivo ? ': ' + em.motivo : '.') + ' Avise o fornecedor por outro canal.' });
+  };
+  const documentosLiberados = !!cot && ['em_analise', 'aprovada'].includes(cot.status);
+
   const enviar = async () => {
     setEnviando(true);
     try {
-      await store.enviar({ cotacaoFornecedorId, numeroCotacao, mensagem: texto, anexos });
+      const r = await store.enviar({ cotacaoFornecedorId, numeroCotacao, mensagem: texto, anexos, cc });
       setTexto(""); setAnexos([]);
-      await reload();
+      mostrarResultado(r);
+      await reload(true);
     } catch (e) { window.toast("Erro: " + e.message, "error"); }
     setEnviando(false);
   };
 
+  // Linha do tempo única: mensagens + e-mails do Inbox + eventos da cotação.
+  const itens = React.useMemo(() => {
+    const lista = [];
+    msgs.forEach(m => lista.push({ k: 'msg:' + m.id, tipo: 'msg', quando: m.created_at, m }));
+    emails.forEach(e => lista.push({ k: 'em:' + e.id, tipo: 'email', quando: e.data_mensagem, e }));
+    // Histórico interno (preço, decisões, eventos com QUEM fez) — vem do vp_logs/eventos_fluxo/decisoes_gerenciais.
+    hist.forEach(h => lista.push({ k: h.k, tipo: 'hist', quando: h.quando, h }));
+    if (cot) {
+      // Eventos "de calendário" da própria cotação só entram quando o histórico não tem o equivalente (cotação antiga).
+      const temEvento = (re) => hist.some(h => h.tipo === 'evento' && re.test(h.titulo || ''));
+      const canal = cot.channel === 'email' ? 'por e-mail' : cot.channel === 'whatsapp' ? 'por WhatsApp' : cot.channel === 'link' ? 'por link' : '';
+      if (cot.sent_at && !temEvento(/enviada/i)) lista.push({ k: 'ev:sent', tipo: 'evento', quando: cot.sent_at, txt: 'Cotação enviada ao fornecedor' + (canal ? ' ' + canal : '') });
+      if (cot.viewed_at) lista.push({ k: 'ev:viewed', tipo: 'evento', quando: cot.viewed_at, txt: 'Fornecedor abriu a cotação' });
+      if (cot.responded_at && !temEvento(/respondeu/i)) lista.push({ k: 'ev:resp', tipo: 'evento', quando: cot.responded_at, txt: 'Fornecedor respondeu pelo formulário do link' });
+    }
+    return lista.filter(i => i.quando).sort((a, b) => new Date(a.quando) - new Date(b.quando));
+  }, [msgs, emails, hist, cot]);
+
   if (loading) return <div style={{ textAlign: "center", padding: "40px 0", color: "var(--fg3)", fontSize: 13 }}>Carregando…</div>;
 
+  const nomeEmail = (e) => (e.direcao === 'entrada' ? (e.de_nome || e.de_email || 'Fornecedor') : 'VerticalParts');
   return (
-    <Card title="Tratativas" sub="Histórico de negociação com o fornecedor. Cada mensagem aqui dispara um aviso por e-mail ao fornecedor — se ele RESPONDER esse e-mail (em vez de esperar você escrever de novo aqui), a resposta aparece no Inbox de E-mail (Geral → Inbox), não nesta lista.">
-      <div className="row" style={{ marginBottom: 8 }}>
-        <CfTratativasEmailRespondidoBadge cotacaoFornecedorId={cotacaoFornecedorId}/>
-      </div>
-      <div className="stack" style={{ gap: 10, maxHeight: 420, overflowY: "auto", padding: "4px 2px" }}>
-        {msgs.length === 0 && <div className="muted small" style={{ padding: "16px 0", textAlign: "center" }}>Nenhuma mensagem ainda.</div>}
-        {msgs.map(m => (
-          <div key={m.id} style={{ border: "1px solid var(--border)", padding: "8px 10px", borderRadius: 4 }}>
-            <div className="row sb" style={{ marginBottom: 4 }}>
-              <b style={{ fontSize: 12 }}>{m.autor}</b>
-              <span className="muted small mono">{fmtTimestamp(m.created_at)}</span>
-            </div>
-            {m.mensagem && <div style={{ fontSize: 13, whiteSpace: "pre-wrap" }}>{m.mensagem}</div>}
-            {(m.anexos || []).length > 0 && (
-              <div className="row gap-2" style={{ flexWrap: "wrap", marginTop: 6 }}>
-                {m.anexos.map((a, i) => (
-                  <a key={i} href={a.url} target="_blank" rel="noreferrer" className="row gap-2"
-                    style={{ border: "1px solid var(--border)", padding: "4px 8px", fontSize: 12, alignItems: "center" }}>
-                    <Icon.fileText size={13}/>{a.nome}
-                  </a>
-                ))}
+    <Card title="Tratativas" sub="Histórico único desta cotação com o fornecedor: mensagens (saem por e-mail e ficam no Inbox), e-mails do Inbox ligados a ela, mudanças de preço, decisões internas e eventos — tudo em ordem de data. Responda direto aqui.">
+      <div className="stack" style={{ gap: 10, maxHeight: 520, overflowY: "auto", padding: "4px 2px" }}>
+        {itens.length === 0 && <div className="muted small" style={{ padding: "16px 0", textAlign: "center" }}>Nenhuma mensagem ainda.</div>}
+        {itens.map(it => {
+          if (it.tipo === 'evento') {
+            return (
+              <div key={it.k} className="row sb muted small" style={{ padding: "2px 6px", borderLeft: "3px solid var(--border)" }}>
+                <span>{it.txt}</span><span className="mono">{fmtTimestamp(it.quando)}</span>
               </div>
-            )}
-          </div>
-        ))}
+            );
+          }
+          if (it.tipo === 'hist') {
+            const h = it.h;
+            const cor = h.tipo === 'preco' ? '#b45309' : h.tipo === 'decisao' ? '#7c3aed' : 'var(--border)';
+            const rotulo = h.tipo === 'preco' ? 'Preço' : h.tipo === 'decisao' ? 'Decisão' : h.tipo === 'evento' ? 'Evento' : 'Registro';
+            return (
+              <div key={it.k} style={{ padding: "4px 8px", borderLeft: "3px solid " + cor, background: h.tipo === 'preco' || h.tipo === 'decisao' ? "var(--bg2, #fafafa)" : "transparent" }}>
+                <div className="row sb" style={{ gap: 6, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12.5 }}>
+                    <span className="badge" style={{ fontSize: 10, marginRight: 6 }}>{rotulo}</span>
+                    <b>{h.titulo}</b>{h.quem ? <span className="muted"> · {h.quem}</span> : null}
+                  </span>
+                  <span className="muted small mono">{fmtTimestamp(h.quando)}</span>
+                </div>
+                {h.linhas && h.linhas.length > 0 && (
+                  <ul style={{ margin: "4px 0 0 18px", padding: 0, fontSize: 12.5 }}>{h.linhas.map((l, i) => <li key={i}>{l}</li>)}</ul>
+                )}
+                {h.detalhe && <div className="muted small" style={{ marginTop: 2, whiteSpace: "pre-wrap" }}>Motivo: {h.detalhe}</div>}
+              </div>
+            );
+          }
+          if (it.tipo === 'email') {
+            const e = it.e; const entrada = e.direcao === 'entrada'; const open = !!aberto[e.id];
+            const corpo = String(e.corpo_texto || '').trim();
+            return (
+              <div key={it.k} style={{ border: "1px solid var(--border)", borderLeft: "3px solid " + (entrada ? "var(--vp-info, #2563eb)" : "var(--fg3)"), padding: "8px 10px", borderRadius: 4, background: entrada ? "var(--bg2, #f7f9ff)" : "transparent" }}>
+                <div className="row sb" style={{ marginBottom: 4, flexWrap: "wrap", gap: 6 }}>
+                  <span className="row gap-2" style={{ alignItems: "center" }}>
+                    <Icon.mail size={12}/>
+                    <b style={{ fontSize: 12 }}>{nomeEmail(e)}</b>
+                    <span className="badge badge--info" style={{ fontSize: 10 }}>{entrada ? 'E-mail recebido (Inbox)' : 'E-mail enviado (Inbox)'}</span>
+                  </span>
+                  <span className="muted small mono">{fmtTimestamp(e.data_mensagem)}</span>
+                </div>
+                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{e.assunto || '(sem assunto)'}</div>
+                {corpo && <div style={{ fontSize: 13, whiteSpace: "pre-wrap", marginTop: 4 }}>{open || corpo.length <= 400 ? corpo : corpo.slice(0, 400) + '…'}</div>}
+                <div className="row gap-2" style={{ marginTop: 6 }}>
+                  {corpo.length > 400 && <button className="btn btn--ghost btn--sm" onClick={() => setAberto(a => ({ ...a, [e.id]: !open }))}>{open ? 'Mostrar menos' : 'Ler tudo'}</button>}
+                  <button className="btn btn--ghost btn--sm" onClick={() => irParaRota('/geral/inbox/' + e.id)}>Abrir no Inbox</button>
+                </div>
+              </div>
+            );
+          }
+          const m = it.m;
+          return (
+            <div key={it.k} style={{ border: "1px solid var(--border)", padding: "8px 10px", borderRadius: 4 }}>
+              <div className="row sb" style={{ marginBottom: 4 }}>
+                <span className="row gap-2" style={{ alignItems: "center" }}>
+                  <b style={{ fontSize: 12 }}>{m.autor}</b>
+                  <span className="badge" style={{ fontSize: 10 }}>Tratativa</span>
+                </span>
+                <span className="muted small mono">{fmtTimestamp(m.created_at)}</span>
+              </div>
+              {m.mensagem && <div style={{ fontSize: 13, whiteSpace: "pre-wrap" }}>{m.mensagem}</div>}
+              {(m.anexos || []).length > 0 && (
+                <div className="row gap-2" style={{ flexWrap: "wrap", marginTop: 6 }}>
+                  {m.anexos.map((a, i) => (
+                    <a key={i} href={a.url} target="_blank" rel="noreferrer" className="row gap-2"
+                      style={{ border: "1px solid var(--border)", padding: "4px 8px", fontSize: 12, alignItems: "center" }}>
+                      <Icon.fileText size={13}/>{a.nome}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
+      {aviso && (
+        <div style={{ marginTop: 10, padding: "8px 10px", fontSize: 12, border: "1px solid " + (aviso.ok ? "#86efac" : "#fbb039"), background: aviso.ok ? "#f0fdf4" : "#fff8e6", color: aviso.ok ? "#166534" : "#8a5a00" }}>
+          {aviso.ok ? '✓ ' : '⚠ '}{aviso.txt}
+        </div>
+      )}
       <div className="stack" style={{ gap: 6, marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+        {window.EmailCcInput && <window.EmailCcInput value={cc} onChange={setCc} />}
         <textarea className="input" rows={2} value={texto} onChange={e => setTexto(e.target.value)}
-          placeholder="Escreva uma mensagem para registrar o ajuste combinado…" style={{ resize: "vertical", fontFamily: "inherit" }}/>
+          placeholder="Escreva para o fornecedor — a mensagem fica registrada aqui e é enviada por e-mail…" style={{ resize: "vertical", fontFamily: "inherit" }}/>
         {anexos.length > 0 && (
           <div className="row gap-2" style={{ flexWrap: "wrap" }}>
             {anexos.map((a, i) => (
@@ -369,13 +482,22 @@ function CfTratativas({ cotacaoFornecedorId, numeroCotacao }) {
           </div>
         )}
         <div className="row sb">
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, width: "fit-content", cursor: "pointer", border: "1px solid var(--border)", padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#fff" }}>
-            <Icon.upload size={12}/> {uploading ? "Enviando…" : "Anexar arquivo"}
-            <input type="file" multiple style={{ display: "none" }} onChange={e => onFiles(e.target.files)}/>
-          </label>
+          <div className="row gap-2">
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 6, width: "fit-content", cursor: "pointer", border: "1px solid var(--border)", padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#fff" }}>
+              <Icon.upload size={12}/> {uploading ? "Enviando…" : "Anexar arquivo"}
+              <input type="file" multiple style={{ display: "none" }} onChange={e => onFiles(e.target.files)}/>
+            </label>
+            <Button variant="outline" icon="fileText" disabled={!documentosLiberados || !window.CfEnviarDocumentosModal}
+              title={documentosLiberados ? 'Envia a cotação do fornecedor, o Projeto de Instalação assinado e as ID-TAGs numa só mensagem' : 'Disponível depois de "Decidir comprar"'}
+              onClick={() => setDocsAberto(true)}>Enviar documentos ao fornecedor</Button>
+          </div>
           <Button variant="primary" icon="send" disabled={enviando || uploading} onClick={enviar}>{enviando ? "Enviando…" : "Enviar"}</Button>
         </div>
       </div>
+      {docsAberto && window.CfEnviarDocumentosModal && (
+        <window.CfEnviarDocumentosModal cot={cot} numeroCotacao={numeroCotacao} onClose={() => setDocsAberto(false)}
+          onEnviado={(r) => { mostrarResultado(r); reload(true); }}/>
+      )}
     </Card>
   );
 }
@@ -385,7 +507,7 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
   const [cot, setCot] = React.useState(cotInicial);
   const [verResp, setVerResp] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
-  const [tab, setTab] = window.useRouteTab('cotacao-fornecedor-detail', 'detalhes', ['detalhes', 'tratativas'], true);
+  const [tab, setTab] = window.useRouteTab('cotacao-fornecedor-detail', 'detalhes', ['detalhes', 'tratativas', 'imagens', 'documentos'], true);
   // Pré-condições financeiras da decisão de compra (contrato assinado + sinal
   // pago + aval), avaliadas na carga. Sem isso, o botão "Decidir comprar"
   // parecia clicável mas falhava só num toast — e a linha do tempo mostrava
@@ -457,25 +579,37 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
         </div>
       </div>
 
+      {/* 07/10 — o motivo do bloqueio ficava só na aba "Detalhes"; quem estava em "Tratativas" via o botão
+          desabilitado sem explicação. Agora aparece acima das abas, nas duas. */}
+      {bloqueadoDecisao && (
+        <Card style={{ marginBottom: 16 }} sharp={false}>
+          <div className="alert warning" style={{ margin: 0 }}>
+            <Icon.warning/>
+            <div style={{ flex: 1 }}>
+              <div className="alert__title">Ainda não é possível decidir a compra</div>
+              <div className="alert__sub" style={{ marginTop: 2 }}>{gate.motivo}</div>
+              {Array.isArray(gate.checagens) && gate.checagens.length > 0 && (
+                <ul style={{ margin: "6px 0 0", padding: 0, listStyle: "none", fontSize: 12.5 }}>
+                  {gate.checagens.map((ck) => (
+                    <li key={ck.rotulo} style={{ color: ck.ok ? "#166534" : "#8a5a00" }}>{ck.ok ? "✓" : "○"} {ck.rotulo} — {ck.ok ? "OK" : "pendente"}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+
       <div className="tbar">
         <div className="seg">
           <button className={tab === 'detalhes' ? 'is-active' : ''} onClick={() => setTab('detalhes')}>Detalhes</button>
           <button className={tab === 'tratativas' ? 'is-active' : ''} onClick={() => setTab('tratativas')}>Tratativas</button>
+          <button className={tab === 'imagens' ? 'is-active' : ''} onClick={() => setTab('imagens')}>Imagens</button>
+          <button className={tab === 'documentos' ? 'is-active' : ''} onClick={() => setTab('documentos')}>Documentos</button>
         </div>
       </div>
 
       {tab === 'detalhes' && <>
-        {bloqueadoDecisao && (
-          <Card style={{ marginBottom: 16 }} sharp={false}>
-            <div className="alert warning" style={{ margin: 0 }}>
-              <Icon.warning/>
-              <div style={{ flex: 1 }}>
-                <div className="alert__title">Ainda não é possível decidir a compra</div>
-                <div className="alert__sub" style={{ marginTop: 2 }}>{gate.motivo}</div>
-              </div>
-            </div>
-          </Card>
-        )}
         <Card style={{ marginBottom: 16 }} sharp={false}>
           <div className="alert info" style={{ margin: 0 }}>
             <Icon.link2/>
@@ -498,21 +632,25 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
           <Card title="Dados enviados">
             <KvBlock label="Fornecedor" value={cot.fornecedor}/>
             <KvBlock label="Categoria" value={cfCategoriaLabel(cot.categoria_produto)}/>
-            <KvBlock label="Nº Cotação (cliente)" value={cot.dados_envio?.header?.numero_cotacao != null ? window.MasterIdEngine.etapaId('cotacao', cot.dados_envio.header.numero_cotacao) : '—'} mono/>
+            <KvBlock label="Nº Cotação (cliente)" value={cot.dados_envio?.header?.numero_cotacao != null ? window.MasterIdEngine.etapaId('cotacao', cot.dados_envio.header.numero_cotacao, cot.revisao) : '—'} mono/>
             <KvBlock label="Equipamentos (Master ID)" value={<CfUnidadesMasterId cot={cot}/>}/>
           </Card>
           <Card title="Linha do tempo">
             <KvBlock label="Enviado em" value={fmtTimestamp(cot.sent_at)}/>
             <KvBlock label="Visualizado em" value={fmtTimestamp(cot.viewed_at)}/>
             <KvBlock label="Respondido em" value={fmtTimestamp(cot.responded_at)}/>
-            <KvBlock label="Decidido comprar em" value={cot.decidido_em ? fmtTimestamp(cot.decidido_em) : (bloqueadoDecisao ? 'Bloqueado — aguardando aval financeiro' : '—')}/>
+            <KvBlock label="Decidido comprar em" value={cot.decidido_em ? fmtTimestamp(cot.decidido_em) : (bloqueadoDecisao ? 'Bloqueado — faltam avais (veja o aviso no topo)' : '—')}/>
             <KvBlock label="Aprovado em" value={fmtTimestamp(cot.aprovado_em)}/>
           </Card>
         </div>
       </>}
 
       {tab === 'tratativas' && (
-        <CfTratativas cotacaoFornecedorId={cot.id} numeroCotacao={cot.dados_envio?.header?.numero_cotacao ?? null}/>
+        <CfTratativas cotacaoFornecedorId={cot.id} cot={cot} numeroCotacao={cot.dados_envio?.header?.numero_cotacao ?? (window.MasterIdEngine?.parseNumeroCotacao?.(cot.numero_documento) ?? null)}/>
+      )}
+
+      {(tab === 'imagens' || tab === 'documentos') && window.CfArquivosFornecedor && (
+        <window.CfArquivosFornecedor tipo={tab} cot={cot} numeroCotacao={cot.dados_envio?.header?.numero_cotacao ?? (window.MasterIdEngine?.parseNumeroCotacao?.(cot.numero_documento) ?? null)}/>
       )}
 
       {verResp && <FECotacaoRespostaModal cot={cot} onClose={() => setVerResp(false)}/>}

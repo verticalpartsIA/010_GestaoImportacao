@@ -1,6 +1,6 @@
 /* ============================================================
    gatilhos-engine.js
-   Motor de "Gatilhos & Prazo" — cada nó nasce automaticamente quando
+   Motor de "Prazos & Pendências" (antiga "Gatilhos & Prazo") — cada nó nasce automaticamente quando
    o evento anterior da cadeia acontece (EventosFluxo), e fecha quando
    o próprio evento dele acontece. Cadeia de tarefas por Nº da Cotação,
    igual dependência de tarefas em ProjectLibre/MS Project — hoje só
@@ -23,8 +23,8 @@
   function sb() { return (window.__VP_SB || {}).sb; }
 
   const SLA_HORAS = {
-    SLA_FORNECEDOR: 48,
-    PRECIFICACAO: 2,               // 29/09: era 5h — pedido do usuário
+    /* 24/10/2026 (Gelson): o tempo do fornecedor é só ACOMPANHADO (a tela mostra quanto já passou), nunca gera atraso — SLA_FORNECEDOR sem prazo. */
+    PRECIFICACAO: 4,               // 24/10: 4h em horário comercial (08–18 BRT, seg–sex, sem feriados) — decisão do Gelson; era 2h (29/09) e antes 5h
     /* 10 dias (23/08, Gelson) — não é mais só um SLA informativo: é o
        limiar do "Cemitério". Depois disso, verificarPrazos() marca
        status 'revisao_necessaria' e a tela de Gatilhos destaca "parado
@@ -39,10 +39,8 @@
     AVAL_PAGAMENTO: 4,
     NEGOCIACAO_COMPRA: 7 * 24,     // 168h
     EMBARQUE_CHEGADA: 90 * 24,     // 2160h
-    /* 03/10: "Proposta pronta — aguardando envio manual" não tinha prazo, então
-       uma proposta parada desde agosto nunca aparecia como atrasada. 24h úteis
-       é uma escolha minha (o usuário não passou número) — ajuste aqui. */
-    PROPOSTA_PREP: 24,
+    /* 24/10/2026 (decisão do Gelson, Q-11): "Proposta pronta — aguardando envio manual" NÃO tem prazo.
+       Só lembrete visual: o SLA de 24h era escolha minha, nunca aprovado, e gerava alarme em rascunho antigo. */
   };
 
   /* Prazos que correm em dia corrido (espera do cliente / navio). Os demais
@@ -71,9 +69,53 @@
     return new Date(t);
   }
 
+  /* SLA em HORÁRIO COMERCIAL (24/10/2026, Gelson): 08:00–18:00 BRT, segunda a sexta, sem feriados. O relógio só anda dentro do
+     expediente; evento fora dele (ex.: resposta do fornecedor às 23:58) começa a contar na próxima abertura. Só os nós listados
+     aqui usam este calendário — os demais seguem o cálculo de antes. BRT = UTC-3 fixo (o Brasil não tem horário de verão desde 2019). */
+  const SLA_COMERCIAL = { PRECIFICACAO: true };
+  const EXPEDIENTE = { ini: 8, fim: 18, deslocaMs: -3 * 3600000 };
+
+  /* Feriados que valem para o prazo (calendario_feriados.ativo e conta_no_sla), 'aaaa-mm-dd'. Vazio = só fim de semana. */
+  let feriadosSet = new Set();
+  let feriadosCarregadosEm = 0;
+  function definirFeriados(set) { feriadosSet = set instanceof Set ? set : new Set(set || []); feriadosCarregadosEm = Date.now(); }
+
+  /* Lê calendario_feriados no banco (cache de 10 min). Falha de leitura NÃO derruba o fluxo: segue com o que já tinha
+     (na pior hipótese, só fim de semana) e avisa no console. */
+  async function carregarFeriados() {
+    if (Date.now() - feriadosCarregadosEm < 600000) return feriadosSet;
+    const c = sb(); if (!c) return feriadosSet;
+    try {
+      const { data, error } = await c.from('calendario_feriados').select('data, conta_no_sla').eq('ativo', true);
+      if (error) throw error;
+      definirFeriados(new Set((data || []).filter((l) => l.conta_no_sla !== false).map((l) => l.data)));
+    } catch (e) { console.warn('[GatilhosEngine] calendario_feriados indisponível — prazo comercial usa só fim de semana', e); }
+    return feriadosSet;
+  }
+
+  function somarHorasComerciais(inicio, horas, feriados) {
+    const f = feriados || feriadosSet;
+    const H = 3600000, DIA = 24 * H;
+    let t = new Date(inicio).getTime() + EXPEDIENTE.deslocaMs;     // relógio de parede de Brasília, lido como UTC
+    let resto = horas * H;
+    let guarda = 0;
+    while (resto > 0 && guarda++ < 4000) {
+      const dia0 = Math.floor(t / DIA) * DIA;
+      const dow = new Date(dia0).getUTCDay();
+      const iso = new Date(dia0).toISOString().slice(0, 10);
+      const abre = dia0 + EXPEDIENTE.ini * H, fecha = dia0 + EXPEDIENTE.fim * H;
+      if (dow === 0 || dow === 6 || f.has(iso) || t >= fecha) { t = dia0 + DIA + EXPEDIENTE.ini * H; continue; }   // dia parado ou expediente acabou: próxima abertura
+      if (t < abre) t = abre;
+      const cabe = fecha - t;
+      if (resto <= cabe) { t += resto; resto = 0; } else { resto -= cabe; t = fecha; }
+    }
+    return new Date(t - EXPEDIENTE.deslocaMs);
+  }
+
   function prazoDe(key, inicio) {
     const h = SLA_HORAS[key];
     if (h == null) return null;
+    if (SLA_COMERCIAL[key]) return somarHorasComerciais(inicio, h);
     return SLA_CALENDARIO[key] ? new Date(new Date(inicio).getTime() + h * 3600000) : somarHorasUteis(inicio, h);
   }
 
@@ -81,6 +123,8 @@
      sem prazo (ex.: Proposta pronta), o calculado pelo SLA atual do nó. */
   function prazoEfetivo(g) {
     if (!g || String(g.evento_key || '').startsWith('LEMBRETE__')) return null;
+    /* 24/10/2026: as 4h comerciais da Precificação medem o tempo até a Financeiro ABRIR a cotação (existir precificação). Aberta = prazo cumprido, a etapa segue até a proposta nascer. */
+    if (g.iniciado_em) return null;
     if (g.prazo_em) return new Date(g.prazo_em);
     if (!g.nascido_em) return null;
     return prazoDe(g.evento_key, g.nascido_em);
@@ -104,9 +148,10 @@
 
   /* Lembretes de cobrança — nascem como um gatilho-filho (evento_key
      'LEMBRETE__<chaveDoPai>') quando o nó pai passa de X horas sem
-     fechar. Verificados sob demanda em verificarPrazos() — não há
-     cron neste projeto, então só atualiza quando alguém abre a tela
-     "Gatilhos & Prazo" (ver instrucaocompra.md). */
+     fechar. Verificados sob demanda em verificarPrazos() — nenhum cron
+     cria lembretes (o cron gatilhos-alerta-prazos-diario só avisa na
+     Central de Notificações), então só atualiza quando alguém abre a tela
+     "Prazos & Pendências" (ver instrucaocompra.md). */
   const LEMBRETES = {
     AGUARDA_CLIENTE:     { apósHoras: 7 * 24,  label: 'Cobrar cliente sobre a Proposta' },
     AGUARDA_ASSINATURA:  { apósHoras: 3 * 24,  label: 'Cobrar cliente sobre a assinatura do Contrato' },
@@ -114,9 +159,11 @@
 
   /* Resolvers de navegação (etapa 3) — dado o alvo_id gravado no nó,
      devolvem o `subsel` no formato que a rota de destino já espera (ver
-     app.jsx). Onde a tela ainda não aceita deep-link (Contrato de Venda,
-     Aval Financeiro, Projeto de Engenharia, Precificação), o nó só
-     declara `rota` — clique pousa na lista, sem subsel. */
+     app.jsx). Contrato de Venda e Aval Financeiro/Jurídico passaram a
+     aceitar deep-link (varredura de URLs de 09/10) — ver resolvers abaixo.
+     Onde a tela ainda não tem um registro específico pra abrir (Projeto de
+     Engenharia por cotação, P.I. ainda não criada), o nó só declara `rota`
+     — clique pousa na lista, sem subsel. */
   const resolverIdDireto = async (alvoId) => alvoId || null;
   const resolverEditProposta = async (alvoId) => (alvoId ? { __editId: alvoId } : null);
   /* 23/08 (achado real, Gelson): clicar em "Financeiro precificando" caía
@@ -137,6 +184,40 @@
     try { return await window.CotacaoElevadorFornecedorStore.getById(alvoId); }
     catch (e) { console.warn('[GatilhosEngine] resolverCotacaoFornecedor falhou', e); return null; }
   };
+  /* 09/10 (varredura de URLs) — AVAL_PAGAMENTO nasce em SINAL_PAGO/
+     AVAL_PAGAMENTO_CONFIRMADO (aval-financeiro-store.js), cujo alvoId já é
+     o id da PRÓPRIA linha de `avais_financeiros` — a tela (aval-financeiro.jsx)
+     agora lê a URL como id da PROPOSTA (`rotaId === r.proposta.id`), então
+     é preciso traduzir aval → proposta antes de navegar. */
+  const resolverAvalFinanceiroPorAval = async (alvoId) => {
+    if (!alvoId || !window.AvalFinanceiroStore) return null;
+    try { const av = await window.AvalFinanceiroStore.getById(alvoId); return av ? av.proposta_id : null; }
+    catch (e) { console.warn('[GatilhosEngine] resolverAvalFinanceiroPorAval falhou', e); return null; }
+  };
+  /* AGUARDA_BOLETO nasce em CONTRATO_VENDA_ASSINADO, cujo alvoId é o id do
+     próprio Contrato de Venda — mesma tradução acima, mas pelo vínculo
+     contrato_venda_id (CVStore.vincularContrato grava isso no aval). */
+  const resolverAvalFinanceiroPorContrato = async (alvoId) => {
+    if (!alvoId || !window.AvalFinanceiroStore) return null;
+    try { const av = await window.AvalFinanceiroStore.getByContratoVendaId(alvoId); return av ? av.proposta_id : null; }
+    catch (e) { console.warn('[GatilhosEngine] resolverAvalFinanceiroPorContrato falhou', e); return null; }
+  };
+  /* AVAL_JURIDICO nasce em CLIENTE_RESPONDEU_PROPOSTA (aprovada), cujo
+     alvoId é a proposta — sempre o caso de aval ligado a Proposta (nunca o
+     avulso por Contrato Instalador, "c-..."), ver AvalJuridicoStore.listarFila. */
+  const resolverAvalJuridico = async (alvoId) => (alvoId ? 'p-' + alvoId : null);
+  /* CONTRATO_ENVIADO/AGUARDA_ASSINATURA nascem em CLIENTE_RESPONDEU_PROPOSTA,
+     alvoId = proposta — mas o Contrato de Venda guarda/abre pelo PRÓPRIO id
+     (CVDashboard.drawerId), então resolve o contrato real desta proposta. */
+  const resolverContratoVendaPorProposta = async (alvoId) => {
+    const c = sb(); if (!c || !alvoId) return null;
+    try {
+      const { data } = await c.from('contratos_venda_equipamentos').select('id')
+        .eq('proposta_id', alvoId).or('status.is.null,status.neq.em_preenchimento')
+        .order('criado_em', { ascending: false }).limit(1).maybeSingle();
+      return data ? data.id : null;
+    } catch (e) { console.warn('[GatilhosEngine] resolverContratoVendaPorProposta falhou', e); return null; }
+  };
 
   /* Cada nó: { key, label, predecessores:[{key, rel}], nasce, fecha,
      fechamentoTipo, condicaoNasce(detalhe) opcional para branches,
@@ -148,12 +229,12 @@
       predecessores: [], nasce: 'FORMULARIO_PREENCHIDO', fecha: 'COTACAO_ENVIADA_FORNECEDOR',
       fechamentoTipo: 'automatico', rota: 'formulario-elevador', resolverSubsel: resolverIdDireto },
 
-    { key: 'SLA_FORNECEDOR', label: 'Aguardando resposta do Fornecedor (SLA 48h)',
+    { key: 'SLA_FORNECEDOR', label: 'Aguardando resposta do Fornecedor',
       predecessores: [{ key: 'FORMULARIO', rel: 'FS' }],
       nasce: 'COTACAO_ENVIADA_FORNECEDOR', fecha: 'FORNECEDOR_RESPONDEU',
       fechamentoTipo: 'automatico', rota: 'cotacao-fornecedor-detail', resolverSubsel: resolverCotacaoFornecedor },
 
-    { key: 'PRECIFICACAO', label: 'Financeiro precificando (SLA 2h)',
+    { key: 'PRECIFICACAO', label: 'Financeiro precificando (4h comerciais para abrir)',
       predecessores: [{ key: 'SLA_FORNECEDOR', rel: 'FS' }],
       nasce: 'FORNECEDOR_RESPONDEU', fecha: 'PROPOSTA_ELABORADA',
       fechamentoTipo: 'automatico', rota: 'precificacao', resolverSubsel: resolverPrecificacaoElevador },
@@ -172,7 +253,7 @@
       predecessores: [{ key: 'AGUARDA_CLIENTE', rel: 'FS' }],
       nasce: 'CLIENTE_RESPONDEU_PROPOSTA',
       condicaoNasce: (detalhe) => (detalhe || {}).resposta === 'aprovada',
-      fecha: 'CONTRATO_VENDA_ENVIADO', fechamentoTipo: 'automatico', rota: 'contrato-venda-equipamentos' },
+      fecha: 'CONTRATO_VENDA_ENVIADO', fechamentoTipo: 'automatico', rota: 'contrato-venda-equipamentos', resolverSubsel: resolverContratoVendaPorProposta },
 
     { key: 'PROJETO_ENVIADO', label: 'Projeto de Engenharia enviado ao Cliente (SLA 24h)',
       predecessores: [{ key: 'AGUARDA_CLIENTE', rel: 'FS' }, { key: 'CONTRATO_ENVIADO', rel: 'SS' }],
@@ -183,19 +264,19 @@
     { key: 'AGUARDA_ASSINATURA', label: 'Aguardando assinatura do Contrato (SLA 5 dias)',
       predecessores: [{ key: 'CONTRATO_ENVIADO', rel: 'FS' }],
       nasce: 'CONTRATO_VENDA_ENVIADO', fecha: 'CONTRATO_VENDA_ASSINADO',
-      fechamentoTipo: 'automatico', rota: 'contrato-venda-equipamentos' },
+      fechamentoTipo: 'automatico', rota: 'contrato-venda-equipamentos', resolverSubsel: resolverContratoVendaPorProposta },
 
     { key: 'AGUARDA_BOLETO', label: 'Aguardando pagamento do Boleto (SLA 3 dias)',
       predecessores: [{ key: 'AGUARDA_ASSINATURA', rel: 'FS' }],
       nasce: 'CONTRATO_VENDA_ASSINADO', fecha: 'SINAL_PAGO',
       fechamentoTipo: 'manual' /* Financeiro clica "Boleto pago" — AvalFinanceiroStore.confirmarSinal() */,
-      rota: 'aval-financeiro' },
+      rota: 'aval-financeiro', resolverSubsel: resolverAvalFinanceiroPorContrato },
 
     { key: 'AVAL_PAGAMENTO', label: 'Aguardando Aval de Pagamento (SLA 4h)',
       predecessores: [{ key: 'AGUARDA_BOLETO', rel: 'FS' }],
       nasce: 'SINAL_PAGO', fecha: 'AVAL_PAGAMENTO_CONFIRMADO',
       fechamentoTipo: 'manual' /* Financeiro clica "Dar Aval de Pagamento" — confirmarAvalPagamento() */,
-      rota: 'aval-financeiro' },
+      rota: 'aval-financeiro', resolverSubsel: resolverAvalFinanceiroPorAval },
 
     /* Aval Jurídico (manual) — desde 29/09 (2ª rodada) abre JUNTO com o
        Aval Financeiro, quando o cliente aprova a Proposta (antes: só depois
@@ -207,15 +288,27 @@
       nasce: 'CLIENTE_RESPONDEU_PROPOSTA',
       condicaoNasce: (detalhe) => (detalhe || {}).resposta === 'aprovada',
       fecha: 'AVAL_JURIDICO_APROVADO',
-      fechamentoTipo: 'manual', rota: 'aval-juridico' },
+      fechamentoTipo: 'manual', rota: 'aval-juridico', resolverSubsel: resolverAvalJuridico },
+
+    /* Aval Engenharia (08/10/2026) — terceiro aval, POR COTAÇÃO: o cliente
+       assina o Projeto de Instalação (Projeto de Elevadores › Assinatura).
+       Abre junto com os outros dois quando o cliente aprova a Proposta e
+       fecha sozinho quando o ÚLTIMO projeto da cotação é assinado (o banco
+       enfileira PROJETO_INSTALACAO_ASSINADO — ver fluxo-pendentes.js). */
+    { key: 'AVAL_ENGENHARIA', label: 'Aguardando assinatura do Projeto de Instalação (Aval Engenharia)',
+      predecessores: [{ key: 'AGUARDA_CLIENTE', rel: 'FS' }],
+      nasce: 'CLIENTE_RESPONDEU_PROPOSTA',
+      condicaoNasce: (detalhe) => (detalhe || {}).resposta === 'aprovada',
+      fecha: 'PROJETO_INSTALACAO_ASSINADO',
+      fechamentoTipo: 'automatico', rota: 'eng-projeto-elevadores' },
 
     { key: 'COMPRA_LIBERADA', label: 'Compra ao Fornecedor liberada',
-      predecessores: [{ key: 'AVAL_PAGAMENTO', rel: 'FS' }, { key: 'AVAL_JURIDICO', rel: 'FS' }],
+      predecessores: [{ key: 'AVAL_PAGAMENTO', rel: 'FS' }, { key: 'AVAL_JURIDICO', rel: 'FS' }, { key: 'AVAL_ENGENHARIA', rel: 'FS' }],
       /* Nasce só quando OS DOIS avais manuais já aconteceram (o último a
          chegar dispara). `nasce` continua sendo o de sempre pra quem lê o
          grafo; `requerEventos` é a condição real (ver onEvento). */
       nasce: 'AVAL_PAGAMENTO_CONFIRMADO',
-      requerEventos: ['AVAL_PAGAMENTO_CONFIRMADO', 'AVAL_JURIDICO_APROVADO'],
+      requerEventos: ['AVAL_PAGAMENTO_CONFIRMADO', 'AVAL_JURIDICO_APROVADO', 'PROJETO_INSTALACAO_ASSINADO'],
       fecha: 'COMPRA_FORNECEDOR_INICIADA',
       fechamentoTipo: 'automatico' /* botão "Decidir Comprar" já existente em Cotação a Fornecedor */,
       rota: 'cotacao-fornecedor-detail', resolverSubsel: resolverCotacaoFornecedor },
@@ -240,8 +333,8 @@
 
     { key: 'EMBARQUE_CHEGADA', label: 'Embarque até chegada no Brasil (SLA 90 dias)',
       predecessores: [{ key: 'NEGOCIACAO_COMPRA', rel: 'FS' }],
-      nasce: 'COMPRA_FORNECEDOR_CONFIRMADA', fecha: null /* ainda sem evento — logística não é wired em eventos_fluxo */,
-      fechamentoTipo: 'manual', rota: 'cotacao-fornecedor-detail', resolverSubsel: resolverCotacaoFornecedor },
+      nasce: 'COMPRA_FORNECEDOR_CONFIRMADA', fecha: 'EMBARQUE_CHEGOU_BRASIL' /* mesmo evento que fecha EMBARQUE_CHEGADA_BRASIL (canal aduaneiro atribuído) */,
+      fechamentoTipo: 'automatico', rota: 'cotacao-fornecedor-detail', resolverSubsel: resolverCotacaoFornecedor },
 
     /* ==========================================================
        Extensão 23/08 — checklist completo de 73 etapas (ver Gatilhos.md
@@ -625,6 +718,7 @@
     const now = new Date();
     const nowIso = now.toISOString();
     const slaHoras = SLA_HORAS[node.key] ?? null;
+    if (SLA_COMERCIAL[node.key]) await carregarFeriados();   // prazo comercial precisa do calendário de feriados
     const prazoEm = prazoDe(node.key, now);
     const relPrincipal = (node.predecessores[0] || {}).rel || 'FS';
     const row = {
@@ -726,6 +820,11 @@
         const predKey = (node.predecessores[0] || {}).key;
         const predRow = predKey ? await garantirNo(numeroCotacao, predKey) : null;
         await nascerNo(numeroCotacao, node, predRow ? predRow.id : null, alvoId);
+        /* Compra liberada pelos 3 avais → nasce a P.I. automática (rascunho). Só onde o PIStore existe
+           (sistema interno); nas páginas públicas a tela de P.I. faz a varredura de segurança. */
+        if (node.key === 'COMPRA_LIBERADA' && window.PIStore && window.PIStore.criarRascunhoAutomatico) {
+          await window.PIStore.criarRascunhoAutomatico(numeroCotacao);
+        }
       }
     } catch (e) {
       console.warn('[GatilhosEngine] onEvento falhou', e);
@@ -744,12 +843,12 @@
     return { rota: node.rota, subsel };
   }
 
-  /* verificarPrazos(rows) — chamado ao carregar a tela "Gatilhos & Prazo"
-     (não há cron neste projeto). Recebe os gatilhos automáticos já
+  /* verificarPrazos(rows) — chamado ao carregar a tela "Prazos & Pendências"
+     (nenhum cron faz isto; ver LEMBRETES acima). Recebe os gatilhos automáticos já
      carregados em memória, nasce lembretes de cobrança quando o prazo
      do nó pai já passou do limite parcial (LEMBRETES), e marca
-     AGUARDA_CLIENTE como "revisao_necessaria" quando estourar os 15
-     dias sem fechar. Retorna true se algo mudou (chamador deve
+     AGUARDA_CLIENTE como "revisao_necessaria" quando estourar o SLA
+     (SLA_HORAS.AGUARDA_CLIENTE = 10 dias corridos) sem fechar. Retorna true se algo mudou (chamador deve
      recarregar). */
   async function verificarPrazos(rows) {
     const c = sb(); if (!c) return false;
@@ -821,5 +920,5 @@
   }
 
   window.GatilhosEngine = { NODES, SLA_HORAS, LEMBRETES, onEvento, verificarPrazos, fecharLembrete, fecharComMotivo, navegarPara, profundidade,
-    nodeByKey, somarHorasUteis, prazoEfetivo, emAtraso, ehRetroativo };
+    nodeByKey, somarHorasUteis, somarHorasComerciais, definirFeriados, carregarFeriados, prazoEfetivo, emAtraso, ehRetroativo };
 }());

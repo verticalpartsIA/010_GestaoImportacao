@@ -25,17 +25,26 @@ const ROUTE_TITLE = {
   almoxarifado: "Almoxarifado",
   "carga-maquina": "Carga Máquina",
   "montagem-produto": "Montagem do Produto",
+  "evolucao-fabricacao": "Evolução da Fabricação",
+  "fabricacao-corrimao": "Fabricação Corrimão",
+  "fabricacao-corte": "Fabricação Corte",
   "simulacao-producao": "Simulação",
   "relatorios-pcp": "Relatórios do PCP",
   expedicao: "Expedição",
+  separacao: "Separação",
+  etiquetas: "Etiquetas",
   "emissao-nf": "Emissão de NF",
   pcp: "PCP — Planejamento e Controle da Produção",
+  mes: "MES — Sistema de Execução da Manufatura",
+  "mes-cadastros": "MES — Cadastros do chão de fábrica",
   leads: "Pipeline de Leads",
   "lead-detail": "Detalhe de Lead",
   formularios: "Formulários",
   "dossier-obra": "Dossier da Obra",
   "status-obras": "Status de Obras",
   "formulario-elevador": "Formulário — Elevador",
+  "formulario-escada": "Formulário — Escada Rolante",
+  "formulario-esteira": "Formulário — Esteira Rolante",
   "formulario-quadro-comando": "Formulário — Quadro de Comando",
   "controle-cotacoes": "Controle de Cotações",
   "contratos-sociais": "Contratos Social",
@@ -45,12 +54,11 @@ const ROUTE_TITLE = {
   propostas: "Propostas Comerciais",
   "proposta-editor": "Editor de Proposta",
   engenharia: "Projetos de Engenharia",
-  "ncm-catalogo": "Catálogo de Produtos",
+  "ncm-catalogo": "Catálogo Siscomex",
   "ncm-kanban": "Solicitações NCM",
   "ncm-detail": "Detalhe da Solicitação NCM",
   "eng-projeto-elevadores": "Projeto de Elevadores",
   "eng-configurador": "Projeto de Equipamento",
-  "desenho-tecnico": "Desenho Técnico ER | ES",
   "ficha-tecnica": "Ficha Técnica",
   "solicitacoes-produto": "Solicitações de Produto",
   juridico: "Contratos & Minutas",
@@ -59,18 +67,21 @@ const ROUTE_TITLE = {
   "contrato-instalador": "Contrato Instalador",
   vistorias: "Resultado Vistorias de Obras",
   instalacao: "Instalação em Campo",
+  "mapa-obras": "Mapa de Obras",
   "central-documentos": "Central de Documentos",
   art: "ART de Instalação",
   cronograma: "Cronograma de Instalação",
   databook: "Data Book & Termo",
   handover: "Entrega Final",
+  "repositorio-documentos": "Repositório Documentos",
   "rh-homologacao": "Homologação de Instaladores",
   "cadastro-instaladores": "Empresas Instaladoras",
   "cadastro-custos": "Atualização de Custos",
-  importacao: "Importação",
+  importacao: "Rastreio Marítimo",
   "importacao-detail": "Detalhe de Embarque",
   "importacao-rastreamento": "Rastreamento de Navios",
   compras: "Importação Varejo",
+  "cotacoes-varejo": "Cotações de Varejo",
   financeiro: "Prazos & Pendências",
   comissoes: "Comissões",
   "pagamentos-instalador": "Pagamentos a Instaladores",
@@ -143,7 +154,7 @@ function EmConstrucaoPage({ titulo, descricao }) {
    3. ASYNC_FETCH_ROUTES — subsel é o registro inteiro, sem suporte a id
       solto no componente; app.jsx busca no Supabase e só then popula
       subsel (renderPage mostra "Carregando…" enquanto isso). */
-const SYNC_PASSTHROUGH_ROUTES = new Set(["dossier-obra", "vistorias", "formulario-elevador", "formulario-quadro-comando", "central-documentos", "cadastro-custos", "ficha-tecnica", "solicitacoes-produto", "precificacao", "linha-do-tempo", "inbox"]);
+const SYNC_PASSTHROUGH_ROUTES = new Set(["dossier-obra", "vistorias", "formulario-elevador", "formulario-escada", "formulario-esteira", "formulario-quadro-comando", "central-documentos", "cadastro-custos", "ficha-tecnica", "solicitacoes-produto", "precificacao", "linha-do-tempo", "inbox"]);
 const WRAPPED_ID_KEY = { "proposta-editor": "__editId" };
 
 /* Cada fetcher recebe o id da URL e resolve pro registro (ou null se não
@@ -328,7 +339,7 @@ function App() {
     "emissao-nf": ["financeiro", "admin"],
     "aval-juridico": ["juridico", "admin"],
     comissoes: ["financeiro", "admin"],
-    "pagamentos-instalador": ["financeiro", "admin"],
+    "pagamentos-instalador": ["financeiro", "engenharia", "admin"],
     logs: ["admin"],
     configuracoes: ["admin"],
   };
@@ -355,6 +366,8 @@ function App() {
       case "crm-analise": return <CRMAnalisePage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "formularios": return <FormulariosPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "formulario-elevador": return <FormularioElevadorPage setRoute={setRoute} subsel={subsel}/>;
+      case "formulario-escada": return <FormularioElevadorPage setRoute={setRoute} subsel={subsel} tipoPadrao="escada"/>;
+      case "formulario-esteira": return <FormularioElevadorPage setRoute={setRoute} subsel={subsel} tipoPadrao="esteira"/>;
       case "formulario-quadro-comando": return <QuadroComandoPage setRoute={setRoute} subsel={subsel}/>;
       case "controle-cotacoes": return <ControleCotacoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "contratos-sociais": return <ContratosSociaisPage/>;
@@ -373,30 +386,32 @@ function App() {
       case "ncm-detail": return <NcmDetailPage product={subsel?.ncmProduct} setRoute={setRoute}/>;
       case "eng-projeto-elevadores": return <window.ProjetoElevadorPage setRoute={setRoute}/>;
       case "eng-configurador": return <ConfiguradorPage setRoute={setRoute}/>;
-      case "desenho-tecnico": return <DesenhoTecnicoPage setRoute={setRoute}/>;
       case "ficha-tecnica": return <FichaTecnicaPage fichaId={subsel}/>; /* deep-link support: /nova-ficha-tecnica */
-      case "solicitacoes-produto": return <SolicitacoesProdutoPage solicitacaoId={subsel}/>; /* deep-link support */
+      case "solicitacoes-produto": return <SolicitacoesProdutoPage solicitacaoId={subsel} setRoute={setRoute} setSubsel={setSubsel}/>; /* deep-link support */
       case "juridico": return <JuridicoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "contrato-editor": return <ContratoEditorPage contrato={subsel} setRoute={setRoute} onSaved={() => {}} />;
       case "contrato-venda-equipamentos": return <ContratoVendaEquipamentosPage/>;
       case "contrato-instalador": return <ContratoInstaladorPage/>;
       case "vistorias-envio": return <VistoriasEnvio setRoute={setRoute}/>;
       case "vistorias": return <VistoriasObras obraId={subsel} setRoute={setRoute}/>;
-      case "instalacao": return <InstalacaoPage/>;
+      case "instalacao": return <InstalacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "mapa-obras": return <window.MapaObrasPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "central-documentos": return <window.CentralDocumentosPage setRoute={setRoute} setSubsel={setSubsel} subsel={subsel}/>;
-      case "art": return <ArtPage setRoute={setRoute}/>;
+      case "art": return <window.ObraArtPage/>;
       case "cronograma": return <CronogramaPage/>;
       case "databook": return <DataBookPage setRoute={setRoute}/>;
       case "handover": return <window.HandoverManutencaoPage/>;
+      case "repositorio-documentos": return <window.RepositorioDocumentosPage/>;
       case "importacao": return <ImportacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "importacao-detail": return <ImportacaoDetail embarque={subsel} setRoute={setRoute}/>;
       case "importacao-rastreamento": return <ImportacaoRastreamento setRoute={setRoute} setSubsel={setSubsel}/>;
       case "compras": return <window.ImportacaoVarejoPage setRoute={setRoute}/>;
+      case "cotacoes-varejo": return <window.CotacoesVarejoPage setRoute={setRoute}/>;
       case "financeiro": return <FinanceiroPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "aval-financeiro": return <window.AvalFinanceiroPage setRoute={setRoute}/>;
       case "aval-juridico": return <window.AvalJuridicoPage setRoute={setRoute}/>;
       case "comissoes": return <ComissoesPage/>;
-      case "pagamentos-instalador": return <PagamentosInstaladorPage/>;
+      case "pagamentos-instalador": return <PagamentosInstaladorPage setRoute={setRoute}/>;
       case "rh-homologacao": return <window.RHHomologacaoPage/>;
       case "cadastro-instaladores": return <window.CadastroInstaladoresPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "cadastro-custos": return <window.CadastroCustosPage setSubsel={setSubsel} subsel={subsel}/>;
@@ -405,11 +420,18 @@ function App() {
       case "almoxarifado": return <window.AlmoxarifadoPage/>;
       case "carga-maquina": return <window.CargaMaquinaPage/>;
       case "expedicao": return <window.ExpedicaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "separacao": return <window.SeparacaoPage/>;
+      case "etiquetas": return <window.EtiquetasPage/>;
       case "emissao-nf": return <window.EmissaoNFPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "relatorios-pcp": return <window.RelatoriosPCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "simulacao-producao": return <window.SimulacaoProducaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "montagem-produto": return <window.MontagemProdutoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "evolucao-fabricacao": return <window.EvolucaoFabricacaoQuadroPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "fabricacao-corrimao": return <window.FabricacaoCorrimaoPage/>;
+      case "fabricacao-corte": return <window.FabricacaoCortePage/>;
       case "pcp": return <window.PCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "mes": return <window.MESPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "mes-cadastros": return <window.MESCadastrosPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "pi-importacao": return <window.PIPage/>;
       case "rfq-importacao": return <window.RFQPage/>;
       case "ims-importacao": return <window.IMSPage/>;
@@ -487,10 +509,9 @@ function App() {
               { value: "propostas", label: "Propostas (wizard)" },
               { value: "proposta-editor", label: "📝 Editor de Proposta (3 eq.)" },
               { value: "engenharia", label: "Engenharia + Laudo" },
-              { value: "ncm-catalogo", label: "📋 Catálogo de Produtos" },
+              { value: "ncm-catalogo", label: "📋 Catálogo Siscomex" },
               { value: "eng-projeto-elevadores", label: "🛗 Projeto de Elevadores" },
               { value: "eng-configurador", label: "🛠 Projeto de Equipamento" },
-              { value: "desenho-tecnico", label: "📐 Desenho Técnico ER | ES" },
               { value: "ficha-tecnica", label: "📋 Ficha Técnica" },
               { value: "juridico", label: "Jurídico (✂️ redator)" },
               { value: "contrato-venda-equipamentos", label: "📄 Contrato Venda de Equipamentos" },
@@ -500,11 +521,13 @@ function App() {
               { value: "art", label: "ART de Instalação" },
               { value: "cronograma", label: "Cronograma de Instalação" },
               { value: "databook", label: "Data Book & Termo" },
-              { value: "handover", label: "📦 Handover & Pós-venda" },
+              { value: "repositorio-documentos", label: "📁 Repositório Documentos" },
+              { value: "handover", label: "📦 Entrega Final" },
               { value: "importacao", label: "Importação (lista)" },
               { value: "importacao-detail", label: "Detalhe de Embarque" },
               { value: "importacao-rastreamento", label: "🛰️ Mapa de Navios" },
               { value: "compras", label: "Importação Varejo" },
+              { value: "cotacoes-varejo", label: "Cotações de Varejo" },
               { value: "inbox", label: "📧 Inbox" },
               { value: "financeiro", label: "⏰ Prazos & Pendências" },
               { value: "comissoes", label: "Comissões" },

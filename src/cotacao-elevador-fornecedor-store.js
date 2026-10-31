@@ -342,11 +342,33 @@
 
   /* ---------- 06/10 — assunto e corpo do RFQ em PT-BR / EN-US / 中文 ----------
      Fonte única pro Formulário de Elevador e pro Quadro de Comando. */
-  function mensagemRfq({ numeroDocumento, numeroTxt, descricaoPt, descricaoEn, descricaoZh, url, linkJaEnviadoEmDoisCanais }) {
-    const subject = `Cotação técnica ${numeroDocumento} — VerticalParts | Technical quotation ${numeroDocumento} — VerticalParts | 技术询价 ${numeroDocumento} — VerticalParts`;
+  /* 20/10 — `novaVersao` ({ revisao, anterior, anteriorRespondida }) só vem
+     preenchido quando este envio é uma revisão de um documento que JÁ foi
+     enviado ao MESMO fornecedor: o aviso em PT/EN/中文 evita que ele ache que
+     é o mesmo formulário de novo. Sem `novaVersao`, o texto é o de sempre. */
+  function avisoNovaVersao(nv) {
+    if (!nv || !nv.revisao) return '';
+    const ant = nv.anterior || '';
+    const respondida = !!nv.anteriorRespondida;
+    return (
+      `⚠ NOVA VERSÃO / NEW VERSION / 新版本 — Revisão / Revision / 修订 ${nv.revisao}\n` +
+      (respondida
+        ? `Esta é uma nova versão da cotação ${ant}, que já foi precificada por vocês. As especificações podem ter mudado: por favor cotem novamente usando ESTE novo link e desconsiderem o anterior.\n` +
+          `This is a new version of quotation ${ant}, which you have already priced. The specifications may have changed: please quote again using THIS new link and disregard the previous one.\n` +
+          `这是询价 ${ant} 的新版本，您此前已报过价。规格可能已变更：请使用此新链接重新报价，并忽略之前的链接。`
+        : `Esta é uma nova versão da cotação ${ant} enviada anteriormente (ainda sem resposta). Não é o mesmo documento: por favor responda usando ESTE novo link e desconsidere o anterior.\n` +
+          `This is a new version of quotation ${ant} sent earlier (no reply yet). It is not the same document: please reply using THIS new link and disregard the previous one.\n` +
+          `这是此前发送的询价 ${ant} 的新版本（尚未收到回复）。这不是同一份文件：请使用此新链接回复，并忽略之前的链接。`) +
+      `\n\n`
+    );
+  }
+
+  function mensagemRfq({ numeroDocumento, numeroTxt, descricaoPt, descricaoEn, descricaoZh, url, linkJaEnviadoEmDoisCanais, novaVersao }) {
+    const sufRev = novaVersao && novaVersao.revisao ? ` (Revisão ${novaVersao.revisao} / Revision ${novaVersao.revisao} / 修订 ${novaVersao.revisao})` : '';
+    const subject = `Cotação técnica ${numeroDocumento} — VerticalParts | Technical quotation ${numeroDocumento} — VerticalParts | 技术询价 ${numeroDocumento} — VerticalParts${sufRev}`;
     const numEn = (numeroTxt || '').replace('Cotação Nº', 'Quotation No.');
     const numZh = (numeroTxt || '').replace('Cotação Nº', '询价编号');
-    let text =
+    let text = avisoNovaVersao(novaVersao) +
       `🇧🇷 Português (Brasil)\n` +
       `Solicitação de cotação técnica ${numeroDocumento}${numeroTxt || ''} — VerticalParts\n` +
       `Segue o link com as especificações ${descricaoPt} para cotação:\n${url}\n\n` +
@@ -457,11 +479,37 @@
     const ehQuadroComando = categoria === 'quadro_comando';
     const tipo_formulario = ehQuadroComando ? 'quadro_comando' : tipoFormularioPara(unidades[0].tipo);
 
+    /* 23/10 — achado real do Codex (PR #1073): esta busca é escopada só por
+       formulário+categoria, NUNCA por fornecedor — e tem que continuar
+       assim. numero_documento é UNIQUE GLOBAL na tabela (migration
+       20260722250000) e masterId() não leva o nome do fornecedor no
+       código — só categoria+Nº cotação+revisão. Se 2 fornecedores
+       cotassem a mesma categoria do mesmo formulário com sequências de
+       letra INDEPENDENTES, o 1º envio de cada um geraria o MESMO
+       numero_documento ("VPEL-EL0990-A" pros dois) e o 2º insert
+       quebraria por violar a constraint única. A letra tem que ser uma
+       sequência ÚNICA por (formulário, categoria), compartilhada entre
+       todos os fornecedores que cotam ali — é o que já garante
+       numero_documento nunca repetir. (Cheguei a escopar por fornecedor
+       nesta mesma sessão — revertido depois de confirmar a constraint.) */
     const { data: existentes, error: exErr } = await c.from('cotacoes_elevador_fornecedor')
       .select('revisao').eq('formulario_elevador_id', formularioElevadorId).eq('categoria_produto', categoria);
     if (exErr) throw exErr;
-    const maiorRevisao = (existentes || []).reduce((max, r) => (r.revisao && r.revisao > max ? r.revisao : max), '');
-    const revisao = (existentes && existentes.length) ? window.MasterIdEngine.proximaRevisao(maiorRevisao || null) : null;
+    /* 20/10 — compara por tamanho e depois por letra: "AA" vem depois de "Z"
+       (a comparação de texto simples punha "AA" antes de "B"). */
+    const maiorRevisao = (existentes || []).reduce((max, r) => {
+      if (!r.revisao) return max;
+      const maior = r.revisao.length !== max.length ? r.revisao.length > max.length : r.revisao > max;
+      return maior ? r.revisao : max;
+    }, '');
+    /* 23/10 (pedido do usuário) — a PRÓPRIA versão original passa a ganhar
+       letra (sempre "A" pro 1º envio desta categoria/formulário, a
+       QUALQUER fornecedor), não só os reenvios. Antes: 1ª cotação sem
+       letra, 2ª vira "A", 3ª vira "B"... Agora: 1ª já nasce "A", 2ª "B",
+       3ª "C"... "desde quando o formulário volte" — cotações já existentes
+       (antes de hoje) continuam gravadas
+       como foram mandadas de verdade ao fornecedor; não é reescrito aqui. */
+    const revisao = window.MasterIdEngine.proximaRevisao(maiorRevisao || null);
     const numero_documento = window.MasterIdEngine.masterId({ categoriaProduto: categoria, numeroCotacao, revisao });
 
     const row = {
@@ -662,15 +710,46 @@
     }).sort((a, b) => String(b.quando || '').localeCompare(String(a.quando || '')));
   }
 
-  /* ---------- Portal público (/cotacao-elevador-fornecedor/:token) ---------- */
+  /* ---------- Portal público (/cotacao-elevador-fornecedor/:token) ----------
+     Segurança real (#571, F1): a página pública fala com o banco por RPC `public_cef_*` (recebem só o TOKEN e mexem só
+     naquela cotação; devolvem só o que a página mostra — sem destinatários, envios, câmbio ou o `_meta` da resposta; a
+     regra de status e a lista de campos aceitos na resposta ficam no servidor). Interruptor de emergência:
+     localStorage.vp_public_rpc = 'off' volta ao caminho antigo (tabela direto). Se a RPC falhar por rede/erro ou ainda
+     não existir no banco, cada função cai no caminho antigo (enquanto a tabela ainda está aberta). Só o portal público
+     chama getByToken/marcarVisualizado/salvarResposta — o app interno usa getById e não muda. */
+  function usarRpcPublica() {
+    try { return localStorage.getItem('vp_public_rpc') !== 'off'; } catch (e) { return true; }
+  }
+  async function chamarRpcPublica(c, nome, args) {
+    try {
+      const { data, error } = await c.rpc(nome, args);
+      if (error) { console.warn('[CotacaoFornecedor] RPC ' + nome + ' falhou — usando caminho antigo', error); return { falhou: true }; }
+      return { data };
+    } catch (e) { console.warn('[CotacaoFornecedor] RPC ' + nome + ' indisponível — usando caminho antigo', e); return { falhou: true }; }
+  }
+  function erroDaRpc(res) {
+    const e = String((res && res.erro) || '');
+    if (e === 'link_invalido') return new Error('Link inválido ou expirado · Invalid or expired link · 链接无效或已过期');
+    if (e.indexOf('status_') === 0) return new Error('Esta cotação já foi respondida ou não aceita mais respostas · This quotation was already answered or no longer accepts answers · 该询价已回复或不再接受回复 (' + e.slice(7) + ')');
+    return new Error('Não foi possível enviar. Tente novamente · Could not submit, please try again · 无法提交，请重试');
+  }
+
   async function getByToken(token) {
     const c = sb(); if (!c || !token) return null;
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_cef_obter', { p_token: token });
+      if (!r.falhou) return r.data || null;
+    }
     const { data } = await c.from('cotacoes_elevador_fornecedor').select('*').eq('token', token).maybeSingle();
     return data || null;
   }
 
   async function marcarVisualizado(token) {
     const c = sb();
+    if (c && token && usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_cef_visualizado', { p_token: token });
+      if (!r.falhou) return (r.data && r.data.ok) ? r.data.rec : null;
+    }
     const cur = await getByToken(token);
     if (!cur) return null;
     if (cur.status !== 'enviado') return cur;
@@ -704,14 +783,52 @@
     }
   }
 
+  /* ---------- Histórico de PREÇO do fornecedor (07/10/2026) ----------
+     `respostas` é sobrescrita a cada nova resposta (formulário do link reaberto ou registro por e-mail com
+     "substituir"), então o preço anterior se perdia. Aqui compara antes × depois e grava UMA linha em vp_logs
+     (alvo_id = id desta cotação) com de → para; a linha do tempo das Tratativas (TratativasStore.listarHistoricoInterno)
+     lê isso. Só registra se algo mudou (ou na 1ª vez que há preço). Best-effort: nunca quebra o fluxo de resposta. */
+  function precosDe(r) {
+    const out = {};
+    if (!r) return out;
+    (r.itens || []).forEach((i) => {
+      const nome = i.unidade_identificador || i.unidade_id || 'Equipamento';
+      if (i.preco_unitario !== '' && i.preco_unitario != null && !isNaN(Number(i.preco_unitario))) out[nome + ' (preço unitário)'] = Number(i.preco_unitario);
+    });
+    [['frete_internacional_usd', 'Frete internacional (US$)'], ['taxas_extras_usd', 'Taxas extras (US$)']].forEach(([k, nome]) => {
+      if (r[k] !== '' && r[k] != null && !isNaN(Number(r[k]))) out[nome] = Number(r[k]);
+    });
+    return out;
+  }
+  function diffPrecos(antes, depois) {
+    const a = precosDe(antes), d = precosDe(depois);
+    const nomes = [...new Set([...Object.keys(a), ...Object.keys(d)])];
+    const itens = nomes.filter((n) => a[n] !== d[n]).map((n) => ({ nome: n, antes: a[n] ?? null, depois: d[n] ?? null }));
+    return { itens, primeira: !Object.keys(a).length && Object.keys(d).length > 0 };
+  }
+  function registrarMudancaPreco(cur, novas, extra) {
+    try {
+      if (!window.VPLog || !cur) return;
+      const { itens, primeira } = diffPrecos(cur.respostas, novas);
+      if (!itens.length) return;
+      window.VPLog.registrar(Object.assign({
+        modulo: 'Cotação a Fornecedor',
+        acao: primeira ? 'Fornecedor informou os preços' : 'Preço do fornecedor atualizado',
+        alvo: cur.numero_documento, alvo_id: cur.id,
+        detalhe: { moeda: (novas && novas.moeda) || (cur.respostas && cur.respostas.moeda) || 'USD', itens },
+      }, extra || {}));
+    } catch (e) { console.warn('[CotacaoFornecedor] histórico de preço falhou', e); }
+  }
+
   /* respostas = { moeda, incoterm_porto, condicoes_pagamento, prazo_fabricacao,
      garantia, validade_dias, embalagem, container_no, documentos_embarque,
      observacoes_gerais, itens:[{unidade_id, modelo_fornecedor, floors_stops_doors,
      preco_unitario, preco_total, confirmacao_tecnica, confirmacao_tecnica_pt}] } */
   async function salvarResposta(token, respostas) {
     const c = sb();
-    const cur = await getByToken(token);
-    if (!cur) return null;
+    const viaRpc = !!(c && token && usarRpcPublica());
+    const cur = viaRpc ? null : await getByToken(token);
+    if (!viaRpc && !cur) return null;
     // Traduz cada "confirmação técnica" em paralelo — não atrasa o envio
     // sequencialmente item a item, e nunca bloqueia se a IA falhar.
     if (Array.isArray(respostas.itens) && respostas.itens.length) {
@@ -730,11 +847,31 @@
        Nunca bloqueia o envio se a API de câmbio falhar. */
     let cambioNaResposta = null;
     try { cambioNaResposta = (await window.CambioAPI.buscarUsdBrl()).valor; } catch (e) { /* segue sem — Precificação fica sem o congelado */ }
+    if (viaRpc) {
+      /* O servidor confere status, aceita só os campos do formulário, carimba IP/hora e grava o câmbio (faixa válida). */
+      const r = await chamarRpcPublica(c, 'public_cef_responder', {
+        p_token: token, p_respostas: respostas, p_meta: { ip, ua: navigator.userAgent }, p_cambio: cambioNaResposta,
+      });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        const rec = r.data.rec;
+        efeitosResposta({ ...rec, respostas: r.data.antes }, respostas, r.data.ip || ip);
+        return rec;
+      }
+    }
+    const atual = cur || await getByToken(token);
+    if (!atual) return null;
     const patch = {
       status: 'respondido', respostas: payload, responded_at: now, updated_at: now,
       cambio_na_resposta_usd_brl: cambioNaResposta,
     };
     await c.from('cotacoes_elevador_fornecedor').update(patch).eq('token', token);
+    efeitosResposta(atual, respostas, ip);
+    return { ...atual, ...patch };
+  }
+  /* Depois de gravar a resposta (RPC ou caminho antigo): histórico de preço, log e evento — iguais aos de antes. */
+  function efeitosResposta(cur, respostas, ip) {
+    registrarMudancaPreco(cur, respostas, { ator_nome: cur.fornecedor || 'Fornecedor', ator_setor: 'fornecedor' });
     if (window.VPLog) window.VPLog.registrar({
       ator_nome: cur.fornecedor || 'Fornecedor', ator_setor: 'fornecedor',
       modulo: 'Formulário de Elevadores', acao: 'respondeu a cotação de fornecedor',
@@ -745,7 +882,6 @@
       numeroCotacao: cur.dados_envio?.header?.numero_cotacao,
       alvoLabel: `${cur.fornecedor || 'Fornecedor'} · ${cur.numero_documento || ''}`, alvoId: cur.id,
     });
-    return { ...cur, ...patch };
   }
 
   /* ---------- Resposta do fornecedor REGISTRADA A PARTIR DE UM E-MAIL (Inbox, 04/10/2026) ----------
@@ -767,6 +903,7 @@
     const { data, error } = await c.from('cotacoes_elevador_fornecedor').update(patch).eq('id', id).select('id');
     if (error) throw error;
     if (!data || !data.length) throw new Error('Não consegui gravar a resposta (nenhuma linha alterada).');
+    registrarMudancaPreco(cur, respostas);
     if (window.VPLog) window.VPLog.registrar({
       modulo: 'Formulário de Elevadores', acao: 'Registrou a resposta do fornecedor a partir de um e-mail',
       alvo: cur.numero_documento, alvo_id: cur.id, detalhe: { email_id: o.emailId || null, substituiu: cur.status === 'respondido' },
@@ -861,6 +998,6 @@
     listarAnexosFormulario, urlAssinadaAnexoFormulario,
     gerar, marcarEnviado, listarPorFormulario, listarTodas, getById,
     getByToken, marcarVisualizado, salvarResposta, registrarRespostaPorEmail, getPublicIP,
-    decidirComprar, aprovar, listarComprasAguardandoEmbarque, excluirComMotivo,
+    decidirComprar, aprovar, listarComprasAguardandoEmbarque, excluirComMotivo, diffPrecos,
   };
 }());

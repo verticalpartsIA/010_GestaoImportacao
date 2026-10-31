@@ -72,7 +72,7 @@ const pt = (px) => Math.round(px * 0.75 * 100) / 100;
 
 function montarStyles() {
   return StyleSheet.create({
-    page: { fontFamily: 'Inter', fontSize: pt(15.5), color: TXT, paddingTop: pt(63), paddingBottom: pt(95), paddingLeft: pt(58), paddingRight: pt(58) },
+    page: { fontFamily: 'Inter', fontSize: pt(15.5), color: TXT, paddingTop: pt(63), paddingBottom: pt(120), paddingLeft: pt(58), paddingRight: pt(58) },
     pageNoPad: { fontFamily: 'Inter', padding: 0 },
 
     // Capa
@@ -236,7 +236,8 @@ function numBR(s) { return parseFloat((s || '0').toString().replace(/\./g, '').r
 
 /* ---------- Peças compartilhadas ---------- */
 function PdfHeader(S, numero) {
-  return h(View, { style: S.pageHeader }, [
+  /* fixed: o cabeçalho se repete nas páginas de continuação (antes só a 1ª página da seção o tinha). */
+  return h(View, { style: S.pageHeader, fixed: true }, [
     h(View, { key: 'l' }, [
       IMG.logo ? h(Image, { key: 'logo', src: IMG.logo, style: S.headerLogo }) : null,
       h(Text, { style: S.headerTag, key: 't' }, 'Elevando você e o seu negócio'),
@@ -290,7 +291,7 @@ function PgCapa(S, data, eq) {
         h(View, { style: S.capaGridItem, key: 'd' }),
       ]),
       h(View, { style: S.capaFoot, key: 'foot' }, [
-        h(Text, { style: S.capaFootTxt, key: '1' }, v.celular || v.fixo || '(11) 2528-6473'),
+        h(Text, { style: S.capaFootTxt, key: '1' }, [v.celular, v.fixo].filter(Boolean).join('  ·  ') || '(11) 2528-6473'),
         h(Text, { style: S.capaFootTxt, key: '2' }, 'Rua Armandina Braga de Almeida, 383'),
       ]),
     ]),
@@ -342,6 +343,8 @@ function PgClienteObra(S, data) {
       h(Text, { style: [S.boxP, { fontWeight: 700 }], key: 'n' }, nomeSemDoc(c.nome, c.cnpj) || c.nome || '—'),
       c.cnpj ? h(Text, { style: S.boxP, key: 'cnpj' }, 'CNPJ: ' + fmtDoc(c.cnpj)) : null,
       c.responsavel ? h(Text, { style: S.boxP, key: 'ac' }, 'A/C: ' + c.responsavel) : null,
+      c.telefone ? h(Text, { style: S.boxP, key: 'tel' }, 'Telefone: ' + c.telefone) : null,
+      c.email ? h(Text, { style: S.boxP, key: 'mail' }, 'E-mail: ' + c.email) : null,
       h(Text, { style: S.boxP, key: 'end' }, [c.endereco, c.numero].filter(Boolean).join(', ') || '—'),
       h(Text, { style: S.boxP, key: 'cid' }, [c.bairro, c.cidade, c.uf].filter(Boolean).join(' - ') || '—'),
       c.cep ? h(Text, { style: S.boxP, key: 'cep' }, 'CEP: ' + c.cep) : null,
@@ -359,33 +362,60 @@ function PgClienteObra(S, data) {
 
 function PgSaudacao(S, data) {
   const ed = data.elevador || {};
-  const s = (ed.especificacoes || [])[0] || {};
+  /* Um resumo por EQUIPAMENTO (não só o 1º) — cada Unidade cita sua quantidade ("6 un."). */
+  const OP = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
   const qtd = ed.valores?.quantidade || '1';
-  const resumo = [s.id, s.modelo, s.carac, s.capacidade ? `Capacidade para ${s.capacidade}` : '', s.andaresParadasPortas].filter(Boolean).join(' - ');
+  /* Tabela (não texto corrido): uma linha por equipamento, com o código único dele. Sem cores alternadas;
+     a cada 24 linhas recomeça com o cabeçalho, pra tabela longa não perder as colunas na página seguinte. */
+  const rows = OP ? OP.resumoEquipamentos(ed.especificacoes) : [];
+  const cols = [
+    { label: 'Equipamento', flex: 2.2 }, { label: 'Modelo', flex: 1.3 }, { label: 'Capacidade', flex: 3.2 },
+    { label: 'Paradas', flex: 1.1, align: 'center' },
+  ];
+  const cel = (flex, align, bold) => ({ flex, textAlign: align || 'left', fontSize: pt(13), padding: `${pt(4)}pt ${pt(8)}pt`, color: TXT, fontWeight: bold ? 700 : 400 });
+  const pedacos = [];
+  for (let i = 0, n = 27; i < rows.length; i += n, n = 34) pedacos.push(rows.slice(i, i + n));
+  const tabelas = pedacos.map((ps, ti) => h(View, { key: 'tb' + ti, break: ti > 0, style: { marginTop: pt(ti ? 0 : 6), border: '1pt solid #ddd' } }, [
+    h(View, { key: 'h', wrap: false, minPresenceAhead: pt(90), style: { flexDirection: 'row', backgroundColor: GRAY_100, borderBottom: '1pt solid #ccc' } },
+      cols.map((c, i) => h(Text, { key: i, style: { ...cel(c.flex, c.align, true), fontSize: pt(12), textTransform: 'uppercase' } }, c.label))),
+    ...ps.map((r, ri) => h(View, { key: 'r' + ri, wrap: false, style: { flexDirection: 'row', borderBottom: ri === ps.length - 1 ? 0 : '1pt solid #eee' } }, [
+      h(Text, { key: 0, style: cel(cols[0].flex, 'left', true) }, r.codigo),
+      h(Text, { key: 1, style: cel(cols[1].flex) }, r.modelo),
+      h(Text, { key: 2, style: cel(cols[2].flex) }, r.capacidade),
+      h(Text, { key: 3, style: cel(cols[3].flex, 'center') }, r.paradas),
+    ])),
+  ]));
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
     h(Text, { style: S.p, key: 'p1' }, 'Prezados Senhores(as):'),
-    h(Text, { style: S.p, key: 'p2' }, `Proposta Comercial para o fornecimento de ${qtd} Elevador(es) de Passageiros.`),
-    h(View, { style: S.box, key: 'b' }, [
-      resumo ? h(Text, { style: S.boxP, key: 'r' }, resumo) : Vazio(S, 'A definir.'),
-      h(Text, { style: S.boxP, key: 'm' }, 'Marca: VerticalParts'),
-    ]),
+    h(Text, { style: S.p, key: 'p2' }, `Proposta Comercial para o fornecimento de ${(typeof window !== 'undefined' && window.PropostaOpcoes) ? window.PropostaOpcoes.resumoFornecimento(data.elevador) : qtd + ' Elevador(es) de Passageiros'}.`),
+    ...(tabelas.length ? tabelas : [Vazio(S, 'A definir.')]),
+    h(Text, { style: [S.p, { marginTop: pt(10) }], key: 'm' }, 'Marca: VerticalParts'),
     PdfFooter(S),
   ]);
 }
 
 function PgMarketing(S, data) {
   const ed = data.elevador || {};
-  const s = (ed.especificacoes || [])[0] || {};
-  const titulo = ['Elevador de Passageiros', s.modelo].filter(Boolean).join(' ');
+  const OPm = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
+  const modelos = OPm ? OPm.modelosDistintos(ed.especificacoes) : ((ed.especificacoes || [])[0] || {}).modelo;
+  const titulo = OPm ? OPm.tituloEquipamentos(ed, modelos) : ['Elevador de Passageiros', modelos].filter(Boolean).join(' ');
+  /* Com perfis por tipo cada um tem a SUA linha de modelos/benefícios/diferenciais; sem perfis, os campos globais. */
+  const blocos = OPm ? OPm.perfisConteudo(ed) : [];
+  const secao = (b, comTitulo, k) => h(View, { key: k, style: { marginBottom: pt(12) } }, [
+    comTitulo ? h(Text, { style: S.subTitle, key: 'pt' }, OPm.tituloPerfil(b)) : null,
+    b.textoModelos ? h(View, { key: 'modelos' }, [comTitulo ? null : h(Text, { style: S.subTitle, key: 't' }, 'Linha de Modelos'), h(Text, { style: S.p, key: 'p' }, b.textoModelos)].filter(Boolean)) : null,
+    (b.beneficios || []).length ? h(View, { key: 'benef' }, [h(Text, { style: S.subTitle, key: 't' }, 'Benefícios'), Lista(S, b.beneficios, 'l')]) : null,
+    (b.diferenciais || []).length ? h(View, { key: 'dif' }, [h(Text, { style: S.subTitle, key: 't' }, 'Diferenciais em Relação ao Mercado'), Lista(S, b.diferenciais, 'l')]) : null,
+  ].filter(Boolean));
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
     h(Text, { style: S.secTitle, key: 't' }, titulo),
     h(View, { style: S.secRule, key: 'r' }),
     ed.textoProposta ? h(Text, { style: S.p, key: 'p' }, ed.textoProposta) : Vazio(S),
-    ed.textoModelos ? h(View, { key: 'modelos' }, [h(Text, { style: S.subTitle, key: 't' }, 'Linha de Modelos'), h(Text, { style: S.p, key: 'p' }, ed.textoModelos)]) : null,
-    (ed.beneficios || []).length ? h(View, { key: 'benef' }, [h(Text, { style: S.subTitle, key: 't' }, 'Benefícios'), Lista(S, ed.beneficios, 'l')]) : null,
-    (ed.diferenciais || []).length ? h(View, { key: 'dif' }, [h(Text, { style: S.subTitle, key: 't' }, 'Diferenciais em Relação ao Mercado'), Lista(S, ed.diferenciais, 'l')]) : null,
+    ...(blocos.length
+      ? blocos.map((b, i) => secao(b, true, 'pf' + i))
+      : [secao({ textoModelos: ed.textoModelos, beneficios: ed.beneficios, diferenciais: ed.diferenciais }, false, 'g')]),
     PdfFooter(S),
   ]);
 }
@@ -398,14 +428,15 @@ function PgMarketing(S, data) {
    cliente mostrava só o 1º equipamento de uma cotação com 2+ (950/955),
    mesmo o preview HTML já mostrando todos. */
 function montarBlocosEspec(especificacoes) {
-  const lista = (especificacoes && especificacoes.length) ? especificacoes : [{}];
+  const O = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
+  const lista = (especificacoes && especificacoes.length) ? (O ? O.ordenarEspecs(especificacoes) : especificacoes) : [{}];
   return lista.map((s) => ({
     id: s.id,
     linhas: [
       ['Tipo de Empreendimento', s.empreendimento], ['Característica de Transporte', s.carac], ['Denominação', s.denominacao],
       ['Percurso', s.percurso && `${s.percurso}mm`], ['Capacidade', s.capacidade], ['Caixa de Corrida', s.dimensoesCaixa],
       ['Poço', s.profPoço && `${s.profPoço}mm`], ['Dimensões da Cabine', s.dimensoesCabine], ['Tensão de Alimentação', s.tensao],
-      ['Tração', s.tracao], ['Velocidade', s.vel && `${s.vel} m/s`], ['Paradas', s.andaresParadasPortas],
+      ['Tração', s.tracao], ['Velocidade', s.vel && `${s.vel} m/s`], ['Paradas', O ? O.paradasDe(s.andaresParadasPortas) : s.andaresParadasPortas],
       ['Modelo', s.modelo], ['Quantidade', s.qtd],
     ].filter(([, v]) => v),
   }));
@@ -420,8 +451,8 @@ function PgEspecTabela(S, data) {
     h(Text, { style: S.secTitle, key: 't' }, 'Especificações Técnicas'),
     h(View, { style: S.secRule, key: 'r' }),
     ...(temConteudo
-      ? blocos.map((b, i) => b.linhas.length ? h(View, { key: 'b' + i }, [
-          h(Text, { style: S.subTitle, key: 'st' }, blocos.length > 1 ? (b.id || `Equipamento ${i + 1}`) : 'Características Principais'),
+      ? blocos.map((b, i) => b.linhas.length ? h(View, { key: 'b' + i, wrap: false }, [
+          blocos.length > 1 ? null : h(Text, { style: S.subTitle, key: 'st' }, 'Características Principais'),
           Tabela2(S, [{ label: 'Característica', flex: 1 }, { label: b.id || 'Elevador de Passageiros', flex: 1 }], b.linhas, 't'),
         ]) : null)
       : [Vazio(S, 'Preencha as especificações técnicas na aba "Especificações Técnicas".')]),
@@ -430,40 +461,68 @@ function PgEspecTabela(S, data) {
 }
 
 function PgAcabamento(S, data) {
-  const a = (data.elevador || {}).acabamentos || {};
-  const linhas = [
-    ['Modelo da Cabine', a.modeloCabine], ['Acabamentos', a.acabamentoMat], ['Sub-teto', a.subTeto], ['Botoeira de Cabine', a.painelOperacao],
-    ['Piso', a.pisoCabina], ['Medidas', a.medidasPiso], ['Porta de Cabine', a.modeloPorta], ['Medidas Porta de Cabine', a.dimPortaCabine],
-    ['Modelo de Porta', a.acabPortaCabine], ['Portas de Pavimento', a.portasPavimento], ['Botoeiras de Pavimento', a.botoeirasPavimento],
-    ['Sinalização', a.sinalizacao], ['Pavimentos Inox', a.pavInox], ['Demais', a.demais],
-  ].filter(([, v]) => v);
+  const OPa = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
+  /* Mesmos blocos do preview (PropostaOpcoes.perfisAcabamento): 1 por perfil de tipo, ou 1 global como sempre. */
+  const blocos = OPa ? OPa.perfisAcabamento(data.elevador) : [];
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
     h(Text, { style: S.secTitle, key: 't' }, 'Acabamento'),
     h(View, { style: S.secRule, key: 'r' }),
-    linhas.length ? Tabela2(S, [{ label: 'Item', flex: 1 }, { label: 'Elevador de Passageiros', flex: 1 }], linhas, 't') : Vazio(S, 'Preencha os acabamentos na aba "Acabamentos".'),
+    ...(blocos.length
+      ? blocos.map((b, i) => h(View, { key: 'b' + i, wrap: false, style: { marginBottom: pt(14) } }, [
+          b.nome ? h(Text, { style: S.subTitle, key: 'st' }, OPa.tituloPerfil(b)) : null,
+          Tabela2(S, [{ label: 'Item', flex: 1 }, { label: b.rotulo, flex: 1 }], b.linhas, 't'),
+        ].filter(Boolean)))
+      : [Vazio(S, 'Preencha os acabamentos na aba "Acabamentos".')]),
     PdfFooter(S),
   ]);
 }
 
 function PgCaracteristicas(S, data) {
-  const c = (data.elevador || {}).caracteristicasEquip || {};
+  const OPc = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
+  const blocos = OPc ? OPc.perfisConteudo(data.elevador || {}) : [];
+  const campos = (c, k) => [
+    h(Text, { style: S.subTitle, key: k + 's1' }, 'Alimentação Elétrica'),
+    c.alimentacao ? h(Text, { style: S.p, key: k + 'p1' }, c.alimentacao) : Vazio(S),
+    h(Text, { style: S.subTitle, key: k + 's2' }, 'Sistema de Comando de Controle'),
+    c.comando ? h(Text, { style: S.p, key: k + 'p2' }, c.comando) : Vazio(S),
+    h(Text, { style: S.subTitle, key: k + 's3' }, 'Máquina de Tração'),
+    c.tracao ? h(Text, { style: S.p, key: k + 'p3' }, c.tracao) : Vazio(S),
+  ];
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
     h(Text, { style: S.secTitle, key: 't' }, 'Características Principais'),
     h(View, { style: S.secRule, key: 'r' }),
-    h(Text, { style: S.subTitle, key: 's1' }, 'Alimentação Elétrica'),
-    c.alimentacao ? h(Text, { style: S.p, key: 'p1' }, c.alimentacao) : Vazio(S),
-    h(Text, { style: S.subTitle, key: 's2' }, 'Sistema de Comando de Controle'),
-    c.comando ? h(Text, { style: S.p, key: 'p2' }, c.comando) : Vazio(S),
-    h(Text, { style: S.subTitle, key: 's3' }, 'Máquina de Tração'),
-    c.tracao ? h(Text, { style: S.p, key: 'p3' }, c.tracao) : Vazio(S),
+    ...(blocos.length
+      ? blocos.map((b, i) => h(View, { key: 'pf' + i, wrap: false, style: { marginBottom: pt(14) } }, [
+          h(Text, { style: [S.subTitle, { textDecoration: 'underline' }], key: 'pt' }, OPc.tituloPerfil(b)),
+          ...campos(b.caracteristicasEquip || {}, 'c' + i),
+        ]))
+      : campos((data.elevador || {}).caracteristicasEquip || {}, 'g')),
     PdfFooter(S),
   ]);
 }
 
 function PgItensNomeados(S, data, titulo, campo, vazioTxt) {
   const itens = (data.elevador || {})[campo] || [];
+  /* Recursos Inclusos é por perfil (Carga / Passageiro / Panorâmico); Infraestrutura continua global. */
+  const OPr = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
+  const blocos = (campo === 'recursosNomeados' && OPr) ? OPr.perfisConteudo(data.elevador || {}).filter((b) => b.recursosNomeados.length) : [];
+  if (blocos.length) {
+    return h(Page, { size: 'A4', style: S.page }, [
+      PdfHeader(S, data.numero),
+      h(Text, { style: S.secTitle, key: 't' }, titulo),
+      h(View, { style: S.secRule, key: 'r' }),
+      ...blocos.map((b, bi) => h(View, { key: 'pf' + bi, style: { marginBottom: pt(14) } }, [
+        h(Text, { style: S.subTitle, key: 'pt' }, OPr.tituloPerfil(b)),
+        ...b.recursosNomeados.map((it, i) => h(View, { style: S.namedItem, key: i }, [
+          h(Text, { style: S.namedItemLbl, key: 'n' }, it.nome),
+          h(Text, { style: S.namedItemTxt, key: 'd' }, it.desc),
+        ])),
+      ])),
+      PdfFooter(S),
+    ]);
+  }
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
     h(Text, { style: S.secTitle, key: 't' }, titulo),
@@ -498,7 +557,6 @@ function PgValoresOpcoes(S, data, ops) {
     h(Text, { style: S.p, key: 'intro' }, 'Esta proposta traz duas modalidades de entrega. Escolha a que melhor atende o seu cronograma — ao escolher uma, a outra deixa de valer.'),
     ...ops.map((o) => {
       const linhasEq = [[o.equipamento, fmtBRL(o.totalEquipamento)]];
-      if (o.difal) linhasEq.push(['DIFAL', fmtBRL(o.difal)]);
       linhasEq.push(['Total — ' + o.titulo.toLowerCase(), fmtBRL(o.total)]);
       const linhasParc = o.parcelas.map((p) => [p.desc || '—', p.valor ? 'R$ ' + p.valor : '—']);
       if (o.parcelas.length) linhasParc.push(['Total Parcelado', fmtBRL(o.totalParcelas)]);
@@ -520,25 +578,19 @@ function PgValores(S, data) {
   const modalidade = O ? O.modalidadeEscolhida(data) : null;
   const v = (data.elevador || {}).valores || {};
   const parcelas = v.parcelas || [];
-  const difal = numBR(v.difal);
   /* v.itens (mais de 1 equipamento vindo da Precificação): 1 linha por
      equipamento real em vez de agregar tudo numa linha só clonada — mesmo
      ajuste feito em proposta-preview.jsx (bug real na cotação 950). Sem
      itens, cai no formato antigo de 1 equipamento só. Tabela mostra só
      Equipamento | Valor (já qtd × unitário somado) — Qtd./Valor Unit.
      saíram da tabela a pedido do usuário (28/09/2026). */
-  const fonte = (Array.isArray(v.itens) && v.itens.length) ? v.itens : [v];
-  const linhas = fonte.map((it) => {
-    const qtd = parseFloat(it.quantidade) || 0;
-    const unit = numBR(it.valorUnit);
-    return { equipamento: it.equipamento, total: qtd * unit };
-  });
+  /* 10/10/2026 (Financeiro): UMA linha por equipamento físico (27 elevadores = 27 linhas, cada um com o
+     valor unitário) e o DIFAL num bloco À PARTE — nunca somado ao "Total Equipamentos". */
+  const linhas = O ? O.linhasUnitarias(data) : [];
   const totalEq = linhas.reduce((s, l) => s + l.total, 0);
-  const totalGeral = totalEq + difal;
   const totalParcelas = parcelas.reduce((s, p) => s + numBR(p.valor), 0);
   const linhasEq = linhas.map((l) => [l.equipamento || 'Elevador de Passageiros', l.total ? fmtBRL(l.total) : '—']);
-  if (difal) linhasEq.push(['DIFAL', fmtBRL(difal)]);
-  linhasEq.push(['Total Equipamentos', fmtBRL(totalGeral)]);
+  linhasEq.push(['Total Equipamentos', fmtBRL(totalEq)]);
   const linhasParc = parcelas.map(p => [p.desc || '—', p.valor ? 'R$ ' + p.valor : '—']);
   if (parcelas.length) linhasParc.push(['Total Parcelado', fmtBRL(totalParcelas)]);
   return h(Page, { size: 'A4', style: S.page }, [
@@ -550,15 +602,16 @@ function PgValores(S, data) {
     Tabela2(S, [{ label: 'Equipamento', flex: 3 }, { label: 'Valor', flex: 1, align: 'right' }], linhasEq, 't1'),
     parcelas.length ? h(View, { key: 'parc' }, [
       h(Text, { style: S.subTitle, key: 's2' }, 'Cronograma de Pagamento'),
+      v.forma ? h(Text, { style: S.p, key: 'fp' }, 'Forma de pagamento: ' + v.forma) : null,
       Tabela2(S, [{ label: 'Parcela / Descrição', flex: 3 }, { label: 'Valor', flex: 1, align: 'right' }], linhasParc, 't2'),
     ]) : null,
     PdfFooter(S),
   ]);
 }
 
-function PgBlocos(S, data, titulo, campo, pares) {
+function PgBlocos(S, data, titulo, campo, pares, prontos) {
   const obj = (data.elevador || {})[campo] || {};
-  const blocos = pares.map(([lbl, k]) => [lbl, obj[k]]).filter(([, v]) => v);
+  const blocos = prontos || pares.map(([lbl, k]) => [lbl, obj[k]]).filter(([, v]) => v);
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
     h(Text, { style: S.secTitle, key: 't' }, titulo),
@@ -655,10 +708,131 @@ function PgGarantia(S, data, assinaturas) {
   ]);
 }
 
+/* ============================================================
+   Páginas — Escada Rolante / Esteira Rolante (15/10/2026). Recebem `data` com `data.elevador` = bloco do
+   equipamento (ver montarDocumento). Linhas e textos vêm de window.PropostaOpcoes (fonte única com o preview).
+   ============================================================ */
+function PgSaudacaoEscEst(S, data, eq) {
+  const OP = window.PropostaOpcoes;
+  const ed = data.elevador || {};
+  const rows = OP.resumoEscEst(ed.especificacoes, eq);
+  const qtd = ed.valores?.quantidade || String(rows.reduce((s, r) => s + (Number(r.qtd) || 0), 0) || 1);
+  const cols = [
+    { label: 'Equipamento', flex: 2.4 }, { label: 'Empreendimento', flex: 1.6 }, { label: 'Inclinação', flex: 1.1 },
+    { label: eq === 'esteira' ? 'Desnível / Comp.' : 'Desnível', flex: 1.4 }, { label: 'Qtd.', flex: 0.8, align: 'center' },
+  ];
+  const cel = (flex, align, bold) => ({ flex, textAlign: align || 'left', fontSize: pt(13), padding: `${pt(4)}pt ${pt(8)}pt`, color: TXT, fontWeight: bold ? 700 : 400 });
+  const pedacos = [];
+  for (let i = 0, n = 27; i < rows.length; i += n, n = 34) pedacos.push(rows.slice(i, i + n));
+  const tabelas = pedacos.map((ps, ti) => h(View, { key: 'tb' + ti, break: ti > 0, style: { marginTop: pt(ti ? 0 : 6), border: '1pt solid #ddd' } }, [
+    h(View, { key: 'h', wrap: false, minPresenceAhead: pt(90), style: { flexDirection: 'row', backgroundColor: GRAY_100, borderBottom: '1pt solid #ccc' } },
+      cols.map((c, i) => h(Text, { key: i, style: { ...cel(c.flex, c.align, true), fontSize: pt(12), textTransform: 'uppercase' } }, c.label))),
+    ...ps.map((r, ri) => h(View, { key: 'r' + ri, wrap: false, style: { flexDirection: 'row', borderBottom: ri === ps.length - 1 ? 0 : '1pt solid #eee' } }, [
+      h(Text, { key: 0, style: cel(cols[0].flex, 'left', true) }, r.codigo),
+      h(Text, { key: 1, style: cel(cols[1].flex) }, r.empreendimento),
+      h(Text, { key: 2, style: cel(cols[2].flex) }, r.incl),
+      h(Text, { key: 3, style: cel(cols[3].flex) }, r.desnivel),
+      h(Text, { key: 4, style: cel(cols[4].flex, 'center') }, String(r.qtd)),
+    ])),
+  ]));
+  return h(Page, { size: 'A4', style: S.page }, [
+    PdfHeader(S, data.numero),
+    h(Text, { style: S.p, key: 'p1' }, 'Prezados Senhores(as):'),
+    h(Text, { style: S.p, key: 'p2' }, `Proposta Comercial para o fornecimento de ${OP.eqInfo(eq).pluralTxt(qtd)}.`),
+    ...(tabelas.length ? tabelas : [Vazio(S, 'A definir.')]),
+    h(Text, { style: [S.p, { marginTop: pt(10) }], key: 'm' }, 'Marca: VerticalParts'),
+    PdfFooter(S),
+  ]);
+}
+
+function PgApresentacaoEscEst(S, data, eq) {
+  const ed = data.elevador || {};
+  const desc = (ed.descricao || []).filter((d) => d && (d.titulo || d.desc || d.beneficios || d.linha));
+  const lista = (t) => String(t || '').split('\n').map((x) => x.trim()).filter(Boolean);
+  return h(Page, { size: 'A4', style: S.page }, [
+    PdfHeader(S, data.numero),
+    h(Text, { style: S.secTitle, key: 't' }, window.PropostaOpcoes.eqInfo(eq).nome),
+    h(View, { style: S.secRule, key: 'r' }),
+    ed.textoProposta ? h(Text, { style: S.p, key: 'p' }, ed.textoProposta) : Vazio(S),
+    ed.textoModelos ? h(View, { key: 'modelos' }, [h(Text, { style: S.subTitle, key: 't' }, 'Linha de Modelos'), h(Text, { style: S.p, key: 'p' }, ed.textoModelos)]) : null,
+    ...desc.map((d, i) => h(View, { key: 'd' + i, wrap: false }, [
+      d.titulo ? h(Text, { style: S.subTitle, key: 't' }, d.titulo) : null,
+      d.linha ? h(Text, { style: [S.p, { fontWeight: 600 }], key: 'l' }, d.linha) : null,
+      d.desc ? h(Text, { style: S.p, key: 'p' }, d.desc) : null,
+      lista(d.beneficios).length ? Lista(S, lista(d.beneficios), 'b') : null,
+    ].filter(Boolean))),
+    PdfFooter(S),
+  ]);
+}
+
+function PgEspecEscEst(S, data, eq) {
+  const OP = window.PropostaOpcoes;
+  const ed = data.elevador || {};
+  const lista = (ed.especificacoes && ed.especificacoes.length) ? ed.especificacoes : [{}];
+  const blocos = lista.map((s) => ({ id: s.id, linhas: OP.linhasEspecEscEst(s, eq) }));
+  const temConteudo = blocos.some((b) => b.linhas.length);
+  return h(Page, { size: 'A4', style: S.page }, [
+    PdfHeader(S, data.numero),
+    h(Text, { style: S.secTitle, key: 't' }, 'Especificações Técnicas'),
+    h(View, { style: S.secRule, key: 'r' }),
+    ...(temConteudo
+      ? blocos.map((b, i) => b.linhas.length ? h(View, { key: 'b' + i, wrap: false }, [
+          blocos.length > 1 ? null : h(Text, { style: S.subTitle, key: 'st' }, 'Características Principais'),
+          Tabela2(S, [{ label: 'Característica', flex: 1 }, { label: b.id || OP.eqInfo(eq).nome, flex: 1 }], b.linhas, 't'),
+        ]) : null)
+      : [Vazio(S, 'Preencha as especificações técnicas na aba "Especificações Técnicas".')]),
+    PdfFooter(S),
+  ]);
+}
+
+function PgEspecificidades(S, data, eq) {
+  const OP = window.PropostaOpcoes;
+  const linhas = OP.linhasEspecificidades(data.elevador, eq);
+  return h(Page, { size: 'A4', style: S.page }, [
+    PdfHeader(S, data.numero),
+    h(Text, { style: S.secTitle, key: 't' }, 'Especificidades'),
+    h(View, { style: S.secRule, key: 'r' }),
+    Tabela2(S, [{ label: 'Item', flex: 1 }, { label: OP.eqInfo(eq).nome, flex: 1 }], linhas, 't'),
+    PdfFooter(S),
+  ]);
+}
+
+/* Acabamento / Características Técnicas de escada e esteira: título em negrito + texto, um item após o outro
+   (a página quebra sozinha — mesmo conteúdo de PreviewListaNomeada em proposta-preview.jsx). */
+function PgListaNomeada(S, data, titulo, itens) {
+  return h(Page, { size: 'A4', style: S.page }, [
+    PdfHeader(S, data.numero),
+    h(Text, { style: S.secTitle, key: 't' }, titulo),
+    h(View, { style: S.secRule, key: 'r' }),
+    ...itens.map((it, i) => h(View, { style: S.namedItem, key: 'i' + i, wrap: false }, [
+      h(Text, { style: S.namedItemLbl, key: 'n' }, String(it.nome).toUpperCase() + ':'),
+      h(Text, { style: S.namedItemTxt, key: 'd' }, it.desc),
+    ])),
+    PdfFooter(S),
+  ]);
+}
+
+function PgInstalacao(S, data) {
+  const blocos = window.PropostaOpcoes.blocosInstalacao(data.elevador);
+  return h(Page, { size: 'A4', style: S.page }, [
+    PdfHeader(S, data.numero),
+    h(Text, { style: S.secTitle, key: 't' }, 'Instalação e Montagem'),
+    h(View, { style: S.secRule, key: 'r' }),
+    ...blocos.map(([t, txt], i) => h(View, { key: i }, [h(Text, { style: S.subTitle, key: 't' }, t), h(Text, { style: S.p, key: 'p' }, txt)])),
+    PdfFooter(S),
+  ]);
+}
+
 /* ---------- Monta o documento completo ---------- */
-async function montarDocumento(data, assinaturas) {
+async function montarDocumento(data, assinaturas, eqParam) {
   const S = montarStyles();
-  const eq = 'elevador';
+  const eq = (eqParam === 'escada' || eqParam === 'esteira') ? eqParam : 'elevador';
+  /* Escada/Esteira: as páginas compartilhadas leem `data.elevador`; aqui esse bloco é o do equipamento. */
+  if (eq !== 'elevador') {
+    const bloco = data[eq] || {};
+    const nomeEq = window.PropostaOpcoes.eqInfo(eq).nome;
+    data = { ...data, elevador: { ...bloco, valores: { ...(bloco.valores || {}), equipamento: (bloco.valores || {}).equipamento || nomeEq } } };
+  }
   const ed = data.elevador || {};
   const fotos = ed.fotos || {};
   const temFotos = !!(fotos.unidade || fotos.teto || fotos.botoeira);
@@ -698,7 +872,8 @@ async function montarDocumento(data, assinaturas) {
       .catch((e) => { IMG.capa = null; montarDocumento.ultimasFalhas.push(e.message); }),
   ]);
 
-  const pages = [
+  const OPx = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
+  const pages = eq === 'elevador' ? [
     PgCapa(S, data, eq),
     PgSobre(S, eq),
     PgSobreCont(S),
@@ -712,18 +887,36 @@ async function montarDocumento(data, assinaturas) {
     PgItensNomeados(S, data, 'Infraestrutura e Instalação', 'infraestruturaNomeada', 'Adicione os itens de infraestrutura.'),
     ...(temFotos ? [PgFotos(S, data, urls)] : []),
     PgValores(S, data),
-    PgBlocos(S, data, 'Condições Gerais de Pagamento', 'condicoesPagto', [['Venda de Equipamentos', 'venda'], ['Impostos e Serviços', 'impostos'], ['Ajuste de Frete Marítimo', 'ajusteFrete'], ['Reajuste', 'reajuste']]),
-    PgBlocos(S, data, 'Ajustes e Impostos', 'ajustes', [['Cláusula de Reajuste Cambial', 'clausulaCambial'], ['Faturamento', 'faturamentoTexto'], ['Taxas e Impostos Inclusos', 'taxasInclusas'], ['Taxas e Impostos Excluídos', 'taxasExcluidas']]),
+    PgBlocos(S, data, 'Condições Gerais de Pagamento', 'condicoesPagto', [], OPx.blocosCondicoes(data.elevador)),
+    PgBlocos(S, data, 'Ajustes e Impostos', 'ajustes', [], (typeof window !== 'undefined' && window.PropostaOpcoes) ? window.PropostaOpcoes.blocosAjustes(data.elevador) : []),
     PgPrazo(S, data),
     PgResponsabilidades(S, data),
+    PgGarantia(S, data, assinaturas),
+  ] : [
+    PgCapa(S, data, eq),
+    PgSobre(S, eq),
+    PgSobreCont(S),
+    PgClienteObra(S, data),
+    PgSaudacaoEscEst(S, data, eq),
+    PgApresentacaoEscEst(S, data, eq),
+    PgEspecEscEst(S, data, eq),
+    ...(OPx.linhasEspecificidades(data.elevador, eq).length ? [PgEspecificidades(S, data, eq)] : []),
+    ...(OPx.itensNomeados(data.elevador.acabamentosLista).length ? [PgListaNomeada(S, data, 'Acabamento', OPx.itensNomeados(data.elevador.acabamentosLista))] : []),
+    ...(OPx.itensNomeados(data.elevador.caracteristicasTec).length ? [PgListaNomeada(S, data, 'Características Técnicas', OPx.itensNomeados(data.elevador.caracteristicasTec))] : []),
+    ...(OPx.blocosInstalacao(data.elevador).length ? [PgInstalacao(S, data)] : []),
+    PgValores(S, data),
+    ...(OPx.blocosCondicoes(data.elevador).length ? [PgBlocos(S, data, 'Condições Gerais de Pagamento', 'condicoesPagto', [], OPx.blocosCondicoes(data.elevador))] : []),
+    ...(OPx.blocosAjustes(data.elevador).length ? [PgBlocos(S, data, 'Ajustes e Impostos', 'ajustes', [], OPx.blocosAjustes(data.elevador))] : []),
+    PgPrazo(S, data),
+    ...((OPx.itensTexto((data.elevador.responsabilidades || {}).vendedor).length || OPx.itensTexto((data.elevador.responsabilidades || {}).comprador).length) ? [PgResponsabilidades(S, data)] : []),
     PgGarantia(S, data, assinaturas),
   ];
   return h0(Document, {}, pages);
 }
 
-async function baixar(data, filename, assinaturas) {
+async function baixar(data, filename, assinaturas, eq) {
   registrarFontes();
-  const elemento = await montarDocumento(data, assinaturas);
+  const elemento = await montarDocumento(data, assinaturas, eq);
   const blob = await pdf(elemento).toBlob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

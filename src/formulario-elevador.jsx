@@ -54,27 +54,19 @@ const FE_TIPOS_EQUIPAMENTO = [
 const FE_SECOES_ESCADA = [
   { titulo: 'Dados Gerais', campos: [
     ['tipo_edificacao', 'Tipo de edificação', 'Comercial, residencial, hospitalar, aeroporto, metrô, shopping, institucional'],
-    ['uso_previsto', 'Uso previsto', 'Público (alto tráfego) / privado (médio/baixo tráfego)'],
     ['horario_pico', 'Horário de pico estimado', 'Passageiros/hora em cada sentido'],
   ] },
   { titulo: 'Dados Geométricos', campos: [
-    ['desnivel_elevacao', 'Desnível (altura de elevação)', 'ex.: 5,04 m'],
-    ['inclinacao', 'Inclinação', '27,3° / 30° / 35°'],
-    ['largura_degrau', 'Largura do degrau', '600 / 800 / 1.000 mm'],
-    ['velocidade_nominal', 'Velocidade nominal', '0,50 / 0,65 / 0,75 m/s'],
     ['comprimento_abertura_piso', 'Comprimento da abertura no piso', ''],
     ['largura_rasgo_laje', 'Largura do rasgo na laje', ''],
     ['profundidade_poco_inferior', 'Profundidade do poço inferior', ''],
     ['headroom', 'Última altura (headroom)', ''],
     ['sentido_circulacao', 'Sentido de circulação', 'Subida / descida / reversível'],
-    ['degraus_planos_patamar', 'Nº de degraus planos no patamar', '2 ou 3'],
-    ['disposicao_espaco', 'Disposição no espaço', 'Simples / paralelas / cruzadas'],
   ] },
   { titulo: 'Especificações Técnicas', campos: [
     ['tipo_acionamento', 'Tipo de acionamento', 'Motorredutor direto / VVVF'],
     ['sistema_economia_energia', 'Sistema de economia de energia', 'Stand-by com sensor de presença'],
     ['capacidade_transporte', 'Capacidade de transporte', '4.500 a 13.500 pessoas/hora'],
-    ['tipo_degrau', 'Tipo de degrau', 'Aço inoxidável / liga de alumínio'],
     ['altura_degrau', 'Altura do degrau', '~200 mm, máx. 240 mm'],
     ['profundidade_degrau', 'Profundidade do degrau', '> 380 mm'],
     ['balaustrada', 'Balaustrada / guarda-corpo', '80cm ou 90cm — vidro/inox'],
@@ -86,7 +78,6 @@ const FE_SECOES_ESCADA = [
     ['comunicacao', 'Comunicação', 'Intercomunicador/alarme/indicadores'],
   ] },
   { titulo: 'Condições Ambientais', campos: [
-    ['local_instalacao', 'Local de instalação', 'Interior / exterior / ambiente controlado'],
     ['protecao_intemperies', 'Proteção contra intempéries', 'Cobertura / toldo / totalmente exposta'],
     ['temp_min', 'Temperatura ambiente mínima', '°C'],
     ['temp_max', 'Temperatura ambiente máxima', '°C'],
@@ -98,7 +89,6 @@ const FE_SECOES_ESCADA = [
     ['caixa_corrida_rasgo', 'Caixa de corrida / rasgo no piso', 'Já executada / será executada'],
   ] },
   { titulo: 'Dados Elétricos', campos: [
-    ['tensao_alimentacao_equip', 'Tensão de alimentação', '220V / 380V / 440V trifásica'],
     ['frequencia_equip', 'Frequência', '60 Hz (Brasil) / 50 Hz'],
     ['potencia_estimada', 'Potência estimada disponível', 'kVA'],
     ['aterramento_equip', 'Aterramento', 'Existe / será executado / tipo'],
@@ -124,24 +114,17 @@ const FE_SECOES_ESTEIRA = [
   { titulo: 'Dados Gerais', campos: FE_SECOES_ESCADA[0].campos },
   { titulo: 'Dados Geométricos', campos: [
     ['comprimento_total', 'Comprimento total (desnível horizontal)', 'até 80m comercial / 120m público / 140m especial'],
-    ['desnivel_vertical', 'Desnível vertical (altura de elevação)', '2.500 a 8.000 mm'],
-    ['inclinacao', 'Inclinação', '0°–6° padrão / 10°/11° sob demanda / 12° inclinada'],
-    ['largura_palete', 'Largura do palete', '800/1.000mm comercial, até 1.400mm público'],
-    ['velocidade_nominal', 'Velocidade nominal', '0,50 / 0,60 / 0,75 m/s'],
     ['comprimento_rasgo_piso', 'Comprimento do rasgo no piso', ''],
     ['largura_rasgo_laje', 'Largura do rasgo na laje', ''],
     ['profundidade_poco_inferior', 'Profundidade do poço inferior', ''],
     ['headroom', 'Última altura (headroom)', ''],
     ['sentido_circulacao', 'Sentido de circulação', 'Unidirecional / reversível'],
-    ['paletes_planos_patamar', 'Nº de paletes planos no patamar', '2 ou 3'],
-    ['disposicao_espaco', 'Disposição no espaço', 'Simples / paralelas / cruzadas / em série'],
     ['raio_curva', 'Raio de curva (se aplicável)', 'esteiras curvas, em metros'],
   ] },
   { titulo: 'Especificações Técnicas', campos: [
     ['tipo_acionamento', 'Tipo de acionamento', 'Motorredutor direto / VVVF / corrente'],
     ['sistema_economia_energia', 'Sistema de economia de energia', 'Stand-by, baixa velocidade em vazio'],
     ['capacidade_transporte', 'Capacidade de transporte', 'depende largura+velocidade — tabela do fabricante'],
-    ['tipo_palete', 'Tipo de palete', 'Aço inox / liga alumínio / aço carbono tratado'],
     ['espessura_palete', 'Espessura do palete', 'mm — resistência à deformação'],
     ['balaustrada', 'Balaustrada / guarda-corpo', '80/90/100cm — vidro/inox'],
     ['corrimao_equip', 'Corrimão', 'Borracha preta/cinza/colorida/LED/antiderrapante'],
@@ -179,6 +162,110 @@ const FE_SECOES_ESTEIRA = [
 
 const FE_SECOES_POR_TIPO = { escada: FE_SECOES_ESCADA, esteira: FE_SECOES_ESTEIRA };
 
+/* 29/10/2026 — parâmetros fixos da planilha técnica de Escaladores e Esteiras
+   (ver formularioEscadas.md). Chaves escolhidas para COINCIDIR com as que
+   `proposta-heranca.js` (montarBlocoEscadaEsteira) já lê de
+   `unidade.especificacoes` — uso_previsto, desnivel_elevacao/desnivel_vertical,
+   largura_degrau/largura_palete, tensao_alimentacao_equip, velocidade_nominal,
+   inclinacao, disposicao_espaco (+ tipo_edificacao/horario_pico/balaustrada, que
+   já existiam nas seções livres abaixo e continuam lá). Não troque esses nomes
+   sem atualizar a herança da Proposta junto (ver proposta-heranca-escada.test.js). */
+const FE_APLICACAO_USO = ['Comercial', 'Alto Tráfego'];
+const FE_LARGURA_DEGRAU_POR_TIPO = { escada: ['600 mm', '800 mm', '1.000 mm'], esteira: ['800 mm', '1.000 mm', '1.400 mm'] };
+const FE_INCLINACAO_ESCADA = ['30°', '35°'];
+const FE_DEGRAUS_NIVEL = ['Padrão (2)', 'Especial (3 ou 4)'];
+const FE_MATERIAL_DEGRAU = ['Alumínio Acinzentado', 'Inox Preto'];
+const FE_ARRANJO_POR_TIPO = { escada: ['Simples', 'Paralela', 'Cruzada'], esteira: ['Simples', 'Paralela', 'Cruzada', 'Em Série'] };
+const FE_MATERIAL_REVESTIMENTO = ['Inox 304', 'Inox 430'];
+const FE_COM_SEM = [{ value: 'sem', label: 'Sem' }, { value: 'com', label: 'Com' }];
+
+/* Mapa interno (rota, usado pela sincronização de URL mais abaixo) — chave
+   curta usada em `tipo_equipamento` -> rota do roteador. Função pura, sem
+   JSX, pra poder ser testada (ver formulario-elevador-escada-calc.test.js). */
+const FE_ROTA_POR_TIPO_EQUIPAMENTO = { elevador: 'formulario-elevador', escada: 'formulario-escada', esteira: 'formulario-esteira' };
+const FE_ROTA_POR_TIPO_EQUIPAMENTO_SET = new Set(Object.values(FE_ROTA_POR_TIPO_EQUIPAMENTO));
+function feRotaPorTipoEquipamento(tipoEquipamento) {
+  return FE_ROTA_POR_TIPO_EQUIPAMENTO[tipoEquipamento] || 'formulario-elevador';
+}
+/* Velocidade (item 007 da planilha): Comercial = 0,50 m/s; Alto Tráfego = 0,65
+   ou 0,75 m/s — vale tanto pra escada quanto pra esteira (a planilha não separa
+   por tipo de equipamento, só por Aplicação/Uso). */
+function feOpcoesVelocidadeEscadaEsteira(usoPrevisto) {
+  return /alto/i.test(String(usoPrevisto || '')) ? ['0,65 m/s', '0,75 m/s'] : ['0,50 m/s'];
+}
+/* Regra da planilha: acima de 6.000 mm de desnível, a inclinação permitida é só
+   30° (escada) e o apoio intermediário passa a ser recomendado — vira aviso,
+   não bloqueio (o resto do formulário de escada/esteira também não bloqueia). */
+function feDesnivelAcimaDe6m(especificacoes, tipoEquipamento) {
+  const chave = tipoEquipamento === 'esteira' ? 'desnivel_vertical' : 'desnivel_elevacao';
+  const bruto = String((especificacoes || {})[chave] || '').replace(/[^\d,.-]/g, '').replace(',', '.');
+  const n = Number(bruto);
+  return Number.isFinite(n) && n > 6000;
+}
+
+/* Os 17 parâmetros da planilha técnica (formularioEscadas.md) — select com
+   opções fechadas (eram texto livre antes, 29/10/2026). Renderizado ANTES das
+   seções livres de FEEspecificacoesGenericas, que continuam cobrindo o resto
+   (Dados Gerais/Condições Ambientais/Dados Elétricos/Acabamentos etc.). */
+function FEParametrosPlanilha({ tipoEquipamento, especificacoes, onChange }) {
+  const e = especificacoes || {};
+  const set = (chave) => (v) => onChange({ ...e, [chave]: v });
+  const chaveDesnivel = tipoEquipamento === 'esteira' ? 'desnivel_vertical' : 'desnivel_elevacao';
+  const chaveLargura = tipoEquipamento === 'esteira' ? 'largura_palete' : 'largura_degrau';
+  const chaveDegrausNivel = tipoEquipamento === 'esteira' ? 'paletes_planos_patamar' : 'degraus_planos_patamar';
+  const chaveMaterial = tipoEquipamento === 'esteira' ? 'tipo_palete' : 'tipo_degrau';
+  const acimaDe6m = feDesnivelAcimaDe6m(e, tipoEquipamento);
+  return (
+    <div>
+      <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Parâmetros da Cotação (planilha técnica)</div>
+      <div className="grid-3" style={{ gap: 12 }}>
+        <FEField label="Aplicação / Uso"><FESelect value={e.uso_previsto} onChange={set('uso_previsto')} options={FE_APLICACAO_USO} placeholder="— selecione —"/></FEField>
+        <FEField label={tipoEquipamento === 'esteira' ? 'Desnível Vertical / Pé-direito (mm)' : 'Desnível Vertical — VR (mm)'}>
+          <FEInput type="number" value={e[chaveDesnivel]} onChange={set(chaveDesnivel)} placeholder="ex.: 5040"/>
+        </FEField>
+        <FEField label={tipoEquipamento === 'esteira' ? 'Largura do Palete' : 'Largura do Degrau'}>
+          <FESelect value={e[chaveLargura]} onChange={set(chaveLargura)} options={FE_LARGURA_DEGRAU_POR_TIPO[tipoEquipamento]} placeholder="— selecione —"/>
+        </FEField>
+        <FEField label="Uso do Local"><FESelect value={e.local_instalacao} onChange={set('local_instalacao')} options={['Interno', 'Externo']} placeholder="— selecione —"/></FEField>
+        <FEField label="Tensão de Alimentação"><FEInput value={e.tensao_alimentacao_equip} onChange={set('tensao_alimentacao_equip')} placeholder="220V / 380V trifásica"/></FEField>
+        <FEField label="Velocidade (m/s)">
+          <FESelect value={e.velocidade_nominal} onChange={set('velocidade_nominal')} options={feOpcoesVelocidadeEscadaEsteira(e.uso_previsto)} placeholder="— selecione a Aplicação/Uso primeiro —"/>
+        </FEField>
+        {tipoEquipamento === 'esteira' ? (
+          <FEField label="Inclinação"><FEInput value="12°" onChange={() => {}} disabled/></FEField>
+        ) : (
+          <FEField label="Inclinação / Ângulo">
+            <FESelect value={e.inclinacao} onChange={set('inclinacao')} options={FE_INCLINACAO_ESCADA} placeholder="— selecione —"/>
+            {acimaDe6m && e.inclinacao === '35°' && (
+              <div className="small" style={{ color: 'var(--vp-danger)', marginTop: 4 }}>⚠ Desnível acima de 6.000 mm — a planilha recomenda 30°.</div>
+            )}
+          </FEField>
+        )}
+        <FEField label={tipoEquipamento === 'esteira' ? 'Paletes em Nível' : 'Degraus em Nível'}>
+          <FESelect value={e[chaveDegrausNivel]} onChange={set(chaveDegrausNivel)} options={FE_DEGRAUS_NIVEL} placeholder="— selecione —"/>
+        </FEField>
+        <FEField label={tipoEquipamento === 'esteira' ? 'Material do Palete' : 'Material do Degrau'}>
+          <FESelect value={e[chaveMaterial]} onChange={set(chaveMaterial)} options={FE_MATERIAL_DEGRAU} placeholder="— selecione —"/>
+        </FEField>
+        <FEField label="Apoio Intermediário">
+          <FESelect value={e.apoio_intermediario} onChange={set('apoio_intermediario')} options={FE_COM_SEM} placeholder="— selecione —"/>
+          {acimaDe6m && e.apoio_intermediario !== 'com' && (
+            <div className="small" style={{ color: 'var(--vp-warning)', marginTop: 4 }}>⚠ Desnível acima de 6.000 mm — apoio intermediário é sugerido.</div>
+          )}
+        </FEField>
+        <FEField label="Iluminação de Balaustrada"><FESelect value={e.iluminacao_balaustrada} onChange={set('iluminacao_balaustrada')} options={FE_COM_SEM} placeholder="— selecione —"/></FEField>
+        <FEField label="Iluminação de Rodapé"><FESelect value={e.iluminacao_rodape} onChange={set('iluminacao_rodape')} options={FE_COM_SEM} placeholder="— selecione —"/></FEField>
+        <FEField label="Vão Livre entre Apoios (mm)"><FEInput type="number" value={e.vao_entre_apoios_mm} onChange={set('vao_entre_apoios_mm')} placeholder="distância entre apoios existente"/></FEField>
+        <FEField label="Arranjo / Disposição"><FESelect value={e.disposicao_espaco} onChange={set('disposicao_espaco')} options={FE_ARRANJO_POR_TIPO[tipoEquipamento]} placeholder="— selecione —"/></FEField>
+        <FEField label="Revestimento Externo (Cladding)"><FESelect value={e.revestimento_externo} onChange={set('revestimento_externo')} options={FE_COM_SEM} placeholder="— selecione —"/></FEField>
+        {e.revestimento_externo === 'com' && (
+          <FEField label="Material do Revestimento"><FESelect value={e.material_revestimento} onChange={set('material_revestimento')} options={FE_MATERIAL_REVESTIMENTO} placeholder="— selecione —"/></FEField>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* Campos das planilhas técnicas do usuário (escada/esteira) — texto livre,
    sem select/obrigatoriedade: são "opções típicas", não lista fechada. */
 function FEEspecificacoesGenericas({ tipoEquipamento, especificacoes, onChange }) {
@@ -186,6 +273,7 @@ function FEEspecificacoesGenericas({ tipoEquipamento, especificacoes, onChange }
   const set = (chave) => (v) => onChange({ ...(especificacoes || {}), [chave]: v });
   return (
     <div className="stack" style={{ gap: 18 }}>
+      <FEParametrosPlanilha tipoEquipamento={tipoEquipamento} especificacoes={especificacoes} onChange={onChange}/>
       {secoes.map((sec) => (
         <div key={sec.titulo}>
           <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>{sec.titulo}</div>
@@ -216,10 +304,22 @@ function feCodigoUnidade(tipoEquip, numeroCotacao, indiceAtivo) {
   return window.MasterIdEngine.masterId({ categoriaProduto: categoria, numeroCotacao, indiceAtivo });
 }
 
-function feNovaUnidade(identificador) {
+/* `tipoEquipamento` (2º argumento, opcional) — default do novo card, usado
+   quando o vendedor abre o formulário direto por /comercial/formulario-escada
+   ou /comercial/formulario-esteira (ver FormularioElevadorForm, tipoPadrao). */
+function feNovaUnidade(identificador, tipoEquipamento) {
+  const tipo = tipoEquipamento === 'escada' || tipoEquipamento === 'esteira' ? tipoEquipamento : 'elevador';
+  // Defaults da planilha (item "Technical Data" de formularioEscadas.md) — só
+  // pra escada/esteira; elevador continua sem especificacoes pré-preenchida.
+  const especificacoesIniciais = tipo === 'elevador' ? {} : {
+    tipo_degrau: 'Inox Preto', tipo_palete: 'Inox Preto',
+    apoio_intermediario: 'sem', iluminacao_balaustrada: 'sem', iluminacao_rodape: 'sem',
+    revestimento_externo: 'sem',
+    ...(tipo === 'esteira' ? { inclinacao: '12°' } : {}),
+  };
   return {
     identificador: identificador || '', quantidade: 1,
-    tipo_equipamento: 'elevador', especificacoes: {},
+    tipo_equipamento: tipo, especificacoes: especificacoesIniciais,
     fornecedor: '', modelo: '',
     tipo: '', tracao: '', capacidade_kg: '', capacidade_pessoas: '', velocidade_ms: '',
     paradas: '', pavimentos_desc: '', casa_maquinas: '', agrupamento: '', porta_oposta: '',
@@ -235,13 +335,43 @@ function feNovaUnidade(identificador) {
 }
 
 /* ---------- Campos genéricos (mesmo padrão visual de ModalNovoLead) ---------- */
-function FEField({ label, children, span }) {
+/* 10/10/2026 — campo obrigatório vazio "acende" (borda/fundo vermelhos + mensagem), igual à Precificação.
+   `chave` liga o campo à lista de faltantes que vem do contexto (cabeçalho ou equipamento); só acende depois que o
+   usuário tenta salvar/enviar (ctx.mostrar). Estilo em styles/planilha.css (.pl-faltando). */
+const FEFaltandoCtx = React.createContext({ mostrar: false, falta: () => false });
+function FEField({ label, children, span, chave, aviso }) {
+  const ctx = React.useContext(FEFaltandoCtx);
+  const faltando = !!chave && ctx.mostrar && ctx.falta(chave);
   return (
-    <div className="stack" style={{ gap: 4, gridColumn: span ? `span ${span}` : undefined }}>
+    <div className={'stack' + (faltando ? ' pl-faltando' : '')} style={{ gap: 4, gridColumn: span ? `span ${span}` : undefined }}>
       <label className="up-eyebrow muted">{label}</label>
       {children}
+      {faltando && <div className="pl-faltando__msg">{aviso || 'Campo obrigatório — preencha para enviar.'}</div>}
     </div>
   );
+}
+function FEFaltaBox({ chave, aviso, children }) {
+  const ctx = React.useContext(FEFaltandoCtx);
+  const faltando = ctx.mostrar && ctx.falta(chave);
+  return (
+    <div className={faltando ? 'pl-faltando' : undefined}>
+      {children}
+      {faltando && <div className="pl-faltando__msg">{aviso || 'Campo obrigatório — preencha para enviar.'}</div>}
+    </div>
+  );
+}
+
+/* Campos obrigatórios do equipamento ELEVADOR (os mesmos de validar(); escada/esteira são texto livre, sem obrigatórios). */
+const FE_UNID_OBRIG = [
+  ['tipo', 'Tipo'], ['tracao', 'Tração'], ['velocidade_ms', 'Velocidade (m/s)'], ['paradas', 'Paradas'],
+  ['pavimentos_desc', 'Descrição dos pavimentos'], ['casa_maquinas', 'Casa de máquinas'], ['agrupamento', 'Agrupamento'],
+  ['porta_oposta', 'Porta oposta / múltiplas entradas'], ['estrutura_caixa', 'Tipo de estrutura da caixa'],
+  ['percurso_mm', 'Percurso / altura de viagem (mm)'], ['porta_tipo_abertura', 'Tipo de abertura (portas)'],
+  ['tensao_principal', 'Tensão de alimentação principal'], ['tensao_iluminacao', 'Tensão de iluminação'],
+];
+function feFaltandoUnidade(u) {
+  if ((u.tipo_equipamento || 'elevador') !== 'elevador') return [];
+  return FE_UNID_OBRIG.filter(([k]) => !u[k]).map(([k, nome]) => ({ chave: k, nome }));
 }
 function FEInput({ value, onChange, placeholder, type = 'text', disabled, onBlur }) {
   return <input className="input" type={type} value={value ?? ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} placeholder={placeholder} disabled={disabled}/>;
@@ -315,22 +445,22 @@ function FEEndereco({ prefix, header, setH, requiredLogradouro, onBuscarCep }) {
   const k = (suf) => `${prefix}${suf}`;
   return (
     <div className="grid-3" style={{ gap: 12 }}>
-      <FEField label={`Logradouro${requiredLogradouro ? ' *' : ''}`} span="2">
+      <FEField label={`Logradouro${requiredLogradouro ? ' *' : ''}`} span="2" chave={requiredLogradouro ? k('logradouro') : undefined}>
         <FEInput value={header[k('logradouro')]} onChange={setH(k('logradouro'))} placeholder="Rua São Paulo, 150"/>
       </FEField>
       <FEField label="Complemento">
         <FEInput value={header[k('complemento')]} onChange={setH(k('complemento'))} placeholder="Apto 22, Bloco B"/>
       </FEField>
-      <FEField label="Bairro">
+      <FEField label={`Bairro${requiredLogradouro ? ' *' : ''}`} chave={requiredLogradouro ? k('bairro') : undefined}>
         <FEInput value={header[k('bairro')]} onChange={setH(k('bairro'))} placeholder="Jardim Paraíso"/>
       </FEField>
-      <FEField label="CEP">
+      <FEField label={`CEP${requiredLogradouro ? ' *' : ''}`} chave={requiredLogradouro ? k('cep') : undefined}>
         <FEInput value={header[k('cep')]} onChange={setH(k('cep'))} placeholder="07140-000" onBlur={() => onBuscarCep?.(header[k('cep')])}/>
       </FEField>
-      <FEField label="Cidade">
+      <FEField label={`Cidade${requiredLogradouro ? ' *' : ''}`} chave={requiredLogradouro ? k('cidade') : undefined}>
         <FEInput value={header[k('cidade')]} onChange={setH(k('cidade'))} placeholder="Guarulhos"/>
       </FEField>
-      <FEField label="UF">
+      <FEField label={`UF${requiredLogradouro ? ' *' : ''}`} chave={requiredLogradouro ? k('estado') : undefined}>
         <FEInput value={header[k('estado')]} onChange={setH(k('estado'))} placeholder="SP"/>
       </FEField>
     </div>
@@ -516,10 +646,22 @@ const FE_OPCOES_ACO = ['Aço 304', 'Aço 430', 'Pintado'];
 const FE_OPCOES_VAZIAS = { teto_falso: [], piso: [], porta: [], botoeira_cabine: [], botoeira_pavimento: [] };
 
 /* ---------- Card de uma Unidade (um elevador) ---------- */
-function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornecedores, modelos, publicMode, numeroCotacao }) {
+function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornecedores, modelos, publicMode, numeroCotacao, mostrarObrig }) {
   const [open, setOpen] = React.useState(true);
+  const faltaU = new Set(feFaltandoUnidade(unidade).map((x) => x.chave));
+  const ctxU = { mostrar: !!mostrarObrig, falta: (k) => faltaU.has(k) };
   const [opcoes, setOpcoes] = React.useState(FE_OPCOES_VAZIAS);
-  const set = (k) => (v) => onChange({ ...unidade, [k]: v });
+  /* 10/10/2026 — passageiros = Capacidade (kg) ÷ 75, calculado (regra única em capacidade-passageiros.js). Elevador de
+     CARGA não leva pessoas: só os kg importam e o campo de passageiros nem aparece. Recalcula ao mudar kg ou tipo. */
+  const CP = window.CapacidadePassageiros;
+  const set = (k) => (v) => {
+    const novo = { ...unidade, [k]: v };
+    if (CP && (k === 'capacidade_kg' || k === 'tipo')) {
+      const p = CP.passageiros(novo.capacidade_kg, novo.tipo);
+      novo.capacidade_pessoas = p == null ? '' : p;
+    }
+    onChange(novo);
+  };
 
   React.useEffect(() => {
     let cancelado = false;
@@ -561,6 +703,7 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
       }
     >
       {open && (
+        <FEFaltandoCtx.Provider value={ctxU}>
         <div className="stack" style={{ gap: 18 }}>
           <div>
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Identificação do equipamento</div>
@@ -570,7 +713,7 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
               </FEField>
               <FEField label="Quantidade idêntica"><FEInput type="number" value={unidade.quantidade ?? 1} onChange={(v) => set('quantidade')(Math.max(1, Number(v) || 1))} placeholder="1"/></FEField>
               <FEField label="Tipo de equipamento *"><FESelect value={tipoEquip} onChange={set('tipo_equipamento')} options={FE_TIPOS_EQUIPAMENTO}/></FEField>
-              {tipoEquip === 'elevador' && <FEField label="Tipo *"><FESelect value={unidade.tipo} onChange={set('tipo')} options={FE_TIPOS}/></FEField>}
+              {tipoEquip === 'elevador' && <FEField label="Tipo *" chave="tipo"><FESelect value={unidade.tipo} onChange={set('tipo')} options={FE_TIPOS}/></FEField>}
               {tipoEquip === 'elevador' && <FEField label="Modelo"><FESelect value={unidade.modelo} onChange={set('modelo')} options={modelosDisponiveis.map((m) => ({ value: m.codigo, label: `${m.codigo} — ${m.nome}` }))} placeholder="— selecione o modelo —"/></FEField>}
               {tipoEquip === 'elevador' && <FEField label="Norma de projeto"><FESelect value={unidade.norma_projeto} onChange={set('norma_projeto')} options={FE_NORMAS}/></FEField>}
               {!publicMode && <FEField label="Fornecedor"><FEFornecedorInput value={unidade.fornecedor} onChange={set('fornecedor')} fornecedores={fornecedores}/></FEField>}
@@ -581,15 +724,17 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
             </p>
             {tipoEquip === 'elevador' && (
               <div className="grid-3" style={{ gap: 12, marginTop: 12 }}>
-                <FEField label="Tração *"><FESelect value={unidade.tracao} onChange={set('tracao')} options={FE_TRACOES} placeholder="— selecione —"/></FEField>
+                <FEField label="Tração *" chave="tracao"><FESelect value={unidade.tracao} onChange={set('tracao')} options={FE_TRACOES} placeholder="— selecione —"/></FEField>
                 <FEField label="Capacidade (kg)"><FEInput type="number" value={unidade.capacidade_kg} onChange={set('capacidade_kg')} placeholder="630"/></FEField>
-                <FEField label="Capacidade (passageiros)"><FEInput type="number" value={unidade.capacidade_pessoas} onChange={set('capacidade_pessoas')} placeholder="8"/></FEField>
-                <FEField label="Velocidade (m/s) *"><FEInput type="number" value={unidade.velocidade_ms} onChange={set('velocidade_ms')} placeholder="1.0"/></FEField>
-                <FEField label="Paradas *"><FEInput type="number" value={unidade.paradas} onChange={set('paradas')} placeholder="4"/></FEField>
-                <FEField label="Descrição dos pavimentos *" span="2"><FEInput value={unidade.pavimentos_desc} onChange={set('pavimentos_desc')} placeholder="Térreo, 1, 2, 3"/></FEField>
-                <FEField label="Casa de máquinas *"><FESelect value={unidade.casa_maquinas} onChange={set('casa_maquinas')} options={[{ value: 'com', label: 'Com casa de máquinas' }, { value: 'sem', label: 'Sem casa de máquinas (MRL)' }]}/></FEField>
-                <FEField label="Agrupamento *"><FESelect value={unidade.agrupamento} onChange={set('agrupamento')} options={[{ value: 'simplex', label: 'Simplex' }, { value: 'duplex', label: 'Duplex' }, { value: 'triplex', label: 'Triplex' }, { value: 'group', label: 'Group control' }]}/></FEField>
-                <FEField label="Porta oposta / múltiplas entradas *"><FEInput value={unidade.porta_oposta} onChange={set('porta_oposta')} placeholder="Não / Sim - 180°"/></FEField>
+                {CP && CP.ehCarga(unidade.tipo)
+                  ? <FEField label="Capacidade (passageiros)"><div className="small muted" style={{ padding: '8px 0' }}>Elevador de carga não leva pessoas — só a capacidade em kg vale.</div></FEField>
+                  : <FEField label="Capacidade (passageiros) — calculada"><FEInput type="number" value={CP ? (CP.passageiros(unidade.capacidade_kg, unidade.tipo) ?? '') : unidade.capacidade_pessoas} onChange={() => {}} disabled placeholder="kg ÷ 75"/></FEField>}
+                <FEField label="Velocidade (m/s) *" chave="velocidade_ms"><FEInput type="number" value={unidade.velocidade_ms} onChange={set('velocidade_ms')} placeholder="1.0"/></FEField>
+                <FEField label="Paradas *" chave="paradas"><FEInput type="number" value={unidade.paradas} onChange={set('paradas')} placeholder="4"/></FEField>
+                <FEField label="Descrição dos pavimentos *" span="2" chave="pavimentos_desc"><FEInput value={unidade.pavimentos_desc} onChange={set('pavimentos_desc')} placeholder="Térreo, 1, 2, 3"/></FEField>
+                <FEField label="Casa de máquinas *" chave="casa_maquinas"><FESelect value={unidade.casa_maquinas} onChange={set('casa_maquinas')} options={[{ value: 'com', label: 'Com casa de máquinas' }, { value: 'sem', label: 'Sem casa de máquinas (MRL)' }]}/></FEField>
+                <FEField label="Agrupamento *" chave="agrupamento"><FESelect value={unidade.agrupamento} onChange={set('agrupamento')} options={[{ value: 'simplex', label: 'Simplex' }, { value: 'duplex', label: 'Duplex' }, { value: 'triplex', label: 'Triplex' }, { value: 'group', label: 'Group control' }]}/></FEField>
+                <FEField label="Porta oposta / múltiplas entradas *" chave="porta_oposta"><FEInput value={unidade.porta_oposta} onChange={set('porta_oposta')} placeholder="Não / Sim - 180°"/></FEField>
               </div>
             )}
           </div>
@@ -603,10 +748,10 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
           <div>
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Estrutura e dimensões da obra <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— opcional, Engenharia complementa na vistoria</span></div>
             <div className="grid-3" style={{ gap: 12 }}>
-              <FEField label="Tipo de estrutura da caixa *"><FEInput value={unidade.estrutura_caixa} onChange={set('estrutura_caixa')} placeholder="Concreto / Alvenaria / Aço"/></FEField>
+              <FEField label="Tipo de estrutura da caixa *" chave="estrutura_caixa"><FEInput value={unidade.estrutura_caixa} onChange={set('estrutura_caixa')} placeholder="Concreto / Alvenaria / Aço"/></FEField>
               <FEField label="Caixa — largura (mm)"><FEInput type="number" value={unidade.caixa_largura_mm} onChange={set('caixa_largura_mm')}/></FEField>
               <FEField label="Caixa — profundidade (mm)"><FEInput type="number" value={unidade.caixa_profundidade_mm} onChange={set('caixa_profundidade_mm')}/></FEField>
-              <FEField label="Percurso / altura de viagem (mm) *"><FEInput type="number" value={unidade.percurso_mm} onChange={set('percurso_mm')}/></FEField>
+              <FEField label="Percurso / altura de viagem (mm) *" chave="percurso_mm"><FEInput type="number" value={unidade.percurso_mm} onChange={set('percurso_mm')}/></FEField>
               <FEField label="Última altura / overhead (mm)"><FEInput type="number" value={unidade.overhead_mm} onChange={set('overhead_mm')}/></FEField>
               <FEField label="Profundidade do poço (mm)"><FEInput type="number" value={unidade.poco_mm} onChange={set('poco_mm')}/></FEField>
             </div>
@@ -627,7 +772,7 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
           <div>
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Portas <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— tipo obrigatório, resto opcional</span></div>
             <div className="grid-3" style={{ gap: 12 }}>
-              <FEField label="Tipo de abertura *"><FESelect value={unidade.porta_tipo_abertura} onChange={set('porta_tipo_abertura')} options={['Central', 'Lateral', 'Telescópica']}/></FEField>
+              <FEField label="Tipo de abertura *" chave="porta_tipo_abertura"><FESelect value={unidade.porta_tipo_abertura} onChange={set('porta_tipo_abertura')} options={['Central', 'Lateral', 'Telescópica']}/></FEField>
               <FEField label="Modelo de porta"><FESelect value={unidade.porta_modelo} onChange={set('porta_modelo')} options={FE_OPCOES_ACO} placeholder="— escolha —"/></FEField>
               <FEField label="Largura (mm)"><FEInput type="number" value={unidade.porta_largura_mm} onChange={set('porta_largura_mm')}/></FEField>
               <FEField label="Altura (mm)"><FEInput type="number" value={unidade.porta_altura_mm} onChange={set('porta_altura_mm')}/></FEField>
@@ -641,8 +786,8 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
           <div>
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Elétrico</div>
             <div className="grid-3" style={{ gap: 12 }}>
-              <FEField label="Tensão de alimentação principal *"><FEInput value={unidade.tensao_principal} onChange={set('tensao_principal')} placeholder="380V/3P/60Hz"/></FEField>
-              <FEField label="Tensão de iluminação *"><FEInput value={unidade.tensao_iluminacao} onChange={set('tensao_iluminacao')} placeholder="220V/1P/60Hz"/></FEField>
+              <FEField label="Tensão de alimentação principal *" chave="tensao_principal"><FEInput value={unidade.tensao_principal} onChange={set('tensao_principal')} placeholder="380V/3P/60Hz"/></FEField>
+              <FEField label="Tensão de iluminação *" chave="tensao_iluminacao"><FEInput value={unidade.tensao_iluminacao} onChange={set('tensao_iluminacao')} placeholder="220V/1P/60Hz"/></FEField>
             </div>
           </div>
 
@@ -668,6 +813,7 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
           </React.Fragment>
           )}
         </div>
+        </FEFaltandoCtx.Provider>
       )}
     </Card>
   );
@@ -964,6 +1110,7 @@ function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedir
   const suportado = !!cadastroMatch || Object.prototype.hasOwnProperty.call(FE_RFQ_CONTATOS_PADRAO, grupo.fornecedor);
   const [verResp, setVerResp] = React.useState(false);
   const [recipient, setRecipient] = React.useState(() => contatoPadrao);
+  const [ccRfq, setCcRfq] = React.useState(() => (window.EmailEnvioHelper ? window.EmailEnvioHelper.ccSalvo() : ''));
   const tocadoRef = React.useRef(false);
   React.useEffect(() => {
     if (cadastroMatch && !tocadoRef.current) {
@@ -1000,7 +1147,7 @@ function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedir
         <div style={{ marginTop: 10 }}>
           <div className="row gap-2">
             <Button variant="outline" size="sm" icon="fileText" onClick={() => setVerResp(true)}>Ver resposta do fornecedor</Button>
-            <Button variant="ghost" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', recipient)}>Reenviar por e-mail</Button>
+            <Button variant="ghost" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', { ...recipient, cc: ccRfq })}>Reenviar (nova revisão) por e-mail</Button>
             <Button variant="ghost" size="sm" icon="refresh" disabled={busy} onClick={() => onPedirRevisao(grupo)}>Pedir nova revisão</Button>
           </div>
           {verResp && <FECotacaoRespostaModal cot={cot} onClose={() => setVerResp(false)}/>}
@@ -1012,9 +1159,10 @@ function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedir
             <FEInput value={recipient.email} onChange={setR('email')} placeholder="e-mail"/>
             <FEInput value={recipient.telefone} onChange={setR('telefone')} placeholder="WhatsApp (DDI+DDD+número)"/>
           </div>
+          {window.EmailCcInput && <div style={{ marginTop: 8 }}><window.EmailCcInput value={ccRfq} onChange={setCcRfq} /></div>}
           <div className="row gap-2" style={{ marginTop: 8 }}>
-            <Button variant="outline" size="sm" icon="message" disabled={busy} onClick={() => onEnviar(grupo, 'whatsapp', recipient)}>{cot ? 'Reenviar por WhatsApp' : 'WhatsApp'}</Button>
-            <Button variant="outline" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', recipient)}>{cot ? 'Reenviar por e-mail' : 'E-mail'}</Button>
+            <Button variant="outline" size="sm" icon="message" disabled={busy} onClick={() => onEnviar(grupo, 'whatsapp', recipient)}>{cot && cot.status !== 'rascunho' ? 'Reenviar (nova revisão) por WhatsApp' : 'WhatsApp'}</Button>
+            <Button variant="outline" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', { ...recipient, cc: ccRfq })}>{cot && cot.status !== 'rascunho' ? 'Reenviar (nova revisão) por e-mail' : 'E-mail'}</Button>
             <Button variant="ghost" size="sm" icon="copy" disabled={busy} onClick={() => onEnviar(grupo, 'link', recipient)}>Copiar link</Button>
           </div>
         </div>
@@ -1090,13 +1238,37 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
     setEnviando(key);
     try {
       let cot = cotacaoDoGrupo(grupo);
-      if (!cot) cot = await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, grupo.categoriaProduto);
+      /* 20/10 — regra do usuário: do 2º envio em diante o fornecedor recebe
+         um documento NOVO com letra (VPEL-EL0990-A, -B…) e um aviso em
+         PT/EN/中文 de que é nova versão — nunca o mesmo link/documento de
+         novo (ele acharia que é o mesmo formulário). "Já enviada" = tem
+         data de envio ou saiu de rascunho. Rascunho de revisão que falhou
+         ao enviar é reaproveitado (não gasta outra letra). */
+      let novaVersao = null;
+      if (cot && (cot.sent_at || cot.status !== 'rascunho')) {
+        if (!window.confirm(`${grupo.fornecedor} já recebeu a cotação ${cot.numero_documento}${cot.status === 'respondido' ? ' e já respondeu' : ' (ainda sem resposta)'}.\n\nO reenvio cria uma NOVA REVISÃO (com letra e link novo) e avisa o fornecedor, em português, inglês e chinês, de que é uma nova versão. O documento anterior continua salvo.\n\nContinuar?`)) return;
+        const anterior = cot;
+        cot = await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, grupo.categoriaProduto);
+        novaVersao = { revisao: cot.revisao, anterior: anterior.numero_documento, anteriorRespondida: anterior.status === 'respondido' || !!anterior.responded_at };
+        await reload();
+      } else if (!cot) {
+        cot = await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, grupo.categoriaProduto);
+      } else if (cot.revisao) {
+        /* rascunho de revisão (ex.: "Pedir nova revisão" ou envio que falhou): ainda é a 1ª saída DESTE documento, mas é versão nova para o fornecedor */
+        const anteriorDoc = cotacoes.filter((x) => x.id !== cot.id && x.fornecedor === cot.fornecedor && x.categoria_produto === cot.categoria_produto && (x.sent_at || x.status !== 'rascunho'))
+          .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+        if (anteriorDoc) novaVersao = { revisao: cot.revisao, anterior: anteriorDoc.numero_documento, anteriorRespondida: anteriorDoc.status === 'respondido' || !!anteriorDoc.responded_at };
+      }
       const url = store.cotacaoUrl(cot.token);
-      const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${window.MasterIdEngine.etapaId('cotacao', numeroCotacao)}` : '';
+      /* 23/10 (pedido do usuário) — "Cotação Nº VPCT-0990" no e-mail/WhatsApp
+         ao fornecedor passa a levar a MESMA letra de revisão deste
+         documento (cot.revisao) — antes saía sempre sem letra, mesmo num
+         reenvio já lettered. */
+      const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${window.MasterIdEngine.etapaId('cotacao', numeroCotacao, cot.revisao)}` : '';
       /* 06/10 — assunto e corpo em PT-BR / EN-US / 中文 (fonte única no store). */
       const unidTxt = grupo.unidades.map((u) => u.identificador).join(', ');
       const { subject: assuntoRfq, text: msg } = store.mensagemRfq({
-        numeroDocumento: cot.numero_documento, numeroTxt, url, linkJaEnviadoEmDoisCanais: true,
+        numeroDocumento: cot.numero_documento, numeroTxt, url, linkJaEnviadoEmDoisCanais: true, novaVersao,
         descricaoPt: `da(s) unidade(s) ${unidTxt}`, descricaoEn: `of unit(s) ${unidTxt}`, descricaoZh: `单元 ${unidTxt} `,
       });
       let registrar = true; // só registra "enviado" quando o envio de fato aconteceu
@@ -1114,7 +1286,7 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
            com Proposta/Contrato de Venda/Contrato Instalador); a decisão do
            que fazer com sucesso/falha continua aqui, sem mudança. */
         const { enviouDireto, emailData } = await window.EmailEnvioHelper.tentarEnviarDireto({
-          to: recipient.email, subject: assuntoRfq, text: msg,
+          to: recipient.email, cc: recipient.cc, subject: assuntoRfq, text: msg,
           numeroCotacao, referenciaTipo: 'cotacao_fornecedor', referenciaId: cot.id,
         });
         if (enviouDireto) {
@@ -1253,12 +1425,17 @@ function feHeaderPick(obj) {
 }
 
 /* ---------- Página / componente principal ---------- */
-function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onSaved, onVoltar, onControleCotacoes }) {
+function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, tipoPadrao, onSaved, onVoltar, onControleCotacoes }) {
+  const [mostrarObrig, setMostrarObrig] = React.useState(false); // campos obrigatórios acendem depois de uma tentativa de salvar/enviar
   const [loading, setLoading] = React.useState(!!formularioId);
   const [saving, setSaving] = React.useState(false);
   const [id, setId] = React.useState(formularioId || null);
   const [header, setHeader] = React.useState(feHeaderDefaults());
-  const [unidades, setUnidades] = React.useState([feNovaUnidade('E1')]);
+  /* tipoPadrao só vale pra formulário NOVO (sem formularioId) — veio da rota
+     (/comercial/formulario-escada ou /comercial/formulario-esteira), ver
+     FormularioElevadorPage mais abaixo. Formulário existente sempre carrega
+     as unidades reais, independente de qual das 3 URLs foi usada pra chegar. */
+  const [unidades, setUnidades] = React.useState([feNovaUnidade('E1', !formularioId ? tipoPadrao : undefined)]);
   /* 15/08 — vendedor busca o cliente já cadastrado em Cadastros em vez de
      redigitar tudo aqui (Cadastros existe desde ontem). `criarClienteInline`
      é a válvula de escape: se o cliente ainda não existir lá, mostra o
@@ -1267,6 +1444,16 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
      self_service (link público pro cliente preencher sozinho) sempre usa o
      formulário completo — não faz sentido pedir pro cliente "se buscar". */
   const [clienteId, setClienteId] = React.useState(null);
+  const [clienteSel, setClienteSel] = React.useState(null); // cliente escolhido no seletor (traz contribuinte_icms do cadastro)
+  /* Formulário já salvo reabre com clienteId mas o seletor não avisa o pai — sem isto clienteSel ficava
+     nulo e a obrigatoriedade do Contribuinte de ICMS deixava de valer. */
+  React.useEffect(() => {
+    if (!clienteId) return undefined;
+    if (clienteSel && clienteSel.id === clienteId) return undefined;
+    let vivo = true;
+    window.CadastrosClientesStore?.obter(clienteId).then((c) => { if (vivo && c) setClienteSel(c); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [clienteId]); // eslint-disable-line
   const [criarClienteInline, setCriarClienteInline] = React.useState(false);
   const [linkPublico, setLinkPublico] = React.useState(null);
   const [numeroCotacao, setNumeroCotacao] = React.useState(null);
@@ -1289,6 +1476,37 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
     if (publicMode || !window.PropostaStore) return;
     window.PropostaStore.temCapacidade('propostas', 'precificar_manual').then(setPodePrecificarManual).catch(() => {});
   }, [publicMode]);
+
+  /* 12/10/2026 — trava após a Precificação (ver formulario-elevador-store.js › estadoTrava). Banner + campos desabilitados;
+     o vendedor "pede destrave", o Líder (alçada formularios.destravar) destrava com motivo. */
+  const [trava, setTrava] = React.useState({ travado: false });
+  const [podeDestravarForm, setPodeDestravarForm] = React.useState(false);
+  const [modalTrava, setModalTrava] = React.useState(null); // null | 'pedir' | 'destravar'
+  const [motivoTrava, setMotivoTrava] = React.useState('');
+  const [salvandoTrava, setSalvandoTrava] = React.useState(false);
+  const recarregarTrava = React.useCallback(() => {
+    if (publicMode || !id) { setTrava({ travado: false }); return; }
+    window.FormularioElevadorStore.estadoTrava(id).then(setTrava).catch(() => {});
+  }, [id, publicMode]);
+  React.useEffect(() => { recarregarTrava(); }, [recarregarTrava]);
+  React.useEffect(() => {
+    if (publicMode) return;
+    window.FormularioElevadorStore.podeDestravar().then(setPodeDestravarForm).catch(() => {});
+  }, [publicMode]);
+  const confirmarTrava = async () => {
+    setSalvandoTrava(true);
+    try {
+      if (modalTrava === 'destravar') {
+        await window.FormularioElevadorStore.destravar(id, motivoTrava);
+        window.toast?.('Cotação destravada para edição. O vendedor foi avisado.', 'success');
+      } else {
+        const n = await window.FormularioElevadorStore.pedirDestrave(id, motivoTrava);
+        window.toast?.(`Pedido enviado ao Líder (${n} pessoa${n > 1 ? 's' : ''}).`, 'success');
+      }
+      setModalTrava(null); setMotivoTrava(''); recarregarTrava();
+    } catch (e) { window.toast?.(e.message || String(e), 'error'); }
+    finally { setSalvandoTrava(false); }
+  };
 
   React.useEffect(() => {
     if (publicMode) return;
@@ -1319,6 +1537,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
       setClienteId(f.cliente_id || null);
       if (!f.cliente_id && (f.razao_social || f.contato || f.predio_empreendimento)) setCriarClienteInline(true); // formulário antigo, sem vínculo — mantém editável do jeito que já estava
       if (f.unidades && f.unidades.length) setUnidades(f.unidades);
+      removidasRef.current = [];
       setLoading(false);
     }).catch((e) => { window.toast?.('Erro ao carregar formulário: ' + e.message, 'error'); setLoading(false); });
   }, [formularioId]);
@@ -1353,6 +1572,24 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
     else setCriarClienteInline(true);
   }, [formularioId, prefillFromLead]);
 
+  /* 29/10/2026 — a URL reflete o Tipo de equipamento do 1º card: escolher
+     "Escada Rolante" muda pra /comercial/formulario-escada (e vice-versa),
+     F5/link direto em qualquer uma das 3 reabre no mesmo lugar (ver router.js
+     KNOWN_ROUTES e app.jsx SYNC_PASSTHROUGH_ROUTES). Só atua quando a tela já
+     está numa dessas 3 rotas — nunca nas outras (ex.: esta função também
+     monta sem VpRouter no canal self-service, formulario-cliente.html).
+     Cotação "camaleão" com vários tipos: só o 1º card decide a URL, de
+     propósito — trocar o tipo de um card 2+ não disputa a URL a cada clique. */
+  const tipoUnidadeUm = unidades[0] ? (unidades[0].tipo_equipamento || 'elevador') : 'elevador';
+  React.useEffect(() => {
+    if (publicMode || !window.VpRouter) return;
+    const loc = window.VpRouter.parseLocation();
+    if (!FE_ROTA_POR_TIPO_EQUIPAMENTO_SET.has(loc.route)) return;
+    const rotaAlvo = feRotaPorTipoEquipamento(tipoUnidadeUm);
+    if (loc.route === rotaAlvo) return;
+    window.VpRouter.navigate(rotaAlvo, id, null, { replace: true });
+  }, [tipoUnidadeUm, id, publicMode]);
+
   const setH = (k) => (v) => setHeader((h) => ({ ...h, [k]: v }));
 
   /* Autopreenchimento por CEP — melhor fonte, pois não depende de o CNPJ
@@ -1376,30 +1613,58 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
   /* Autopreenchimento por CNPJ — preenche o formulário inteiro do cliente,
      mas o endereço pode não bater com o real (por isso o CEP acima é a via
      preferencial), então tudo continua editável manualmente. */
+  /* Omie primeiro: se o CNPJ já é cliente no ERP, usa o cadastro de lá; senão traz da consulta pública. */
+  const cnpjConsultadoRef = React.useRef('');
   const buscarCnpjEPreencher = async (cnpjRaw) => {
     if (!window.EnderecoAPI?.isCnpjValido(cnpjRaw)) return;
-    try {
-      const dados = await window.EnderecoAPI.buscarCNPJ(cnpjRaw);
-      setHeader((h) => ({
-        ...h,
-        razao_social: dados.razao_social || h.razao_social,
-        telefone: h.telefone || dados.telefone,
-        endereco_logradouro: window.EnderecoAPI.mesclarLogradouro(h.endereco_logradouro, dados.endereco.logradouro),
-        endereco_complemento: dados.endereco.complemento || h.endereco_complemento,
-        endereco_bairro: dados.endereco.bairro || h.endereco_bairro,
-        endereco_cep: dados.endereco.cep || h.endereco_cep,
-        endereco_cidade: dados.endereco.cidade || h.endereco_cidade,
-        endereco_estado: dados.endereco.estado || h.endereco_estado,
-      }));
-      window.toast?.('Dados do CNPJ preenchidos automaticamente.', 'success');
-    } catch (e) {
-      window.toast?.(e.message, 'warning');
+    const digits = window.EnderecoAPI.sanitizeDigits(cnpjRaw);
+    if (cnpjConsultadoRef.current === digits) return;
+    const r = await window.EnderecoAPI.consultarCnpjOmieFirst(cnpjRaw);
+    if (!r.fonte) {
+      window.toast?.(`Não foi possível consultar o CNPJ (${r.erro || 'serviço indisponível'}). Preencha os dados manualmente.`, 'warning');
+      return;
     }
+    cnpjConsultadoRef.current = digits;
+    const dados = r.dados;
+    setHeader((h) => ({
+      ...h,
+      razao_social: dados.razao_social || h.razao_social,
+      telefone: h.telefone || dados.telefone,
+      email: h.email || dados.email || h.email,
+      endereco_logradouro: dados.endereco.logradouro ? window.EnderecoAPI.mesclarLogradouro(h.endereco_logradouro, dados.endereco.logradouro) : h.endereco_logradouro,
+      endereco_complemento: dados.endereco.complemento || h.endereco_complemento,
+      endereco_bairro: dados.endereco.bairro || h.endereco_bairro,
+      endereco_cep: dados.endereco.cep || h.endereco_cep,
+      endereco_cidade: dados.endereco.cidade || h.endereco_cidade,
+      endereco_estado: dados.endereco.estado || h.endereco_estado,
+    }));
+    window.toast?.(r.fonte === 'omie' ? 'Cliente encontrado no ERP Omie — dados preenchidos.' : 'CNPJ não está no Omie — dados preenchidos pela consulta pública.', 'success');
   };
 
   const setUnidade = (idx) => (u) => setUnidades((arr) => arr.map((x, i) => (i === idx ? u : x)));
-  const addUnidade = () => setUnidades((arr) => [...arr, feNovaUnidade(`E${arr.length + 1}`)]);
-  const removeUnidade = (idx) => setUnidades((arr) => (arr.length > 1 ? arr.filter((_, i) => i !== idx) : arr));
+  // Novo card segue o tipo do 1º equipamento já na tela (cotação toda de escada, por ex.) e,
+  // sem nenhum ainda, o tipoPadrao da rota — o usuário sempre pode trocar o select depois.
+  const addUnidade = () => setUnidades((arr) => [...arr, feNovaUnidade(`E${arr.length + 1}`, (arr[0] && arr[0].tipo_equipamento) || tipoPadrao)]);
+  /* Remover equipamento: antes só tirava da tela — o save nunca apagava no banco e o equipamento voltava ao reabrir
+     (e seguia para RFQ/Precificação/Proposta). Agora unidade já salva vai para `removidasRef` e é apagada no próximo
+     salvar; unidade já enviada a fornecedor não pode ser removida aqui (o preço/Precificação dependem dela). */
+  const removidasRef = React.useRef([]);
+  const removeUnidade = async (idx) => {
+    if (unidades.length <= 1) return;
+    const alvo = unidades[idx];
+    if (alvo && alvo.id) {
+      const cotada = window.FormularioElevadorStore.unidadeJaCotada
+        ? await window.FormularioElevadorStore.unidadeJaCotada(alvo.id) : false;
+      if (cotada && cotada.erro) { window.toast?.('Não foi possível conferir se este equipamento já foi cotado. Tente de novo.', 'error'); return; }
+      if (cotada) {
+        window.toast?.(`Este equipamento já foi enviado para cotação (${cotada.fornecedor}) e não pode ser removido daqui. Exclua a cotação a fornecedor antes, ou mantenha o equipamento.`, 'warning');
+        return;
+      }
+      if (!window.confirm(`Remover o equipamento ${alvo.identificador || ''}? Ele será apagado ao salvar o formulário.`)) return;
+      removidasRef.current = [...removidasRef.current, alvo.id];
+    }
+    setUnidades((arr) => (arr.length > 1 ? arr.filter((_, i) => i !== idx) : arr));
+  };
   /* Duplicar (15/08): copia os ~40 campos técnicos do elevador pra um card
      novo — pedido do vendedor pra quando só muda paradas/velocidade entre
      dois elevadores da mesma cotação (ex.: 2 MRL-4-paradas + 3
@@ -1422,11 +1687,57 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
   const temIdentificacaoMinima = () =>
     !!(header.razao_social?.trim() || header.contato?.trim() || header.predio_empreendimento?.trim());
 
+  /* Campos obrigatórios do cabeçalho (mesmas regras de validar(), em forma de lista para "acender" na tela). */
+  const listaFaltandoHeader = () => {
+    const f = [];
+    if (usaClientePicker ? !clienteId : !temIdentificacaoMinima()) f.push({ chave: 'cliente', nome: usaClientePicker ? 'Cliente' : 'Nome/Razão Social, Contato ou Prédio/Empreendimento' });
+    if (!header.local_obra_cidade?.trim()) f.push({ chave: 'local_obra_cidade', nome: 'Cidade da obra' });
+    if (!header.local_obra_estado?.trim()) f.push({ chave: 'local_obra_estado', nome: 'UF da obra' });
+    if (!header.tipo_mao_de_obra) f.push({ chave: 'tipo_mao_de_obra', nome: 'Instalação Será' });
+    if (!header.responsavel_entrega) f.push({ chave: 'responsavel_entrega', nome: 'Responsável pela entrega' });
+    if (!header.finalidade_compra) f.push({ chave: 'finalidade_compra', nome: 'Finalidade da compra' });
+    if (usaClientePicker ? (clienteSel && clienteSel.contribuinte_icms == null) : (header.contribuinte_icms === '' || header.contribuinte_icms == null)) f.push({ chave: 'contribuinte_icms', nome: 'Contribuinte de ICMS' });
+    if (header.endereco_obra_diferente) {
+      [['logradouro', 'Logradouro da obra'], ['bairro', 'Bairro da obra'], ['cep', 'CEP da obra'], ['cidade', 'Cidade (endereço da obra)'], ['estado', 'UF (endereço da obra)']]
+        .forEach(([suf, nome]) => { if (!header['endereco_obra_' + suf]?.trim()) f.push({ chave: 'endereco_obra_' + suf, nome }); });
+    }
+    return f;
+  };
+  const faltaHeader = new Set(listaFaltandoHeader().map((x) => x.chave));
+  const ctxHeader = { mostrar: mostrarObrig, falta: (k) => faltaHeader.has(k) };
+  /* Resumo de TODOS os faltantes (cabeçalho + cada equipamento) para a mensagem e para o clique em "enviar". */
+  const resumoFaltando = () => {
+    const partes = listaFaltandoHeader().map((x) => x.nome);
+    unidades.forEach((u, i) => {
+      const fu = feFaltandoUnidade(u);
+      if (fu.length) partes.push(`${u.identificador || 'Equipamento ' + (i + 1)}: ${fu.map((x) => x.nome).join(', ')}`);
+    });
+    return partes;
+  };
+  /* Acende tudo e leva a tela até o primeiro campo faltante. Devolve true se havia algo faltando. */
+  const acenderObrigatorios = (prefixo) => {
+    const partes = resumoFaltando();
+    if (!partes.length) return false;
+    setMostrarObrig(true);
+    window.toast?.(`${prefixo || 'Faltam campos obrigatórios'} (em vermelho): ${partes.join(' · ')}.`, 'warning');
+    setTimeout(() => { const el = document.querySelector('.pl-faltando'); el?.scrollIntoView?.({ behavior: 'smooth', block: 'center' }); }, 80);
+    return true;
+  };
+
   const validar = () => {
     if (usaClientePicker ? !clienteId : !temIdentificacaoMinima()) return 'Informe Nome/Razão Social, Contato ou Prédio/Empreendimento antes de continuar.';
     if (!header.local_obra_cidade?.trim() || !header.local_obra_estado?.trim()) return 'Local da obra (cidade/UF) é obrigatório.';
     if (!header.tipo_mao_de_obra) return 'Instalação Será é obrigatório.';
     if (!header.responsavel_entrega) return 'Responsável pela entrega é obrigatório.';
+    /* 10/10/2026 — pedido do usuário: sem estes dois o DIFAL não calcula (cotação Nº 984, obra em SC, ficou
+       sem DIFAL porque o vendedor não respondeu). Finalidade da compra e Contribuinte de ICMS definem se
+       há DIFAL e quem recolhe — viram obrigatórios para ENVIAR a cotação (rascunho continua livre). */
+    if (!header.finalidade_compra) return 'Finalidade da compra é obrigatória — ela define se incide DIFAL.';
+    if (usaClientePicker ? (clienteSel && clienteSel.contribuinte_icms == null) : (header.contribuinte_icms === '' || header.contribuinte_icms == null)) {
+      return usaClientePicker
+        ? 'Informe se o cliente é Contribuinte de ICMS para determinar o responsável pelo recolhimento do DIFAL. (Complete em Cadastros → Clientes.)'
+        : 'Informe se o cliente é Contribuinte de ICMS para determinar o responsável pelo recolhimento do DIFAL.';
+    }
     if (header.endereco_obra_diferente && (!header.endereco_obra_logradouro?.trim() || !header.endereco_obra_bairro?.trim() || !header.endereco_obra_cep?.trim() || !header.endereco_obra_cidade?.trim() || !header.endereco_obra_estado?.trim())) {
       return 'Informe o endereço completo da obra (logradouro, bairro, CEP, cidade e UF).';
     }
@@ -1463,11 +1774,14 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
     // toast nenhum), travando em "Cotação Nº — (gerado ao salvar)" pra
     // sempre. O resto de `validar()` continua opcional pra rascunho.
     if (usaClientePicker ? !clienteId : !temIdentificacaoMinima()) {
+      setMostrarObrig(true);
       window.toast?.(usaClientePicker ? 'Selecione o cliente antes de salvar.' : 'Preencha Nome/Razão Social, Contato ou Prédio/Empreendimento antes de salvar.', 'warning');
       return null;
     }
     const erro = validar();
-    if (novoStatus === 'enviado' && erro) { window.toast?.(erro, 'warning'); return null; }
+    if (novoStatus === 'enviado' && erro) { setMostrarObrig(true); window.toast?.(erro, 'warning'); return null; }
+    /* CNPJ digitado e ainda não consultado (ex.: não saiu do campo antes de salvar) → consulta Omie/pública agora; falha não trava. */
+    if (!usaClientePicker && header.tipo_pessoa !== 'PF') await buscarCnpjEPreencher(header.cnpj);
     setSaving(true);
     try {
       let cliente = null;
@@ -1490,7 +1804,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
         setId(currentId);
         setNumeroCotacao(f.numero_cotacao ?? null);
       } else {
-        await window.FormularioElevadorStore.salvar(currentId, { ...feHeaderPick(header), cliente_id: cliente?.id });
+        await window.FormularioElevadorStore.salvar(currentId, { ...feHeaderPick(header), cliente_id: cliente?.id }, { origem: 'formulario' });
       }
       // Sincroniza unidades: atualiza as que já têm id, cria as que não têm —
       // e hidrata o estado com o id real de cada unidade nova (issue #91:
@@ -1499,21 +1813,26 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
       // Sequencial de propósito: adicionarUnidade calcula indice_ativo
       // consultando as unidades já existentes, então rodar em paralelo
       // arriscaria duas unidades novas caírem no mesmo índice.
+      // Apaga primeiro as unidades salvas que o vendedor removeu da tela (ver removeUnidade).
+      for (const uid of removidasRef.current) {
+        await window.FormularioElevadorStore.removerUnidade(uid, { origem: 'formulario' });
+      }
+      removidasRef.current = [];
       const unidadesSalvas = [];
       for (const u of unidades) {
         const payload = { ...u };
         delete payload.id; delete payload.formulario_id; delete payload.created_at;
         if (u.id) {
-          await window.FormularioElevadorStore.atualizarUnidade(u.id, payload);
+          await window.FormularioElevadorStore.atualizarUnidade(u.id, payload, { origem: 'formulario' });
           unidadesSalvas.push(u);
         } else {
-          const nova = await window.FormularioElevadorStore.adicionarUnidade(currentId, payload);
+          const nova = await window.FormularioElevadorStore.adicionarUnidade(currentId, payload, { origem: 'formulario' });
           unidadesSalvas.push({ ...u, id: nova.id, indice_ativo: nova.indice_ativo });
         }
       }
       setUnidades(unidadesSalvas);
       if (novoStatus) await window.FormularioElevadorStore.enviar(currentId);
-      window.toast?.(novoStatus ? 'Formulário enviado!' : 'Rascunho salvo.', 'success');
+      window.toast?.(novoStatus ? 'Formulário devolvido para a VerticalParts!' : 'Rascunho salvo.', 'success');
       if (novoStatus && avisoSemFornecedor) window.toast?.(avisoSemFornecedor, 'warning');
       onSaved?.(currentId);
       return currentId;
@@ -1541,7 +1860,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
   if (loading) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   return (
-    <div className={publicMode ? 'fe-public' : 'page fade-in'}>
+    <div className={publicMode ? 'fe-public' : 'page fade-in pl'}>
       {!publicMode && (
         <div className="page-head">
           <div className="page-head__l">
@@ -1570,30 +1889,66 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
         </div>
       )}
 
+      {!publicMode && (
+        <div className="pl-legenda">
+          <span><i className="pl-l-edit"/> Campo para preencher</span>
+          <span><i className="pl-l-calc"/> Calculado automaticamente</span>
+          <span><b style={{ color: '#b91c1c' }}>*</b> Obrigatório para enviar a cotação (rascunho pode ficar incompleto) — o que faltar acende em vermelho</span>
+        </div>
+      )}
+
+      {!publicMode && id && (trava.travado || trava.destravado) && (
+        <div style={{ marginBottom: 12, padding: '12px 14px', borderRadius: 6, fontSize: 13, border: '1px solid ' + (trava.travado ? '#b91c1c' : '#FBB039'), background: trava.travado ? '#fef2f2' : '#fff8e6', color: trava.travado ? '#7f1d1d' : '#8a5a00' }}>
+          {trava.travado
+            ? <>🔒 <b>Cotação travada</b> — já foi precificada. Para mudar equipamento ou dados, o <b>Líder</b> precisa destravar (ele vê discrepâncias e dados que faltam).</>
+            : <>🔓 <b>Destravada por {trava.destravadoPor}</b> — motivo: “{trava.motivo}”. Ao devolver a cotação (Enviar direto para Precificação) ela trava de novo.</>}
+          <div className="row gap-2" style={{ marginTop: 8 }}>
+            {trava.travado && !podeDestravarForm && <Button variant="outline" size="sm" icon="send" onClick={() => { setMotivoTrava(''); setModalTrava('pedir'); }}>Pedir destrave</Button>}
+            {trava.travado && podeDestravarForm && <Button variant="primary" size="sm" icon="check" onClick={() => { setMotivoTrava(''); setModalTrava('destravar'); }}>Destravar (informar motivo)</Button>}
+          </div>
+        </div>
+      )}
+      {modalTrava && (
+        <Modal title={modalTrava === 'destravar' ? 'Destravar a cotação' : 'Pedir destrave ao Líder'} onClose={() => setModalTrava(null)}
+          footer={<><Button variant="ghost" onClick={() => setModalTrava(null)}>Cancelar</Button><Button variant="primary" disabled={salvandoTrava || motivoTrava.trim().length < 10} onClick={confirmarTrava}>{salvandoTrava ? 'Enviando…' : (modalTrava === 'destravar' ? 'Destravar' : 'Enviar pedido')}</Button></>}>
+          <p style={{ fontSize: 13, marginBottom: 8 }}>{modalTrava === 'destravar' ? 'Explique o que está errado ou faltando (fica no histórico e avisa o vendedor).' : 'Explique o que precisa mudar e por quê (o Líder recebe um aviso).'}</p>
+          <textarea className="input" rows={4} style={{ width: '100%' }} value={motivoTrava} onChange={(e) => setMotivoTrava(e.target.value)} placeholder="Mínimo 10 letras"/>
+        </Modal>
+      )}
+
       {!publicMode && showLinkCliente && linkPublico && (
         <FELinkClienteModal url={linkPublico} numeroCotacao={numeroCotacao} header={header} onClose={() => setShowLinkCliente(false)}/>
       )}
 
+      <FEFaltandoCtx.Provider value={ctxHeader}>
+      <fieldset disabled={trava.travado} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <Card title="Dados do cliente e da obra">
         <div className="stack" style={{ gap: 14 }}>
           <div>
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Cliente</div>
             {usaClientePicker ? (
-              <FEClientePicker clienteId={clienteId} onSelecionar={(c) => setClienteId(c ? c.id : null)} onCriarNovo={() => setCriarClienteInline(true)}/>
+              <>
+                <FEFaltaBox chave="cliente" aviso="Escolha o cliente (ou cadastre um novo aqui mesmo).">
+                  <FEClientePicker clienteId={clienteId} onSelecionar={(c) => { setClienteId(c ? c.id : null); setClienteSel(c || null); }} onCriarNovo={() => setCriarClienteInline(true)}/>
+                </FEFaltaBox>
+                {faltaHeader.has('contribuinte_icms') && (
+                  <div className="pl-faltando__msg pl-faltando" style={{ marginTop: 6 }}>Informe se o cliente é Contribuinte de ICMS para determinar o responsável pelo recolhimento do DIFAL. (Complete em Cadastros → Clientes.)</div>
+                )}
+              </>
             ) : (
               <>
                 <div className="grid-3" style={{ gap: 12 }}>
                   <FEField label="Tipo de pessoa"><FESelect value={header.tipo_pessoa} onChange={setH('tipo_pessoa')} options={[{ value: 'PJ', label: 'Pessoa Jurídica' }, { value: 'PF', label: 'Pessoa Física' }]}/></FEField>
-                  <FEField label="Nome / Razão Social" span="2"><FEInput value={header.razao_social} onChange={setH('razao_social')} placeholder="Nome do cliente"/></FEField>
+                  <FEField label="Nome / Razão Social" span="2" chave="cliente" aviso="Informe ao menos um: Nome/Razão Social, Contato ou Prédio/Empreendimento."><FEInput value={header.razao_social} onChange={setH('razao_social')} placeholder="Nome do cliente"/></FEField>
                   {header.tipo_pessoa === 'PF'
                     ? <FEField label="CPF"><FEInput value={header.cpf} onChange={setH('cpf')} placeholder="000.000.000-00"/></FEField>
                     : <FEField label="CNPJ"><FEInput value={header.cnpj} onChange={setH('cnpj')} placeholder="00.000.000/0000-00" onBlur={() => buscarCnpjEPreencher(header.cnpj)}/></FEField>}
                   <FEField label="Inscrição Estadual"><FEInput value={header.inscricao_estadual} onChange={setH('inscricao_estadual')} disabled={header.tipo_pessoa === 'PF'}/></FEField>
-                  <FEField label="Contribuinte de ICMS?"><FESelect value={header.contribuinte_icms === '' ? '' : String(header.contribuinte_icms)} onChange={(v) => setH('contribuinte_icms')(v === '' ? '' : v === 'true')} options={[{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }]}/></FEField>
+                  <FEField label="Contribuinte de ICMS? *" chave="contribuinte_icms" aviso="Informe se o cliente é Contribuinte de ICMS para determinar o responsável pelo recolhimento do DIFAL."><FESelect value={header.contribuinte_icms === '' ? '' : String(header.contribuinte_icms)} onChange={(v) => setH('contribuinte_icms')(v === '' ? '' : v === 'true')} options={[{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }]}/></FEField>
                   <FEField label="Telefone"><FEInput value={header.telefone} onChange={setH('telefone')}/></FEField>
                   <FEField label="E-mail" span="2"><FEInput type="email" value={header.email} onChange={setH('email')}/></FEField>
-                  <FEField label="Contato"><FEInput value={header.contato} onChange={setH('contato')} placeholder="Nome do síndico / responsável"/></FEField>
-                  <FEField label="Prédio / Empreendimento" span="2"><FEInput value={header.predio_empreendimento} onChange={setH('predio_empreendimento')} placeholder="Ed. Itacolomi, Shopping Vila Olímpia…"/></FEField>
+                  <FEField label="Contato" chave="cliente" aviso="Informe ao menos um: Nome/Razão Social, Contato ou Prédio/Empreendimento."><FEInput value={header.contato} onChange={setH('contato')} placeholder="Nome do síndico / responsável"/></FEField>
+                  <FEField label="Prédio / Empreendimento" span="2" chave="cliente" aviso="Informe ao menos um: Nome/Razão Social, Contato ou Prédio/Empreendimento."><FEInput value={header.predio_empreendimento} onChange={setH('predio_empreendimento')} placeholder="Ed. Itacolomi, Shopping Vila Olímpia…"/></FEField>
                 </div>
                 <p className="small muted" style={{ margin: '8px 0 0' }}>
                   Sem Nome/Razão Social, CNPJ ou CPF ainda? Informe pelo menos o Contato ou o
@@ -1612,7 +1967,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
             )}
           </div>
           <div className="grid-3" style={{ gap: 12 }}>
-            <FEField label="Finalidade da compra"><FESelect value={header.finalidade_compra} onChange={setH('finalidade_compra')} options={FE_FINALIDADE_COMPRA}/></FEField>
+            <FEField label="Finalidade da compra *" chave="finalidade_compra"><FESelect value={header.finalidade_compra} onChange={setH('finalidade_compra')} options={FE_FINALIDADE_COMPRA}/></FEField>
           </div>
           {header.finalidade_compra === 'revenda' && header.contribuinte_icms === false && (
             <p style={{ fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #FBB039', padding: '8px 12px', margin: 0 }}>
@@ -1620,11 +1975,11 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
             </p>
           )}
           <div className="grid-3" style={{ gap: 12 }}>
-            <FEField label="Cidade da obra *"><FEInput value={header.local_obra_cidade} onChange={setH('local_obra_cidade')}/></FEField>
-            <FEField label="UF da obra *"><FEInput value={header.local_obra_estado} onChange={setH('local_obra_estado')} placeholder="SP"/></FEField>
+            <FEField label="Cidade da obra *" chave="local_obra_cidade"><FEInput value={header.local_obra_cidade} onChange={setH('local_obra_cidade')}/></FEField>
+            <FEField label="UF da obra *" chave="local_obra_estado"><FEInput value={header.local_obra_estado} onChange={setH('local_obra_estado')} placeholder="SP"/></FEField>
             <FEField label="Prazo mínimo desejado em obra"><FEInput value={header.prazo_desejado} onChange={setH('prazo_desejado')} placeholder="3 a 4 meses"/></FEField>
-            <FEField label="Instalação Será *"><FESelect value={header.tipo_mao_de_obra} onChange={setH('tipo_mao_de_obra')} options={FE_INSTALACAO_SERA}/></FEField>
-            <FEField label="Responsável pela entrega *"><FESelect value={header.responsavel_entrega} onChange={setH('responsavel_entrega')} options={FE_RESPONSAVEL_ENTREGA}/></FEField>
+            <FEField label="Instalação Será *" chave="tipo_mao_de_obra"><FESelect value={header.tipo_mao_de_obra} onChange={setH('tipo_mao_de_obra')} options={FE_INSTALACAO_SERA}/></FEField>
+            <FEField label="Responsável pela entrega *" chave="responsavel_entrega"><FESelect value={header.responsavel_entrega} onChange={setH('responsavel_entrega')} options={FE_RESPONSAVEL_ENTREGA}/></FEField>
             {!publicMode && <FEField label="Origem da venda"><FESelect value={header.origem_venda} onChange={setH('origem_venda')} options={FE_ORIGEM_VENDA}/></FEField>}
             {!publicMode && <FEField label="Vendedor"><FEInput value={header.vendedor} onChange={setH('vendedor')} placeholder="Iniciais ou nome"/></FEField>}
           </div>
@@ -1652,6 +2007,8 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
           <FEField label="Observações"><textarea className="input" rows={2} value={header.observacoes || ''} onChange={(e) => setH('observacoes')(e.target.value)}/></FEField>
         </div>
       </Card>
+      </fieldset>
+      </FEFaltandoCtx.Provider>
 
       {/* Sem `id &&`: um formulário novo (ainda não salvo) também mostra
           estas seções — FEAnexos salva o rascunho na hora, por trás, se o
@@ -1672,10 +2029,10 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
           pra editar `unidades` no meio do save e o setUnidades(unidadesSalvas)
           no final sobrescrevia essas edições com o snapshot antigo (achado
           do Codex no PR #167, issue #91). */}
-      <fieldset disabled={saving} style={{ border: 0, padding: 0, margin: 0 }}>
+      <fieldset disabled={saving || trava.travado} style={{ border: 0, padding: 0, margin: 0 }}>
         {unidades.map((u, i) => (
           <div key={u.id || i} style={{ marginTop: 16 }}>
-            <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)} onDuplicate={() => duplicarUnidade(i)} fornecedores={fornecedoresOptions} modelos={modelos} publicMode={publicMode} numeroCotacao={numeroCotacao}/>
+            <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)} onDuplicate={() => duplicarUnidade(i)} fornecedores={fornecedoresOptions} modelos={modelos} publicMode={publicMode} numeroCotacao={numeroCotacao} mostrarObrig={mostrarObrig}/>
           </div>
         ))}
 
@@ -1690,19 +2047,26 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
         </div>
       )}
       <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        {/* Link do cliente: um único botão, que devolve o formulário preenchido
+            pra VerticalParts conferir (não vai pra cotação sozinho, nem tem
+            rascunho). Dentro do sistema não existe mais "Enviar para Cotação":
+            o vendedor segue pelos botões de baixo (RFQ a fornecedores, envio
+            direto pra Precificação, Controle de Cotações). */}
         <div className="row gap-2">
-          <Button variant="outline" onClick={() => salvarTudo(null)} disabled={saving}>{saving ? 'Salvando…' : 'Salvar rascunho'}</Button>
-          <Button variant="primary" onClick={() => salvarTudo('enviado')} disabled={saving}>{saving ? 'Enviando…' : 'Enviar para Cotação'}</Button>
+          {publicMode
+            ? <Button variant="primary" onClick={() => salvarTudo('enviado')} disabled={saving}>{saving ? 'Enviando…' : 'Devolver para a VerticalParts'}</Button>
+            : <Button variant="outline" onClick={async () => { const r = await salvarTudo(null); if (r) acenderObrigatorios('Rascunho salvo, mas ainda faltam campos obrigatórios'); }} disabled={saving || trava.travado}>{saving ? 'Salvando…' : 'Salvar rascunho'}</Button>}
         </div>
       </div>
 
       {!publicMode && (id || onControleCotacoes) && (
         <div className="row gap-2" style={{ marginTop: 16, justifyContent: 'center' }}>
-          {id && <Button variant="ghost" icon="send" onClick={() => setShowCotacaoFornecedor(true)}>Enviar cotação a fornecedores</Button>}
+          {id && <Button variant="ghost" icon="send" onClick={() => { if (acenderObrigatorios('Preencha antes de enviar a cotação ao fornecedor')) return; setShowCotacaoFornecedor(true); }}>Enviar cotação a fornecedores</Button>}
           {id && podePrecificarManual && (
             <Button variant="ghost" icon="calculator" title="Preço já combinado por fora (CEO/Financeiro) — a Proposta já nasce agora, com o preço em aberto pra preencher"
               onClick={async () => {
                 if (!unidades.length) { window.toast?.('Adicione ao menos um equipamento antes de enviar.', 'warning'); return; }
+                acenderObrigatorios('Atenção: faltam campos obrigatórios');
                 if (!window.confirm('A proposta nasce agora, mesmo sem preço — alguém preenche o valor depois (na própria Proposta ou pela fila de Precificação). Confirma?')) return;
                 try {
                   await window.FormularioElevadorStore.enviarDiretoParaPrecificacao(id);
@@ -1752,12 +2116,17 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
 }
 
 /* ---------- Wrapper interno (rota "formulario-elevador") ---------- */
-function FormularioElevadorPage({ setRoute, subsel }) {
+/* `tipoPadrao` — ver app.jsx: as rotas /comercial/formulario-escada e
+   /comercial/formulario-esteira renderizam este mesmo componente passando
+   'escada'/'esteira'; /comercial/formulario-elevador não passa nada (o
+   default 'elevador' de feNovaUnidade já cobre). */
+function FormularioElevadorPage({ setRoute, subsel, tipoPadrao }) {
   const prefillFromLead = subsel && typeof subsel === 'object' ? subsel.__prefillFromLead : null;
   return (
     <FormularioElevadorForm
       formularioId={typeof subsel === 'string' ? subsel : null}
       prefillFromLead={prefillFromLead}
+      tipoPadrao={tipoPadrao}
       onVoltar={() => setRoute('formularios')}
       onSaved={() => {}}
       onControleCotacoes={() => setRoute('controle-cotacoes')}

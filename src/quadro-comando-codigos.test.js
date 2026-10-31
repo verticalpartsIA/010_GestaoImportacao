@@ -1,0 +1,174 @@
+const test = require('node:test');
+const assert = require('node:assert');
+global.window = {};
+require('./quadro-comando-bom-engine.js');
+require('./quadro-comando-codigos.js');
+const E = window.QuadroComandoBomEngine;
+const K = window.QuadroComandoCodigos;
+
+const CAT = [
+  { codigo: 'VPB-318', descricao: 'Botoeira de Cabina em Aço Inox, sem Furos, sem Display Indicador de Posição, para Elevador - Ref.: BST' },
+  { codigo: 'VPB-351', descricao: 'Botoeira de Cabina Vidro Preto, com Botões em Led Branco, e Display em Led Branco, para Elevador - Ref.: BST' },
+  { codigo: 'VPB-032', descricao: 'Botoeira de Cabina Vidro Preto, 10 Andares, com Botões em Led Branco, e Display em Led Branco, para Elevador - Ref.: BST' },
+  { codigo: 'VPB-035', descricao: 'Botoeira de Pavimento Vidro Preto com 2 Botões, &quot;1 Sobe e 1 Desce&quot; sem Display' },
+  { codigo: 'VPB-034', descricao: 'Botoeira de Pavimento Vidro Preto com 1 Botão "Seta Subida" sem Display' },
+  { codigo: 'VPB-317', descricao: 'Botoeira de Pavimento AIE 02 Botões sem Display' },
+  { codigo: 'VPB-065', descricao: 'Botoeira de Pavimento AIE, 2 Botões, com Display' },
+  { codigo: 'VPEL-686', descricao: 'Indicador de Posição de Pavimento LIP, Horizontal, LED Branco' },
+  { codigo: 'VPB-381', descricao: 'Resgate Manual no Comando para Elevador' },
+  { codigo: 'VPMAC-40K-0800-100-380V', descricao: 'Máquina de Tração para Elevador, 5.3KW' },
+  { codigo: 'VPB-321', descricao: 'Porta de Cabina Completa 2 Folhas Lateral Esquerda 800x2000 AI 304' },
+  { codigo: 'VPB-322', descricao: 'Porta de Pavimento Completa 2 Folhas Lateral Esquerda 800x2000 AI 304' },
+  { codigo: 'VPKIT-042', descricao: 'Porta de Pavimento Pintado Abertura Cental Inward' },
+];
+
+test('opcoes filtra por item, decodifica entidades e tira kits/cópias das portas', () => {
+  assert.deepStrictEqual(K.opcoes('maquina_tracao', CAT).map((o) => o.codigo), ['VPMAC-40K-0800-100-380V']);
+  assert.deepStrictEqual(K.opcoes('portas', CAT).map((o) => o.codigo), ['VPB-321']);
+  assert.deepStrictEqual(K.opcoes('portas_pavimento', CAT).map((o) => o.codigo), ['VPB-322']);
+  assert.ok(K.opcoes('lop', CAT).find((o) => o.codigo === 'VPB-035').descricao.includes('"1 Sobe e 1 Desce"'));
+});
+
+test('sugerir: COP pelo display e nº de andares; LOP pela família e botões', () => {
+  assert.strictEqual(K.sugerir('cop', { paradas: 10, resp: { cop_display: 'com' } }, CAT), 'VPB-032');
+  assert.strictEqual(K.sugerir('cop', { paradas: 5, resp: { cop_display: 'com' } }, CAT), 'VPB-351');
+  assert.strictEqual(K.sugerir('cop', { paradas: 5, resp: { cop_display: 'sem' } }, CAT), 'VPB-318');
+  assert.strictEqual(K.sugerir('cop', { paradas: 5, resp: {} }, CAT), null);
+  assert.strictEqual(K.sugerir('lop', { resp: { lop_material: 'vidro', lop_display: 'sem', lop_botoes: '2' } }, CAT), 'VPB-035');
+  assert.strictEqual(K.sugerir('lop', { resp: { lop_material: 'vidro', lop_display: 'sem', lop_botoes: '1' } }, CAT), 'VPB-034');
+  assert.strictEqual(K.sugerir('lop', { resp: { lop_material: 'aco_escovado', lop_display: 'sem', lop_botoes: '2' } }, CAT), 'VPB-317');
+  assert.strictEqual(K.sugerir('lop', { resp: { lop_material: 'aco_escovado', lop_display: 'com', lop_botoes: '2' } }, CAT), 'VPB-065');
+  assert.strictEqual(K.sugerir('resgate_automatico', {}, CAT), 'VPB-381'); // único candidato
+  assert.strictEqual(K.sugerir('maquina_tracao', {}, CAT), null);
+});
+
+test('familiaDoCodigo reconhece qualquer posição da família', () => {
+  assert.strictEqual(K.familiaDoCodigo('VPB-317').nome, 'aco_sem');
+  assert.strictEqual(K.familiaDoCodigo('VPB-034').dois, 'VPB-035');
+  assert.strictEqual(K.familiaDoCodigo('VPB-999'), null);
+});
+
+test('LOP usa a família escolhida (aço, sem display) em vez dos padrões de vidro', () => {
+  const fam = K.familiaDoCodigo('VPB-317');
+  const itens = E.montarItensLop(4, '2', {}, false, { sobe: fam.sobe, desce: fam.desce, dois: fam.dois });
+  assert.deepStrictEqual(itens.map((i) => [i.sku, i.quantidade]), [['VPB-315', 1], ['VPB-316', 1], ['VPB-317', 2]]);
+  const padrao = E.montarItensLop(4, '2', {}, false);
+  assert.deepStrictEqual(padrao.map((i) => i.sku), ['VPB-034', 'VPB-033', 'VPB-035']);
+});
+
+test('itensDoEscopo: código escolhido vira linha; sem código vira pendência; não duplica', () => {
+  const paradas = [
+    { abertura_frontal: true, abertura_traseira: true }, { abertura_frontal: true, abertura_traseira: true }, { abertura_frontal: true, abertura_traseira: false },
+  ];
+  const escopo = {
+    cop: { decisao: 'fornecer', codigo: 'VPB-318' },
+    lip: { decisao: 'fornecer', codigo: 'VPEL-686' },
+    interfone: { decisao: 'fornecer' },
+    maquina_tracao: { decisao: 'fornecer', codigo: 'VPMAC-40K-0800-100-380V' },
+    portas: { decisao: 'fornecer', codigo: 'VPB-321', codigo_pavimento: 'VPB-322', quantidade_pavimento: '5' },
+    gongo: { decisao: 'nao_aplica', codigo: 'X' },
+  };
+  const r = K.itensDoEscopo(escopo, paradas, CAT, ['VPB-318']);
+  assert.deepStrictEqual(r.pendentes, ['interfone']);
+  const por = Object.fromEntries(r.itens.map((i) => [i.sku, i]));
+  assert.ok(!por['VPB-318'], 'não repete o que já está no BOM');
+  assert.strictEqual(por['VPEL-686'].quantidade, 5);          // 3 frente + 2 oposta
+  assert.strictEqual(por['VPEL-686'].confianca, 'estimado');
+  assert.strictEqual(por['VPMAC-40K-0800-100-380V'].quantidade, 1);
+  assert.strictEqual(por['VPB-321'].quantidade, 2);            // cabina frente + oposta
+  assert.strictEqual(por['VPB-322'].quantidade, 5);            // informada pelo vendedor
+  assert.strictEqual(por['VPB-322'].confianca, 'confirmado');
+});
+
+test('inspeção de cabina usa o código escolhido no hub', () => {
+  const r = E.montarItensInspecao({ botoeira_inspecao_cabina: { decisao: 'fornecer', codigo: 'VPB-378' } }, {});
+  assert.strictEqual(r[0].sku, 'VPB-378');
+  const padrao = E.montarItensInspecao({ botoeira_inspecao_cabina: { decisao: 'fornecer' } }, {});
+  assert.strictEqual(padrao[0].sku, 'VPB-193');
+});
+
+test('chicotes automáticos: poço (VPB-209) e topo de cabine (VPB-193) trazem os seus; todo quadro leva HW, MT e OS', () => {
+  const skus = (l) => l.map((i) => i.sku).sort();
+  assert.deepStrictEqual(skus(E.montarItensChicotes([{ sku: 'VPB-209' }], {})),
+    ['VPEL-729a', 'VPEL-730a', 'VPEL-731a', 'VPEL-732a', 'VPEL-733a']);
+  assert.deepStrictEqual(skus(E.montarItensChicotes([{ sku: 'VPB-193' }], {})),
+    ['A-DEFINIR-CA/CC'.replace('/', ''), 'A-DEFINIR-COB1', 'A-DEFINIR-DC1', 'A-DEFINIR-DEN1', 'A-DEFINIR-DP', 'A-DEFINIR-DZ', 'A-DEFINIR-RDZ', 'A-DEFINIR-WT1', 'A-DEFINIR-Y1Y2S3', 'A-DEFINIR-Y4', 'A-DEFINIR-CBTEL1',
+      'VPEL-721a', 'VPEL-723a', 'VPEL-725a', 'VPEL-727a', 'VPEL-728a', 'VPEL-729a', 'VPEL-730a', 'VPEL-731a'].sort());
+  assert.deepStrictEqual(skus(E.montarItensChicotes([{ sku: 'VPB-380' }], {})), ['VPEL-729a', 'VPEL-730a', 'VPEL-731a']);
+  assert.deepStrictEqual(skus(E.montarItensChicotes([{ sku: 'VPEL-729a' }], {})), ['VPEL-730a', 'VPEL-731a']);
+});
+
+test('MRL: máquina (MT), limitador (OS) e PAP (HW) saem com 6000mm quando não medidos; medida vence; com casa de máquinas não presume', () => {
+  const mm = (t) => Object.fromEntries(t.map((x) => [x.endereco_referencia, x.comprimento_final_mm]));
+  const mrl = mm(E.montarTrechosFiacaoFixa({}, 'MRL'));
+  assert.strictEqual(mrl['U/V/W, MT (freio)'], 6000);
+  assert.strictEqual(mrl.OS, 6000);
+  assert.strictEqual(mrl.HW, 6000);
+  const medido = mm(E.montarTrechosFiacaoFixa({ distancia_quadro_maquina_mm: 5200, distancia_quadro_limitador_mm: 4800 }, 'MRL'));
+  assert.strictEqual(medido['U/V/W, MT (freio)'], 5200);
+  assert.strictEqual(medido.OS, 4800);
+  const mr = E.montarTrechosFiacaoFixa({}, 'MR');
+  assert.ok(mr.every((t) => !t.comprimento_final_mm));
+  assert.ok(!mr.some((t) => t.endereco_referencia === 'HW'));
+});
+
+test('chicotes HW, MT e OS levam o comprimento do trecho de fiação fixa; sem medida ficam pendentes', () => {
+  const por = (l) => Object.fromEntries(l.map((i) => [i.sku, i]));
+  const mrl = por(E.montarItensChicotes([], {}, E.montarTrechosFiacaoFixa({}, 'MRL')));
+  ['VPEL-729a', 'VPEL-730a', 'VPEL-731a'].forEach((k) => {
+    assert.match(mrl[k].descricao, /6,00 m$/);
+    assert.strictEqual(mrl[k].confianca, 'estimado');
+    assert.strictEqual(mrl[k].quantidade, 1);
+  });
+  const medido = por(E.montarItensChicotes([], {}, E.montarTrechosFiacaoFixa({ distancia_quadro_maquina_mm: 5200, distancia_quadro_limitador_mm: 4800 }, 'MRL')));
+  assert.match(medido['VPEL-731a'].descricao, /5,20 m$/);
+  assert.strictEqual(medido['VPEL-731a'].confianca, 'confirmado');
+  assert.match(medido['VPEL-729a'].descricao, /4,80 m$/);
+  const mr = por(E.montarItensChicotes([], {}, E.montarTrechosFiacaoFixa({}, 'MR')));
+  assert.match(mr['VPEL-730a'].descricao, /comprimento a definir/);
+  assert.strictEqual(mr['VPEL-730a'].confianca, 'pendente_engenharia');
+  const semTrechos = por(E.montarItensChicotes([], {}));
+  assert.strictEqual(semTrechos['VPEL-731a'].confianca, 'pendente_engenharia');
+});
+
+test('chicotes da caixa de topo: um por conector, 2,40 m (3,50 m SOS e WT2), código a definir até cadastrar; condições', () => {
+  const por = (l) => Object.fromEntries(l.map((i) => [i.sku, i]));
+  const base = por(E.montarItensChicotes([{ sku: 'VPB-193' }], {}));
+  assert.match(base['A-DEFINIR-DP'].descricao, /2,40 m — código VPEL a definir$/);
+  assert.strictEqual(base['A-DEFINIR-DP'].confianca, 'pendente_engenharia');
+  assert.match(base['VPEL-725a'].descricao, /3,50 m$/);
+  assert.match(base['VPEL-721a'].descricao, /2,40 m$/);
+  ['EDP2', 'DC2', 'DEN2', 'WT2', 'COB2'].forEach((k) => assert.ok(!base['A-DEFINIR-' + k], k + ' só com a condição'));
+  const comTudo = por(E.montarItensChicotes([{ sku: 'VPB-193' }], {}, null, { portaOposta: true, celulaCarga: true, cob2: true }));
+  ['EDP2', 'DC2', 'DEN2', 'WT2', 'COB2'].forEach((k) => assert.ok(comTudo['A-DEFINIR-' + k], k));
+  assert.match(comTudo['A-DEFINIR-WT2'].descricao, /3,50 m/);
+  const cad = por(E.montarItensChicotes([{ sku: 'VPB-193' }], {}, null, { codigos: { DP: 'VPEL-740a', SOS: 'VPEL-799a' } }));
+  assert.ok(cad['VPEL-740a'] && !cad['A-DEFINIR-DP']);
+  assert.strictEqual(cad['VPEL-740a'].confianca, 'confirmado');
+  assert.ok(cad['VPEL-799a'] && !cad['VPEL-725a']);
+  assert.deepStrictEqual(Object.keys(por(E.montarItensChicotes([{ sku: 'VPB-209' }], {}))).filter((k) => k.startsWith('A-DEFINIR')), []);
+});
+
+test('cabo de manobra: soma dos pisos + reserva (10 paradas de 3 m = 47 m, 8 paradas = 41 m); piso maior soma o excedente', () => {
+  const pisos = (n, mm = 3000) => Array.from({ length: n - 1 }, () => ({ distancia_mm: mm }));
+  const mm = (n, extra = {}, tipo = 'MRL', geo = {}) => E.montarTrechoCaboManobra(geo, pisos(n), tipo, extra).comprimento_final_mm;
+  assert.strictEqual(mm(10), 47000);
+  assert.strictEqual(mm(8), 41000);
+  const um4m = [...pisos(10)]; um4m[3] = { distancia_mm: 4000 };
+  assert.strictEqual(E.montarTrechoCaboManobra({}, um4m, 'MRL').comprimento_final_mm, 48000);
+  const t = E.montarTrechoCaboManobra({}, pisos(10), 'MRL');
+  assert.strictEqual(t.confianca, 'estimado');
+  assert.strictEqual(t.comprimento_base_mm, 27000);
+  assert.strictEqual(t.contornos_mm, 3000);
+});
+
+test('cabo de manobra: seio/pontas editáveis; com casa de máquinas exige e soma a distância do quadro até a laje; sem percurso fica pendente', () => {
+  const pisos = Array.from({ length: 9 }, () => ({ distancia_mm: 3000 }));
+  assert.strictEqual(E.montarTrechoCaboManobra({ seio_cabo_mm: 4000, folga_mm: 5000 }, pisos, 'MRL').comprimento_final_mm, 27000 + 4000 + 3000 + 5000 + 10000);
+  const semDist = E.montarTrechoCaboManobra({}, pisos, 'MR');
+  assert.strictEqual(semDist.comprimento_final_mm, null);
+  assert.strictEqual(semDist.confianca, 'pendente_engenharia');
+  const mr = E.montarTrechoCaboManobra({ distancia_quadro_entrada_caixa_mm: 8000 }, pisos, 'MR');
+  assert.strictEqual(mr.comprimento_final_mm, 47000 + 8000);
+  assert.strictEqual(E.montarTrechoCaboManobra({}, [], 'MRL').comprimento_final_mm, null);
+});

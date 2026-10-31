@@ -67,7 +67,6 @@
 .pe-top__autosave .dot {
   width: 7px; height: 7px; border-radius: 50%;
   background: var(--vp-success);
-  animation: pulse-dot 2.5s ease-in-out infinite;
 }
 
 .pe-top__main {
@@ -730,8 +729,6 @@ select.pe-input.is-empty {
 .pe-totais-row.final span { font-size: 11px; font-weight: 800; color: var(--vp-yellow); letter-spacing: .14em; text-transform: uppercase; }
 .pe-totais-row.final b { color: var(--vp-yellow); font-size: 22px; }
 
-@keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
-
 /* ---- PDF live preview panel ----
    Mesmo padrão da Ficha Técnica: .pe__preview-wrap mede o espaço disponível
    (ResizeObserver, ver proposta-preview.jsx) e .pe__preview-scaler aplica
@@ -901,9 +898,6 @@ select.pe-input.is-empty {
   border-top: 1px solid #ddd;
   padding-top: 8px;
 }
-
-/* hover ring on focused field's matching preview row */
-.pe-hl { background: #FFFBE6; box-shadow: inset 3px 0 0 0 var(--vp-yellow); }
 
 /* ---- Equipment-specific accents (the cover triangle) ---- */
 .pe__pdf-capa[data-eq="elevador"] .pe__pdf-capa-img { background-image: url("../assets/capa-elevador.png"); }

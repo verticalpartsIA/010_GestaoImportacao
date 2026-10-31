@@ -156,5 +156,39 @@
     };
   }
 
-  window.EnderecoAPI = { sanitizeDigits, isCepValido, isCnpjValido, isCpfValido, validarDocumento, buscarCEP, buscarCNPJ, extrairNumeroLogradouro, mesclarLogradouro };
+  /* Consulta de CNPJ "Omie primeiro": 1) o ERP (Edge Function omie-buscar-cliente — o front nunca fala com o Omie direto);
+     2) só se o Omie não tiver (ou falhar) cai na consulta pública (BrasilAPI). Nunca lança erro. Devolve
+     { fonte: 'omie' | 'externo' | null, omie: { encontrado: true|false|null, ... }, dados, erro }.
+     `omie.encontrado === null` = falha de consulta (NÃO é "não cadastrado"). `dados` tem o mesmo formato de buscarCNPJ
+     (do Omie só vêm razão social, fantasia, telefone e e-mail — endereço fica vazio). */
+  async function consultarCnpjOmieFirst(cnpjRaw) {
+    const cnpj = sanitizeDigits(cnpjRaw);
+    if (!isCnpjValido(cnpj)) return { fonte: null, omie: { encontrado: null }, dados: null, erro: 'CNPJ inválido — confira os dígitos.' };
+    let omie = { encontrado: null, erro: 'Banco de dados indisponível' };
+    try {
+      const sb = window.__VP_SB && window.__VP_SB.sb;
+      if (sb) {
+        const { data, error } = await sb.functions.invoke('omie-buscar-cliente', { body: { cnpj_cpf: cnpj } });
+        if (error) {
+          const st = error.context && error.context.status;
+          omie = { encontrado: null, erro: st === 401 ? 'sessão sem permissão pra consultar o ERP (faça login de novo)' : st ? 'ERP respondeu HTTP ' + st : (error.message || 'falha ao consultar o ERP') };
+        } else omie = data || { encontrado: null, erro: 'Resposta vazia do ERP' };
+      }
+    } catch (e) { omie = { encontrado: null, erro: e.message || 'Falha ao consultar o ERP' }; }
+    if (omie.encontrado === true) {
+      return { fonte: 'omie', omie, erro: null, dados: {
+        cnpj, razao_social: omie.razao_social || '', nome_fantasia: omie.nome_fantasia || '',
+        telefone: omie.telefone || '', email: omie.email || '', status: omie.inativo ? 'inativo' : 'ativo',
+        endereco: { logradouro: '', complemento: '', bairro: '', cep: '', cidade: '', estado: '' },
+      } };
+    }
+    try {
+      const dados = await buscarCNPJ(cnpj);
+      return { fonte: 'externo', omie, dados, erro: null };
+    } catch (e) {
+      return { fonte: null, omie, dados: null, erro: e.message };
+    }
+  }
+
+  window.EnderecoAPI = { sanitizeDigits, isCepValido, isCnpjValido, isCpfValido, validarDocumento, buscarCEP, buscarCNPJ, consultarCnpjOmieFirst, extrairNumeroLogradouro, mesclarLogradouro };
 })();

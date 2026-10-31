@@ -28,6 +28,8 @@ function PrecificacaoLeadsPage({ setRoute, setSubsel, modo, setModo }) {
   const [loading, setLoading] = React.useState(true);
   const [erro, setErro] = React.useState(false);
   const [selectedProject, setSelectedProject] = React.useState(null);
+  const [busca, setBusca] = React.useState(''); // 23/10 (pedido do usuário)
+  const ord = window.useOrdenacao();
 
   React.useEffect(() => {
     let alive = true;
@@ -82,6 +84,13 @@ function PrecificacaoLeadsPage({ setRoute, setSubsel, modo, setModo }) {
   const prontos = items.filter(i => i.analiseAprovada).length;
   const valorPipeline = items.reduce((s, p) => s + (p.value || 0), 0);
 
+  const termo = busca.trim().toLowerCase();
+  const filtradosItems = !termo ? items : items.filter((i) =>
+    [i.name, i.client, i.status].some((v) => (v || '').toString().toLowerCase().includes(termo)));
+  const itemsOrdenados = ord.aplicar(filtradosItems, {
+    projeto: (i) => i.name, cliente: (i) => i.client, valor: (i) => i.value, status: (i) => i.status,
+  });
+
   return (
     <div className="page fade-in">
       <div className="page-head">
@@ -103,12 +112,17 @@ function PrecificacaoLeadsPage({ setRoute, setSubsel, modo, setModo }) {
         <KPI label="Valor em pipeline" value={fmtBRL(valorPipeline)} sub="soma dos leads convertidos" icon="trending"/>
       </div>
 
-      <div className="table-wrap">
+      <div style={{ display: 'flex', gap: 8, margin: '0 0 12px', flexWrap: 'wrap' }}>
+        <input className="input" placeholder="Buscar projeto, cliente ou status…" value={busca}
+          onChange={(e) => setBusca(e.target.value)} style={{ minWidth: 280 }}/>
+      </div>
+
+      <div className="table-wrap table-wrap--sticky">
         <table className="t">
           <thead><tr>
-            <th>Projeto</th><th>Cliente</th>
-            <th className="text-right">Valor</th>
-            <th>Status</th><th></th>
+            {ord.th('projeto', 'Projeto')}{ord.th('cliente', 'Cliente')}
+            {ord.th('valor', 'Valor', { className: 'text-right' })}
+            {ord.th('status', 'Status')}<th></th>
           </tr></thead>
           <tbody>
             {items.length === 0 && (
@@ -116,7 +130,12 @@ function PrecificacaoLeadsPage({ setRoute, setSubsel, modo, setModo }) {
                 Nenhum registro cadastrado.
               </td></tr>
             )}
-            {items.map((p) => (
+            {items.length > 0 && itemsOrdenados.length === 0 && (
+              <tr><td colSpan={99} style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
+                Nenhum resultado para "{busca}".
+              </td></tr>
+            )}
+            {itemsOrdenados.map((p) => (
               <tr key={p.id}
                 style={{ cursor:'pointer', background: selectedProject?.id === p.id ? 'var(--vp-gray-50)' : '' }}
                 onClick={() => setSelectedProject(p)}>
@@ -490,6 +509,7 @@ function PropostasPage({ setRoute, setSubsel }) {
   const [escopo, setEscopo] = React.useState(null);
   const [podeExcluir, setPodeExcluir] = React.useState(false);
   const [excluindoId, setExcluindoId] = React.useState(null);
+  const ord = window.useOrdenacao(); // 23/10 (pedido do usuário) — ordenação por coluna
 
   // Escopo de visibilidade (Configurações do Sistema › Permissões) — resolve
   // antes de carregar, pra montar a query já filtrada por vendedor_id em vez
@@ -505,7 +525,7 @@ function PropostasPage({ setRoute, setSubsel }) {
   const carregar = React.useCallback(() => {
     if (!escopo) return;
     let q = window.__VP_SB.sb.from('propostas')
-      .select('id, numero_documento, titulo, status, valor_total, master_id, numero_cotacao, proposal_type, criado_em, revisao_texto, clientes(razao_social, cnpj), perfis(nome, email)');
+      .select('id, numero_documento, titulo, status, valor_total, master_id, numero_cotacao, proposal_type, criado_em, revisao_texto, vigencia, substituida_por_id, clientes(razao_social, cnpj), perfis(nome, email)');
     if (!escopo.veTudo && escopo.vendedorId) q = q.eq('vendedor_id', escopo.vendedorId);
     q.order('criado_em', { ascending: false }).limit(300)
       .then(({ data }) => setRows(data || []));
@@ -534,9 +554,15 @@ function PropostasPage({ setRoute, setSubsel }) {
     const { data: pz } = await window.__VP_SB.sb.from('precificacoes_elevador')
       .select('id, numero_documento, numero_cotacao').in('status', ['calculado', 'finalizado'])
       .order('numero_cotacao', { ascending: false });
-    const { data: props } = await window.__VP_SB.sb.from('propostas').select('numero_cotacao').not('numero_cotacao', 'is', null);
-    const jaTemProposta = new Set((props || []).map((p) => p.numero_cotacao));
-    setProntas((pz || []).filter((p) => p.numero_cotacao != null && !jaTemProposta.has(p.numero_cotacao)));
+    const { data: props } = await window.__VP_SB.sb.from('propostas')
+      .select('numero_cotacao, numero_documento').not('numero_cotacao', 'is', null).eq('proposal_type', 'elevador');
+    /* 23/10 — "já tem proposta" é por REVISÃO (letra do numero_documento,
+       ver master-id-engine.js parseRevisao), não só pelo Nº da cotação —
+       senão uma Precificação de revisão nova (VPPC-0990-B) nunca aparecia
+       aqui, escondida atrás da Proposta da revisão anterior (VPPR-0990). */
+    const chaveRevisao = (numCot, numDoc) => `${numCot}|${window.MasterIdEngine.parseRevisao(numDoc) || ''}`;
+    const revisoesComProposta = new Set((props || []).map((p) => chaveRevisao(p.numero_cotacao, p.numero_documento)));
+    setProntas((pz || []).filter((p) => p.numero_cotacao != null && !revisoesComProposta.has(chaveRevisao(p.numero_cotacao, p.numero_documento))));
   }, []);
   React.useEffect(() => { carregarProntas(); }, [carregarProntas]);
 
@@ -545,7 +571,13 @@ function PropostasPage({ setRoute, setSubsel }) {
      "de onde vêm os dados da proposta" (antes vivia em Precificação). */
   const abrirDaPrecificacao = async (pz) => {
     try {
-      const r = await window.PropostaHeranca.prefillPorNumeroCotacao(pz.numero_cotacao);
+      /* precificacaoId: pz.id — pina NESTA precificação (achado real do
+         Codex, 23/10): a tela "Prontas para enviar" pode listar uma
+         revisão B ainda só 'calculado' enquanto a original já está
+         'finalizado'; sem o pin, prefillPorNumeroCotacao() prefere a
+         'finalizado' e devolveria os preços da revisão ERRADA, mesmo com
+         o Nº da Proposta rotulado "-B" (ver `letra` abaixo). */
+      const r = await window.PropostaHeranca.prefillPorNumeroCotacao(pz.numero_cotacao, { precificacaoId: pz.id });
       if (!r.encontrado) {
         window.toast?.('Não foi possível localizar o formulário desta cotação.', 'error');
         return;
@@ -553,8 +585,12 @@ function PropostasPage({ setRoute, setSubsel }) {
       /* Nº da Proposta pré-preenchido com o Master ID universal de ETAPA
          (VPPR-0950 — mesmo número da cotação, prefixo da Proposta), não um
          rótulo inventado. Vendedor pode editar, mas o padrão precisa ser o
-         código que todo mundo na empresa reconhece. */
-      const numero = pz.numero_cotacao != null ? window.MasterIdEngine.etapaId('proposta', pz.numero_cotacao) : (pz.numero_documento || '');
+         código que todo mundo na empresa reconhece. Herda a letra de
+         revisão da própria Precificação (VPPC-0950-B → VPPR-0950-B, 23/10)
+         — sem isso, abrir manualmente a Precificação de uma revisão nova
+         geraria um Nº de Proposta que colide com a da revisão anterior. */
+      const letra = pz.numero_documento != null ? window.MasterIdEngine.parseRevisao(pz.numero_documento) : null;
+      const numero = pz.numero_cotacao != null ? window.MasterIdEngine.etapaId('proposta', pz.numero_cotacao, letra) : (pz.numero_documento || '');
       const prefill = { ...r.prefill, numero };
       setSubsel(prefill);
       setRoute('proposta-editor');
@@ -569,6 +605,40 @@ function PropostasPage({ setRoute, setSubsel }) {
   }, [rows]);
 
   const EQUIPAMENTO_LABEL = { elevador: 'Elevador', escada: 'Escada Rolante', esteira: 'Esteira Rolante' };
+
+  /* 23/10 — mesmo aviso que a fila da Precificação já mostra ("substituída
+     por VPEL-EL0990-B") pra quando o fornecedor manda uma revisão nova.
+     Fonte PRIMÁRIA: vigencia/substituida_por_id (colunas reais do sistema
+     "Revisões Comerciais", migration 20261022100000/PR #1054, mantidas por
+     proposta_aplicar_vigencia() — ao contrário de "mais nova por
+     criado_em", essas colunas sabem que uma proposta APROVADA continua
+     vigente mesmo com um rascunho mais novo por cima, achado real do
+     Codex nesta mesma revisão). Só cai pro heurístico (mais nova por
+     criado_em) quando vigencia ainda não foi calculada pro par (ex.:
+     sibling recém-criado por este fluxo, 'em_negociacao', cujo trigger só
+     roda ao mudar de status — substituida_por_id ainda null). */
+  const substituidasPor = React.useMemo(() => {
+    const porId = {}; (rows || []).forEach((p) => { porId[p.id] = p; });
+    const map = {};
+    (rows || []).forEach((p) => {
+      if (p.numero_cotacao == null || p.vigencia === 'vigente') return; // vigência já diz que esta é a atual
+      if (p.substituida_por_id) {
+        // Vigência já calculada pelo motor real — confia nela, mesmo sem
+        // achar a linha-alvo na página (não arrisca o heurístico por cima).
+        const alvo = porId[p.substituida_por_id];
+        if (alvo) map[p.id] = alvo.numero_documento;
+        return;
+      }
+      // vigencia != 'vigente' mas o motor ainda não apontou quem a sucede
+      // (ex.: sibling recém-criado 'em_negociacao' — o trigger só roda ao
+      // mudar de status) — heurístico só pra não deixar a tela muda.
+      const irmas = (rows || []).filter((o) => o.id !== p.id && o.numero_cotacao === p.numero_cotacao && o.proposal_type === p.proposal_type);
+      const maisNovas = irmas.filter((o) => String(o.criado_em) > String(p.criado_em));
+      maisNovas.sort((a, b) => String(b.criado_em).localeCompare(String(a.criado_em)));
+      if (maisNovas[0]) map[p.id] = maisNovas[0].numero_documento;
+    });
+    return map;
+  }, [rows]);
 
   const filtradas = React.useMemo(() => {
     if (!rows) return [];
@@ -601,6 +671,16 @@ function PropostasPage({ setRoute, setSubsel }) {
     ? (totalValor >= 1e6 ? `R$ ${(totalValor / 1e6).toFixed(1)}M` : fmtBRL(totalValor))
     : '—';
   const comMasterId = (rows || []).filter((p) => p.master_id).length;
+
+  const linhasOrdenadas = ord.aplicar(filtradas, {
+    numeroDocumento: (p) => p.numero_documento,
+    cliente: (p) => p.clientes?.razao_social || p.titulo,
+    vendedor: (p) => p.perfis?.nome,
+    masterId: (p) => p.master_id,
+    valor: (p) => (p.valor_total != null ? Number(p.valor_total) : null),
+    status: (p) => p.status,
+    data: (p) => (p.criado_em ? new Date(p.criado_em).getTime() : null),
+  });
 
   const abrirNova = () => { setSubsel && setSubsel(null); setRoute("proposta-editor"); };
   const abrirExistente = (p) => { setSubsel && setSubsel({ __editId: p.id }); setRoute("proposta-editor"); };
@@ -673,29 +753,30 @@ function PropostasPage({ setRoute, setSubsel }) {
         <KPI label="Aprovadas" value={(rows || []).filter((p) => p.status === 'aprovada').length} sub="fecharam negócio" icon="check"/>
       </div>
 
-      <div className="tbar">
-        <div className="seg">
-          {['Todos'].concat(statusDisponiveis).map((s) => (
-            <button key={s} className={fStatus === s ? 'is-active' : ''} onClick={() => setFStatus(s)}>{s}</button>
-          ))}
-        </div>
-        <div className="spacer"/>
-        <div className="search">
-          <Icon.search size={12} color="var(--fg3)"/>
-          <input placeholder="Buscar por código, cliente, CNPJ, equipamento, cotação ou vendedor…" value={busca} onChange={(e) => setBusca(e.target.value)}/>
-        </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+        <input className="input" style={{ maxWidth: 420 }} placeholder="Buscar por código, cliente, CNPJ, equipamento, cotação ou vendedor…" value={busca} onChange={(e) => setBusca(e.target.value)}/>
+        <span className="small" style={{ color: 'var(--fg3)' }}>{rows ? filtradas.length : '…'} proposta(s)</span>
       </div>
 
-      <div className="table-wrap">
-        <table className="t la-table">
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+        {['Todos'].concat(statusDisponiveis).map((s) => (
+          <Button key={s} size="sm" variant={fStatus === s ? 'primary' : 'ghost'} onClick={() => setFStatus(s)}>
+            {String(s).replace(/_/g, ' ')} <span style={{ opacity: .7 }}>({s === 'Todos' ? (rows ? rows.length : 0) : (rows || []).filter((r) => r.status === s).length})</span>
+          </Button>
+        ))}
+      </div>
+
+      <Card title="Propostas" sub="Clique numa proposta para abrir no editor">
+      <div className="table-wrap table-wrap--sticky" style={{ border: 0 }}>
+        <table className="t pcp-grid">
           <thead><tr>
-            <th>Nº Documento</th>
-            <th>Cliente</th>
-            <th>Vendedor</th>
-            <th>Master ID</th>
-            <th className="text-right">Valor</th>
-            <th>Status</th>
-            <th>Data</th>
+            {ord.th('numeroDocumento', 'Nº Documento')}
+            {ord.th('cliente', 'Cliente')}
+            {ord.th('vendedor', 'Vendedor')}
+            {ord.th('masterId', 'Master ID')}
+            {ord.th('valor', 'Valor', { className: 'text-right' })}
+            {ord.th('status', 'Status')}
+            {ord.th('data', 'Data')}
             {podeExcluir && <th></th>}
           </tr></thead>
           <tbody>
@@ -705,14 +786,17 @@ function PropostasPage({ setRoute, setSubsel }) {
             {rows !== null && filtradas.length === 0 && (
               <tr><td colSpan={99}><div className="empty"><h4>Nenhuma proposta encontrada</h4><p>Nada encontrado com os filtros atuais.</p></div></td></tr>
             )}
-            {filtradas.map((p) => (
+            {linhasOrdenadas.map((p) => (
               <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => abrirExistente(p)}>
-                <td><span className="mono small">{p.numero_documento || '—'}</span></td>
+                <td>
+                  <span className="mono small">{p.numero_documento || '—'}</span>
+                  {substituidasPor[p.id] ? <span className="small" style={{ color: 'var(--vp-danger)', fontWeight: 700 }} title={`O cliente já tem uma proposta mais nova (${substituidasPor[p.id]}), de uma revisão do fornecedor. Envie essa, não esta.`}> · substituída por {substituidasPor[p.id]}</span> : null}
+                </td>
                 <td style={{ fontSize: 12.5 }}>{p.clientes?.razao_social || p.titulo || <span className="muted">—</span>}</td>
                 <td style={{ fontSize: 12.5 }}>{p.perfis?.nome || <span className="muted">—</span>}</td>
                 <td><span className="mono small">{p.master_id || <span className="muted">—</span>}</span></td>
                 <td className="cell-money">{p.valor_total ? fmtBRL(p.valor_total) : '—'}</td>
-                <td><StatusBadge status={p.status || 'rascunho'}/></td>
+                <td style={{ whiteSpace: 'nowrap' }}><StatusBadge status={p.status || 'rascunho'}/></td>
                 <td><span className="mono small" style={{ whiteSpace: 'nowrap' }}>{p.criado_em ? new Date(p.criado_em).toLocaleDateString('pt-BR') : '—'}</span></td>
                 {podeExcluir && (
                   <td>
@@ -725,6 +809,7 @@ function PropostasPage({ setRoute, setSubsel }) {
           </tbody>
         </table>
       </div>
+      </Card>
     </div>
   );
 }

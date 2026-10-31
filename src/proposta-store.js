@@ -190,6 +190,9 @@
     if (!cur.data_json || !Object.keys(cur.data_json).length) {
       throw new Error('Salve a proposta antes de publicar.');
     }
+    if (window.PropostaOpcoes && window.PropostaOpcoes.semEquipamentoVisivel(cur.data_json, cur.proposal_type)) {
+      throw new Error('Todos os equipamentos estão ocultos — reexiba ao menos um antes de publicar.');
+    }
     const now = new Date().toISOString();
     const jaPublicada = !!cur.publicado_em;
     const versao = jaPublicada ? (Number(cur.version) || 1) + 1 : (Number(cur.version) || 1);
@@ -260,6 +263,12 @@
 
   function resolverEq(rec, dadosConvertidos) {
     const d = dadosConvertidos;
+    /* Escolha gravada pelo próprio editor (salvar grava proposal_type = eq,
+       valor exato) vale mais que a dedução pelo conteúdo: uma proposta de
+       Escada que recebeu o bloco `elevador` (herança antiga) reabria como
+       Elevador. As legadas têm NULO ou outros formatos e seguem abaixo. */
+    const gravado = rec && rec.proposal_type;
+    if (gravado === 'elevador' || gravado === 'escada' || gravado === 'esteira') return gravado;
     if (d) {
       /* MESMA ORDEM do converterPropostaLegado (elevador → escada →
          esteira). Inverter aqui daria resultado diferente do conversor
@@ -304,6 +313,9 @@
        Só conta como reenvio-pós-revisão se a revisão foi ACEITA — reenviar
        sem decisão registrada (recusada_interna nunca chega aqui, o editor
        não deixa editar) continua dando PROPOSTA_ENVIADA normal. */
+    if (window.PropostaOpcoes && window.PropostaOpcoes.semEquipamentoVisivel(cur.data_json, cur.proposal_type)) {
+      throw new Error('Todos os equipamentos estão ocultos — reexiba ao menos um antes de enviar.');
+    }
     const foiRevisaoAceita = cur.status === 'revisao_solicitada' && cur.revisao_decisao === 'aceita';
     const now = new Date();
     const expires = new Date(now.getTime() + 7*24*3600*1000);
@@ -406,12 +418,25 @@
        numero_cotacao -> formularios_elevador.lead_id -> leads; formulário sem Lead não tem o que converter. */
     await passo('lead→cliente', async () => {
       if (updated.numero_cotacao == null) return;
-      const { data: form } = await c.from('formularios_elevador').select('lead_id').eq('numero_cotacao', updated.numero_cotacao).maybeSingle();
+      const { data: form } = await c.from('formularios_elevador').select('lead_id, cliente_id').eq('numero_cotacao', updated.numero_cotacao).maybeSingle();
       if (!form?.lead_id) return;
-      const { data: leadRow } = await c.from('leads').select('id, building, contact, phone, email').eq('id', form.lead_id).maybeSingle();
+      const { data: leadRow } = await c.from('leads').select('id, building, contact, phone, email, cliente_id, contribuinte_icms').eq('id', form.lead_id).maybeSingle();
       if (!leadRow) return;
       const { error: errLead } = await c.from('leads').update({ status: 'Convertido' }).eq('id', leadRow.id);
       if (errLead) throw errLead;
+      /* Auditoria #843 B2: o cliente certo do negócio é o do Formulário (achado pelo CNPJ). Se o Lead ainda não tem cliente e o
+         Formulário tem, grava ESTE no Lead antes de qualquer busca por nome — criarOuVincularDeLead casa pelo nome do prédio e,
+         quando ele difere da razão social, criava um cliente duplicado. Lead que já tem cliente, ou Formulário sem cliente (ou
+         com cliente que não existe mais), segue o caminho de sempre. */
+      if (!leadRow.cliente_id && form.cliente_id) {
+        const { data: cli, error: errCli } = await c.from('clientes').select('id').eq('id', form.cliente_id).maybeSingle();
+        if (errCli) throw errCli;
+        if (cli) {
+          const { error: errVinc } = await c.from('leads').update({ cliente_id: cli.id }).eq('id', leadRow.id);
+          if (errVinc) throw errVinc;
+          return;
+        }
+      }
       if (window.CadastrosClientesStore) await window.CadastrosClientesStore.criarOuVincularDeLead(leadRow);
     });
     return falhas;
@@ -708,31 +733,48 @@
     ]);
     return { perfis: perfis || [], concedidas: concedidas || [] };
   }
-  async function concederAlcada(perfilId, modulo, capacidade, conceder) {
-    const c = sb(); if (!c) return;
-    if (conceder) {
-      const por = (window.__VP_USER || {}).email || null;
-      await c.from('alcadas_capacidade').upsert(
-        { perfil_id: perfilId, modulo, capacidade, concedido_por: por, concedido_em: new Date().toISOString() },
-        { onConflict: 'perfil_id,modulo,capacidade' },
-      );
-    } else {
-      await c.from('alcadas_capacidade').delete().eq('perfil_id', perfilId).eq('modulo', modulo).eq('capacidade', capacidade);
-    }
-    resetAlcadasCache();
-  }
+  /* Conceder saiu do HUB — quem concede é o vpsistema.com/administracao
+     (árvore de alçadas, 09/10/2026). O banco já recusa gravação do navegador. */
+  async function concederAlcada() { throw new Error('As alçadas agora são geridas em vpsistema.com/administracao.'); }
 
   /* ---------- Trava por aprovação ----------
      Cliente aprovou = editor trava pro vendedor. Quem tem a capacidade
      'destravar_aprovada' pode reabrir — fica editável até o próximo
      Salvar, que retrava sozinho (não fica aberto pra sempre). */
-  async function destravar(id) {
+  /* 12/10/2026: a trava passou a valer desde o envio ao cliente (enviada,
+     visualizada, revisão pedida) e não só na aprovação — qualquer edição
+     depois disso exige o destrave do Líder, com motivo obrigatório. */
+  const STATUS_TRAVADOS = ['enviada', 'visualizada', 'revisao_solicitada', 'aprovada'];
+  async function destravar(id, motivo) {
+    const txt = String(motivo || '').trim();
+    if (txt.length < 10) throw new Error('Informe o motivo do destrave (mínimo 10 letras).');
+    if (!(await temCapacidade('propostas', 'destravar_aprovada'))) throw new Error('Você não tem a alçada para destravar propostas.');
     const c = sb(); if (!c) throw new Error('Supabase indisponível');
     const por = (window.__VP_USER || {}).email || null;
     const now = new Date().toISOString();
-    const { error } = await c.from('propostas').update({ destravada_em: now, destravada_por: por }).eq('id', id);
+    const { data: cur } = await c.from('propostas').select('log, numero_cotacao').eq('id', id).maybeSingle();
+    const log = Array.isArray(cur?.log) ? cur.log.slice() : [];
+    log.push({ status: 'destravada', at: now, meta: { por, motivo: txt } });
+    const { error } = await c.from('propostas').update({ destravada_em: now, destravada_por: por, log }).eq('id', id);
     if (error) throw error;
+    try {
+      window.VPLog?.registrar({ modulo: 'Propostas', acao: 'Destravou a proposta', alvo: 'Proposta', alvo_id: id, detalhe: { motivo: txt, cotacao: cur?.numero_cotacao || null } });
+    } catch (_) {}
     return { destravada_em: now, destravada_por: por };
+  }
+
+  /* Quem pode ocultar/reexibir equipamento na proposta (23/10/2026): o DONO (vendedor_id da proposta) ou quem tem a
+     alçada de líder (propostas.destravar_aprovada — Regiane; Administrador passa). Proposta ainda não salva = do próprio
+     usuário. Checagem de interface (RLS aberta, issue #571) — a trava de status continua em salvar(). */
+  async function podeOcultarEquipamento(id) {
+    if (!id) return true;
+    try {
+      if (await temCapacidade('propostas', 'destravar_aprovada')) return true;
+      const c = sb(); if (!c) return false;
+      const { data: row } = await c.from('propostas').select('vendedor_id').eq('id', id).maybeSingle();
+      const meu = await resolverVendedorId();
+      return !!(row && meu && row.vendedor_id === meu);
+    } catch (e) { return false; }
   }
 
   /* Excluir — pedido do usuário 19/08, fase de muito teste no ar: precisa
@@ -770,8 +812,8 @@
       let destravadaAgora = false;
       if (editId) {
         const { data: atual } = await c.from('propostas').select('status, destravada_em').eq('id', editId).maybeSingle();
-        if (atual && atual.status === 'aprovada' && !atual.destravada_em) {
-          return { erro: 'Proposta aprovada está travada para edição. Peça destrave a quem tem essa alçada.' };
+        if (atual && STATUS_TRAVADOS.includes(atual.status) && !atual.destravada_em) {
+          return { erro: 'Proposta enviada ao cliente está travada para edição. Peça o destrave ao Líder (informando o motivo).' };
         }
         if (atual && atual.destravada_em) destravadaAgora = true;
       }
@@ -817,6 +859,22 @@
       const ehFkPrecificacaoMorta = (err) => /precificacao_id_fkey/i.test(err?.message || '');
       let precificacaoOrfa = false;
 
+      /* 23/10 (achado real do Codex, PR #1070) — "Revisões Comerciais Etapa
+         1" (migration 20261022100000, PR #1054) já colocou em `propostas`
+         dois índices únicos PARCIAIS: uma só vigência='vigente' por
+         (numero_cotacao, tipo) e um só revisao_indice por família — e os
+         dois DEFAULT pra 'vigente'/0. Um insert cru da 2ª proposta de uma
+         família (ver abaixo) colidiria com esses índices contra a proposta
+         original, que também está em 'vigente'/0 por default. `extrasRevisao`
+         preenche esses campos só quando já existe irmã — família com 1
+         membro só (o caso de sempre) continua nos defaults do banco, sem
+         mudança nenhuma. Não integra com as RPCs daquele sistema
+         (proposta_criar_revisao etc. exigem sessão autenticada via
+         vp_usuario_ativo(), que este fluxo — chave anon — não tem ainda);
+         só respeita as mesmas colunas/vocabulário pra não quebrar o
+         constraint nem os relatórios que aquele sistema vier a usar. */
+      let extrasRevisao = {};
+
       /* Trava (02/10, cotação 982): um Nº de cotação digitado ANTES de a cotação
          andar virou "Proposta elaborada" de verdade, pulou Fornecedor e
          Precificação na linha do tempo e colou a proposta de outro vendedor na
@@ -832,13 +890,34 @@
           numeroAnterior = ant ? ant.numero_cotacao : null;
         }
         if (!existing?.id || numeroAnterior !== payload.numero_cotacao) {
-          /* Um Nº de cotação, uma proposta por tipo de equipamento — outra
-             pessoa não pode "pegar" o Nº de uma proposta que já existe. */
+          /* Um Nº de cotação, uma proposta por tipo de equipamento POR
+             REVISÃO — outra pessoa não pode "pegar" o Nº de uma proposta
+             que já existe, mas uma revisão nova do fornecedor (Nº com
+             sufixo de letra próprio, ver master-id-engine.js) tem direito à
+             SUA própria proposta ao lado da anterior (23/10 — pedido do
+             usuário: a proposta precisa dizer qual revisão venceu). */
+          const letraNova = window.MasterIdEngine.parseRevisao(chave);
           const { data: dup, error: dupErr } = await c.from('propostas')
-            .select('id, numero_documento').eq('numero_cotacao', payload.numero_cotacao).eq('proposal_type', eq).limit(1);
+            .select('id, numero_documento, revisao_indice').eq('numero_cotacao', payload.numero_cotacao).eq('proposal_type', eq);
           if (dupErr) throw dupErr;
-          if (dup && dup.length && dup[0].id !== existing?.id) {
-            return { erro: `A cotação Nº ${payload.numero_cotacao} já tem a proposta ${dup[0].numero_documento}. Abra essa proposta em vez de criar outra com o mesmo Nº.` };
+          const conflito = (dup || []).find((d) => d.id !== existing?.id && (window.MasterIdEngine.parseRevisao(d.numero_documento) || null) === letraNova);
+          if (conflito) {
+            return { erro: `A cotação Nº ${payload.numero_cotacao} já tem a proposta ${conflito.numero_documento}. Abra essa proposta em vez de criar outra com o mesmo Nº.` };
+          }
+          const irmas = (dup || []).filter((d) => d.id !== existing?.id);
+          if (irmas.length) {
+            const raiz = irmas.find((d) => !window.MasterIdEngine.parseRevisao(d.numero_documento)) || irmas[0];
+            extrasRevisao = {
+              revisao_indice: Math.max(0, ...irmas.map((d) => Number(d.revisao_indice) || 0)) + 1,
+              revisao_codigo: letraNova,
+              // 'em_negociacao' (não 'vigente') — evita colidir com a índice
+              // parcial; quem decide qual revisão vira a vigente de verdade
+              // é o motor do próprio sistema (proposta_aplicar_vigencia) ou,
+              // até essa integração chegar, a tela (ver "substituídasPor").
+              vigencia: 'em_negociacao',
+              proposta_raiz_id: raiz ? raiz.id : null,
+              proposta_base_id: raiz ? raiz.id : null,
+            };
           }
           if (eq === 'elevador') {
             const { data: precif, error: precifErr } = await c.from('precificacoes_elevador')
@@ -877,10 +956,10 @@
         if (error) throw error;
         return { ...row, precificacaoOrfa };
       } else {
-        let { data: row, error } = await c.from('propostas').insert([{ ...payload, status: 'rascunho' }]).select('id, token').single();
+        let { data: row, error } = await c.from('propostas').insert([{ ...payload, ...extrasRevisao, status: 'rascunho' }]).select('id, token').single();
         if (error && ehFkPrecificacaoMorta(error)) {
           precificacaoOrfa = true;
-          ({ data: row, error } = await c.from('propostas').insert([{ ...payload, precificacao_id: null, status: 'rascunho' }]).select('id, token').single());
+          ({ data: row, error } = await c.from('propostas').insert([{ ...payload, ...extrasRevisao, precificacao_id: null, status: 'rascunho' }]).select('id, token').single());
         }
         if (error) throw error;
         if (window.EventosFluxo) window.EventosFluxo.registrar({
@@ -907,6 +986,6 @@
     salvar,
     resolverEscopoVisibilidade, resetEscopoVisibilidadeCache,
     resolverPerfilAtual, temCapacidade, podeConcederAlcadas, resetAlcadasCache,
-    listarAlcadas, concederAlcada, destravar, excluir,
+    listarAlcadas, concederAlcada, destravar, excluir, podeOcultarEquipamento,
   };
 }());

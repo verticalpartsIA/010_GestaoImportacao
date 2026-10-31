@@ -50,8 +50,16 @@
     const numerosSerie = unique(pis.flatMap((p) => p.numeros_serie || []));
     const numerosRequisicao = unique(pis.map((p) => p.numero_requisicao));
     const datasAbertura = pis.map((p) => p.data_abertura).filter(Boolean).sort();
-    const valorTotal = pis.reduce((s, p) => s + (Number(p.valor_total) || 0), 0);
-    const moeda = (pis[0] && pis[0].moeda) || 'USD';
+    /* Ordem estável (o banco não garante a ordem de listarPIsVinculadas): P.I. mais antiga primeiro, desempate pelo número. */
+    const ordenadas = pis.slice().sort((a, b) => String(a.data_abertura || '9999').localeCompare(String(b.data_abertura || '9999')) || String(a.numero_pi || '').localeCompare(String(b.numero_pi || '')) || String(a.id || '').localeCompare(String(b.id || '')));
+    const moeda = (ordenadas[0] && ordenadas[0].moeda) || 'USD';
+    /* Onda 1 (30/10/2026): o total gravado soma só as P.I. na moeda da primeira (antes somava tudo como se fosse a mesma
+       moeda). As demais aparecem em totaisPorMoeda e a tela avisa (moedasMistas). */
+    const totaisPorMoeda = {};
+    pis.forEach((p) => { const m = p.moeda || 'USD'; totaisPorMoeda[m] = (totaisPorMoeda[m] || 0) + (Number(p.valor_total) || 0); });
+    const moedasMistas = Object.keys(totaisPorMoeda).length > 1;
+    const valorTotal = totaisPorMoeda[moeda] || 0;
+    const cotacoesDistintas = unique(pis.map((p) => p.numero_cotacao).filter((v) => v != null));
     /* 23/08 — achado real: embarques-importacao.jsx nunca expõe
        numero_cotacao na tela (o embarque só se liga à cotação
        INDIRETAMENTE, via P.I. vinculada). Sem isso, todo o disparo de
@@ -59,8 +67,8 @@
        entrega) ficaria mudo pra sempre em produção — nenhum embarque
        real teria numero_cotacao gravado. Deriva da primeira P.I.
        vinculada, mesma lógica de fornecedor/incoterms acima. */
-    const numeroCotacao = pis.map((p) => p.numero_cotacao).find((v) => v != null) ?? null;
-    return { piNumbers, fornecedores, incoterms, categorias, numerosSerie, numerosRequisicao, dataPi: datasAbertura[0] || '', valorTotal, moeda, numeroCotacao };
+    const numeroCotacao = ordenadas.map((p) => p.numero_cotacao).find((v) => v != null) ?? null;
+    return { piNumbers, fornecedores, incoterms, categorias, numerosSerie, numerosRequisicao, dataPi: datasAbertura[0] || '', valorTotal, moeda, numeroCotacao, totaisPorMoeda, moedasMistas, cotacoesDistintas };
   }
 
   function _payload(form, pis) {
@@ -70,7 +78,13 @@
     const nfes = (form.nfes || []).map((n) => ({ ...n, valor: n.valor !== '' && n.valor != null ? Number(n.valor) : null })).filter((n) => n.numero);
     const resumo = resumoPIs(pis || []);
     const num = (v) => (v === '' || v == null ? null : Number(v));
+    // Cotações de frete (aba Frete): a vencedora preenche os campos únicos que o resto do sistema já lê.
+    const EF = window.EmbFreteCalc;
+    const cotacoesFrete = EF ? EF.normalizar(form.cotacoes_frete) : [];
+    const vencida = EF ? EF.resumoVencedor(cotacoesFrete) : null;
+    const f = vencida ? { ...form, ...vencida } : form;
     return {
+      cotacoes_frete: cotacoesFrete,
       numero_cotacao: resumo.numeroCotacao ?? (form.numero_cotacao ?? null),
       nome_embarque: form.nome_embarque || null, status_etapa: form.status_etapa || 'Pagamento',
       valor_total: resumo.valorTotal || null, moeda_valor_total: resumo.moeda || form.moeda_valor_total || 'USD',
@@ -79,13 +93,13 @@
       data_pedido_redestinacao: form.data_pedido_redestinacao || null,
       etd_original: form.etd_original || null, etd_atual: form.etd_atual || null, houve_rolagem: !!form.houve_rolagem,
       historico_rolagens: form.historico_rolagens || [], containers,
-      tipo_frete: form.tipo_frete || null, modalidade_frete: form.modalidade_frete || null, agente_carga: form.agente_carga || null,
-      cotacao_frete: num(form.cotacao_frete), moeda_frete: form.moeda_frete || 'USD', aprovacao_frete: form.aprovacao_frete || 'Pendente',
-      pedido_booking: form.pedido_booking || null, transit_time: num(form.transit_time), free_time: num(form.free_time),
+      tipo_frete: form.tipo_frete || null, modalidade_frete: form.modalidade_frete || null, agente_carga: f.agente_carga || null,
+      cotacao_frete: num(f.cotacao_frete), moeda_frete: f.moeda_frete || 'USD', aprovacao_frete: form.aprovacao_frete || 'Pendente',
+      pedido_booking: form.pedido_booking || null, transit_time: num(f.transit_time), free_time: num(f.free_time),
       referencia_despachante: form.referencia_despachante || null, custos_estimativa: num(form.custos_estimativa),
       documentos_marimex: form.documentos_marimex || null, transit_time_total: num(form.transit_time_total),
       di: form.di || null, data_registro_di: form.data_registro_di || null, canal_parametrizacao: form.canal_parametrizacao || null,
-      ultima_data_free_time: form.ultima_data_free_time || null, eta_santos: form.eta_santos || null, historico_eta: form.historico_eta || [],
+      ultima_data_free_time: form.ultima_data_free_time || null, eta_santos: form.eta_atual || form.eta_santos || null, eta_original: form.eta_original || null, eta_atual: form.eta_atual || null, presenca_carga: form.presenca_carga || null, historico_eta: form.historico_eta || [],
       conferencia_status: form.conferencia_status || null, conferencia_motivo: form.conferencia_motivo || null, conferencia_data: form.conferencia_data || null,
       empresa_desembaraco: form.empresa_desembaraco || null, faturamento_desembaraco: num(form.faturamento_desembaraco),
       numerario_desembaraco: num(form.numerario_desembaraco), valor_reembolso: num(form.valor_reembolso),
@@ -116,37 +130,63 @@
       client: saved.nome_embarque || saved.referencia_embarque || 'Gestão Importação',
       vessel: saved.navio || null, bl, sealine: saved.sealine || null,
       container_number: containerNumero, containers: (saved.containers || []).length || 1,
+      containers_lista: (saved.containers || []).map((x) => ({ numero: x.numero || null, tipo_tamanho: x.tipo_tamanho || null, lacre: x.lacre || null })),
       container_type: (saved.containers && saved.containers[0] && saved.containers[0].tipo_tamanho) || null,
       origin: saved.porto_origem || null, destination: saved.porto_destino || null,
       etd: saved.etd_atual || saved.etd_original || null,
-      eta: saved.eta_santos || null, eta_original: saved.eta_santos || null,
+      eta: saved.eta_atual || saved.eta_santos || null, eta_original: saved.eta_original || saved.eta_atual || saved.eta_santos || null,
       status, numero_cotacao: saved.numero_cotacao || null,
     };
 
     try {
-      const { data: existente } = await c.from('embarques').select('id')
+      const { data: existente, error: errBusca } = await c.from('embarques').select('id, eta, last_ais_sync')
         .eq('origem_embarque_importacao_id', embarqueImportacaoId).maybeSingle();
+      if (errBusca) throw errBusca;
       if (existente) {
-        await c.from('embarques').update(patch).eq('id', existente.id);
+        /* O rastreio (AIS) pode ter atualizado o ETA depois do último ETA digitado: não apaga. */
+        if (existente.eta && existente.last_ais_sync) {
+          const hist = saved.historico_eta || [];
+          const ultimo = hist.reduce((m, h) => (h && h.registrado_em && h.registrado_em > m ? h.registrado_em : m), '');
+          if (!ultimo || String(ultimo) < String(existente.last_ais_sync)) { delete patch.eta; }
+        }
+        const { error } = await c.from('embarques').update(patch).eq('id', existente.id);
+        if (error) throw error;
       } else {
         const id = 'EM-' + Date.now().toString().slice(-6);
-        await c.from('embarques').insert({ id, position: 0, docs: [], milestones: [], ...patch, origem_embarque_importacao_id: embarqueImportacaoId });
+        const { error } = await c.from('embarques').insert({ id, position: 0, docs: [], milestones: [], ...patch, origem_embarque_importacao_id: embarqueImportacaoId });
+        if (error) throw error;
         c.functions.invoke('ais-sync').catch(() => {}); // popula posição/timeline já na criação
       }
     } catch (e) {
       console.warn('[EmbarquesImportacaoStore] _sincronizarRastreio falhou (não bloqueia o salvamento do embarque)', e);
+      window.toast?.('Embarque salvo, mas o espelho do rastreamento não foi atualizado: ' + ((e && e.message) || 'erro desconhecido'), 'error');
     }
+  }
+
+  /* T6 #1226 (31/10/2026): agente de carga e empresa de desembaraço ganham o vínculo com o cadastro de
+     Fornecedores ao lado do nome. Agente da cotação de frete vencedora usa o fornecedor da própria cotação;
+     nos demais casos só liga quando o nome bate com UM cadastro (senão fica sem vínculo, o nome continua). */
+  async function _comFornecedoresIds(row, form) {
+    const S = window.CadastrosFornecedoresStore;
+    if (!S || !S.resolverIdPorNome) return row;
+    try {
+      const EF = window.EmbFreteCalc;
+      const venc = EF ? EF.vencedor(EF.normalizar(form.cotacoes_frete)) : null;
+      const agenteId = venc && venc.fornecedor_id ? venc.fornecedor_id : await S.resolverIdPorNome(row.agente_carga, form.agente_carga_id);
+      const despId = await S.resolverIdPorNome(row.empresa_desembaraco, form.empresa_desembaraco_id);
+      return { ...row, agente_carga_id: row.agente_carga ? (agenteId || null) : null, empresa_desembaraco_id: row.empresa_desembaraco ? (despId || null) : null };
+    } catch (e) { console.warn('[EmbarquesImportacaoStore] vínculo de fornecedor não resolvido', e); return row; }
   }
 
   async function criar(form, pis) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const user = window.__VP_USER || {};
     const historico = [{ data: new Date().toISOString(), descricao: 'Embarque criado', usuario: user.nome || user.email || 'Sistema' }];
-    const row = { ..._payload({ ...form, historico }, pis), created_by: user.email || null };
+    const row = await _comFornecedoresIds({ ..._payload({ ...form, historico }, pis), created_by: user.email || null }, form);
     const { data, error } = await c.from('embarques_importacao').insert(row).select().single();
     if (error) throw error;
     if (window.EventosFluxo) window.EventosFluxo.registrar({
-      evento: 'EMBARQUE_CRIADO', numeroCotacao: data.numero_cotacao, alvoLabel: data.nome || data.id, alvoId: data.id,
+      evento: 'EMBARQUE_CRIADO', numeroCotacao: data.numero_cotacao, alvoLabel: data.nome_embarque || data.id, alvoId: data.id,
     });
     await _sincronizarRastreio(data.id, data);
     return data;
@@ -164,14 +204,19 @@
     const antes = await obter(id);
     const user = window.__VP_USER || {};
     const historico = [...(form.historico || []), { data: new Date().toISOString(), descricao: 'Embarque atualizado', usuario: user.nome || user.email || 'Sistema' }];
-    const row = { ..._payload({ ...form, historico }, pis), updated_at: new Date().toISOString() };
+    const row = await _comFornecedoresIds({ ..._payload({ ...form, historico }, pis), updated_at: new Date().toISOString() }, form);
     const { data, error } = await c.from('embarques_importacao').update(row).eq('id', id).select().single();
     if (error) throw error;
     if (window.EventosFluxo) {
       const alvoLabel = data.nome_embarque || data.id;
       window.EventosFluxo.registrar({ evento: 'EMBARQUE_ATUALIZADO', numeroCotacao: data.numero_cotacao, alvoLabel, alvoId: data.id });
+      /* Embarque costuma nascer sem P.I. (a tela pede "salve para vincular") e só ganha o Nº da cotação depois — os
+         eventos disparados antes saíram sem Nº e o motor de gatilhos os ignorou. Na transição "sem Nº → com Nº" repete
+         EMBARQUE_CRIADO e as transições de campo já preenchidas, agora com o Nº (auditoria de 11/10). */
+      const ganhouCotacao = !!(antes && antes.numero_cotacao == null && data.numero_cotacao != null);
+      if (ganhouCotacao) window.EventosFluxo.registrar({ evento: 'EMBARQUE_CRIADO', numeroCotacao: data.numero_cotacao, alvoLabel, alvoId: data.id });
       const transicao = (campo, evento) => {
-        if (antes && !antes[campo] && data[campo]) {
+        if ((antes && !antes[campo] && data[campo]) || (ganhouCotacao && data[campo])) {
           window.EventosFluxo.registrar({ evento, numeroCotacao: data.numero_cotacao, alvoLabel, alvoId: data.id, detalhe: { [campo]: data[campo] } });
         }
       };
@@ -255,5 +300,112 @@
     )));
   }
 
-  window.EmbarquesImportacaoStore = { listarTodas, obter, listarPIsVinculadas, resumoPIs, criar, atualizar, remover, arquivar, containersDaCotacao, expandirContainers };
+  /* Chamado por PIStore quando o Nº da cotação chega ao embarque fora de atualizar() (vínculo pela P.I.): registra os
+     eventos que tinham saído sem Nº e atualiza o espelho do rastreio (embarques.numero_cotacao). */
+  async function aoGanharCotacao(id) {
+    const data = await obter(id);
+    if (!data || data.numero_cotacao == null) return;
+    if (window.EventosFluxo) {
+      const alvoLabel = data.nome_embarque || data.id;
+      window.EventosFluxo.registrar({ evento: 'EMBARQUE_CRIADO', numeroCotacao: data.numero_cotacao, alvoLabel, alvoId: data.id });
+      [['agente_carga', 'AGENTE_CARGA_DEFINIDO'], ['data_carregamento', 'CARGO_READY_CONFIRMADO'],
+       ['canal_parametrizacao', 'EMBARQUE_CHEGOU_BRASIL'], ['data_entrega', 'EMBARQUE_ENTREGUE_OBRA']].forEach(([campo, evento]) => {
+        if (data[campo]) window.EventosFluxo.registrar({ evento, numeroCotacao: data.numero_cotacao, alvoLabel, alvoId: data.id, detalhe: { [campo]: data[campo] } });
+      });
+    }
+    await _sincronizarRastreio(data.id, data);
+  }
+
+
+  /* ---------- Cotações de frete marítimo (aba Frete) ----------
+     Cada cotação tem id "<embarque>:F<n>" (vira referencia_id do e-mail em
+     emails_projeto, referencia_tipo 'cotacao_frete'). Anexos no bucket
+     `engenharia`. O envio usa o helper único de e-mail (send-email): nada
+     da Edge Function/Inbox foi alterado. */
+  const FRETE_ANEXO_MAX = 25 * 1024 * 1024;
+  const FRETE_EMAIL_MAX = 2.5 * 1024 * 1024; // limite real do send-email (MAX_ANEXO_TOTAL)
+
+  // Grava só a coluna das cotações. Quem é vencedora NÃO muda aqui (isso só vale no "Salvar" do embarque,
+  // que também atualiza agente/frete/prazos e dispara os eventos): a marca de vencedora vem do banco.
+  async function salvarCotacoesFrete(id, cotacoes) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data: atual, error: e0 } = await c.from('embarques_importacao').select('cotacoes_frete').eq('id', id).single();
+    if (e0) throw e0;
+    const gravadas = {};
+    ((atual && atual.cotacoes_frete) || []).forEach((g) => { gravadas[g.id] = !!g.vencedor; });
+    const lista = window.EmbFreteCalc.normalizar(cotacoes).map((g) => ({ ...g, vencedor: !!gravadas[g.id] }));
+    const { error } = await c.from('embarques_importacao').update({ cotacoes_frete: lista, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw error;
+    return lista;
+  }
+
+  async function uploadAnexoFrete(embarqueId, cotacaoId, file) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    if (!file) throw new Error('Arquivo não informado.');
+    if (file.size > FRETE_ANEXO_MAX) throw new Error('Arquivo acima de 25 MB.');
+    const ok = /^(image\/|application\/pdf)/.test(file.type || '') || /\.(pdf|png|jpe?g|webp|gif|xlsx?|docx?|csv)$/i.test(file.name || '');
+    if (!ok) throw new Error('Envie PDF, imagem ou planilha/documento.');
+    const seguro = String(file.name).replace(/[^\w.\-]/g, '_');
+    const path = `embarques-frete/${String(embarqueId)}/${String(cotacaoId).replace(/[^\w\-]/g, '_')}/${Date.now()}_${seguro}`;
+    const { error } = await c.storage.from('engenharia').upload(path, file, { upsert: false });
+    if (error) throw new Error(error.message);
+    const { data: pub } = c.storage.from('engenharia').getPublicUrl(path);
+    const user = window.__VP_USER || {};
+    return { nome: file.name, url: pub.publicUrl, path, tipo: file.type || '', tamanho: file.size, por: user.email || null, em: new Date().toISOString() };
+  }
+
+  // Anexos que cabem no e-mail (≤ 2,5 MB somados) vão como arquivo; o resto vai como link no texto.
+  async function anexosParaEmail(anexos) {
+    const attachments = []; const links = [];
+    let total = 0;
+    for (const a of (anexos || [])) {
+      if (total + (a.tamanho || 0) > FRETE_EMAIL_MAX) { links.push(a); continue; }
+      try {
+        const resp = await fetch(a.url);
+        if (!resp.ok) { links.push(a); continue; }
+        const buf = new Uint8Array(await resp.arrayBuffer());
+        let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+        attachments.push({ filename: a.nome, contentType: a.tipo || 'application/octet-stream', base64: btoa(bin) });
+        total += buf.length;
+      } catch (e) { links.push(a); }
+    }
+    return { attachments, links };
+  }
+
+  // Envia o pedido de cotação ao agente pelo send-email (aparece em Enviados no Inbox) e registra o envio.
+  async function enviarPedidoCotacaoFrete(emb, cotacao, { to, cc, subject, text }) {
+    if (!emb || !emb.id) throw new Error('Salve o embarque antes de enviar a cotação.');
+    if (!to) throw new Error('Informe o e-mail do agente.');
+    const { attachments, links } = await anexosParaEmail(cotacao.anexos);
+    const corpo = links.length
+      ? text + '\n\n' + links.map((a) => `• ${a.nome}: ${a.url}`).join('\n')
+      : text;
+    const r = await window.EmailEnvioHelper.tentarEnviarDireto({
+      to, cc, subject, text: corpo,
+      numeroCotacao: emb.numero_cotacao ?? undefined,
+      referenciaTipo: 'cotacao_frete', referenciaId: cotacao.id,
+      attachments: attachments.length ? attachments : undefined,
+    });
+    if (!r.enviouDireto) return { ok: false, links, erro: r.emailData || r.emailError };
+    const user = window.__VP_USER || {};
+    const envio = { em: new Date().toISOString(), por: user.email || null, para: to, assunto: subject, anexos: attachments.length, links: links.length };
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Embarques de Importação', acao: 'Enviou pedido de cotação de frete ao agente',
+      alvo: emb.nome_embarque || emb.id, alvo_id: emb.id, detalhe: { agente: cotacao.agente, para: to },
+    });
+    return { ok: true, envio };
+  }
+
+  // E-mails de ENTRADA vinculados a esta cotação (Message-ID da resposta ao e-mail enviado pelo site).
+  async function respostasFrete(cotacaoId) {
+    const c = sb(); if (!c || !cotacaoId) return [];
+    const { data, error } = await c.from('emails_projeto')
+      .select('id, assunto, de_email, de_nome, data_mensagem')
+      .eq('direcao', 'entrada').is('excluido_em', null).eq('referencia_id', String(cotacaoId))
+      .order('data_mensagem', { ascending: false }).limit(20);
+    if (error) return [];
+    return data || [];
+  }
+
+  window.EmbarquesImportacaoStore = { salvarCotacoesFrete, uploadAnexoFrete, enviarPedidoCotacaoFrete, respostasFrete, aoGanharCotacao, listarTodas, obter, listarPIsVinculadas, resumoPIs, criar, atualizar, remover, arquivar, containersDaCotacao, expandirContainers };
 }());

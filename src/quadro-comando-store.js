@@ -58,15 +58,16 @@
 
   async function obter(id) {
     const c = sb(); if (!c) return null;
-    const [{ data: header }, { data: paradas }, { data: intervalos }, { data: geometria }, { data: maquina }] = await Promise.all([
+    const [{ data: header }, { data: paradas }, { data: intervalos }, { data: geometria }, { data: maquina }, { data: componentes }] = await Promise.all([
       c.from('quadros_comando').select('*').eq('id', id).maybeSingle(),
       c.from('quadros_comando_paradas').select('*').eq('quadro_comando_id', id).order('ordem'),
       c.from('quadros_comando_intervalos_piso').select('*').eq('quadro_comando_id', id).order('ordem'),
       c.from('quadros_comando_geometria').select('*').eq('quadro_comando_id', id).maybeSingle(),
       c.from('quadros_comando_maquina').select('*').eq('quadro_comando_id', id).maybeSingle(),
+      c.from('quadros_comando_componentes').select('*').eq('quadro_comando_id', id).maybeSingle(),
     ]);
     if (!header) return null;
-    return { ...header, paradas: paradas || [], intervalos: intervalos || [], geometria: geometria || {}, maquina: maquina || {} };
+    return { ...header, paradas: paradas || [], intervalos: intervalos || [], geometria: geometria || {}, maquina: maquina || {}, componentes: componentes || {} };
   }
 
   async function listarPorNumeroCotacao(numeroCotacao) {
@@ -125,7 +126,7 @@
   async function salvarMaquina(quadroId, maquina) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('quadros_comando_maquina')
-      .upsert({ ...maquina, quadro_comando_id: quadroId, updated_at: new Date().toISOString() }, { onConflict: 'quadro_comando_id' });
+      .upsert({ ...maquina, fases: maquina.fases || '3', quadro_comando_id: quadroId, updated_at: new Date().toISOString() }, { onConflict: 'quadro_comando_id' });
     if (error) throw error;
   }
 
@@ -146,6 +147,22 @@
     return mapa;
   }
 
+  /* Estrutura do produto do quadro no Omie: variante -> produto (pcp_quadro_variante) -> filhos (pcp_estrutura).
+     null = variante sem produto ou sem estrutura (aí vale a lista fixa do motor). */
+  async function bomDaEstruturaOmie(varianteKey, catalogo) {
+    const c = sb(); if (!c) return null;
+    const { data: v, error: e1 } = await c.from('pcp_quadro_variante').select('codigo_produto').eq('variante', varianteKey).maybeSingle();
+    if (e1 || !v || !v.codigo_produto) return null;
+    const { data: linhas, error: e2 } = await c.from('pcp_estrutura').select('codigo_filho, quantidade').eq('codigo_pai', v.codigo_produto).limit(1000);
+    if (e2 || !linhas || !linhas.length) return null;
+    const codigos = [...new Set(linhas.map((l) => l.codigo_filho))];
+    const { data: prods, error: e3 } = await c.from('pcp_produtos').select('codigo, descricao, unidade').in('codigo', codigos);
+    if (e3) return null;
+    const porCodigo = {};
+    (prods || []).forEach((p) => { porCodigo[p.codigo] = p; });
+    return { produto: v.codigo_produto, itens: window.QuadroComandoBomEngine.montarBomDaEstrutura(linhas, porCodigo, catalogo, v.codigo_produto) };
+  }
+
   /* ---------- Cálculo: BOM + trechos de corte (Ramo A — fabricar interno) ----------
      Idempotente por regeneração: apaga o cálculo anterior deste quadro e
      grava o novo (o quadro em si e suas respostas de formulário não são
@@ -158,20 +175,71 @@
     const quadro = await obter(quadroId);
     if (!quadro) throw new Error('Quadro de comando não encontrado.');
 
-    const varianteKey = engine.chaveVariante(quadro.maquina.potencia_kw, quadro.maquina.tensao_v);
+    // O modelo escolhido no Escopo manda (a tensão da aba Máquina é a da REDE do prédio e pode diferir da do quadro);
+    // sem modelo no Escopo, vale potência/tensão da máquina como antes.
+    const modeloEscopo = String((((quadro.escopo_fornecimento || {}).quadro_comando) || {}).detalhe || '').match(/^(7\.5|15|30)_(220|380)$/);
+    const potVariante = modeloEscopo ? Number(modeloEscopo[1]) : quadro.maquina.potencia_kw;
+    const tensVariante = modeloEscopo ? Number(modeloEscopo[2]) : quadro.maquina.tensao_v;
+    const varianteKey = engine.chaveVariante(potVariante, tensVariante);
     const catalogo = await catalogoPorSku();
 
     let bomItens = [];
     let erroVariante = null;
-    if (varianteKey) {
+    let fonteBom = null;
+    // 1º a estrutura do produto no Omie (pcp_estrutura); só cai na lista fixa do código se a variante não tiver produto/estrutura.
+    const chaveQuadro = engine.chaveVarianteQuadro(potVariante, tensVariante);
+    const doOmie = chaveQuadro ? await bomDaEstruturaOmie(chaveQuadro, catalogo) : null;
+    if (doOmie && doOmie.itens.length) {
+      bomItens = doOmie.itens; fonteBom = `Omie ${doOmie.produto}`;
+    } else if (varianteKey) {
       const r = engine.montarBomFixo(varianteKey, catalogo);
-      bomItens = r.itens; erroVariante = r.erro;
+      bomItens = r.itens; erroVariante = r.erro; fonteBom = 'lista fixa do sistema (variante sem estrutura no Omie)';
     } else {
-      erroVariante = 'Potência/tensão da máquina não preenchida ou fora das 4 variantes conhecidas (7,5/15 kW × 220/380 V) — BOM fixo não gerado. Preencha Máquina/Freio/Encoder e gere novamente.';
+      erroVariante = 'Potência/tensão da máquina não preenchida ou sem estrutura cadastrada no Omie para essa variante (7,5/15/30 kW × 220/380 V) — BOM fixo não gerado. Preencha Máquina/Freio/Encoder e gere novamente.';
     }
 
-    const trechosFixa = engine.montarTrechosFiacaoFixa(quadro.geometria);
-    const trechoManobra = engine.montarTrechoCaboManobra(quadro.geometria, quadro.intervalos);
+    // LOP — botoeiras de pavimento prontas (Sobe / Desce / 2 botões) pela posição de cada parada; só se vamos fornecer.
+    const lopEsc = (quadro.escopo_fornecimento || {}).lop || {};
+    if (lopEsc.decisao === 'fornecer') {
+      const pub = quadro.respostas_publico || {};
+      const nParadas = (quadro.paradas || []).length || parseInt(pub.num_paradas, 10) || 0;
+      const botoes = lopEsc.botoes_intermediarios || pub.lop_botoes || '2';
+      const comDisplay = lopEsc.com_display === true || lopEsc.com_display === 'sim' || pub.lop_display === 'com';
+      // Se o vendedor escolheu um código de LOP no hub, vale a família dele (vidro/aço, com/sem display).
+      const famCod = window.QuadroComandoCodigos && window.QuadroComandoCodigos.familiaDoCodigo(lopEsc.codigo);
+      const familia = famCod ? { sobe: famCod.sobe, desce: famCod.desce, dois: famCod.dois } : null;
+      // Com paradas cadastradas, usa a qtd de LOP frontal/traseira de cada uma; senão (só o nº de paradas do formulário público) assume 1 frontal por parada.
+      const itensLop = (quadro.paradas || []).length
+        ? engine.montarItensLopParadas(quadro.paradas, botoes, catalogo, comDisplay, familia)
+        : engine.montarItensLop(nParadas, botoes, catalogo, comDisplay, familia);
+      bomItens = [...bomItens, ...itensLop];
+    }
+
+    bomItens = [...bomItens, ...engine.montarItensInspecao(quadro.escopo_fornecimento, catalogo)];
+
+    // Itens do Escopo com código do Omie escolhido no hub (COP, LIP, portas, máquina…). Fornecer sem código = pendência.
+    let pendentesCodigo = [];
+    const K = window.QuadroComandoCodigos;
+    if (K) {
+      let catOmie = [];
+      try { catOmie = await K.carregarCatalogo(c); } catch (e) { console.warn('[quadro-comando] catálogo do Omie indisponível:', e); }
+      const extra = K.itensDoEscopo(quadro.escopo_fornecimento, quadro.paradas, catOmie, bomItens.map((i) => i.sku));
+      bomItens = [...bomItens, ...extra.itens];
+      pendentesCodigo = extra.pendentes;
+    }
+
+    // Chicotes VPEL que acompanham a caixa do poço, a caixa de topo de cabine e o quadro (depois de todos os itens, para ver os códigos escolhidos).
+    const trechosFixa = engine.montarTrechosFiacaoFixa(quadro.geometria, quadro.tipo_aplicacao);
+    // Códigos VPEL dos chicotes (lista "Chicotes da caixa de topo"); sem a tabela/códigos o chicote entra como "código a definir".
+    let codigosChicote = {};
+    try {
+      const rc = await c.from('chicotes_caixa_topo').select('chave,codigo');
+      (rc.data || []).forEach((x) => { if (x.codigo) codigosChicote[x.chave] = x.codigo; });
+    } catch (e) { console.warn('[quadro-comando] lista de chicotes indisponível:', e); }
+    const portaOposta = (quadro.paradas || []).some((p) => p.abertura_traseira);
+    bomItens = [...bomItens, ...engine.montarItensChicotes(bomItens, catalogo, trechosFixa, { codigos: codigosChicote, portaOposta, celulaCarga: false, cob2: false })];
+
+    const trechoManobra = engine.montarTrechoCaboManobra(quadro.geometria, quadro.intervalos, quadro.tipo_aplicacao);
     const trechosCarro = engine.montarTrechosFiacaoCarro(quadro.geometria, quadro.configuracao);
     const trechos = [...trechosFixa, trechoManobra, ...trechosCarro];
 
@@ -191,9 +259,9 @@
     await salvar(quadroId, { status: 'cotado' });
     if (window.VPLog) window.VPLog.registrar({
       modulo: 'Quadro de Comando', acao: 'Gerou BOM e lista de corte', alvo_id: quadroId,
-      detalhe: { totalItens: bomItens.length, erroVariante },
+      detalhe: { totalItens: bomItens.length, erroVariante, fonteBom, pendentesCodigo },
     });
-    return { bomItens, trechos, erroVariante };
+    return { bomItens, trechos, erroVariante, fonteBom, pendentesCodigo };
   }
 
   async function obterBomECortes(quadroId) {
@@ -344,8 +412,25 @@
     return unidades || [];
   }
 
+  /* Nº da cotação do Formulário dono da Unidade. Antes o vínculo gravava só a Unidade e quadros_comando.numero_cotacao
+     ficava nulo para sempre (64 de 64 em 11/10) — e o RFQ do quadro exige o Nº (MasterIdEngine), então nunca saía. */
+  async function numeroCotacaoDaUnidade(unidadeElevadorId) {
+    const c = sb(); if (!c || !unidadeElevadorId) return null;
+    const { data: un, error: e1 } = await c.from('formularios_elevador_unidades').select('formulario_id').eq('id', unidadeElevadorId).maybeSingle();
+    if (e1) throw e1;
+    if (!un) return null;
+    const { data: f, error: e2 } = await c.from('formularios_elevador').select('numero_cotacao').eq('id', un.formulario_id).maybeSingle();
+    if (e2) throw e2;
+    return f ? (f.numero_cotacao ?? null) : null;
+  }
+
   async function vincularFormularioElevador(quadroId, unidadeElevadorId) {
-    await salvar(quadroId, { formulario_elevador_unidade_id: unidadeElevadorId || null });
+    const patch = { formulario_elevador_unidade_id: unidadeElevadorId || null };
+    if (unidadeElevadorId) {
+      const n = await numeroCotacaoDaUnidade(unidadeElevadorId);
+      if (n != null) patch.numero_cotacao = n;
+    }
+    await salvar(quadroId, patch);
   }
 
   /* Monta o objeto "unidade" sintético que CEF_SPEC_DEFS_QUADRO_COMANDO
@@ -423,8 +508,15 @@
     if (eUn) throw eUn;
     if (!unidadeElevador) throw new Error('A Unidade do Formulário de Elevador vinculada não foi encontrada — vincule novamente.');
 
+    // Quadros vinculados antes da correção de 11/10 não têm o Nº: completa a partir do Formulário da Unidade.
+    let numeroCotacao = quadro.numero_cotacao;
+    if (numeroCotacao == null) {
+      numeroCotacao = await numeroCotacaoDaUnidade(quadro.formulario_elevador_unidade_id);
+      if (numeroCotacao == null) throw new Error('O Formulário de Elevador vinculado ainda não tem Nº da Cotação — confira o vínculo antes de enviar.');
+      await salvar(quadroId, { numero_cotacao: numeroCotacao });
+    }
     const unidadeSintetica = construirUnidadeSintetica(quadro, unidadeElevador);
-    const cot = await store.gerar(unidadeElevador.formulario_id, [unidadeSintetica], fornecedor, quadro.numero_cotacao, 'quadro_comando');
+    const cot = await store.gerar(unidadeElevador.formulario_id, [unidadeSintetica], fornecedor, numeroCotacao, 'quadro_comando');
     await salvar(quadroId, { cotacao_fornecedor_id: cot.id });
     return cot;
   }

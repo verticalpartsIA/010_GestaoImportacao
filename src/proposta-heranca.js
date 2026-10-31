@@ -22,8 +22,18 @@
 
   /* ---------- Busca as fontes a partir do Nº da Cotação ----------
      numeroCotacao é o inteiro que o vendedor conhece (ex.: 902), o mesmo
-     que vem sendo continuado desde a planilha histórica. */
-  async function buscarFontes(numeroCotacao) {
+     que vem sendo continuado desde a planilha histórica.
+
+     opts.precificacaoId (23/10, achado real do Codex/PR #1070): quando o
+     chamador JÁ sabe qual Precificação quer (ex.: abriu ela na tela, ou
+     acabou de aprová-la) — pina a busca NAQUELA precificação específica em
+     vez de aplicar a heurística "finalizado > mais recente" abaixo. Sem
+     isso, pedir o prefill de uma revisão B (status 'calculado', ainda não
+     aprovada) enquanto a revisão original já está 'finalizado' sempre
+     devolvia os preços/ativos da ORIGINAL — a Proposta nascia rotulada
+     "-B" mas com o conteúdo errado (da revisão anterior). */
+  async function buscarFontes(numeroCotacao, opts) {
+    const { precificacaoId } = opts || {};
     const c = sb();
     if (!c) throw new Error('Supabase não carregado');
     // Aceita tanto o nº puro (898) quanto o Master ID completo (VPEL-EL0898).
@@ -52,15 +62,22 @@
        maturidade do pipeline (aprovada > em análise > respondida > última).
        Entre as precificações do mesmo Nº de Cotação, prioriza a que foi
        explicitamente aprovada (issue #4) — sem isso, a Proposta podia puxar
-       um rascunho de cálculo nunca revisado só por ser o mais recente. */
+       um rascunho de cálculo nunca revisado só por ser o mais recente.
+       Com precificacaoId, essa heurística some de propósito: o chamador
+       mandou qual é, e a cotação do fornecedor vem só do vínculo DELA
+       (nunca do "melhor" entre as cotações da família inteira). */
     const lista = cotacoes || [];
     const listaPz = precificacoes || [];
-    const precificacao = listaPz.find((p) => p.status === 'finalizado') || listaPz[0] || null;
-    const cotacao = (precificacao && lista.find((x) => x.id === precificacao.cotacao_fornecedor_id))
-      || lista.find((x) => x.status === 'aprovada')
-      || lista.find((x) => x.status === 'em_analise')
-      || lista.find((x) => x.status === 'respondido')
-      || lista[0] || null;
+    const precificacao = precificacaoId
+      ? (listaPz.find((p) => p.id === precificacaoId) || null)
+      : (listaPz.find((p) => p.status === 'finalizado') || listaPz[0] || null);
+    const cotacao = precificacaoId
+      ? (precificacao ? (lista.find((x) => x.id === precificacao.cotacao_fornecedor_id) || null) : null)
+      : ((precificacao && lista.find((x) => x.id === precificacao.cotacao_fornecedor_id))
+          || lista.find((x) => x.status === 'aprovada')
+          || lista.find((x) => x.status === 'em_analise')
+          || lista.find((x) => x.status === 'respondido')
+          || lista[0] || null);
 
     return {
       encontrado: true,
@@ -97,20 +114,30 @@
       const mod = modelos.find((m) => m.unidadeId === uid) || {};
       const modCalc = modelosCalc.find((m) => m.unidadeId === uid) || {};
       const capKg = u.capacidade_kg || tec.capacidade_kg;
-      const capPass = u.capacidade_pessoas || tec.capacidade_pessoas;
+      /* 10/10/2026 — passageiros = Capacidade máx. (kg) ÷ 75 (regra única, capacidade-passageiros.js); Elevador de CARGA
+         não leva pessoas: só os kg. Antes valia o número digitado à mão no Formulário (o "4000 Passageiros" da 950). */
+      const CP = window.CapacidadePassageiros;
+      const capPass = CP ? CP.passageiros(capKg, u.tipo || tec.tipo) : (u.capacidade_pessoas || tec.capacidade_pessoas);
       const largura = u.caixa_largura_mm || tec.caixa_largura_mm;
       const prof = u.caixa_profundidade_mm || tec.caixa_profundidade_mm;
       const paradas = u.paradas || tec.paradas;
       const tipo = u.tipo || tec.tipo || '';
       const cabLargura = u.cabina_largura_mm || tec.cabina_largura_mm;
       const cabProf = u.cabina_profundidade_mm || tec.cabina_profundidade_mm;
-      /* Elevador de Carga também pode ter capacidade de passageiros (não é
-         exclusividade do tipo Passageiro) — o "4000 Passageiros" visto na
-         cotação 950 era só o vendedor tendo digitado o número errado no
-         Formulário (corrigido pra 53 depois), não uma regra de categoria.
-         Não suprimir por tipo aqui. */
+      /* REGRA (Financeiro, 10/10/2026): cada equipamento físico é ÚNICO e tem o SEU código (VPEL-EL0963-1 … -27,
+         numeração corrida da Precificação — mo_lookup). O identificador da Unidade do Formulário NÃO é código de
+         equipamento quando a Unidade tem quantidade > 1. Aqui ficam todos os códigos físicos desta Unidade. */
+      const codigos = ((precificacao && precificacao.mo_lookup) || [])
+        .filter((l) => l.unidadeId === uid && l.identificador)
+        .sort((a, b) => (Number(a.equipamentoIndice) || 0) - (Number(b.equipamentoIndice) || 0))
+        .map((l) => l.identificador);
+      const idUnidade = u.identificador || tec.identificador || '';
       return {
-        id: u.identificador || tec.identificador || '',
+        id: codigos.length ? codigos.join(', ') : idUnidade,
+        codigos: codigos.length ? codigos : (idUnidade ? [idUnidade] : []),
+        /* Liga a especificação (e o item de valores) aos ativos físicos VPEL-ELxxxx-k — é o que
+           permite listar os N equipamentos de uma Unidade de quantidade N, cada um com seu código. */
+        unidadeId: uid || '',
         modelo: mod.modelo || u.modelo || tec.modelo || '',
         empreendimento: '',
         carac: tipo,
@@ -187,23 +214,150 @@
     // Há Unidade com vários equipamentos: 1 ativo por equipamento físico e
     // `indice` sequencial único (1..N) — os consumidores (Contrato Instalador,
     // dashboard financeiro) identificam o ativo por esse índice.
+    /* 10/10 — na explosão os códigos vêm CORRIDOS (1..N, menor → maior
+       paradas) de mo_lookup (ver renumerarPorParadas em
+       precificacao-elevador-store.js): a ordem e o código dos ativos
+       seguem a Precificação, não a ordem das Unidades do Formulário. */
+    const porUid = new Map(porUnidade.map((x) => [x.uid, x]));
     const out = [];
+    moLookup.forEach((l) => {
+      const x = porUid.get(l.unidadeId);
+      if (!x) return; // equipamento avulso (sem Unidade real) fica de fora, como sempre
+      out.push({
+        indice: out.length + 1, codigo: l.identificador || x.codigo, identificador: l.identificador || x.identificador,
+        modelo: x.modelo, unidadeId: x.uid, equipamentoIndice: l.equipamentoIndice ?? null,
+        custoInstalacaoMaoDeObraRs: Number(l.valorRs) || null,
+      });
+    });
+    // Unidade sem nenhuma linha em mo_lookup mantém o formato de sempre
     porUnidade.forEach((x) => {
-      if (x.linhasMo.length > 1) {
-        x.linhasMo.forEach((l) => out.push({
-          indice: out.length + 1, codigo: l.identificador || x.codigo, identificador: l.identificador || x.identificador,
-          modelo: x.modelo, unidadeId: x.uid, equipamentoIndice: l.equipamentoIndice ?? null,
-          custoInstalacaoMaoDeObraRs: Number(l.valorRs) || null,
-        }));
-      } else {
-        out.push({
-          indice: out.length + 1, codigo: x.codigo, identificador: x.identificador, modelo: x.modelo,
-          unidadeId: x.uid, equipamentoIndice: 1,
-          custoInstalacaoMaoDeObraRs: Number((x.linhasMo[0] || {}).valorRs) || null,
-        });
-      }
+      if (x.linhasMo.length) return;
+      out.push({
+        indice: out.length + 1, codigo: x.codigo, identificador: x.identificador, modelo: x.modelo,
+        unidadeId: x.uid, equipamentoIndice: 1, custoInstalacaoMaoDeObraRs: null,
+      });
     });
     return out;
+  }
+
+  /* ---------- Perfis por tipo de equipamento (acabamentos) ----------
+     Cotação com 2+ TIPOS (Carga / Passageiro / Panorâmico) ganha 1 perfil por tipo, com os acabamentos herdados da
+     Unidade do Formulário daquele tipo (primeira do grupo). 1 tipo só → [] (a proposta segue com o bloco global de
+     sempre). Valores vão como estão no Formulário (sem "traduzir" para as listas do editor: a lista do editor é
+     parcial e traduzir por palpite poderia trocar o acabamento certo). */
+  function montarPerfis(fontes, especificacoes, modo) {
+    const porEquipamento = modo === 'equipamento';
+    const O = window.PropostaOpcoes;
+    const engine = window.PropostaAcabamentosEngine;
+    if (!O || !engine) return [];
+    const unidades = (fontes && fontes.unidades) || [];
+    const envio = (fontes && fontes.cotacao && fontes.cotacao.dados_envio && fontes.cotacao.dados_envio.unidades) || [];
+    const grupos = new Map();
+    (especificacoes || []).forEach((e, idx) => {
+      const u = unidades.find((x) => x.id === e.unidadeId) || envio.find((x) => x.unidade_id === e.unidadeId) || {};
+      const tipo = String(e.carac || u.tipo || '').trim();
+      /* modo 'equipamento': 1 perfil por especificação (Unidade) — a mesma granularidade da seção Especificações Técnicas.
+         modo padrão ('tipo'): 1 perfil por tipo (Carga / Passageiro / Panorâmico). */
+      const chave = porEquipamento
+        ? 'u' + (e.unidadeId || idx)
+        : (O.tipoChave(tipo) || ('x:' + tipo.toLowerCase()));
+      if (!grupos.has(chave)) grupos.set(chave, { tipo, unidadeIds: [], codigos: [], unidade: u });
+      const g = grupos.get(chave);
+      if (e.unidadeId) g.unidadeIds.push(e.unidadeId);
+      (Array.isArray(e.codigos) ? e.codigos : []).forEach((c) => { if (!g.codigos.includes(c)) g.codigos.push(c); });
+    });
+    if (grupos.size < 2) return [];
+    const dim = (l, a) => ((l || a) ? `${l || '?'} x ${a || '?'}mm` : '');
+    return [...grupos.entries()].map(([chave, g]) => {
+      const u = g.unidade || {};
+      const abertura = String(u.porta_tipo_abertura || '').trim();
+      const legado = {
+        modeloCabine: u.modelo || '',
+        acabamentoMat: u.aco_cabina || '',
+        subTeto: u.teto_falso || '',
+        painelOperacao: u.botoeira_cabine || '',
+        pisoCabina: u.piso_cabina || '',
+        modeloPorta: abertura ? `Automática ${abertura}` : '',
+        dimPortaCabine: dim(u.porta_largura_mm, u.porta_altura_mm),
+        acabPortaCabine: u.acabamento_porta_cabina || '',
+        portasPavimento: u.acabamento_porta_pavimento || '',
+        botoeirasPavimento: u.botoeira_pavimento || '',
+      };
+      return {
+        id: 'perfil_' + chave.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+        nome: O.nomePerfil(g.tipo),
+        tipo: g.tipo,
+        unidadeIds: g.unidadeIds,
+        codigos: g.codigos,
+        acabamentosCats: [engine.catNativaFromLegacy(legado)],
+        /* Conteúdo comercial do perfil (fase 2): texto-base do tipo + alimentação/tração reais da Unidade. */
+        ...(window.PropostaTextosBase ? window.PropostaTextosBase.paraTipo(O.tipoChave(g.tipo), u) : {}),
+      };
+    }).sort((a, b) => {
+      const n = (p) => { const m = /-(\d+)$/.exec(p.codigos[0] || ''); return m ? Number(m[1]) : Infinity; };
+      return n(a) - n(b);
+    });
+  }
+
+  /* ---------- "Separar por tipo" numa proposta que já tem texto digitado no bloco único ----------
+     Cria os perfis (montarPerfis) e NÃO joga fora o que o vendedor digitou: o bloco global é de UM dos tipos — o perfil
+     cuja cabine herdada do Formulário é a mesma digitada ("Modelo da Cabine") fica com os acabamentos e o texto digitados.
+     Sem perfil correspondente nada é sobrescrito (todos nascem do Formulário + texto-base) e o bloco global fica
+     guardado, só deixa de aparecer. Devolve { perfis, origemId, origemNome }; perfis = [] se não há 2+ tipos. */
+  function perfisAPartirDaProposta(elevador, fontes, modo) {
+    const O = window.PropostaOpcoes;
+    const engine = window.PropostaAcabamentosEngine;
+    const ed = elevador || {};
+    const perfis = montarPerfis(fontes || { unidades: [], cotacao: null }, ed.especificacoes || [], modo);
+    if (!perfis.length || !O || !engine) return { perfis, origemId: null, origemNome: null };
+    const modeloDe = (cats) => {
+      const c = (cats || []).flatMap((x) => x.campos || []).find((f) => f.k === 'modeloCabine' && f.ativo);
+      return c ? String(c.valor || '').trim() : '';
+    };
+    const catsGlobais = (Array.isArray(ed.acabamentosCats) && ed.acabamentosCats.length) ? ed.acabamentosCats : [engine.catNativaFromLegacy(ed.acabamentos)];
+    const digitado = O.linhasAcabamento(ed).length > 0;
+    const modeloGlobal = digitado ? (modeloDe(catsGlobais) || String((ed.acabamentos || {}).modeloCabine || '').trim()) : '';
+    /* Todo perfil cuja cabine herdada é a digitada recebe o que foi digitado (no modo por equipamento podem ser vários). */
+    const origens = modeloGlobal ? perfis.filter((p) => modeloDe(p.acabamentosCats) === modeloGlobal) : [];
+    if (!origens.length) return { perfis, origemId: null, origemNome: null };
+    const clone = (x) => JSON.parse(JSON.stringify(x));
+    origens.forEach((origem) => {
+      origem.acabamentosCats = clone(catsGlobais);
+      if ((ed.beneficios || []).length) origem.beneficios = clone(ed.beneficios);
+      if ((ed.diferenciais || []).length) origem.diferenciais = clone(ed.diferenciais);
+      if ((ed.recursosNomeados || []).length) origem.recursosNomeados = clone(ed.recursosNomeados);
+      if (Object.values(ed.caracteristicasEquip || {}).some(Boolean)) origem.caracteristicasEquip = clone(ed.caracteristicasEquip);
+      if (String(ed.textoModelos || '').trim()) origem.textoModelos = ed.textoModelos;
+      delete origem.conteudoCats; // o editor refaz as categorias a partir dos campos acima
+    });
+    // 1 origem = só o nome (como sempre); várias (modo por equipamento) = nome + faixa de códigos para distinguir
+    const nomes = origens.length === 1 ? [origens[0].nome] : origens.map((o) => (O.faixaCodigos(o.codigos) ? `${o.nome} — ${O.faixaCodigos(o.codigos)}` : o.nome));
+    return { perfis, origemId: origens[0].id, origemNome: nomes.join('; ') };
+  }
+
+  /* ---------- Dividir perfis já separados por TIPO em 1 perfil por EQUIPAMENTO (especificação) ----------
+     Quem já clicou "Separar por tipo" não perde nada: cada perfil com 2+ especificações vira N cópias (acabamentos e
+     textos iguais aos do perfil de origem, prontas para editar uma a uma). Perfil com 1 especificação só fica como está. */
+  function dividirPerfisPorEquipamento(elevador) {
+    const ed = elevador || {};
+    const perfis = Array.isArray(ed.perfis) ? ed.perfis : [];
+    const specs = ed.especificacoes || [];
+    const clone = (x) => JSON.parse(JSON.stringify(x));
+    const out = [];
+    perfis.forEach((p) => {
+      const ids = Array.isArray(p.unidadeIds) ? p.unidadeIds : [];
+      if (ids.length < 2) { out.push(clone(p)); return; }
+      ids.forEach((uid) => {
+        const sp = specs.find((e) => e.unidadeId === uid) || {};
+        const novo = clone(p);
+        novo.id = p.id + '_u_' + String(uid).toLowerCase().replace(/[^a-z0-9]+/g, '_');
+        novo.unidadeIds = [uid];
+        novo.codigos = Array.isArray(sp.codigos) ? sp.codigos.slice() : [];
+        out.push(novo);
+      });
+    });
+    const n = (p) => { const m = /-(\d+)$/.exec((p.codigos || [])[0] || ''); return m ? Number(m[1]) : Infinity; };
+    return out.sort((a, b) => n(a) - n(b));
   }
 
   /* ---------- Prefill no formato do PropostaEditor ---------- */
@@ -215,7 +369,6 @@
     // V2 (nunca recalculada desde a migração).
     const resultado = (precificacao && precificacao.resultado_v2 && precificacao.resultado_v2.precificacao)
       || (precificacao && precificacao.resultado && precificacao.resultado.precificacao) || null;
-    const difal = (precificacao && precificacao.difal) || null;
     const especificacoes = montarEspecificacoes(fontes);
 
     const qtdTotal = especificacoes.reduce((s, e) => s + (Number(e.qtd) || 0), 0) || 1;
@@ -257,11 +410,10 @@
     if (equipamentos) valores.equipamento = equipamentos;
     if (qtdTotal) valores.quantidade = String(qtdTotal);
     if (resultado && resultado.precoVendaPorEquipamento) {
-      valores.valorUnit = String(Math.round(resultado.precoVendaPorEquipamento));
+      valores.valorUnit = window.PropostaOpcoes ? window.PropostaOpcoes.textoBR(resultado.precoVendaPorEquipamento) : String(Math.round(resultado.precoVendaPorEquipamento));
     }
-    if (difal && difal.difal_aplicavel && difal.responsavel_recolhimento === 'emitente_verticalparts') {
-      valores.difal = String(Math.round(difal.valor_difal));
-    }
+    /* DIFAL NÃO vai para a proposta (Financeiro, 13/10/2026): o preço de venda já o contém, a proposta mostra
+       só o valor da venda. Ele continua na Precificação como custo da VerticalParts. */
     /* Mais de 1 equipamento na cotação: monta uma linha por unidade (não só
        o agregado acima) pra Preview mostrar cada equipamento separado, em
        vez de uma linha só somando tudo (bug real na cotação 950 — 2
@@ -270,24 +422,52 @@
        em precificacao-elevador-engine.js) — só cai pra precoVendaPorEquipamento
        (a média) quando o rateio não está disponível (cotação antiga, ou
        modelos[] incompleto). */
-    if (especificacoes.length > 1 && resultado
+    if ((qtdTotal > 1 || especificacoes.length > 1) && resultado
       && (resultado.precoVendaPorEquipamento || especificacoes.some((e) => e.valorUnitarioRs))) {
-      const mediaFallback = Math.round(resultado.precoVendaPorEquipamento) || 0;
-      valores.itens = especificacoes.map((e, i) => {
-        const unit = Math.round(e.valorUnitarioRs) || mediaFallback;
-        return {
-          id: e.id || e.codigoAtivo || `Equipamento ${i + 1}`,
-          /* Só o Nº do equipamento (VPEL-EL0950-1) — combinado é esse, sem
-             anexar o código interno de modelo do fabricante junto. */
-          equipamento: e.id || equipamentos || 'Elevador de Passageiros',
-          quantidade: String(Number(e.qtd) || 1),
-          valorUnit: String(unit),
-          /* valorOriginal: congelado no nascimento — nunca sobrescrito por um
-             desconto (proposta-desconto.js só mexe em valorUnit/desconto*). */
-          valorOriginal: String(unit),
-          desconto: null, descontoPendente: null, descontoLog: [],
-        };
+      const O = window.PropostaOpcoes;
+      const c2 = O ? O.c2 : (x) => Math.round((Number(x) || 0) * 100) / 100;
+      const txt = O ? O.textoBR : (x) => String(Math.round(x));
+      const mediaFallback = c2(resultado.precoVendaPorEquipamento) || 0;
+      /* UM item por EQUIPAMENTO FÍSICO, com o código dele (VPEL-EL0963-13…): cada equipamento é único e o
+         cliente pode pedir mudança num específico. Unidade de quantidade N vira N itens (quantidade 1). */
+      valores.itens = [];
+      especificacoes.forEach((e, i) => {
+        const unit = c2(e.valorUnitarioRs) || mediaFallback;
+        const n = Math.max(1, Number(e.qtd) || 1);
+        const codigos = (Array.isArray(e.codigos) && e.codigos.length === n) ? e.codigos : null;
+        for (let k = 0; k < n; k++) {
+          const cod = codigos ? codigos[k] : (n === 1 ? (e.id || e.codigoAtivo || `Equipamento ${i + 1}`) : null);
+          valores.itens.push({
+            id: cod || e.id || `Equipamento ${i + 1}`,
+            unidadeId: e.unidadeId || '',
+            equipamento: cod || e.id || equipamentos || 'Elevador de Passageiros',
+            quantidade: cod ? '1' : String(n),
+            valorUnit: txt(unit),
+            /* valorOriginal: congelado no nascimento — nunca sobrescrito por um
+               desconto (proposta-desconto.js só mexe em valorUnit/desconto*). */
+            valorOriginal: txt(unit),
+            desconto: null, descontoPendente: null, descontoLog: [],
+          });
+          if (!cod) break; // sem código físico conhecido: mantém 1 item agregado (nunca inventa numeração)
+        }
       });
+      // Lista na ordem dos códigos (…-1, -2, … -27), não na ordem das Unidades.
+      const nCod = (it) => { const m = /-(\d+)$/.exec(it.equipamento || ''); return m ? Number(m[1]) : Infinity; };
+      valores.itens.sort((a, b) => nCod(a) - nCod(b));
+      /* Fecha no centavo: a soma dos equipamentos tem que ser EXATAMENTE o preço da Precificação
+         (R$ 8.961.402,72 na 963). O arredondamento por item deixa até alguns centavos de diferença;
+         o último equipamento de quantidade 1 absorve. */
+      const alvo = Math.round(c2(resultado.precoVendaProposta) * 100);
+      if (alvo > 0) {
+        const cent = (it) => Math.round(c2(String(it.valorUnit).replace(',', '.')) * 100) * (Number(it.quantidade) || 1);
+        const soma = valores.itens.reduce((s, it) => s + cent(it), 0);
+        const dif = alvo - soma;
+        const alvoItem = [...valores.itens].reverse().find((it) => Number(it.quantidade) === 1);
+        if (dif !== 0 && Math.abs(dif) <= 100 * valores.itens.length && alvoItem) {
+          const novo = txt((cent(alvoItem) + dif) / 100);
+          alvoItem.valorUnit = novo; alvoItem.valorOriginal = novo;
+        }
+      }
     }
     /* "VALORES DE PAGAMENTOS" (Forma de Pagamento + Parcelas) — assim que
        precificado, a Proposta já nasce com o template padrão (Sinal 40% +
@@ -297,23 +477,18 @@
        se o vendedor ainda não tiver mexido nesses campos — nunca sobrescreve
        parcelas já digitadas/ajustadas. */
     if (Object.keys(valores).length) {
+      const pbr = (x) => parseFloat(String(x == null ? '0' : x).replace(/\./g, '').replace(',', '.')) || 0;
       const totalItens = Array.isArray(valores.itens)
-        ? valores.itens.reduce((s, it) => s + (Number(it.valorUnit) || 0) * (Number(it.quantidade) || 1), 0)
-        : (Number(valores.quantidade) || 0) * (Number(valores.valorUnit) || 0);
-      const totalComDifal = totalItens + (Number(valores.difal) || 0);
+        ? valores.itens.reduce((s, it) => s + pbr(it.valorUnit) * (Number(it.quantidade) || 1), 0)
+        : (Number(valores.quantidade) || 0) * pbr(valores.valorUnit);
+      const totalComDifal = totalItens;
       if (totalComDifal > 0) {
         const QTD_PADRAO = 5;
-        const sinal = totalComDifal * 0.4;
         const restCount = QTD_PADRAO - 1;
-        const cadaParcela = (totalComDifal - sinal) / restCount;
-        const fmt2 = (x) => x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         valores.formaTipo = 'parcelado';
         valores.qtdParcelas = QTD_PADRAO;
         valores.forma = `40% à vista e ${restCount} parcelas`;
-        valores.parcelas = [
-          { desc: 'Sinal de 40% na assinatura do contrato', valor: fmt2(sinal) },
-          ...Array.from({ length: restCount }, (_, i) => ({ desc: `${i + 1}ª Parcela`, valor: fmt2(cadaParcela) })),
-        ];
+        valores.parcelas = window.PropostaOpcoes.parcelasPadrao(QTD_PADRAO, totalComDifal);
       }
     }
 
@@ -324,17 +499,9 @@
        2+ equipamentos não existe resultado_v2_expresso, então nada muda. */
     const expresso = precificacao && precificacao.resultado_v2_expresso && precificacao.resultado_v2_expresso.precificacao;
     if (expresso && especificacoes.length === 1 && window.PropostaOpcoes) {
-      const difalOpc = (difal && difal.difal_aplicavel && difal.responsavel_recolhimento === 'emitente_verticalparts') ? difal.valor_difal : 0;
-      const fmt2 = (x) => x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const opcao90 = window.PropostaOpcoes.montarOpcao90({
-        precoVendaPorEquipamento: expresso.precoVendaPorEquipamento, difal: difalOpc, qtdParcelas: 5,
-        parcelasFn: (qtd, total) => {
-          const rest = Math.max(qtd - 1, 0);
-          const sinal = total * 0.4;
-          const cada = rest > 0 ? (total - sinal) / rest : 0;
-          return [{ desc: 'Sinal de 40% na assinatura do contrato', valor: fmt2(sinal) },
-            ...Array.from({ length: rest }, (_, i) => ({ desc: `${i + 1}ª Parcela`, valor: fmt2(cada) }))];
-        },
+        precoVendaPorEquipamento: expresso.precoVendaPorEquipamento, qtdParcelas: 5,
+        parcelasFn: (qtd, total) => window.PropostaOpcoes.parcelasPadrao(qtd, total),
       });
       if (opcao90) valores.opcao90 = opcao90;
     }
@@ -342,14 +509,77 @@
     if (especificacoes.length || Object.keys(valores).length) {
       prefill.elevador = {};
       if (especificacoes.length) prefill.elevador.especificacoes = especificacoes;
+      const perfis = montarPerfis(fontes, especificacoes);
+      if (perfis.length) prefill.elevador.perfis = perfis;
       if (Object.keys(valores).length) prefill.elevador.valores = valores;
     }
     return prefill;
   }
 
-  /* Atalho usado pelo editor: número → prefill (ou null se não achar). */
-  async function prefillPorNumeroCotacao(numeroCotacao) {
-    const fontes = await buscarFontes(numeroCotacao);
+  /* ---------- Escada / Esteira Rolante ----------
+     No Formulário, escada/esteira guardam as especificações em
+     `formularios_elevador_unidades.especificacoes` (jsonb, texto livre das
+     planilhas técnicas); a proposta usa SELECTS com listas fixas (OPTIONS em
+     proposta-form.jsx). Por isso cada valor é normalizado para a opção
+     equivalente — texto que não casa com nenhuma opção ficaria em branco no
+     select. Não há Precificação própria de escada/esteira: sem valores. */
+  const ESC_OPTS = {
+    escada: {
+      empreendimento: ['Comercial', 'Supermercado', 'Shopping', 'Hospital', 'Aeroporto'],
+      incl: ['30º', '35º'], largura: ['600mm', '800mm', '1000mm'], bal: ['900mm', '1000mm'],
+      vel: ['0.5 m/s', '0.65 m/s', '0.75 m/s'], alim: (v) => `${v}V Trifásico`, arranjo: ['Paralelo', 'Cruzada', 'Simples'],
+    },
+    esteira: {
+      empreendimento: ['Supermercado', 'Shopping', 'Aeroporto'],
+      incl: ['0º', '10º', '11º', '12º'], largura: ['800mm', '1000mm'], bal: ['900mm', '1000mm'],
+      vel: ['0.5 m/s', '0.65 m/s'], alim: (v) => `Trifásico ${v}V`, arranjo: ['Paralelo', 'Cruzada', 'Simples'],
+    },
+  };
+  const _t = (v) => String(v == null ? '' : v).trim();
+  const _num = (v) => { const m = /(\d+(?:[.,]\d+)?)/.exec(_t(v).replace(/\.(?=\d{3}\b)/g, '')); return m ? parseFloat(m[1].replace(',', '.')) : null; };
+  const _mm = (v) => { const n = _num(v); if (n == null) return ''; return String(/\bmm\b/i.test(_t(v)) || n >= 100 ? Math.round(n) : Math.round(n * 1000)); };
+  const _opt = (v, opts) => { const n = _num(v); if (n == null) return ''; return opts.find((o) => _num(o) === n) || ''; };
+  const _txt = (v, opts) => { const t = _t(v).toLowerCase(); return t ? (opts.find((o) => t.includes(o.toLowerCase())) || '') : ''; };
+
+  function montarBlocoEscadaEsteira(fontes, tipo) {
+    if (!fontes || !fontes.encontrado || (tipo !== 'escada' && tipo !== 'esteira')) return null;
+    const O = ESC_OPTS[tipo];
+    const unidades = (fontes.unidades || []).filter((u) => (u.tipo_equipamento || 'elevador') === tipo);
+    if (!unidades.length) return null;
+    const especificacoes = unidades.map((u, i) => {
+      const e = u.especificacoes || {};
+      const tensao = _num(e.tensao_alimentacao_equip);
+      const alimentacao = tensao === 220 || tensao === 380 ? O.alim(tensao) : '';
+      const disp = _t(e.disposicao_espaco).toLowerCase();
+      const arranjo = /cruz/.test(disp) ? 'Cruzada' : /paralel/.test(disp) ? 'Paralelo' : /simples/.test(disp) ? 'Simples' : '';
+      const uso = _t(e.uso_previsto).toLowerCase();
+      const carac = /alto/.test(uso) || _num(e.horario_pico) >= 8000 ? 'Alto Tráfego' : uso ? 'Comercial' : '';
+      const base = {
+        id: u.identificador || `${tipo === 'escada' ? 'Escada' : 'Esteira'} ${i + 1}`,
+        unidadeId: u.id,
+        empreendimento: _txt(e.tipo_edificacao, O.empreendimento),
+        carac,
+        incl: _opt(e.inclinacao, O.incl),
+        balaustrada: _opt(e.balaustrada, O.bal),
+        vel: _opt(e.velocidade_nominal, O.vel),
+        alimentacao, arranjo, maquina: '',
+        qtd: Number(u.quantidade) || 1, valorUnit: '',
+      };
+      return tipo === 'escada'
+        ? { ...base, desnivel: _mm(e.desnivel_elevacao), largDegrau: _opt(e.largura_degrau, O.largura) }
+        : { ...base, desnivelComp: _mm(e.desnivel_vertical || e.comprimento_total), largPallet: _opt(e.largura_palete, O.largura) };
+    });
+    const qtd = especificacoes.reduce((s, x) => s + (Number(x.qtd) || 0), 0);
+    return {
+      especificacoes,
+      valores: { equipamento: tipo === 'escada' ? 'Escada Rolante' : 'Esteira Rolante', quantidade: String(qtd) },
+    };
+  }
+
+  /* Atalho usado pelo editor: número → prefill (ou null se não achar).
+     opts.precificacaoId — ver buscarFontes(). */
+  async function prefillPorNumeroCotacao(numeroCotacao, opts) {
+    const fontes = await buscarFontes(numeroCotacao, opts);
     if (!fontes.encontrado) return { encontrado: false, numeroCotacao: fontes.numeroCotacao };
     return { encontrado: true, prefill: montarPrefill(fontes), fontes };
   }
@@ -363,5 +593,5 @@
     return partes.join(' · ');
   }
 
-  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes, montarAtivos, montarEspecificacoes };
+  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes, montarAtivos, montarEspecificacoes, montarPerfis, perfisAPartirDaProposta, dividirPerfisPorEquipamento, montarBlocoEscadaEsteira };
 }());

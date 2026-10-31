@@ -11,6 +11,7 @@ function rfqFmtDate(d) { return d ? new Date(d + 'T12:00:00').toLocaleDateString
 
 /* ---------- Formulário ---------- */
 const RFQ_EMPTY = {
+  numero_cotacao: '',
   numero_rfq: '', data: '', data_validade: '', status: 'Aberta',
   fornecedores: [], itens: [], fornecedor_vencedor_global_id: '',
   moeda_total_item: 'BRL', observacoes: '',
@@ -25,16 +26,35 @@ function RFQForm({ initialData, isEdit, numeroSugerido, onSubmit, onCancel, savi
 
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
 
-  const addFornecedor = () => {
+  /* T5 #1225: o fornecedor escolhido da lista fica ligado ao cadastro (cadastro_id + código VPFOR);
+     fornecedor_id continua sendo a chave interna da RFQ (preços/vencedor), como antes.
+     Nome que não está no cadastro só entra como exceção confirmada (nome_livre). */
+  const [adicionando, setAdicionando] = React.useState(false);
+  const addFornecedor = async () => {
     const nome = novoFornecedor.trim();
-    if (!nome) return;
+    if (!nome || adicionando) return;
     if ((form.fornecedores || []).some((f) => f.fornecedor_nome.toLowerCase() === nome.toLowerCase())) {
       return window.toast?.('Esse fornecedor já está na RFQ.', 'warning');
     }
+    setAdicionando(true);
+    let cad = null;
+    try { cad = await window.CadastrosFornecedoresStore?.resolverPorNome?.(nome); } catch (_) { cad = { erro: true }; }
+    setAdicionando(false);
+    if (cad && cad.id && (form.fornecedores || []).some((f) => f.cadastro_id === cad.id)) {
+      return window.toast?.('Esse fornecedor já está na RFQ.', 'warning');
+    }
+    const ligado = !!(cad && cad.id);
+    if (!ligado) {
+      const motivo = cad && cad.erro ? 'Não foi possível conferir o cadastro de fornecedores agora.' : 'Esse nome não corresponde a um único fornecedor do cadastro.';
+      if (!window.confirm(motivo + '\n\nAdicionar "' + nome + '" como nome livre, sem ligação com o cadastro?\n(O ideal é escolher da lista ou cadastrar antes em Cadastros › Fornecedores.)')) return;
+    }
     const id = store.novoId();
+    const entrada = ligado
+      ? { fornecedor_id: id, fornecedor_nome: nome, cadastro_id: cad.id, cadastro_codigo: cad.codigo || null, moeda: 'BRL' }
+      : { fornecedor_id: id, fornecedor_nome: nome, nome_livre: true, moeda: 'BRL' };
     setForm((prev) => ({
       ...prev,
-      fornecedores: [...(prev.fornecedores || []), { fornecedor_id: id, fornecedor_nome: nome, moeda: 'BRL' }],
+      fornecedores: [...(prev.fornecedores || []), entrada],
       itens: (prev.itens || []).map((item) => ({ ...item, precos: [...(item.precos || []), { fornecedor_id: id, valor_unitario: null, valor_total: 0 }] })),
     }));
     setNovoFornecedor('');
@@ -117,6 +137,7 @@ function RFQForm({ initialData, isEdit, numeroSugerido, onSubmit, onCancel, savi
     <Card title={isEdit ? `Editar RFQ ${form.numero_rfq}` : 'Nova RFQ'}>
       <div className="grid-3" style={{ gap: 12 }}>
         <PIField label="Nº RFQ"><PIInput value={form.numero_rfq} onChange={set('numero_rfq')}/></PIField>
+        <PIField label="Nº Cotação — só se for de equipamento (vazio = varejo/estoque)"><PIInput type="number" value={form.numero_cotacao ?? ''} onChange={set('numero_cotacao')}/></PIField>
         <PIField label="Data *"><PIInput type="date" value={form.data} onChange={set('data')}/></PIField>
         <PIField label="Validade"><PIInput type="date" value={form.data_validade} onChange={set('data_validade')}/></PIField>
         <PIField label="Status"><PISelect value={form.status} onChange={set('status')} options={RFQ_STATUS}/></PIField>
@@ -132,13 +153,15 @@ function RFQForm({ initialData, isEdit, numeroSugerido, onSubmit, onCancel, savi
           <input className="input" style={{ flex: 1 }} placeholder="Nome do fornecedor…" value={novoFornecedor} list="dl-fornecedores-rfq"
             onChange={(e) => setNovoFornecedor(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addFornecedor())}/>
           <CadFornecedorDatalist id="dl-fornecedores-rfq" categoria="Fornecedor"/>
-          <Button variant="outline" icon="plus" onClick={addFornecedor}>Adicionar</Button>
+          <Button variant="outline" icon="plus" onClick={addFornecedor} disabled={adicionando}>{adicionando ? 'Conferindo…' : 'Adicionar'}</Button>
         </div>
         {(form.fornecedores || []).length > 0 && (
           <div className="row gap-2" style={{ flexWrap: 'wrap', marginTop: 10 }}>
             {form.fornecedores.map((f) => (
-              <span key={f.fornecedor_id} className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px' }}>
+              <span key={f.fornecedor_id} className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px' }}
+                title={f.cadastro_id ? 'Ligado ao cadastro de fornecedores' : (f.nome_livre ? 'Nome livre: não está ligado ao cadastro' : 'RFQ antiga: sem ligação com o cadastro')}>
                 {f.fornecedor_nome}
+                {f.cadastro_codigo ? <span className="muted small">{f.cadastro_codigo}</span> : (f.cadastro_id ? null : <span className="small" style={{ color: 'var(--vp-warning, #b26a00)' }}>{f.nome_livre ? 'nome livre' : 'sem vínculo'}</span>)}
                 <button type="button" onClick={() => removeFornecedor(f.fornecedor_id)} style={{ border: 0, background: 'none', cursor: 'pointer', color: 'var(--vp-danger, #c00)' }}>×</button>
               </span>
             ))}
@@ -297,6 +320,13 @@ function RFQPage() {
   const [search, setSearch] = React.useState('');
   const [filterStatus, setFilterStatus] = React.useState('Todos');
   const [saving, setSaving] = React.useState(false);
+  /* Cotações de VAREJO (COTV-xxxx) entram sozinhas na lista; abrir leva às tratativas por fornecedor (rfq-varejo.jsx). */
+  const [loteId, setLoteId] = window.useRotaId('rfq-importacao');
+  const [lotes, setLotes] = React.useState([]);
+  React.useEffect(() => {
+    if (!window.CotacoesVarejoStore) return;
+    window.CotacoesVarejoStore.listarLotes().then(setLotes).catch(() => setLotes([]));
+  }, [loteId]);
 
   const reload = React.useCallback(() => { window.RFQStore.listarTodas().then(setRfqs).catch(() => setRfqs([])); }, []);
   React.useEffect(() => { reload(); }, [reload]);
@@ -320,6 +350,8 @@ function RFQPage() {
     catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
   };
 
+  if (loteId) return <window.RFQVarejoDetalhe key={loteId} loteId={loteId} onVoltar={() => setLoteId(null)} />;
+
   if (rfqs === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   const filtered = rfqs.filter((r) => {
@@ -327,6 +359,12 @@ function RFQPage() {
     const matchSearch = !s || (r.numero_rfq || '').toLowerCase().includes(s) || (r.itens || []).some((i) => (i.nome || '').toLowerCase().includes(s));
     const matchStatus = filterStatus === 'Todos' || r.status === filterStatus;
     return matchSearch && matchStatus;
+  });
+
+  const lotesFiltrados = lotes.filter((l) => {
+    const s = search.toLowerCase();
+    const matchStatus = filterStatus === 'Todos';
+    return matchStatus && (!s || (l.numero || '').toLowerCase().includes(s));
   });
 
   return (
@@ -357,9 +395,18 @@ function RFQPage() {
         </select>
       </div>
 
+      {lotesFiltrados.length > 0 && (
+        <div style={{ marginBottom: 18 }}>
+          <div className="small muted" style={{ marginBottom: 8 }}>{lotesFiltrados.length} cotação(ões) de varejo — tratativas com os exportadores (vêm de Cotações de Varejo)</div>
+          <div className="stack" style={{ gap: 10 }}>
+            {lotesFiltrados.map((l) => <window.RFQVarejoLinha key={l.id} lote={l} onAbrir={setLoteId} />)}
+          </div>
+        </div>
+      )}
+
       <div className="small muted" style={{ marginBottom: 8 }}>{filtered.length} RFQ(s) encontrada(s)</div>
 
-      {filtered.length === 0 && (
+      {filtered.length === 0 && lotesFiltrados.length === 0 && (
         <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13, border: '1px dashed var(--border)', borderRadius: 6 }}>Nenhuma RFQ encontrada.</div>
       )}
 

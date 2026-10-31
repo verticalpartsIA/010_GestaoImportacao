@@ -4,27 +4,35 @@
    ============================================================ */
 
 const DOSSIER_STATUS_COLOR = {
-  'Lead qualificado': '#999',
-  'Dossier criado': '#0066cc',
-  'Análise técnica': '#0066cc',
-  'Precificação': '#ff9900',
-  'Proposta enviada': '#ff9900',
-  'Contrato assinado': '#00aa00',
-  'Importação': '#0066cc',
-  'Homologação instalador': '#ff9900',
-  'Instalação': '#ff6600',
-  'DataBook': '#00aa00',
-  'Entregue': '#00aa00',
-  'Manutenção preventiva': '#0066cc',
+  'Lead qualificado': 'var(--fg3)',
+  'Dossier criado': 'var(--vp-info)',
+  'Análise técnica': 'var(--vp-info)',
+  'Precificação': 'var(--vp-warning)',
+  'Proposta enviada': 'var(--vp-warning)',
+  'Contrato assinado': 'var(--vp-success)',
+  'Importação': 'var(--vp-info)',
+  'Homologação instalador': 'var(--vp-warning)',
+  'Instalação': 'var(--vp-warning-ink)',
+  'DataBook': 'var(--vp-success)',
+  'Entregue': 'var(--vp-success)',
+  'Manutenção preventiva': 'var(--vp-info)',
 };
+
+/* Nº da obra exibido: VPOB-<cotação> quando há cotação; senão o id interno (obra legada). Fonte única do cálculo neste arquivo. */
+function dossierObraNo(o) {
+  // Código oficial da obra = o gravado (dossier_obra.codigo_obra, base da ART); o cálculo antigo só como contingência.
+  if (o.codigo_obra) return o.codigo_obra;
+  return o.numero_cotacao != null ? window.MasterIdEngine.etapaId('obra', o.numero_cotacao) : o.id;
+}
 
 /* ---------- Status de Obras — visão consolidada de todos os Dossiês ---------- */
 function ObrasStatusPage({ setRoute, setSubsel }) {
   const [obras, setObras] = React.useState([]);
   const [equipPorObra, setEquipPorObra] = React.useState({}); // dossier_id -> [numero_serie,...]
   const [loading, setLoading] = React.useState(true);
-  const [statusFiltro, setStatusFiltro] = React.useState('Todos');
-  const [busca, setBusca] = React.useState('');
+  // Filtro e busca vivem na URL (?status=…&q=…): F5 e link direto reabrem a lista filtrada.
+  const [statusFiltro, setStatusFiltro] = window.useQueryParam('status', 'Todos');
+  const [busca, setBusca] = window.useQueryParam('q', '');
   const statusFlow = (window.__DOSSIER && window.__DOSSIER.STATUS_FLOW) || [];
   const statuses = ['Todos', ...statusFlow];
 
@@ -54,7 +62,7 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
   const rows = obras.filter((o) => {
     if (statusFiltro !== 'Todos' && o.status_master !== statusFiltro) return false;
     if (!q) return true;
-    const obraNo = o.numero_cotacao != null ? window.MasterIdEngine.etapaId('obra', o.numero_cotacao) : o.id;
+    const obraNo = dossierObraNo(o);
     const seriais = (equipPorObra[o.id] || []).join(' ');
     const alvo = [o.client_name, o.building_name, o.id, obraNo, o.parceiros_instaladores?.nome, seriais]
       .filter(Boolean).join(' ').toLowerCase();
@@ -66,8 +74,8 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Engenharia · Status de Obras</div>
-          <h1 className="page-head__title">Status de Obras</h1>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Obras & Instalação · Dossiês de Obras</div>
+          <h1 className="page-head__title">Dossiês de Obras</h1>
           <p className="page-head__sub">Visão consolidada de todas as obras em andamento — onde cada uma está parada e quem é o responsável.</p>
         </div>
       </div>
@@ -85,7 +93,7 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
       </div>
 
       <div className="table-wrap">
-        <table className="t">
+        <table className="t tab-cruz">
           <thead><tr>
             <th>Obra Nº</th>
             <th>Prédio / Obra</th>
@@ -104,7 +112,7 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
             )}
             {rows.map((o) => (
               <tr key={o.id} onClick={() => abrirDossier(o)} style={{ cursor: 'pointer' }}>
-                <td><span className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{o.numero_cotacao != null ? window.MasterIdEngine.etapaId('obra', o.numero_cotacao) : o.id}</span></td>
+                <td><span className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{dossierObraNo(o)}</span></td>
                 <td className="cell-main">{o.building_name || '—'}</td>
                 <td>{o.client_name || '—'}</td>
                 <td style={{ textTransform: 'capitalize' }}>{o.equip_type || '—'}</td>
@@ -112,9 +120,9 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
                 <td>
                   <span style={{
                     display: 'inline-flex', alignItems: 'center', gap: 6,
-                    fontSize: 12, fontWeight: 600, color: DOSSIER_STATUS_COLOR[o.status_master] || '#666',
+                    fontSize: 12, fontWeight: 600, color: DOSSIER_STATUS_COLOR[o.status_master] || 'var(--fg2)',
                   }}>
-                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: DOSSIER_STATUS_COLOR[o.status_master] || '#666' }}/>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: DOSSIER_STATUS_COLOR[o.status_master] || 'var(--fg2)' }}/>
                     {o.status_master || '—'}
                   </span>
                 </td>
@@ -136,6 +144,133 @@ const DOSSIER_TAB_LABEL = {
   pendencias: 'Pendências', responsaveis: 'Responsáveis', historico: 'Histórico',
 };
 
+/* Endereço completo da obra (19/10/2026): alimenta o Mapa de Obras (posição exata).
+   O CEP preenche rua/bairro/cidade/UF só nos campos vazios; o número é sempre digitado. */
+function DossierEnderecoModal({ dossier, onClose, onSalvo }) {
+  const [f, setF] = React.useState({
+    cep: dossier.endereco_cep || '', logradouro: dossier.endereco_logradouro || '', numero: dossier.endereco_numero || '',
+    complemento: dossier.endereco_complemento || '', bairro: dossier.endereco_bairro || '',
+    cidade: (dossier.city || '').trim(), uf: (dossier.state || '').trim(),
+  });
+  const [buscando, setBuscando] = React.useState(false);
+  const [salvando, setSalvando] = React.useState(false);
+  const [erro, setErro] = React.useState(null);
+  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+
+  const buscarCep = async () => {
+    setErro(null);
+    if (!window.EnderecoAPI) { setErro('Consulta de CEP indisponível.'); return; }
+    setBuscando(true);
+    try {
+      const r = await window.EnderecoAPI.buscarCEP(f.cep);
+      setF((x) => ({
+        ...x,
+        cep: r.cep || x.cep,
+        logradouro: x.logradouro || r.logradouro || '',
+        bairro: x.bairro || r.bairro || '',
+        cidade: x.cidade || r.cidade || '',
+        uf: x.uf || r.estado || '',
+      }));
+    } catch (e) { setErro(e.message || 'CEP não encontrado.'); }
+    finally { setBuscando(false); }
+  };
+
+  const salvar = async () => {
+    setErro(null); setSalvando(true);
+    try {
+      await window.__DOSSIER.atualizarEndereco(dossier.id, f);
+      window.toast && window.toast('Endereço da obra salvo. O Mapa de Obras vai localizar o ponto exato.', 'success');
+      onSalvo();
+    } catch (e) { setErro(e.message || String(e)); }
+    finally { setSalvando(false); }
+  };
+
+  const campo = { width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' };
+  const rot = { fontSize: 11, fontWeight: 600, color: 'var(--fg2)', marginBottom: 4, display: 'block' };
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg, #fff)', borderRadius: 8, padding: 24, width: 'min(560px, 100%)', maxHeight: '90vh', overflow: 'auto' }}>
+        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Endereço da obra</div>
+        <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 16 }}>Onde o equipamento será instalado (não o endereço da sede do cliente). Usado pelo Mapa de Obras.</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'end', marginBottom: 12 }}>
+          <label><span style={rot}>CEP</span><input style={campo} value={f.cep} onChange={set('cep')} placeholder="00000-000" inputMode="numeric"/></label>
+          <button type="button" className="btn btn--outline" onClick={buscarCep} disabled={buscando}>{buscando ? 'Buscando…' : 'Buscar CEP'}</button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr', gap: 8, marginBottom: 12 }}>
+          <label><span style={rot}>Rua / Avenida</span><input style={campo} value={f.logradouro} onChange={set('logradouro')}/></label>
+          <label><span style={rot}>Número</span><input style={campo} value={f.numero} onChange={set('numero')}/></label>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+          <label><span style={rot}>Complemento</span><input style={campo} value={f.complemento} onChange={set('complemento')} placeholder="Bloco, torre…"/></label>
+          <label><span style={rot}>Bairro</span><input style={campo} value={f.bairro} onChange={set('bairro')}/></label>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr', gap: 8, marginBottom: 12 }}>
+          <label><span style={rot}>Cidade</span><input style={campo} value={f.cidade} onChange={set('cidade')}/></label>
+          <label><span style={rot}>UF</span><input style={campo} value={f.uf} onChange={set('uf')} maxLength={2}/></label>
+        </div>
+        {erro && <div style={{ color: 'var(--vp-danger)', fontSize: 13, marginBottom: 12 }}>{erro}</div>}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button type="button" className="btn btn--outline" onClick={onClose} disabled={salvando}>Cancelar</button>
+          <button type="button" className="btn btn--primary" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar endereço'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Pausa de obra (25/10/2026): "Pausada até dd/mm" + motivo. Enquanto vale, a Evolução dos Equipamentos para de
+   cobrar previsão vencida/desatualizada e "sem Diário" desta obra; erro de dado continua. Máx. 60 dias, renovável. */
+function dossierHojeISO(add) {
+  const d = new Date(); d.setDate(d.getDate() + (add || 0));
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function DossierPausaModal({ dossier, onClose, onSalvo }) {
+  const vigente = !!dossier.pausada_ate && dossier.pausada_ate >= dossierHojeISO(0);
+  const [ate, setAte] = React.useState(vigente ? dossier.pausada_ate : dossierHojeISO(14));
+  const [motivo, setMotivo] = React.useState(vigente ? (dossier.pausa_motivo || '') : '');
+  const [salvando, setSalvando] = React.useState(false);
+  const [erro, setErro] = React.useState(null);
+  const faltam = Math.max(0, 10 - motivo.trim().length);
+
+  const salvar = async (cancelar) => {
+    setErro(null); setSalvando(true);
+    try {
+      await window.__DOSSIER.pausarObra(dossier.id, cancelar ? null : ate, motivo);
+      window.toast && window.toast(cancelar ? 'Pausa cancelada: a obra volta a ser cobrada.' : 'Obra pausada até ' + ate.split('-').reverse().join('/') + '.', 'success');
+      onSalvo();
+    } catch (e) { setErro(e.message || String(e)); }
+    finally { setSalvando(false); }
+  };
+
+  const campo = { width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' };
+  const rot = { fontSize: 11, fontWeight: 600, color: 'var(--fg2)', marginBottom: 4, display: 'block' };
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg, #fff)', borderRadius: 8, padding: 24, width: 'min(520px, 100%)', maxHeight: '90vh', overflow: 'auto' }}>
+        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{vigente ? 'Pausa da obra' : 'Pausar obra'}</div>
+        <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 16 }}>
+          Use quando a obra está parada de propósito (cliente pediu, falta liberação). Até a data, a Evolução dos Equipamentos não cobra previsão vencida nem Diário
+          desta obra. Erros de dado (data no futuro, sem nº de série…) continuam sendo apontados. No máximo 60 dias; depois a obra volta a ser cobrada.
+        </div>
+        <label style={{ display: 'block', marginBottom: 12 }}>
+          <span style={rot}>Pausada até</span>
+          <input type="date" style={campo} value={ate} min={dossierHojeISO(0)} max={dossierHojeISO(60)} onChange={(e) => setAte(e.target.value)}/>
+        </label>
+        <label style={{ display: 'block', marginBottom: 12 }}>
+          <span style={rot}>Motivo {faltam > 0 ? <span style={{ color: 'var(--vp-danger)' }}>(faltam {faltam} letras)</span> : <span style={{ color: 'var(--vp-success, #2e7d32)' }}>✓</span>}</span>
+          <textarea style={{ ...campo, minHeight: 72 }} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: Cliente pediu para segurar até a liberação do elevador social"/>
+        </label>
+        {erro && <div style={{ color: 'var(--vp-danger)', fontSize: 13, marginBottom: 12 }}>{erro}</div>}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
+          {vigente && <button type="button" className="btn btn--outline" onClick={() => salvar(true)} disabled={salvando}>Cancelar pausa</button>}
+          <button type="button" className="btn btn--outline" onClick={onClose} disabled={salvando}>Fechar</button>
+          <button type="button" className="btn btn--primary" onClick={() => salvar(false)} disabled={salvando || faltam > 0 || !ate}>{salvando ? 'Salvando…' : (vigente ? 'Renovar pausa' : 'Pausar obra')}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DossierObraPage({ dossierId, setRoute, setSubsel }) {
   const [dossier, setDossier] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -144,6 +279,15 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
   const [activeTab, setActiveTab] = React.useState(() =>
     (window.VpRouter && window.VpRouter.parseLocation().tab) || 'visao-geral');
   const [modalOpen, setModalOpen] = React.useState(null);
+  const [editandoEndereco, setEditandoEndereco] = React.useState(false);
+  const [pausando, setPausando] = React.useState(false);
+  const [podePausar, setPodePausar] = React.useState(false);
+  React.useEffect(() => {
+    let vivo = true;
+    const PS = window.PropostaStore;
+    if (PS && PS.temCapacidade) PS.temCapacidade('mapa-obras', 'pausar').then((ok) => { if (vivo) setPodePausar(!!ok); }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
 
   React.useEffect(() => {
     carregarDossier();
@@ -194,16 +338,24 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
     return <div style={{ padding: 32, textAlign: 'center' }}>❌ Dossier não encontrado</div>;
   }
 
-  const statusColor = (status) => DOSSIER_STATUS_COLOR[status] || '#666';
+  const statusColor = (status) => DOSSIER_STATUS_COLOR[status] || 'var(--fg2)';
 
   const indicePossivel = window.__DOSSIER.STATUS_FLOW.indexOf(dossier.status_master);
   const progressoPct = ((indicePossivel + 1) / window.__DOSSIER.STATUS_FLOW.length) * 100;
 
   return (
     <div style={{ padding: '24px' }}>
+      {editandoEndereco && (
+        <DossierEnderecoModal dossier={dossier} onClose={() => setEditandoEndereco(false)}
+          onSalvo={() => { setEditandoEndereco(false); carregarDossier(); }}/>
+      )}
+      {pausando && (
+        <DossierPausaModal dossier={dossier} onClose={() => setPausando(false)}
+          onSalvo={() => { setPausando(false); carregarDossier(); }}/>
+      )}
       {/* ---- HEADER DO DOSSIER ---- */}
       <div style={{
-        background: 'linear-gradient(135deg, #0066cc 0%, #0052a3 100%)',
+        background: 'var(--vp-info)',
         color: 'white',
         padding: '32px',
         borderRadius: '8px',
@@ -214,15 +366,32 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
             <div style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>{dossier.building_name}</div>
             {dossier.numero_cotacao != null && (
               <div className="mono" style={{ fontSize: 12, opacity: 0.85, marginBottom: 6 }}>
-                Obra Nº {window.MasterIdEngine.etapaId('obra', dossier.numero_cotacao)}
+                Obra Nº {dossierObraNo(dossier)}
               </div>
             )}
             <div style={{ fontSize: 14, opacity: 0.9 }}>
               Cliente: <b>{dossier.client_name}</b>
             </div>
-            <div style={{ fontSize: 14, opacity: 0.9 }}>
-              {dossier.city && dossier.state ? `${dossier.city}, ${dossier.state}` : 'Localização não informada'}
-              {dossier.equip_type && ` · ${dossier.equip_type}`}
+            <div style={{ fontSize: 14, opacity: 0.9, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span>
+                {(window.MapaObrasCalc && window.MapaObrasCalc.enderecoTexto(dossier)) || 'Endereço da obra não informado'}
+                {dossier.equip_type && ` · ${dossier.equip_type}`}
+              </span>
+              <button type="button" onClick={() => setEditandoEndereco(true)}
+                style={{ background: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.5)', borderRadius: 12, padding: '2px 10px', fontSize: 12, cursor: 'pointer' }}>
+                {dossier.endereco_logradouro ? 'Editar endereço' : 'Informar endereço'}
+              </button>
+              {dossier.pausada_ate && dossier.pausada_ate >= dossierHojeISO(0) && (
+                <span title={dossier.pausa_motivo || ''} style={{ background: 'rgba(255,255,255,0.9)', color: '#7a5200', borderRadius: 12, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>
+                  ⏸ Pausada até {dossier.pausada_ate.split('-').reverse().join('/')}
+                </span>
+              )}
+              {podePausar && (
+                <button type="button" onClick={() => setPausando(true)}
+                  style={{ background: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.5)', borderRadius: 12, padding: '2px 10px', fontSize: 12, cursor: 'pointer' }}>
+                  {dossier.pausada_ate && dossier.pausada_ate >= dossierHojeISO(0) ? 'Ver / renovar pausa' : 'Pausar obra'}
+                </button>
+              )}
             </div>
             {dossier.propostaVinculada ? (
               <div style={{ fontSize: 12, opacity: 0.9, marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -245,25 +414,25 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
         {/* ---- BARRA DE PROGRESSO ---- */}
         <div style={{ marginTop: 20 }}>
           <div style={{ fontSize: 12, marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
-            <span>Progresso do projeto</span>
+            <span title="Posição do dossiê no fluxo de status. O avanço da instalação em campo está em Acompanhamento de Obra.">Etapa do dossiê no fluxo</span>
             <span style={{ fontWeight: 600 }}>{Math.round(progressoPct)}%</span>
           </div>
           <div style={{ background: 'rgba(255, 255, 255, 0.2)', height: 6, borderRadius: 3, overflow: 'hidden' }}>
-            <div style={{ background: '#ffff00', height: '100%', width: progressoPct + '%', transition: 'width 0.3s' }} />
+            <div style={{ background: 'var(--vp-yellow)', height: '100%', width: progressoPct + '%', transition: 'width 0.3s' }} />
           </div>
         </div>
       </div>
 
       {/* ---- STATUS MESTRE ---- */}
       <div style={{
-        background: '#f5f5f5',
+        background: 'var(--vp-gray-100)',
         padding: '16px 20px',
-        borderRadius: '6px',
-        marginBottom: '24px',
-        borderLeft: `4px solid ${statusColor(dossier.status_master)}`
+        borderRadius: 'var(--r-lg)',
+        marginBottom: '24px'
       }}>
-        <div style={{ fontSize: 11, color: '#666', textTransform: 'uppercase', marginBottom: 4 }}>Status Mestre</div>
-        <div style={{ fontSize: 16, fontWeight: 600, color: statusColor(dossier.status_master) }}>
+        <div style={{ fontSize: 11, color: 'var(--fg2)', textTransform: 'uppercase', marginBottom: 4 }}>Status Mestre</div>
+        <div style={{ fontSize: 16, fontWeight: 600, color: statusColor(dossier.status_master), display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: statusColor(dossier.status_master), flex: 'none' }} />
           {dossier.status_master}
         </div>
       </div>
@@ -272,7 +441,7 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
       <div style={{
         display: 'flex',
         gap: '12px',
-        borderBottom: '1px solid #ddd',
+        borderBottom: '1px solid var(--border)',
         marginBottom: '24px',
         flexWrap: 'wrap'
       }}>
@@ -294,8 +463,8 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
               padding: '12px 16px',
               border: 'none',
               background: 'transparent',
-              borderBottom: activeTab === tab.id ? '2px solid #0066cc' : 'none',
-              color: activeTab === tab.id ? '#0066cc' : '#666',
+              borderBottom: activeTab === tab.id ? '2px solid var(--vp-info)' : 'none',
+              color: activeTab === tab.id ? 'var(--vp-info)' : 'var(--fg2)',
               fontWeight: activeTab === tab.id ? 600 : 400,
               cursor: 'pointer',
               fontSize: 13
@@ -371,7 +540,7 @@ function ClienteVinculoField({ dossier, reload }) {
         <option value="">— nenhum vinculado —</option>
         {(clientes || []).map((c) => <option key={c.id} value={c.id}>{c.nome_fantasia || c.razao_social}</option>)}
       </select>
-      <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
+      <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 4 }}>
         Nome digitado na obra: "{dossier.client_name}" — vincule ao cadastro correto se o nome não bater sozinho.
       </div>
     </div>
@@ -413,15 +582,15 @@ function CardContratoInstalador({ dossier, setRoute }) {
   if (!contratos || contratos.length === 0) return null;
 
   return (
-    <div style={{ background: '#f5f5f5', border: '1px solid #ddd', borderRadius: 6, padding: 16 }}>
-      <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 8 }}>Contrato Instalador</div>
+    <div style={{ background: 'var(--vp-gray-100)', border: '1px solid var(--border)', borderRadius: 6, padding: 16 }}>
+      <div style={{ fontSize: 12, color: 'var(--fg2)', textTransform: 'uppercase', marginBottom: 8 }}>Contrato Instalador</div>
       {contratos.map((ct) => {
         const st = (window.CIStore && window.CIStore.STATUS[ct.status]) || { label: ct.status };
         const valorFmt = ct.valor_total != null ? 'R$ ' + (window.CI ? window.CI.fmtMoeda(ct.valor_total) : ct.valor_total) : '—';
         return (
-          <div key={ct.id} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid #e5e5e5' }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>{ct.numero_documento} <span style={{ fontWeight: 400, color: '#666' }}>· {ct.contratada_nome}</span></div>
-            <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
+          <div key={ct.id} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{ct.numero_documento} <span style={{ fontWeight: 400, color: 'var(--fg2)' }}>· {ct.contratada_nome}</span></div>
+            <div style={{ fontSize: 12, color: 'var(--fg2)', marginTop: 2 }}>
               {st.label} · {valorFmt}
               {ct.parcelasTotal > 0 && <> · {ct.parcelasPagas}/{ct.parcelasTotal} parcela(s) paga(s)</>}
             </div>
@@ -429,6 +598,35 @@ function CardContratoInstalador({ dossier, setRoute }) {
         );
       })}
       <Button variant="outline" size="small" onClick={() => setRoute && setRoute('contrato-instalador')}>Abrir no Jurídico →</Button>
+    </div>
+  );
+}
+
+/* Handover (Entrega Final): a coluna `handover` (jsonb) mora na mesma linha de dossier_obra e é editada na tela
+   "Entrega Final" (/engenharia/handover/<id>). Este card só LÊ e leva até lá, pra quem está no Dossiê enxergar o estado. */
+function CardHandover({ dossier }) {
+  const [h, setH] = React.useState(undefined); // undefined = carregando, null = sem handover
+  React.useEffect(() => {
+    let vivo = true;
+    const c = window.__VP_SB && window.__VP_SB.sb;
+    if (!c) { setH(null); return; }
+    c.from('dossier_obra').select('handover').eq('id', dossier.id).maybeSingle()
+      .then(({ data }) => { if (vivo) setH((data && data.handover) || null); });
+    return () => { vivo = false; };
+  }, [dossier.id]);
+  if (h === undefined) return null;
+  const estado = !h ? 'Aguardando handover' : h.escamax_transferido ? 'Transferido para a Escamax' : 'Handover registrado';
+  const fmt = (iso) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : null; };
+  const garantia = h && fmt(h.data_fim_garantia);
+  const abrir = () => { if (window.pcpIrParaUrl) window.pcpIrParaUrl('/engenharia/handover/' + encodeURIComponent(dossier.id)); };
+  return (
+    <div style={{ background: 'var(--vp-gray-100)', border: '1px solid var(--border)', borderRadius: 6, padding: 16 }}>
+      <div style={{ fontSize: 12, color: 'var(--fg2)', textTransform: 'uppercase', marginBottom: 8 }}>Entrega Final (Handover)</div>
+      <div style={{ fontSize: 13, fontWeight: 600 }}>{estado}</div>
+      {garantia && <div style={{ fontSize: 12, color: 'var(--fg2)', marginTop: 2 }}>Garantia até {garantia}</div>}
+      <div style={{ marginTop: 10 }}>
+        <Button variant="outline" size="small" onClick={abrir}>Abrir em Entrega Final →</Button>
+      </div>
     </div>
   );
 }
@@ -442,20 +640,20 @@ function TabVisaoGeral({ dossier, setModalOpen, reload, setRoute }) {
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
       {/* CARDS DE STATUS */}
       <div style={{
-        background: '#f0f8ff',
-        border: '1px solid #0066cc',
+        background: 'var(--vp-info-tint)',
+        border: '1px solid var(--vp-info)',
         borderRadius: 6,
         padding: 16,
         gridColumn: '1 / -1'
       }}>
-        <div style={{ fontSize: 12, color: '#0066cc', textTransform: 'uppercase', marginBottom: 8 }}>⚠️ Situação</div>
+        <div style={{ fontSize: 12, color: 'var(--vp-info)', textTransform: 'uppercase', marginBottom: 8 }}>⚠️ Situação</div>
         <div style={{ fontSize: 14 }}>
           {pendenciaBloqueante ? (
-            <><b style={{ color: '#c00' }}>BLOQUEADO</b> — Pendência bloqueante resolvida</>
+            <><b style={{ color: 'var(--vp-danger)' }}>BLOQUEADO</b> — Pendência bloqueante resolvida</>
           ) : pendenciasAtivas.length > 0 ? (
-            <><b style={{ color: '#ff6600' }}>{pendenciasAtivas.length} PENDÊNCIAS</b> — Aguardando ações</>
+            <><b style={{ color: 'var(--vp-warning-ink)' }}>{pendenciasAtivas.length} PENDÊNCIAS</b> — Aguardando ações</>
           ) : (
-            <><b style={{ color: '#00aa00' }}>SEM BLOQUEIOS</b> — Próximo passo liberado</>
+            <><b style={{ color: 'var(--vp-success)' }}>SEM BLOQUEIOS</b> — Próximo passo liberado</>
           )}
         </div>
         <ClienteVinculoField dossier={dossier} reload={reload} />
@@ -463,12 +661,12 @@ function TabVisaoGeral({ dossier, setModalOpen, reload, setRoute }) {
 
       {/* ANÁLISE TÉCNICA */}
       <div style={{
-        background: '#f5f5f5',
-        border: '1px solid #ddd',
+        background: 'var(--vp-gray-100)',
+        border: '1px solid var(--border)',
         borderRadius: 6,
         padding: 16
       }}>
-        <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 8 }}>Análise Técnica</div>
+        <div style={{ fontSize: 12, color: 'var(--fg2)', textTransform: 'uppercase', marginBottom: 8 }}>Análise Técnica</div>
         {(() => {
           const at = dossier.analiseTecnica;
           const statusLabel = !at ? 'Não iniciada'
@@ -476,7 +674,7 @@ function TabVisaoGeral({ dossier, setModalOpen, reload, setRoute }) {
             : at.status === 'completa' ? 'Completa (aguardando aprovação)'
             : at.status === 'pendente_cliente' ? 'Pendente do cliente'
             : 'Rascunho';
-          const statusColorAt = !at ? '#999' : at.status === 'aprovada' ? '#00aa00' : '#ff9900';
+          const statusColorAt = !at ? 'var(--fg3)' : at.status === 'aprovada' ? 'var(--vp-success)' : 'var(--vp-warning)';
           return (
             <>
               <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: statusColorAt }}>{statusLabel}</div>
@@ -490,12 +688,12 @@ function TabVisaoGeral({ dossier, setModalOpen, reload, setRoute }) {
 
       {/* PRÓXIMO PASSO */}
       <div style={{
-        background: '#f5f5f5',
-        border: '1px solid #ddd',
+        background: 'var(--vp-gray-100)',
+        border: '1px solid var(--border)',
         borderRadius: 6,
         padding: 16
       }}>
-        <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 8 }}>Próximo Passo</div>
+        <div style={{ fontSize: 12, color: 'var(--fg2)', textTransform: 'uppercase', marginBottom: 8 }}>Próximo Passo</div>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
           {dossier.status_master}
         </div>
@@ -506,13 +704,13 @@ function TabVisaoGeral({ dossier, setModalOpen, reload, setRoute }) {
 
       {/* DOCUMENTOS */}
       <div style={{
-        background: '#f5f5f5',
-        border: '1px solid #ddd',
+        background: 'var(--vp-gray-100)',
+        border: '1px solid var(--border)',
         borderRadius: 6,
         padding: 16
       }}>
-        <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 8 }}>Documentos</div>
-        <div style={{ fontSize: 28, fontWeight: 700, color: '#0066cc', marginBottom: 8 }}>{documentsCount}</div>
+        <div style={{ fontSize: 12, color: 'var(--fg2)', textTransform: 'uppercase', marginBottom: 8 }}>Documentos</div>
+        <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--vp-info)', marginBottom: 8 }}>{documentsCount}</div>
         <Button variant="outline" size="small">
           Ver Documentos →
         </Button>
@@ -520,12 +718,12 @@ function TabVisaoGeral({ dossier, setModalOpen, reload, setRoute }) {
 
       {/* RESPONSÁVEIS */}
       <div style={{
-        background: '#f5f5f5',
-        border: '1px solid #ddd',
+        background: 'var(--vp-gray-100)',
+        border: '1px solid var(--border)',
         borderRadius: 6,
         padding: 16
       }}>
-        <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 8 }}>Responsáveis</div>
+        <div style={{ fontSize: 12, color: 'var(--fg2)', textTransform: 'uppercase', marginBottom: 8 }}>Responsáveis</div>
         <div style={{ fontSize: 13, lineHeight: 1.6 }}>
           {dossier.responsaveis && dossier.responsaveis.length > 0 ? (
             dossier.responsaveis.map(r => (
@@ -534,22 +732,23 @@ function TabVisaoGeral({ dossier, setModalOpen, reload, setRoute }) {
               </div>
             ))
           ) : (
-            <div style={{ color: '#999' }}>Nenhum responsável atribuído</div>
+            <div style={{ color: 'var(--fg3)' }}>Nenhum responsável atribuído</div>
           )}
         </div>
       </div>
 
       <CardContratoInstalador dossier={dossier} setRoute={setRoute} />
+      <CardHandover dossier={dossier} />
 
       {/* PENDÊNCIAS */}
       <div style={{
-        background: '#fff5f0',
-        border: '1px solid #ff9900',
+        background: 'var(--vp-danger-tint)',
+        border: '1px solid var(--vp-warning)',
         borderRadius: 6,
         padding: 16,
         gridColumn: '1 / -1'
       }}>
-        <div style={{ fontSize: 12, color: '#ff6600', textTransform: 'uppercase', marginBottom: 8 }}>Pendências Ativas</div>
+        <div style={{ fontSize: 12, color: 'var(--vp-warning-ink)', textTransform: 'uppercase', marginBottom: 8 }}>Pendências Ativas</div>
         {pendenciasAtivas.length > 0 ? (
           <div style={{ fontSize: 13 }}>
             {pendenciasAtivas.slice(0, 3).map(p => (
@@ -561,11 +760,11 @@ function TabVisaoGeral({ dossier, setModalOpen, reload, setRoute }) {
               </div>
             ))}
             {pendenciasAtivas.length > 3 && (
-              <div style={{ color: '#666', marginTop: 8 }}>... +{pendenciasAtivas.length - 3} mais</div>
+              <div style={{ color: 'var(--fg2)', marginTop: 8 }}>... +{pendenciasAtivas.length - 3} mais</div>
             )}
           </div>
         ) : (
-          <div style={{ color: '#999' }}>Sem pendências bloqueantes</div>
+          <div style={{ color: 'var(--fg3)' }}>Sem pendências bloqueantes</div>
         )}
         <Button variant="outline" size="small" style={{ marginTop: 12 }} onClick={() => setModalOpen?.('adionar-pendencia')}>
           + Adicionar Pendência
@@ -611,7 +810,7 @@ function ModalAvancarStatus({ dossier, onClose, onSaved }) {
         <Button variant="primary" onClick={salvar} disabled={saving}>{saving ? 'Salvando…' : 'Confirmar'}</Button>
       </>}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ fontSize: 12, color: '#666' }}>
+        <div style={{ fontSize: 12, color: 'var(--fg2)' }}>
           Etapa atual: <b>{dossier.status_master}</b>
         </div>
         <div className="stack" style={{ gap: 4 }}>
@@ -676,32 +875,32 @@ function TabDocumentos({ dossier, reload }) {
   const obrig = TIPOS_DOC_OBRA.filter(t => t.obrigatorio);
   const prontos = obrig.filter(t => (byType[t.tipo] || []).length > 0).length;
   const extras = Object.keys(byType).filter(t => !TIPOS_DOC_OBRA.some(x => x.tipo === t));
-  const rowBox = { border: '1px solid #ddd', borderRadius: 6, padding: 14, marginBottom: 10, display: 'flex', gap: 12, alignItems: 'flex-start' };
-  const uploadBtn = { cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#0066cc', border: '1px solid #0066cc', borderRadius: 4, padding: '6px 12px', whiteSpace: 'nowrap' };
+  const rowBox = { border: '1px solid var(--border)', borderRadius: 6, padding: 14, marginBottom: 10, display: 'flex', gap: 12, alignItems: 'flex-start' };
+  const uploadBtn = { cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--vp-info)', border: '1px solid var(--vp-info)', borderRadius: 4, padding: '6px 12px', whiteSpace: 'nowrap' };
 
   return (
     <div>
-      <div style={{ background: '#f5f7fa', border: '1px solid #dde3ea', borderRadius: 6, padding: '12px 16px', marginBottom: 16, fontSize: 13, fontWeight: 600 }}>
+      <div style={{ background: 'var(--vp-gray-50)', border: '1px solid var(--border)', borderRadius: 6, padding: '12px 16px', marginBottom: 16, fontSize: 13, fontWeight: 600 }}>
         Checklist da obra — {prontos}/{obrig.length} documentos obrigatórios prontos
       </div>
       {TIPOS_DOC_OBRA.map(t => {
         const items = byType[t.tipo] || [];
         const pronto = items.length > 0;
         const mark = pronto ? '✓' : (t.obrigatorio ? '○' : '–');
-        const markColor = pronto ? '#00aa00' : (t.obrigatorio ? '#cc7700' : '#999');
+        const markColor = pronto ? 'var(--vp-success)' : (t.obrigatorio ? 'var(--vp-warning-ink)' : 'var(--fg3)');
         return (
           <div key={t.tipo} style={rowBox}>
             <div style={{ fontSize: 18, color: markColor, fontWeight: 700, width: 20, textAlign: 'center' }}>{mark}</div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{t.label}{!t.obrigatorio && <span style={{ color: '#999', fontWeight: 400 }}> · opcional</span>}</div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{t.label}{!t.obrigatorio && <span style={{ color: 'var(--fg3)', fontWeight: 400 }}> · opcional</span>}</div>
               {items.length === 0 ? (
                 <div style={{ fontSize: 12, color: markColor, marginTop: 2 }}>{t.obrigatorio ? 'Pendente' : 'Não anexado (quando aplicável)'}</div>
               ) : items.map(d => (
                 <div key={d.id} style={{ fontSize: 12, marginTop: 4 }}>
                   {d.arquivo_url
-                    ? <a href={d.arquivo_url} target="_blank" rel="noopener noreferrer" style={{ color: '#0066cc', fontWeight: 600 }}>⬇ {d.nome || t.label}</a>
+                    ? <a href={d.arquivo_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--vp-info)', fontWeight: 600 }}>⬇ {d.nome || t.label}</a>
                     : <span style={{ fontWeight: 600 }}>{d.nome || t.label}</span>}
-                  <span style={{ color: '#999', marginLeft: 8 }}>v{d.versao} · {d.status}{d.data_criacao ? ' · ' + d.data_criacao : ''}</span>
+                  <span style={{ color: 'var(--fg3)', marginLeft: 8 }}>v{d.versao} · {d.status}{d.data_criacao ? ' · ' + d.data_criacao : ''}</span>
                 </div>
               ))}
             </div>
@@ -715,10 +914,10 @@ function TabDocumentos({ dossier, reload }) {
       })}
       {extras.length > 0 && (
         <div style={{ marginTop: 20 }}>
-          <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 8 }}>Outros documentos vinculados</div>
+          <div style={{ fontSize: 12, color: 'var(--fg2)', textTransform: 'uppercase', marginBottom: 8 }}>Outros documentos vinculados</div>
           {extras.map(tipo => (byType[tipo] || []).map(d => (
             <div key={d.id} style={{ fontSize: 12, marginBottom: 6 }}>
-              <b>{tipo}:</b> {d.arquivo_url ? <a href={d.arquivo_url} target="_blank" rel="noopener noreferrer" style={{ color: '#0066cc' }}>{d.nome || tipo}</a> : (d.nome || tipo)} <span style={{ color: '#999' }}>· {d.status}</span>
+              <b>{tipo}:</b> {d.arquivo_url ? <a href={d.arquivo_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--vp-info)' }}>{d.nome || tipo}</a> : (d.nome || tipo)} <span style={{ color: 'var(--fg3)' }}>· {d.status}</span>
             </div>
           )))}
         </div>
@@ -762,11 +961,11 @@ function TermoEntregaPanel({ dossier, reload }) {
   };
 
   return (
-    <div style={{ marginTop: 20, background: '#f5f7fa', border: '1px solid #dde3ea', borderRadius: 6, padding: 14 }}>
+    <div style={{ marginTop: 20, background: 'var(--vp-gray-50)', border: '1px solid var(--border)', borderRadius: 6, padding: 14 }}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Termo de Entrega — assinatura digital</div>
 
       {termo?.status === 'concluido' ? (
-        <div style={{ fontSize: 12.5, color: '#00aa00' }}>
+        <div style={{ fontSize: 12.5, color: 'var(--vp-success)' }}>
           ✓ Assinado em {termo.concluido_em ? new Date(termo.concluido_em).toLocaleString('pt-BR') : '—'}
           {termo.assinaturas?.cliente && <span> · Cliente: {termo.assinaturas.cliente.nome}</span>}
           {termo.assinaturas?.supervisor && <span> · Supervisor: {termo.assinaturas.supervisor.nome}</span>}
@@ -774,7 +973,7 @@ function TermoEntregaPanel({ dossier, reload }) {
       ) : (
         <>
           {termo?.status === 'pendente' && (
-            <div style={{ fontSize: 12, color: '#cc7700', marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: 'var(--vp-warning-ink)', marginBottom: 10 }}>
               Aguardando assinatura{termo.modo === 'presencial' ? ' (cliente + supervisor)' : ' do cliente'} —
               gerado em {termo.gerado_em ? new Date(termo.gerado_em).toLocaleString('pt-BR') : '—'}.
               {termo.assinaturas?.cliente && <span> Cliente já assinou.</span>}
@@ -863,7 +1062,7 @@ function EquipamentoCard({ equip, parceiros, onSalvar, onExcluir }) {
   };
 
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 6, marginBottom: 8, background: '#fff' }}>
+    <div style={{ border: '1px solid var(--border)', borderRadius: 6, marginBottom: 8, background: 'var(--bg)' }}>
       <div className="row sb" style={{ padding: '10px 14px', cursor: 'pointer' }} onClick={() => setAberto((v) => !v)}>
         <div className="row gap-3" style={{ alignItems: 'center' }}>
           <Icon.chevRight size={12} style={{ transform: aberto ? 'rotate(90deg)' : 'none' }}/>
@@ -1033,8 +1232,8 @@ function TabEquipamentos({ dossier, setRoute, setSubsel }) {
               </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 {eq.parceiros_instaladores?.nome
-                  ? <span style={{ fontSize: 11, color: '#00aa00', fontWeight: 600 }}>✓ {eq.parceiros_instaladores.nome}</span>
-                  : <span style={{ fontSize: 11, color: '#cc7700', fontWeight: 600 }}>○ sem instalador ainda</span>}
+                  ? <span style={{ fontSize: 11, color: 'var(--vp-success)', fontWeight: 600 }}>✓ {eq.parceiros_instaladores.nome}</span>
+                  : <span style={{ fontSize: 11, color: 'var(--vp-warning-ink)', fontWeight: 600 }}>○ sem instalador ainda</span>}
                 <Button variant="ghost" size="sm" icon="chevRight" onClick={() => abrirDossier(eq.dossier_id)}>Abrir</Button>
               </div>
             </div>
@@ -1075,14 +1274,14 @@ function EmpresasDaObraRoster({ dossierId, parceiros }) {
     catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
   };
 
-  if (roster === null) return <div style={{ fontSize: 12, color: '#999', marginBottom: 12 }}>Carregando…</div>;
+  if (roster === null) return <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 12 }}>Carregando…</div>;
 
   const jaVinculadas = new Set(roster.map((r) => r.parceiro_instalador_id));
 
   return (
     <div style={{ marginBottom: 16 }}>
       <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Empresas vinculadas à obra</div>
-      {roster.length === 0 && <div style={{ fontSize: 12, color: '#999' }}>Nenhuma empresa vinculada ainda.</div>}
+      {roster.length === 0 && <div style={{ fontSize: 12, color: 'var(--fg3)' }}>Nenhuma empresa vinculada ainda.</div>}
       {roster.map((r) => (
         <div key={r.id} className="row sb" style={{ fontSize: 13, marginBottom: 4, alignItems: 'center' }}>
           <div>🏢 <b>{r.parceiros_instaladores?.nome || r.parceiro_instalador_id}</b></div>
@@ -1105,7 +1304,7 @@ function EmpresasDaObraRoster({ dossierId, parceiros }) {
           <Button variant="ghost" size="sm" onClick={() => setAdicionando(false)}>Cancelar</Button>
         </div>
       )}
-      <div style={{ fontSize: 11, color: '#999', marginTop: 6 }}>Aqui é só o cadastro de quem passou pela obra. Pra dizer qual empresa montou qual equipamento, use a aba Equipamentos.</div>
+      <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>Aqui é só o cadastro de quem passou pela obra. Pra dizer qual empresa montou qual equipamento, use a aba Equipamentos.</div>
     </div>
   );
 }
@@ -1124,19 +1323,19 @@ function InstaladorasDaObraPanel({ equipamentos }) {
   const lista = Object.entries(grupos);
 
   if (equipamentos.length === 0) {
-    return <div style={{ fontSize: 12, color: '#999', marginBottom: 12 }}>Nenhum equipamento cadastrado ainda — cadastre na aba Equipamentos pra ver quem monta cada um.</div>;
+    return <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 12 }}>Nenhum equipamento cadastrado ainda — cadastre na aba Equipamentos pra ver quem monta cada um.</div>;
   }
 
   return (
     <div style={{ marginBottom: 16 }}>
       <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Quem monta cada equipamento</div>
-      {lista.length === 0 && <div style={{ fontSize: 12, color: '#999' }}>Nenhum equipamento tem instalador vinculado ainda.</div>}
+      {lista.length === 0 && <div style={{ fontSize: 12, color: 'var(--fg3)' }}>Nenhum equipamento tem instalador vinculado ainda.</div>}
       {lista.map(([empId, g]) => (
         <div key={empId} style={{ fontSize: 13, marginBottom: 4 }}>
           🏢 <b>{g.nome}</b> — {g.equipamentos.length} equipamento{g.equipamentos.length !== 1 ? 's' : ''}
         </div>
       ))}
-      {semInstalador > 0 && <div style={{ fontSize: 12, color: '#cc7700', marginTop: 4 }}>⚠ {semInstalador} equipamento{semInstalador !== 1 ? 's' : ''} sem instalador vinculado.</div>}
+      {semInstalador > 0 && <div style={{ fontSize: 12, color: 'var(--vp-warning-ink)', marginTop: 4 }}>⚠ {semInstalador} equipamento{semInstalador !== 1 ? 's' : ''} sem instalador vinculado.</div>}
     </div>
   );
 }
@@ -1181,22 +1380,22 @@ function TabInstalacao({ dossier, reload }) {
   return (
     <div>
       <div style={{
-        background: checklist.pronta ? '#eafaf0' : '#fff8e6',
-        border: `1px solid ${checklist.pronta ? '#00aa00' : '#FBB039'}`,
+        background: checklist.pronta ? 'var(--vp-success-tint)' : 'var(--vp-warning-tint)',
+        border: `1px solid ${checklist.pronta ? 'var(--vp-success)' : 'var(--vp-warning)'}`,
         borderRadius: 6, padding: '12px 16px', marginBottom: 16, fontSize: 13, fontWeight: 700,
-        color: checklist.pronta ? '#00701f' : '#8a5a00',
+        color: checklist.pronta ? 'var(--vp-success-ink)' : 'var(--vp-warning-ink)',
       }}>
         {checklist.pronta ? '✓ Obra pronta para instalação' : '○ Obra ainda não está pronta para instalação'}
       </div>
 
       <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 8, fontWeight: 600 }}>Checklist de obra pronta</div>
+        <div style={{ fontSize: 12, color: 'var(--fg2)', textTransform: 'uppercase', marginBottom: 8, fontWeight: 600 }}>Checklist de obra pronta</div>
         {checklist.itens.map((item) => (
-          <div key={item.chave} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', border: '1px solid #ddd', borderRadius: 6, padding: 12, marginBottom: 8 }}>
-            <div style={{ fontSize: 18, color: item.ok ? '#00aa00' : '#cc7700', fontWeight: 700, width: 20, textAlign: 'center' }}>{item.ok ? '✓' : '○'}</div>
+          <div key={item.chave} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', border: '1px solid var(--border)', borderRadius: 6, padding: 12, marginBottom: 8 }}>
+            <div style={{ fontSize: 18, color: item.ok ? 'var(--vp-success)' : 'var(--vp-warning-ink)', fontWeight: 700, width: 20, textAlign: 'center' }}>{item.ok ? '✓' : '○'}</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>{item.label}</div>
-              <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{item.detalhe}</div>
+              <div style={{ fontSize: 12, color: 'var(--fg3)', marginTop: 2 }}>{item.detalhe}</div>
             </div>
           </div>
         ))}
@@ -1247,14 +1446,14 @@ function TabInstalacao({ dossier, reload }) {
             <option value="">— nenhum vinculado —</option>
             {parceiros.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
           </select>
-          <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
+          <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 4 }}>
             Pra vincular uma empresa diferente num equipamento específico (obra com mais de uma instaladora), use a aba Equipamentos.
           </div>
         </div>
       </div>
 
       <div>
-        <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 8, fontWeight: 600 }}>Vistorias</div>
+        <div style={{ fontSize: 12, color: 'var(--fg2)', textTransform: 'uppercase', marginBottom: 8, fontWeight: 600 }}>Vistorias</div>
         <VistoriasObras obraId={dossier.id} obra={{ nome: dossier.building_name }} embedded onChanged={carregar}/>
       </div>
     </div>
@@ -1334,9 +1533,9 @@ function TabCronogramaInstalacao({ dossier }) {
 
   return (
     <div>
-      <div style={{ background: '#0b1220', color: '#fff', borderRadius: 8, padding: '16px 20px', marginBottom: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+      <div style={{ background: 'var(--vp-gray-900)', color: 'var(--bg)', borderRadius: 8, padding: '16px 20px', marginBottom: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
         <div>
-          <div style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: '#9aa7bd' }}>Progresso</div>
+          <div style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--vp-gray-300)' }}>Progresso</div>
           <div style={{ fontSize: 22, fontWeight: 800 }}>{concluidos} / {total} · {pct}%</div>
         </div>
         <div className="row gap-2">
@@ -1347,12 +1546,12 @@ function TabCronogramaInstalacao({ dossier }) {
       </div>
 
       {linkPublico && (
-        <div style={{ background: '#f0f8ff', border: '1px solid #0066cc', borderRadius: 6, padding: 10, marginBottom: 8, fontSize: 12, wordBreak: 'break-all' }}>
+        <div style={{ background: 'var(--vp-info-tint)', border: '1px solid var(--vp-info)', borderRadius: 6, padding: 10, marginBottom: 8, fontSize: 12, wordBreak: 'break-all' }}>
           Link público — Cliente (copiado): <a href={linkPublico} target="_blank" rel="noopener noreferrer">{linkPublico}</a>
         </div>
       )}
       {linkInterno && (
-        <div style={{ background: '#fff8e6', border: '1px solid #cc7700', borderRadius: 6, padding: 10, marginBottom: 16, fontSize: 12, wordBreak: 'break-all' }}>
+        <div style={{ background: 'var(--vp-warning-tint)', border: '1px solid var(--vp-warning-ink)', borderRadius: 6, padding: 10, marginBottom: 16, fontSize: 12, wordBreak: 'break-all' }}>
           Link interno — VerticalParts, permite anotar (copiado): <a href={linkInterno} target="_blank" rel="noopener noreferrer">{linkInterno}</a>
         </div>
       )}
@@ -1363,29 +1562,29 @@ function TabCronogramaInstalacao({ dossier }) {
 
       {semanas.map((sem) => (
         <div key={sem} style={{ marginBottom: 20 }}>
-          <div style={{ borderLeft: `4px solid ${store.semanaCor(sem)}`, paddingLeft: 12, marginBottom: 10 }}>
+          <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 11, textTransform: 'uppercase', color: store.semanaCor(sem), fontWeight: 700 }}>Semana {sem}</div>
             <div style={{ fontSize: 14, fontWeight: 700 }}>{store.semanaTitulo(sem)}</div>
           </div>
           {itens.filter((i) => i.semana === sem).map((item) => (
             <div key={item.id} style={{
-              border: '1px solid ' + (item.status === 'concluido' ? '#10b981' : item.status === 'nao_aplicavel' ? '#ccc' : '#ddd'),
-              background: item.status === 'concluido' ? '#f0fdf4' : item.status === 'nao_aplicavel' ? '#fafafa' : '#fff',
+              border: '1px solid ' + (item.status === 'concluido' ? 'var(--vp-success)' : item.status === 'nao_aplicavel' ? 'var(--border-strong)' : 'var(--border)'),
+              background: item.status === 'concluido' ? 'var(--vp-success-tint)' : item.status === 'nao_aplicavel' ? 'var(--vp-gray-50)' : 'var(--bg)',
               borderRadius: 6, padding: 12, marginBottom: 8, opacity: item.status === 'nao_aplicavel' ? 0.6 : 1,
             }}>
               <div className="row sb" style={{ alignItems: 'flex-start' }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 700 }}>{item.etapa}</div>
                   {item.servicos && item.servicos.length > 0 && (
-                    <ul style={{ margin: '6px 0', paddingLeft: 18, fontSize: 12, color: '#555' }}>
+                    <ul style={{ margin: '6px 0', paddingLeft: 18, fontSize: 12, color: 'var(--fg2)' }}>
                       {item.servicos.map((s, i) => <li key={i}>{s}</li>)}
                     </ul>
                   )}
                   {item.resultado_esperado && (
-                    <div style={{ fontSize: 12, color: '#0a7a3d', marginTop: 4 }}>✓ {item.resultado_esperado}</div>
+                    <div style={{ fontSize: 12, color: 'var(--vp-success-ink)', marginTop: 4 }}>✓ {item.resultado_esperado}</div>
                   )}
                   {item.status === 'concluido' && (
-                    <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
+                    <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>
                       Concluído por {item.concluido_por || '—'} em {item.concluido_em ? new Date(item.concluido_em).toLocaleString('pt-BR') : '—'}
                     </div>
                   )}
@@ -1442,7 +1641,7 @@ function FormAdicionarItemTemplate({ onSaved, equipTypePadrao }) {
   };
 
   return (
-    <div style={{ border: '1px dashed #999', borderRadius: 6, padding: 14, marginBottom: 18, background: '#fafafa' }}>
+    <div style={{ border: '1px dashed var(--fg3)', borderRadius: 6, padding: 14, marginBottom: 18, background: 'var(--vp-gray-50)' }}>
       <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 10 }}>Novo item de template (elevador / escada / esteira)</div>
       <div className="grid-3" style={{ gap: 10, marginBottom: 10 }}>
         <div>
@@ -1491,6 +1690,7 @@ function TabAcompanhamentoObra({ dossier }) {
   const [selecionados, setSelecionados] = React.useState({});
   const [fotos, setFotos] = React.useState({});
   const [observacoes, setObservacoes] = React.useState({});
+  const [datas, setDatas] = React.useState({});
 
   const carregar = React.useCallback(() => {
     Promise.all([store.obterEstadoDossier(dossier.id), store.obterLink(dossier.id)])
@@ -1529,6 +1729,18 @@ function TabAcompanhamentoObra({ dossier }) {
     finally { setBusy(false); }
   };
 
+  const corrigirConclusao = async (itemId, data) => {
+    if (!data) return;
+    if (!window.confirm('Corrigir o dia em que esta etapa foi concluída para ' + data.split('-').reverse().join('/') + '? A data de envio não muda.')) return;
+    setBusy(true);
+    try {
+      await store.corrigirConcluidoEm(dossier.id, itemId, data, window.__VP_USER?.email);
+      window.toast?.('Data de conclusão corrigida.', 'success');
+      carregar();
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    finally { setBusy(false); }
+  };
+
   const toggleSelecionar = (itemId) => {
     setSelecionados((p) => { const n = { ...p }; if (n[itemId]) delete n[itemId]; else n[itemId] = true; return n; });
   };
@@ -1559,11 +1771,11 @@ function TabAcompanhamentoObra({ dossier }) {
       for (const itemId of ids) {
         const urls = [];
         for (const f of fotos[itemId]) urls.push(await store.uploadFoto(dossier.id, itemId, f.file));
-        itensHoje.push({ item_id: itemId, fotos: urls, observacao: (observacoes[itemId] || '').trim() || null });
+        itensHoje.push({ item_id: itemId, fotos: urls, concluido_em: datas[itemId] || store.hojeSP(), observacao: (observacoes[itemId] || '').trim() || null });
       }
       await store.flegarItensOperador(dossier.id, itensHoje, window.__VP_USER?.email);
       window.toast?.('Atividade(s) flegada(s).', 'success');
-      setSelecionados({}); setFotos({}); setObservacoes({});
+      setSelecionados({}); setFotos({}); setObservacoes({}); setDatas({});
       carregar();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setBusy(false); }
@@ -1579,15 +1791,15 @@ function TabAcompanhamentoObra({ dossier }) {
   return (
     <div>
       {(estado.equipamentos || []).length > 0 && (
-        <div style={{ marginBottom: 12, display: 'inline-block', background: '#dcfce7', color: '#166534', fontWeight: 800, fontSize: 13, padding: '5px 12px', borderRadius: 6 }}>
+        <div style={{ marginBottom: 12, display: 'inline-block', background: 'var(--vp-success-tint)', color: 'var(--vp-success-ink)', fontWeight: 800, fontSize: 13, padding: '5px 12px', borderRadius: 6 }}>
           Nº do Equipamento: {estado.equipamentos.map((e) => e.numero_serie || '—').join(' + ')}
         </div>
       )}
-      <div style={{ background: '#0b1220', color: '#fff', borderRadius: 8, padding: '16px 20px', marginBottom: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+      <div style={{ background: 'var(--vp-gray-900)', color: 'var(--bg)', borderRadius: 8, padding: '16px 20px', marginBottom: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
         <div>
-          <div style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: '#9aa7bd' }}>Progresso ponderado</div>
+          <div style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--vp-gray-300)' }}>Progresso ponderado</div>
           <div style={{ fontSize: 22, fontWeight: 800 }}>{resumo.pct}%</div>
-          <div style={{ fontSize: 11, color: '#9aa7bd', marginTop: 2 }}>
+          <div style={{ fontSize: 11, color: 'var(--vp-gray-300)', marginTop: 2 }}>
             {resumo.marcos.map((m) => `${m.label}${m.completo ? ' ✓' : ''}`).join(' · ')}
           </div>
         </div>
@@ -1597,7 +1809,7 @@ function TabAcompanhamentoObra({ dossier }) {
       </div>
 
       {linkUrl && (
-        <div style={{ background: '#f0f8ff', border: '1px solid #0066cc', borderRadius: 6, padding: 10, marginBottom: 18, fontSize: 12, wordBreak: 'break-all' }}>
+        <div style={{ background: 'var(--vp-info-tint)', border: '1px solid var(--vp-info)', borderRadius: 6, padding: 10, marginBottom: 18, fontSize: 12, wordBreak: 'break-all' }}>
           Link fixo do Montador (mande junto com o contrato): <a href={linkUrl} target="_blank" rel="noopener noreferrer">{linkUrl}</a>
         </div>
       )}
@@ -1612,7 +1824,7 @@ function TabAcompanhamentoObra({ dossier }) {
         <>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Checklist ({statusOrdenado.filter((s) => s.flegado).length}/{statusOrdenado.length})</div>
           {podeEditar && (
-            <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 10 }}>
               Você tem alçada pra flegar atividades direto por aqui (ex.: o Montador esqueceu de enviar) — marque, anexe a foto e envie.
             </div>
           )}
@@ -1623,8 +1835,8 @@ function TabAcompanhamentoObra({ dossier }) {
               const fotosItem = fotos[item.id] || [];
               return (
                 <div key={s.id} style={{
-                  border: '1px solid ' + (s.flegado ? '#10b981' : selecionado ? '#0066cc' : '#ddd'),
-                  background: s.flegado ? '#f0fdf4' : selecionado ? '#f0f8ff' : '#fff',
+                  border: '1px solid ' + (s.flegado ? 'var(--vp-success)' : selecionado ? 'var(--vp-info)' : 'var(--border)'),
+                  background: s.flegado ? 'var(--vp-success-tint)' : selecionado ? 'var(--vp-info-tint)' : 'var(--bg)',
                   borderRadius: 6, padding: 10, marginBottom: 6,
                 }}>
                   <div className="row sb" style={{ alignItems: 'flex-start' }}>
@@ -1634,15 +1846,28 @@ function TabAcompanhamentoObra({ dossier }) {
                           onChange={() => toggleSelecionar(item.id)} style={{ marginTop: 3, width: 16, height: 16 }} />
                       )}
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600 }}>{s.flegado ? '✅' : '⬜'} {item.texto} <span style={{ fontWeight: 400, color: '#999' }}>({item.peso}%)</span></div>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{s.flegado ? '✅' : '⬜'} {item.texto} <span style={{ fontWeight: 400, color: 'var(--fg3)' }}>({item.peso}%)</span></div>
                         {s.flegado && (
-                          <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+                          <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 4 }}>
                             Flegado em {s.flegado_em ? new Date(s.flegado_em).toLocaleString('pt-BR') : '—'}
                             {s.flegado_por ? ` · por ${s.flegado_por}` : ' · pelo Montador'}
                           </div>
                         )}
+                        {s.flegado && (
+                          <div style={{ fontSize: 11, color: 'var(--fg2)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span>Concluído em:</span>
+                            {podeEditar ? (
+                              <input type="date" value={s.concluido_em || ''} disabled={busy} max={s.flegado_em ? store.diaSP(s.flegado_em) : store.hojeSP()}
+                                onChange={(e) => corrigirConclusao(item.id, e.target.value)}
+                                title="Dia real em que a etapa foi concluída em campo. A data de envio não muda." style={{ fontSize: 12, padding: '2px 4px' }} />
+                            ) : (
+                              <b>{s.concluido_em ? s.concluido_em.split('-').reverse().join('/') : 'não informado (vale a data de envio)'}</b>
+                            )}
+                            {podeEditar && !s.concluido_em && <span style={{ color: 'var(--fg3)' }}>não informado — vale a data de envio</span>}
+                          </div>
+                        )}
                         {s.desflegado_em && !s.flegado && (
-                          <div style={{ fontSize: 11, color: '#cc7700', marginTop: 4 }}>
+                          <div style={{ fontSize: 11, color: 'var(--vp-warning-ink)', marginTop: 4 }}>
                             Desflegado por {s.desflegado_por || '—'} em {new Date(s.desflegado_em).toLocaleString('pt-BR')}
                           </div>
                         )}
@@ -1650,17 +1875,22 @@ function TabAcompanhamentoObra({ dossier }) {
                           <div className="row gap-1" style={{ marginTop: 6, flexWrap: 'wrap' }}>
                             {s.fotos.map((url, i) => (
                               <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                                <img src={url} alt="" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #ddd' }} />
+                                <img src={url} alt="" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)' }} />
                               </a>
                             ))}
                           </div>
                         )}
                         {s.flegado && s.observacao && (
-                          <div style={{ fontSize: 12, color: '#555', marginTop: 6 }}>📝 {s.observacao}</div>
+                          <div style={{ fontSize: 12, color: 'var(--fg2)', marginTop: 6 }}>📝 {s.observacao}</div>
                         )}
                         {!s.flegado && selecionado && (
                           <div style={{ marginTop: 8 }}>
-                            <label style={{ fontSize: 11, color: '#0066cc', border: '1px solid #0066cc', borderRadius: 6, padding: '4px 8px', display: 'inline-block', cursor: 'pointer' }}>
+                            <label style={{ display: 'block', fontSize: 11, color: 'var(--fg2)', marginBottom: 6 }}>
+                              Dia em que concluiu{' '}
+                              <input type="date" value={datas[item.id] || store.hojeSP()} max={store.hojeSP()} disabled={busy}
+                                onChange={(e) => setDatas((p) => ({ ...p, [item.id]: e.target.value }))} style={{ fontSize: 12, padding: '2px 4px' }} />
+                            </label>
+                            <label style={{ fontSize: 11, color: 'var(--vp-info)', border: '1px solid var(--vp-info)', borderRadius: 6, padding: '4px 8px', display: 'inline-block', cursor: 'pointer' }}>
                               📷 {fotosItem.length > 0 ? `${fotosItem.length} foto(s) anexada(s)` : 'Anexar foto (obrigatório)'}
                               <input type="file" accept="image/*" multiple hidden disabled={busy}
                                 onChange={(e) => onFotos(item.id, e.target.files)} />
@@ -1676,7 +1906,7 @@ function TabAcompanhamentoObra({ dossier }) {
                               disabled={busy}
                               placeholder="Observação (opcional) — descreva se teve alguma dificuldade nessa tarefa"
                               rows={2}
-                              style={{ marginTop: 8, width: '100%', fontSize: 12, padding: 6, border: '1px solid #ddd', borderRadius: 6, resize: 'vertical', boxSizing: 'border-box' }}
+                              style={{ marginTop: 8, width: '100%', fontSize: 12, padding: 6, border: '1px solid var(--border)', borderRadius: 6, resize: 'vertical', boxSizing: 'border-box' }}
                             />
                           </div>
                         )}
@@ -1696,24 +1926,24 @@ function TabAcompanhamentoObra({ dossier }) {
             <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhum envio registrado ainda.</div>
           )}
           {estado.lancamentos.map((l) => (
-            <div key={l.id} style={{ border: '1px solid #ddd', borderRadius: 6, padding: 10, marginBottom: 8 }}>
-              <div style={{ fontSize: 12, fontWeight: 700 }}>{new Date(l.data + 'T00:00:00').toLocaleDateString('pt-BR')} <span style={{ fontWeight: 400, color: '#888' }}>· enviado {new Date(l.enviado_em).toLocaleTimeString('pt-BR')}</span></div>
+            <div key={l.id} style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 10, marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 700 }}>{new Date(l.data + 'T00:00:00').toLocaleDateString('pt-BR')} <span style={{ fontWeight: 400, color: 'var(--fg3)' }}>· enviado {new Date(l.enviado_em).toLocaleTimeString('pt-BR')}</span></div>
               <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12 }}>
                 {(l.itens || []).map((it, i) => (
                   <li key={i}>
                     {(statusOrdenado.find((s) => s.acompanhamento_obra_itens?.id === it.item_id)?.acompanhamento_obra_itens?.texto) || it.item_id}
-                    {it.observacao && <span style={{ color: '#555' }}> — 📝 {it.observacao}</span>}
+                    {it.observacao && <span style={{ color: 'var(--fg2)' }}> — 📝 {it.observacao}</span>}
                   </li>
                 ))}
               </ul>
-              {l.observacao && <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>{l.observacao}</div>}
+              {l.observacao && <div style={{ fontSize: 12, color: 'var(--fg2)', marginTop: 4 }}>{l.observacao}</div>}
             </div>
           ))}
         </>
       )}
 
       {podeEditar && qtdSelecionados > 0 && (
-        <div style={{ position: 'sticky', bottom: 0, background: '#fff', borderTop: '1px solid #ddd', padding: 12, marginTop: 16 }}>
+        <div style={{ position: 'sticky', bottom: 0, background: 'var(--bg)', borderTop: '1px solid var(--border)', padding: 12, marginTop: 16 }}>
           <Button variant="primary" onClick={flegarSelecionados} disabled={busy} style={{ width: '100%' }}>
             {busy ? 'Enviando…' : `Flegar selecionado(s) (${qtdSelecionados})`}
           </Button>
@@ -1750,8 +1980,8 @@ function TabPendencias({ dossier, setModalOpen, reload }) {
         {ativas.length > 0 ? (
           ativas.map(p => (
             <div key={p.id} style={{
-              background: p.bloqueante ? '#fff0f0' : '#fff8e6',
-              border: `1px solid ${p.bloqueante ? '#ff6666' : '#ffcc00'}`,
+              background: p.bloqueante ? 'var(--vp-danger-tint)' : 'var(--vp-warning-tint)',
+              border: `1px solid ${p.bloqueante ? 'var(--vp-danger)' : 'var(--vp-warning)'}`,
               borderRadius: 6,
               padding: 12,
               marginBottom: 8
@@ -1759,7 +1989,7 @@ function TabPendencias({ dossier, setModalOpen, reload }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{p.descricao}</div>
-                  <div style={{ fontSize: 11, color: '#666' }}>
+                  <div style={{ fontSize: 11, color: 'var(--fg2)' }}>
                     Tipo: <b>{p.tipo}</b> {p.etapa && `· Etapa: ${p.etapa}`}
                   </div>
                 </div>
@@ -1770,7 +2000,7 @@ function TabPendencias({ dossier, setModalOpen, reload }) {
             </div>
           ))
         ) : (
-          <div style={{ color: '#999', textAlign: 'center', padding: 16 }}>Sem pendências ativas</div>
+          <div style={{ color: 'var(--fg3)', textAlign: 'center', padding: 16 }}>Sem pendências ativas</div>
         )}
       </div>
 
@@ -1779,15 +2009,15 @@ function TabPendencias({ dossier, setModalOpen, reload }) {
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>✅ Pendências Resolvidas ({resolvidas.length})</div>
           {resolvidas.map(p => (
             <div key={p.id} style={{
-              background: '#f0f8f0',
-              border: '1px solid #cce6cc',
+              background: 'var(--vp-success-tint)',
+              border: '1px solid var(--vp-success)',
               borderRadius: 6,
               padding: 12,
               marginBottom: 8,
               opacity: 0.7
             }}>
               <div style={{ fontSize: 13, marginBottom: 4 }}>{p.descricao}</div>
-              <div style={{ fontSize: 11, color: '#666' }}>
+              <div style={{ fontSize: 11, color: 'var(--fg2)' }}>
                 Resolvido em {new Date(p.resolved_at).toLocaleDateString('pt-BR')} por {p.resolved_by}
               </div>
             </div>
@@ -1810,19 +2040,19 @@ function TabResponsaveis({ dossier, reload }) {
           const resp = responsaveis.find(r => r.etapa === etapa);
           return (
             <div key={etapa} style={{
-              background: '#f5f5f5',
-              border: '1px solid #ddd',
+              background: 'var(--vp-gray-100)',
+              border: '1px solid var(--border)',
               borderRadius: 6,
               padding: 16
             }}>
-              <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: 'var(--fg2)', textTransform: 'uppercase', marginBottom: 12 }}>
                 {etapa}
               </div>
               <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
                 {resp?.responsavel || '—'}
               </div>
               {resp?.notes && (
-                <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
+                <div style={{ fontSize: 12, color: 'var(--fg2)', marginBottom: 12 }}>
                   {resp.notes}
                 </div>
               )}
@@ -1888,7 +2118,7 @@ function TabHistorico({ dossier }) {
             <div key={h.id} style={{
               position: 'relative',
               paddingBottom: 24,
-              borderLeft: i === historico.length - 1 ? 'none' : '2px solid #ddd'
+              borderLeft: i === historico.length - 1 ? 'none' : '2px solid var(--border)'
             }}>
               <div style={{
                 position: 'absolute',
@@ -1896,21 +2126,21 @@ function TabHistorico({ dossier }) {
                 top: 2,
                 width: 12,
                 height: 12,
-                background: '#0066cc',
+                background: 'var(--vp-info)',
                 borderRadius: '50%',
                 border: '3px solid white'
               }} />
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
                 {h.status_from} → {h.status_to}
               </div>
-              <div style={{ fontSize: 11, color: '#666', marginBottom: 4 }}>
+              <div style={{ fontSize: 11, color: 'var(--fg2)', marginBottom: 4 }}>
                 Por: <b>{h.actor}</b>
               </div>
-              <div style={{ fontSize: 11, color: '#999' }}>
+              <div style={{ fontSize: 11, color: 'var(--fg3)' }}>
                 {new Date(h.created_at).toLocaleDateString('pt-BR')} · {new Date(h.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
               </div>
               {h.notes && (
-                <div style={{ fontSize: 12, marginTop: 8, padding: 8, background: '#f5f5f5', borderRadius: 4 }}>
+                <div style={{ fontSize: 12, marginTop: 8, padding: 8, background: 'var(--vp-gray-100)', borderRadius: 4 }}>
                   {h.notes}
                 </div>
               )}
@@ -1918,7 +2148,7 @@ function TabHistorico({ dossier }) {
           ))}
         </div>
       ) : (
-        <div style={{ color: '#999', textAlign: 'center', padding: 32 }}>
+        <div style={{ color: 'var(--fg3)', textAlign: 'center', padding: 32 }}>
           Sem histórico de transições
         </div>
       )}
@@ -1984,22 +2214,22 @@ function ModalAdicionarPendencia({ dossierId, onClose, onSaved }) {
 
 function statusBg(status) {
   const bgs = {
-    'rascunho': '#f5f5f5',
-    'aprovado': '#e6ffe6',
-    'enviado': '#e6f2ff',
-    'assinado': '#e6ffe6',
-    'vencido': '#ffe6e6'
+    'rascunho': 'var(--vp-gray-100)',
+    'aprovado': 'var(--vp-success-tint)',
+    'enviado': 'var(--vp-info-tint)',
+    'assinado': 'var(--vp-success-tint)',
+    'vencido': 'var(--vp-danger-tint)'
   };
-  return bgs[status] || '#f5f5f5';
+  return bgs[status] || 'var(--vp-gray-100)';
 }
 
 function statusColor(status) {
   const colors = {
-    'rascunho': '#999',
-    'aprovado': '#00aa00',
-    'enviado': '#0066cc',
-    'assinado': '#00aa00',
-    'vencido': '#cc0000'
+    'rascunho': 'var(--fg3)',
+    'aprovado': 'var(--vp-success)',
+    'enviado': 'var(--vp-info)',
+    'assinado': 'var(--vp-success)',
+    'vencido': 'var(--vp-danger)'
   };
-  return colors[status] || '#666';
+  return colors[status] || 'var(--fg2)';
 }

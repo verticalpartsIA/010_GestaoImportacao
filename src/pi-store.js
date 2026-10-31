@@ -77,6 +77,15 @@
     return data || null;
   }
 
+  /* T6 #1226 (31/10/2026): grava o vínculo com o cadastro de Fornecedores ao lado do nome (fornecedor_id).
+     Só liga quando o nome bate com UM cadastro; senão fica sem vínculo (o nome continua valendo). */
+  async function _comFornecedorId(row, idAtual) {
+    const S = window.CadastrosFornecedoresStore;
+    if (!S || !S.resolverIdPorNome) return row;
+    try { return { ...row, fornecedor_id: await S.resolverIdPorNome(row.fornecedor, idAtual || null) }; }
+    catch (e) { console.warn('[PIStore] vínculo do fornecedor não resolvido', e); return row; }
+  }
+
   function _payload(form) {
     const itens = (form.itens || []).map((i) => {
       const q = parseFloat(i.quantidade) || 0;
@@ -119,22 +128,113 @@
   async function criar(form) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     if (!form.numero_pi || !form.numero_pi.trim()) throw new Error('Informe o número da P.I.');
-    const row = { ..._payload(form), created_by: (window.__VP_USER || {}).email || null };
+    const row = await _comFornecedorId({ ..._payload(form), created_by: (window.__VP_USER || {}).email || null }, form.fornecedor_id);
     const { data, error } = await c.from('pi_importacao').insert(row).select().single();
     if (error) throw error;
     if (window.EventosFluxo) window.EventosFluxo.registrar({
       evento: 'PI_CRIADA', numeroCotacao: data.numero_cotacao, alvoLabel: data.numero_pi, alvoId: data.id,
     });
+    if (data.numero_cotacao != null && data.embarque_id) await propagarCotacaoAoEmbarque(c, data.numero_cotacao, data.embarque_id);
     return data;
+  }
+
+  /* P.I. automática (rascunho) — nasce sozinha quando a compra da cotação é liberada pelos 3 avais
+     (nó COMPRA_LIBERADA), com fornecedor, Nº da cotação e produtos herdados. É só um rascunho:
+     NÃO emite PI_CRIADA (a etapa "Importação a iniciar" só fecha quando a P.I. real for confirmada
+     — veja atualizar()). Idempotente: se já existe P.I. com esse Nº, não cria outra. A criação
+     manual continua como sempre ("+ Nova P.I."). */
+  const PREFIXO_RASCUNHO = 'RASCUNHO-';
+  function ehRascunhoAutomatico(pi) { return !!(pi && pi.producao && pi.producao.rascunho_auto); }
+  async function criarRascunhoAutomatico(numeroCotacao) {
+    const c = sb(); if (!c || numeroCotacao == null) return null;
+    try {
+      const n = Number(numeroCotacao);
+      const { data: ja, error: e0 } = await c.from('pi_importacao').select('id').eq('numero_cotacao', n).limit(1);
+      if (e0) throw e0;
+      if (ja && ja.length) return null;
+      if (!window.PropostaHeranca) return null;
+      const fontes = await window.PropostaHeranca.buscarFontes(n);
+      if (!fontes || !fontes.encontrado) return null;
+      const modelos = (fontes.precificacao && fontes.precificacao.modelos) || [];
+      const itens = modelos.map((m) => ({
+        descricao_produto: m.modelo || 'Equipamento', codigo_produto: '', quantidade: m.quantidade || 1,
+        unidade_medida: 'un', ncm: '', valor_unitario: m.valorUnitarioUsd || 0,
+      }));
+      const idMestre = window.MasterIdEngine ? window.MasterIdEngine.etapaId('cotacao', n) : String(n);
+      const form = {
+        numero_pi: PREFIXO_RASCUNHO + idMestre, fornecedor: (fontes.cotacao || {}).fornecedor || '',
+        numero_cotacao: n, status: 'Aguardando documentos', moeda: 'USD', itens,
+        observacoes: 'P.I. criada automaticamente quando a compra foi liberada (3 avais OK). Confira os dados e troque o número pelo da P.I. do fornecedor.',
+        producao: { rascunho_auto: true },
+      };
+      const row = await _comFornecedorId({ ..._payload(form), created_by: 'automático (compra liberada)' }, form.fornecedor_id);
+      const { data, error } = await c.from('pi_importacao').insert(row).select().single();
+      if (error) throw error;
+      if (window.VPLog) window.VPLog.registrar({ modulo: 'P.I.', acao: 'Criou P.I. automática', alvo: data.numero_pi, alvo_id: data.id, detalhe: { numero_cotacao: n } });
+      return data;
+    } catch (e) { console.warn('[PIStore] rascunho automático falhou', e); return null; }
+  }
+  /* Rede de segurança: cotações com a compra liberada (e ainda sem decidir) que não têm P.I. ganham o rascunho. */
+  async function sincronizarRascunhosAutomaticos() {
+    const c = sb(); if (!c) return 0;
+    try {
+      const { data, error } = await c.from('gatilhos').select('numero_cotacao').eq('evento_key', 'COMPRA_LIBERADA').eq('status', 'pendente');
+      if (error) throw error;
+      let criados = 0;
+      for (const g of data || []) { if (await criarRascunhoAutomatico(g.numero_cotacao)) criados++; }
+      return criados;
+    } catch (e) { console.warn('[PIStore] sincronizarRascunhos falhou', e); return 0; }
   }
 
   async function atualizar(id, form) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const row = { ..._payload(form), updated_at: new Date().toISOString() };
+    const { data: antes, error: errAntes } = await c.from('pi_importacao').select('numero_cotacao, embarque_id, numero_pi, producao').eq('id', id).maybeSingle();
+    if (errAntes) throw errAntes;
+    const row = await _comFornecedorId({ ..._payload(form), updated_at: new Date().toISOString() }, form.fornecedor_id);
+    /* Rascunho automático confirmado: o usuário trocou o número provisório pelo da P.I. real. */
+    const confirmouRascunho = ehRascunhoAutomatico(antes) && row.numero_pi && !String(row.numero_pi).startsWith(PREFIXO_RASCUNHO);
+    if (confirmouRascunho) row.producao = { ...(row.producao || {}), rascunho_auto: false };
+    // Nº da cotação, uma vez gravado, não muda por aqui (a tela trava o campo; isto protege contra versão antiga em cache).
+    if (antes && antes.numero_cotacao != null) row.numero_cotacao = antes.numero_cotacao;
     const { data, error } = await c.from('pi_importacao').update(row).eq('id', id).select().single();
     if (error) throw error;
+    /* P.I. antiga criada sem Nº (todas as 13 em 11/10) ganhou o Nº agora: emite PI_CRIADA com o Nº (fecha a etapa
+       "Importação a iniciar") e leva o Nº ao embarque vinculado. Antes o Nº só era aceito na criação. */
+    if (antes && antes.numero_cotacao == null && data.numero_cotacao != null) {
+      if (window.EventosFluxo) window.EventosFluxo.registrar({
+        evento: 'PI_CRIADA', numeroCotacao: data.numero_cotacao, alvoLabel: data.numero_pi, alvoId: data.id,
+      });
+    }
+    if (confirmouRascunho && data.numero_cotacao != null && window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'PI_CRIADA', numeroCotacao: data.numero_cotacao, alvoLabel: data.numero_pi, alvoId: data.id,
+    });
+    // Embarque escolhido pelo formulário da P.I. (não pelo "Vincular") também recebe o Nº — antes só o "Vincular" levava.
+    const ganhou = antes && antes.numero_cotacao == null && data.numero_cotacao != null;
+    const trocouEmbarque = antes && data.embarque_id && data.embarque_id !== antes.embarque_id;
+    if (data.numero_cotacao != null && data.embarque_id && (ganhou || trocouEmbarque)) {
+      await propagarCotacaoAoEmbarque(c, data.numero_cotacao, data.embarque_id);
+    }
     return data;
   }
+
+  /* Leva o Nº da cotação da P.I. ao embarque (só se o embarque ainda não tiver um) e registra os eventos do embarque. */
+  async function propagarCotacaoAoEmbarque(c, numeroCotacao, embarqueId) {
+    // Não derruba o salvamento da P.I. (já gravada): falha aqui vira aviso, não erro.
+    try {
+      const { data: emb, error: e1 } = await c.from('embarques_importacao').select('numero_cotacao').eq('id', embarqueId).maybeSingle();
+      if (e1) throw e1;
+      if (!emb || emb.numero_cotacao != null) return;
+      const { error: e2 } = await c.from('embarques_importacao').update({ numero_cotacao: numeroCotacao }).eq('id', embarqueId);
+      if (e2) throw e2;
+      if (window.EmbarquesImportacaoStore && window.EmbarquesImportacaoStore.aoGanharCotacao) {
+        await window.EmbarquesImportacaoStore.aoGanharCotacao(embarqueId);
+      }
+    } catch (e) {
+      console.warn('[PIStore] Nº da cotação não chegou ao embarque', e);
+      window.toast?.('P.I. salva, mas o Nº da cotação não foi levado ao embarque: ' + (e.message || e), 'warning');
+    }
+  }
+
 
   async function remover(id) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
@@ -151,13 +251,9 @@
        é, quem sabe é a P.I. Só preenche se o embarque ainda não tiver um
        (não sobrescreve um valor já definido por outra P.I. vinculada). */
     if (embarqueId) {
-      const { data: pi } = await c.from('pi_importacao').select('numero_cotacao').eq('id', id).maybeSingle();
-      if (pi && pi.numero_cotacao != null) {
-        const { data: emb } = await c.from('embarques_importacao').select('numero_cotacao').eq('id', embarqueId).maybeSingle();
-        if (emb && emb.numero_cotacao == null) {
-          await c.from('embarques_importacao').update({ numero_cotacao: pi.numero_cotacao }).eq('id', embarqueId);
-        }
-      }
+      const { data: pi, error: e0 } = await c.from('pi_importacao').select('numero_cotacao').eq('id', id).maybeSingle();
+      if (e0) throw e0;
+      if (pi && pi.numero_cotacao != null) await propagarCotacaoAoEmbarque(c, pi.numero_cotacao, embarqueId);
     }
   }
 
@@ -175,7 +271,73 @@
     await c.storage.from('engenharia').remove([path]);
   }
 
+  /* Busca o produto pelo código para preencher o item da P.I.
+     Fontes (nesta ordem): catálogo de importação do Omie (descrição/unidade/NCM),
+     cadastro do PCP e Ficha Técnica (só completa o que faltar). Só leitura. */
+  const UNIDADE_PI = { PC: 'un', PÇ: 'un', UN: 'un', UND: 'un', PEÇA: 'un', PECA: 'un', KG: 'kg', G: 'g', TON: 'ton', T: 'ton', M: 'm', MT: 'm', 'M²': 'm²', M2: 'm²', 'M³': 'm³', M3: 'm³', L: 'L', LT: 'L', ML: 'mL', CX: 'cx', CAIXA: 'cx', PCT: 'pct', PAR: 'par', CJ: 'cj', KIT: 'cj', JG: 'cj' };
+  const _cacheProduto = new Map();
+  async function buscarProdutoPorCodigo(codigo) {
+    const cod = String(codigo || '').trim();
+    if (cod.length < 3) return null;
+    const chave = cod.toUpperCase();
+    if (_cacheProduto.has(chave)) return _cacheProduto.get(chave);
+    const c = sb(); if (!c) return null;
+    const un = (u) => UNIDADE_PI[String(u || '').trim().toUpperCase()] || '';
+    let r = { descricao: '', unidade: '', ncm: '' };
+    try {
+      const q = (t, cols) => c.from(t).select(cols).ilike(t === 'fichas_tecnicas' ? 'codigo_produto' : 'codigo', cod).limit(1);
+      const [iv, pcp, ft] = await Promise.all([
+        q('importacao_varejo_produtos', 'descricao,unidade,ncm'),
+        q('pcp_produtos', 'descricao,unidade,ncm'),
+        q('fichas_tecnicas', 'nome_produto,ncm_recomendado').eq('arquivado', false).limit(1),
+      ]);
+      const a = (iv.data || [])[0] || {}, b = (pcp.data || [])[0] || {}, f = (ft.error ? [] : ft.data || [])[0] || {};
+      r = {
+        descricao: a.descricao || b.descricao || f.nome_produto || '',
+        unidade: un(a.unidade) || un(b.unidade),
+        ncm: a.ncm || b.ncm || f.ncm_recomendado || '',
+      };
+    } catch (e) { console.warn('[PIStore] buscarProdutoPorCodigo', e); return null; }
+    const out = (r.descricao || r.ncm) ? r : null;
+    if (out) _cacheProduto.set(chave, out);
+    return out;
+  }
+
+  /* P.I. em RASCUNHO nascida da aprovação de um lote de Cotações de Varejo (1 por fornecedor vencedor). Sem Nº de cotação
+     (varejo não é equipamento). Idempotente por convite: aprovar de novo não duplica. O número provisório deve ser trocado pelo
+     da P.I. do fornecedor ao recebê-la. NÃO emite PI_CRIADA (só rascunho). */
+  async function criarRascunhoDeLote({ lote, convite, itens, ordem, cambioLote, cambioResposta }) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data: ja, error: e0 } = await c.from('pi_importacao').select('id, numero_pi').contains('producao', { convite_id: convite.id }).limit(1);
+    if (e0) throw e0;
+    if (ja && ja.length) return ja[0];
+    const m = convite.moeda === 'RMB' ? 'CNY' : (convite.moeda || 'USD');
+    const moeda = ['USD', 'EUR', 'BRL', 'CNY', 'GBP'].includes(m) ? m : 'USD';
+    const linhas = await Promise.all((itens || []).map(async (i) => {
+      let p = null; try { p = await buscarProdutoPorCodigo(i.codigo); } catch (e) { /* segue sem cadastro */ }
+      return {
+        descricao_produto: i.descricao || (p && p.descricao) || '', codigo_produto: i.codigo, quantidade: Number(i.quantidade) || 0,
+        unidade_medida: (p && p.unidade) || i.unidade || 'un', ncm: (p && p.ncm) || '', valor_unitario: Number(i.preco) || 0,
+      };
+    }));
+    const fmt = (v) => (Number(v) > 0 ? 'R$ ' + Number(v).toFixed(4).replace('.', ',') : '—');
+    const form = {
+      numero_pi: 'RASCUNHO-' + lote.numero + '-' + (ordem || 1), fornecedor: convite.fornecedor_nome || '', status: 'Aguardando documentos', moeda, itens: linhas,
+      observacoes: 'P.I. criada ao aprovar o lote ' + lote.numero + ' (Cotações de Varejo). Preços = o que o fornecedor cotou para a quantidade aprovada. '
+        + 'Dólar da cotação: ' + fmt(cambioLote) + ' · dólar na resposta do fornecedor: ' + fmt(cambioResposta) + '. '
+        + 'Confira os dados com a Proforma do fornecedor e troque o número provisório pelo da P.I. dele.',
+      producao: { rascunho_auto: true, origem_lote: lote.id, lote_numero: lote.numero, convite_id: convite.id },
+    };
+    /* T6: o convite já aponta para o cadastro do fornecedor — esse vínculo vale, sem adivinhar pelo nome. */
+    const row = { ..._payload(form), created_by: (window.__VP_USER || {}).email || null, fornecedor_id: convite.fornecedor_id || null };
+    const { data, error } = await c.from('pi_importacao').insert(row).select().single();
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'P.I.', acao: 'Criou P.I. em rascunho a partir do lote ' + lote.numero, alvo: data.numero_pi, alvo_id: data.id, detalhe: { fornecedor: convite.fornecedor_nome, itens: linhas.length } });
+    return data;
+  }
+
   window.PIStore = {
+    criarRascunhoDeLote, buscarProdutoPorCodigo, criarRascunhoAutomatico, sincronizarRascunhosAutomaticos, ehRascunhoAutomatico,
     listarTodas, obter, criar, atualizar, remover, vincularEmbarque,
     uploadAnexoProducao, removerAnexoProducao,
     calcItemTotal, calcTotalGeral, somaPagamentosAdicionais, fmtMoeda,

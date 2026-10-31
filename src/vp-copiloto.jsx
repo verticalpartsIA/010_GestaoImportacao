@@ -3,7 +3,7 @@
    Acompanha o usuário em TODAS as telas. Conversa, preenche
    formulários e revisa documentos procurando erros.
 
-   IA: Anthropic Claude via Edge Function vp-copiloto.
+   IA: sessão do Claude na VPS (copiloto.vpsistema.com) — ver comentário de VPC_ENDPOINT.
    Mecanismo universal: lê os campos do <main> direto do DOM e
    preenche via native-setter + eventos (React atualiza o estado).
 
@@ -11,20 +11,28 @@
    ============================================================ */
 const { useState: _vpUS, useRef: _vpUR, useEffect: _vpUE } = React;
 
-const VPC_ENDPOINT = 'https://jxtqwzmpgofwctqajewt.supabase.co/functions/v1/vp-copiloto';
-const VPC_ANON_KEY = 'sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP';
+/* 11/10/2026 — o Copiloto deixou de ser a Edge Function vp-copiloto (API do Claude sem ferramentas) e
+   passou a ser uma sessão do Claude na VPS (copiloto.vpsistema.com), que conhece o código/mapa do site
+   e consulta dados ao vivo (contratos, propostas, cotações, e-mails, Omie) SÓ PARA LEITURA, respeitando
+   as alçadas/valores do vpsistema. O login vai junto (sessão individual do VP Gestão, VpAuth): a VPS
+   confere no Supabase quem é a pessoa — o e-mail não é declarado pelo navegador. Mesmo formato de
+   resposta de antes ({reply, fills, questions, issues, opsQuestionario}). */
+const VPC_ENDPOINT = 'https://copiloto.vpsistema.com/perguntar';
 const VPC_LS_OPEN = 'vpc_open_v1';
 
 /* ---------- API ---------- */
 async function vpcCall(body) {
+  const token = (window.VpAuth && window.VpAuth.getAccessToken) ? await window.VpAuth.getAccessToken() : null;
+  if (!token) throw new Error('não encontrei seu login. Saia e entre de novo pelo vpsistema.com e tente outra vez.');
   const res = await fetch(VPC_ENDPOINT, {
     method: 'POST',
-    headers: { 'apikey': VPC_ANON_KEY, 'Authorization': 'Bearer ' + VPC_ANON_KEY, 'Content-Type': 'application/json' },
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error('HTTP ' + res.status + (txt ? ' · ' + txt.slice(0, 160) : ''));
+    let msg = '';
+    try { msg = (await res.json()).error || ''; } catch (e) { /* resposta sem JSON */ }
+    throw new Error(msg || ('HTTP ' + res.status));
   }
   return res.json();
 }
@@ -109,6 +117,90 @@ function vpcScanPage() {
 function vpcDocText() {
   const main = document.querySelector('main.main') || document.body;
   return (main.innerText || '').replace(/\n{3,}/g, '\n\n').trim().slice(0, 12000);
+}
+
+/* ---------- VISÃO DA TELA + GPS (10/10/2026) ----------
+   Pedido do usuário: o Copiloto precisa "ver" a tela (não só os campos editáveis) e saber onde está no ecossistema.
+   Devolve: url, breadcrumb, módulo/item ativo do menu, abas ativas e um resumo estruturado do que está visível no <main>:
+   títulos, campos (inclusive somente leitura, com o valor), tabelas (cabeçalho + primeiras/últimas linhas, com contagem),
+   botões (e se estão desabilitados) e avisos. Limitado a ~14.000 caracteres para caber no contexto. */
+function vpcVisaoDaTela() {
+  const main = document.querySelector('main.main') || document.body;
+  const vis = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  const limpa = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+  const linhas = [];
+  const LIMITE = 14000;
+  let total = 0;
+  const push = (t) => { if (!t || total > LIMITE) return; linhas.push(t); total += t.length + 1; };
+
+  const rotuloDe = (el) => {
+    try { return vpcLabelFor(el) || ''; } catch (e) { return ''; }
+  };
+  const campoTxt = (el) => {
+    const tag = el.tagName.toLowerCase();
+    const type = (el.getAttribute('type') || '').toLowerCase();
+    if (['hidden', 'file', 'submit', 'button', 'radio', 'range'].includes(type)) return null;
+    const ro = el.disabled || el.readOnly ? ' (somente leitura)' : '';
+    let val = '';
+    if (tag === 'select') { const o = el.options[el.selectedIndex]; val = o ? limpa(o.text) : ''; }
+    else if (type === 'checkbox') val = el.checked ? 'marcado' : 'desmarcado';
+    else val = el.value || '';
+    const rot = rotuloDe(el) || el.getAttribute('placeholder') || '(campo sem rótulo)';
+    return `[campo] ${rot}${ro} = ${val === '' ? '(vazio)' : val}`;
+  };
+  const tabelaTxt = (tb) => {
+    const ths = [...tb.querySelectorAll('thead th')].map((x) => limpa(x.innerText));
+    const trs = [...tb.querySelectorAll('tbody tr')].filter(vis);
+    const cel = (tr) => [...tr.children].map((td) => {
+      const inp = td.querySelector('input, select, textarea');
+      return inp && inp.tagName ? (inp.tagName === 'SELECT' ? limpa(inp.options[inp.selectedIndex] ? inp.options[inp.selectedIndex].text : '') : (inp.value || '(vazio)')) : limpa(td.innerText);
+    }).join(' | ');
+    const out = [`[tabela] ${ths.join(' | ')}  — ${trs.length} linha(s)`];
+    const mostra = trs.length > 14 ? [...trs.slice(0, 6), null, ...trs.slice(-2)] : trs;
+    mostra.forEach((tr) => out.push(tr ? '  ' + cel(tr) : `  … (${trs.length - 8} linhas omitidas) …`));
+    return out.join('\n');
+  };
+  const walk = (node) => {
+    if (total > LIMITE || node.nodeType !== 1) return;
+    const tag = node.tagName.toLowerCase();
+    if (['script', 'style', 'svg', 'noscript', 'option'].includes(tag)) return;
+    if (!vis(node)) return;
+    if (tag === 'table') { push(tabelaTxt(node)); return; }
+    if (['input', 'select', 'textarea'].includes(tag)) { const t = campoTxt(node); if (t) push(t); return; }
+    if (tag === 'button') {
+      const t = limpa(node.innerText);
+      if (t && t.length < 90) push(`[botão${node.disabled ? ' desabilitado' : ''}${node.classList.contains('is-active') ? ' ATIVO' : ''}] ${t}`);
+      return;
+    }
+    if (/^h[1-4]$/.test(tag) || node.classList.contains('card__title')) { push(`## ${limpa(node.innerText)}`); return; }
+    if (node.classList.contains('card__sub') || node.classList.contains('page-head__sub')) { push(limpa(node.innerText)); return; }
+    // texto próprio do nó (sem os filhos) + recursão nos filhos
+    const proprio = [...node.childNodes].filter((n) => n.nodeType === 3).map((n) => limpa(n.textContent)).join(' ').trim();
+    if (proprio) push(proprio);
+    [...node.children].forEach(walk);
+  };
+  walk(main);
+
+  const crumb = document.querySelector('.breadcrumb');
+  const itemAtivo = document.querySelector('.nav-item.is-active');
+  let modulo = '';
+  if (itemAtivo) {
+    // sobe até o grupo do menu para achar o nome do módulo
+    let g = itemAtivo.parentElement;
+    for (let i = 0; i < 6 && g; i++, g = g.parentElement) {
+      const t = g.querySelector && g.querySelector(':scope > .sidebar__group-title, :scope > .sidebar__group-head, :scope > button');
+      if (t && limpa(t.innerText) && !t.classList.contains('nav-item')) { modulo = limpa(t.innerText).replace(/\?/g, '').trim(); break; }
+    }
+  }
+  const abas = [...main.querySelectorAll('.seg button.is-active, [role="tab"][aria-selected="true"]')].filter(vis).map((b) => limpa(b.innerText));
+  return {
+    url: location.pathname + location.search,
+    breadcrumb: crumb ? limpa(crumb.innerText).replace(/\s*\/\s*/g, ' › ') : '',
+    menu: { modulo, item: itemAtivo ? limpa(itemAtivo.innerText) : '' },
+    abasAtivas: abas,
+    papel: (document.querySelector('.role-select, [class*="role"] b') || {}).innerText || '',
+    texto: linhas.join('\n'),
+  };
 }
 
 /* ---------- Preenchimento (React-compatível) ---------- */
@@ -393,11 +485,13 @@ function VpCopiloto({ route, role }) {
       const body = {
         mode,
         message: userText,
+        // A VPS guarda a conversa de cada pessoa; avisa quando é o começo de uma nova (1ª pergunta da bolinha).
+        novaConversa: base.filter(m => m.role === 'user').length <= 1 && !pendingMode,
         history: base.slice(-12).map(m => ({
           role: m.role,
           content: m.content + (m.questions && m.questions.length ? ' [perguntei: ' + m.questions.map(q => q.text).join(' | ') + ']' : ''),
         })),
-        page: { route, title: document.title.replace(' · VP Gestão', ''), fields },
+        page: { route, title: document.title.replace(' · VP Gestão', ''), fields, ...(() => { try { return { visao: vpcVisaoDaTela() }; } catch (e) { return {}; } })() },
       };
       if (mode === 'analyze') body.documentText = vpcDocText();
       if (mode === 'questionario') body.questionarioContext = window.__VPC_QUESTIONARIO || null;

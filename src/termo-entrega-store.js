@@ -100,9 +100,35 @@
     return publicUrl(token);
   }
 
+  /* Segurança real (#571, F1): a página pública /termo-entrega/:token fala com o banco por RPC `public_termo_*` (recebem
+     só o TOKEN e mexem só naquele termo; a decisão de "assinatura completa" e o IP vêm do servidor). Interruptor de
+     emergência: localStorage.vp_public_rpc = 'off' volta ao caminho antigo. Se a RPC falhar (rede, ou migração ainda não
+     aplicada), cai no caminho antigo (leitura/gravação direta em dossier_obra). */
+  function usarRpcPublica() {
+    try { return localStorage.getItem('vp_public_rpc') !== 'off'; } catch (e) { return true; }
+  }
+  async function chamarRpcPublica(c, nome, args) {
+    try {
+      const { data, error } = await c.rpc(nome, args);
+      if (error) { console.warn('[TermoEntregaStore] RPC ' + nome + ' falhou — usando caminho antigo', error); return { falhou: true }; }
+      return { data };
+    } catch (e) { console.warn('[TermoEntregaStore] RPC ' + nome + ' indisponível — usando caminho antigo', e); return { falhou: true }; }
+  }
+  const MSG_RPC = {
+    link_invalido: 'Link não encontrado.',
+    papel_invalido: 'papel inválido',
+    nome_obrigatorio: 'Nome é obrigatório.',
+    assinatura_obrigatoria: 'Assinatura é obrigatória.',
+    ja_assinado: 'Esta assinatura já foi registrada. Recarregue a página.',
+  };
+
   /* ---------- Página pública: ler pelo token ---------- */
   async function obterPorToken(token) {
     const c = sb(); if (!c || !token) return null;
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_termo_obter', { p_token: token });
+      if (!r.falhou) return r.data || null;
+    }
     const { data } = await c.from('dossier_obra')
       .select('id, client_name, building_name, city, state, termo_entrega')
       .eq('termo_entrega_token', token).maybeSingle();
@@ -117,6 +143,29 @@
     if (!['cliente', 'supervisor'].includes(papel)) throw new Error('papel inválido');
     if (!nome || !nome.trim()) throw new Error('Nome é obrigatório.');
     if (!assinaturaPngDataUrl) throw new Error('Assinatura é obrigatória.');
+
+    if (usarRpcPublica()) {
+      const ipRpc = await getPublicIP();
+      const hashRpc = await sha256Hex(`${token}|${papel}|${nome}|${Date.now()}`);
+      const r = await chamarRpcPublica(c, 'public_termo_assinar', {
+        p_token: token, p_papel: papel, p_nome: nome.trim(), p_assinatura_png: assinaturaPngDataUrl,
+        p_audit: { hash: hashRpc, ip: ipRpc, device: deviceLabel() },
+      });
+      if (!r.falhou) {
+        const res = r.data || {};
+        if (!res.ok) throw new Error(MSG_RPC[res.erro] || 'Não foi possível registrar a assinatura. Tente novamente.');
+        const termoRpc = res.termo || {};
+        if (res.completo && res.dossier) {
+          /* PDF continua sendo gerado aqui (jsPDF) e anexado em dossier_documentos; o servidor só guarda o id. */
+          let documentoId = null, pdfErro = null;
+          try { documentoId = await gerarEAnexarPdf(res.dossier, termoRpc); }
+          catch (e) { console.error('Erro ao gerar PDF do Termo de Entrega:', e); pdfErro = String(e.message || e); }
+          await chamarRpcPublica(c, 'public_termo_registrar_pdf', { p_token: token, p_documento_id: documentoId, p_pdf_erro: pdfErro });
+          if (documentoId) termoRpc.documento_id = documentoId; else termoRpc.pdf_erro = pdfErro;
+        }
+        return termoRpc;
+      }
+    }
 
     const { data: atual, error: e1 } = await c.from('dossier_obra')
       .select('id, client_name, building_name, numero_cotacao, termo_entrega')

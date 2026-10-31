@@ -43,12 +43,14 @@
     if (error) window.toast?.('Erro ao marcar notificação como lida: ' + error.message, 'error');
   }
 
+  /* Devolve true se gravou (#1217 B.2: a tela só mostra "marcadas como lidas" depois de confirmar). */
   async function marcarTodasLidas(alertaIds, userEmail) {
     const c = sb(); const email = userEmail || emailAtual();
-    if (!c || !email || !(alertaIds || []).length) return;
+    if (!c || !email || !(alertaIds || []).length) return false;
     const rows = alertaIds.map((id) => ({ alerta_id: String(id), user_email: email }));
     const { error } = await c.from('notificacoes_lidas').upsert(rows, { onConflict: 'alerta_id,user_email' });
-    if (error) window.toast?.('Erro ao marcar notificações como lidas: ' + error.message, 'error');
+    if (error) { window.toast?.('Erro ao marcar notificações como lidas: ' + error.message, 'error'); return false; }
+    return true;
   }
 
   /* Arquivar / desarquivar para a pessoa atual (arquivar também conta como lida). */
@@ -78,10 +80,16 @@
       c.from('avais_financeiros').select('id, numero_cotacao, sinal_pago, contrato_venda_id'),
     ]);
     if (alertasR.error) throw alertasR.error;
-    const sinteticos = window.AdminMetrics
+    /* #1217 B.3: os avisos calculados (proposta aprovada sem contrato, sinal pago etc.) dependem de 3 leituras; se alguma
+       falhar eles NÃO são calculados (calcular com lista vazia daria avisos errados) e a lista volta marcada `incompleto`. */
+    const falhas = [propR, ctR, avaisR].filter((r) => r && r.error);
+    if (falhas.length) console.warn('[Notificações] avisos calculados indisponíveis', falhas.map((r) => r.error));
+    const sinteticos = window.AdminMetrics && !falhas.length
       ? window.AdminMetrics.alertasSinteticosDetalhados({ propostas: propR.data || [], contratos: ctR.data || [], avais: avaisR.data || [] })
       : [];
-    return [...(alertasR.data || []), ...sinteticos];
+    const lista = [...(alertasR.data || []), ...sinteticos];
+    if (falhas.length) lista.incompleto = true;
+    return lista;
   }
 
   function lerPreferencias() {

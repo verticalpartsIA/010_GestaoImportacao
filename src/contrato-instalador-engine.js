@@ -218,6 +218,7 @@
          Valor total do contrato (Passo 5), nunca lido pelo documento em si. */
       ativosSnapshot: [],
       dossierIds: [],  // Dossiê(s) reais cobertos (pagamento por marco — Trilha B)
+      dossieNumero: '', acordoId: null,   // Dossiê informado no Passo 1 e preço combinado herdado dele (15/10/2026)
       /* Nº do contrato nasce dos equipamentos (29/09): numeroContratoBase =
          "VPNI-0955" (cotação) ou "VPNI-<nº de série/projeto>" (avulso);
          numeroContrato = base + sufixo -2/-3 se já existir outro contrato
@@ -225,16 +226,21 @@
          de nascer. equipamentosManuais = nº de série / Master ID digitados
          (obrigatório no avulso; opcional junto de uma Proposta). */
       numeroCotacao: null, numeroContrato: null, numeroContratoBase: null, equipamentosManuais: [],
-      c_razao:'', c_cnpj:'', c_rua:'', c_numero:'', c_bairro:'', c_cidade:'', c_estado:'', c_cep:'',
+      clienteObraId:null, clienteObraNome:'', clienteObraNovo:false, c_razao:'', c_cnpj:'', c_rua:'', c_numero:'', c_bairro:'', c_cidade:'', c_estado:'', c_cep:'',
       r_nome:'', r_nacionalidade:'brasileiro(a)', r_estadoCivil:'', r_profissao:'',
       r_rg:'', r_cpf:'', r_mesmoEndereco: true,
       r_rua:'', r_numero:'', r_bairro:'', r_cidade:'', r_estado:'', r_cep:'',
       equipamento: 'elevador', quantidade: 1, localServico:'', descricaoServicos:'',
+      /* Cláusula de prazo e cronograma (pedido do Jurídico, 22/10/2026) — bloco opcional; marcos escolhidos um a um, cada um com a sua data.
+         criterio '' = não qualifica o prazo (corridos/úteis é decisão do Jurídico, ainda pendente). */
+      cronograma: { ativo: false, prazoDias: '', criterio: '', marcos: {} },
+      equipamentosDetalhe: [],   // [{dossier, serie, descricao, tipo}] vindos do Dossiê/equipamentos_obra (cláusula 1.1.1)
+      fasesAtivas: {}, fasesTexto: {},   // fases de montagem (só elevador): { f1: true } / texto editado por fase
       tipoElevador: 'social', capacidadeCarga:'', cargaEspecial: false,
       paradas: '5', paradasCustom:'', destino:'',
-      obraCidade:'', obraEstado:'', distancia:'',
+      obraCidade:'', obraEstado:'', distancia:'', distanciaAuto:true,
       logResponsavel:'contratada', logModo:'despesas', logDiasExtra:'',
-      valorTotal:'', formaPagamento:'2', parcelas:[],
+      valorTotal:'', formaPagamento:'2', parcelas:[], condicionarUltimaParcela: true, datasParcelas:['', '', ''],   // datas previstas das parcelas rápidas (2/3); nas personalizadas é p.data
       banco:'', agencia:'', conta:'', pix:'',
       cidadeAssinatura: 'Guarulhos',
       dataDia: pad2(hoje.getDate()),
@@ -287,6 +293,82 @@
     return km >= 100;
   }
   function isRemocao(s) { return s.modalidade === 'remocao' || s.modalidade === 'remocao_adequacao'; }
+
+  /* Fases de montagem de elevador (opcionais, só elevador): texto-padrão editável por fase.
+     {andares} vira o nº de paradas do equipamento. */
+  const FASES_MONTAGEM = [
+    { id:'f1', label:'Fase 1 (Estrutura e Caixa)', texto:'Fase 1 (Estrutura e Caixa): Fixação de suportes, alinhamento, prumo e montagem das guias (cabine e contra-peso), instalação do limitador de velocidade e montagem da estrutura do contra-peso;' },
+    { id:'f2', label:'Fase 2 (Mecânica e Tracionamento)', texto:'Fase 2 (Mecânica e Tracionamento): Instalação da máquina de tração (MRL), passagem de cabos de aço (tracionamento), montagem da armação de cabine (chassis) e instalação do sistema de freio de segurança;' },
+    { id:'f3', label:'Fase 3 (Cabine e Portas)', texto:'Fase 3 (Cabine e Portas): Montagem dos painéis da cabine, subteto, botoeiras, instalação dos operadores de porta e portas de pavimento em todos os {andares} andares;' },
+    { id:'f4', label:'Fase 4 (Elétrica e Ajustes Finais)', texto:'Fase 4 (Elétrica e Ajustes Finais): Lançamento de cabos de manobra, fixação do quadro de comando, fiação de poço, sensores de leitura, ajustes de nivelamento, testes dinâmicos e preparação para vistoria.' },
+  ];
+  /* Descrição livre só conta se tiver letra ou número (um ":" solto não é descrição). Com fase marcada e com texto,
+     a descrição livre é opcional (pedido do Jurídico, 22/10/2026). */
+  function descricaoLivreTemTexto(s) { return /[\p{L}\p{N}]/u.test(String(s.descricaoServicos || '')); }
+  function descricaoServicosValida(s) { return descricaoLivreTemTexto(s) || fasesDoContrato(s).length > 0; }
+  /* Cláusula 1.1.1 — cada equipamento com descrição + nº de série + identificação. Ausência é dita, nunca inventada. */
+  function equipamentosDescritos(s) {
+    const cobertosSel = new Set(equipamentosDoContrato(s));   // só o que ainda está selecionado (chip removido sai do texto)
+    const det = (s.equipamentosDetalhe || []).filter((e) => e && (e.descricao || e.serie || e.dossier) && (cobertosSel.has(String(e.dossier || '').trim()) || cobertosSel.has(String(e.serie || '').trim())));
+    const itens = det.map((e) => {
+      const partes = [e.serie ? 'nº de série ' + e.serie : 'nº de série não informado'];
+      if (e.dossier) partes.push('Dossiê ' + e.dossier);
+      return (e.descricao ? e.descricao + ' ' : '') + '(' + partes.join('; ') + ')';
+    });
+    const cobertos = new Set();
+    det.forEach((e) => { if (e.serie) cobertos.add(String(e.serie).trim()); if (e.dossier) cobertos.add(String(e.dossier).trim()); });
+    equipamentosDoContrato(s).forEach((v) => { if (!cobertos.has(v)) itens.push(v); });
+    return itens;
+  }
+  const MARCOS_CRONOGRAMA = [
+    { id:'inicio', label:'Início previsto' },
+    { id:'tracionamento', label:'Previsão de tracionamento' },
+    { id:'cabine', label:'Previsão de cabine e portas' },
+    { id:'termino', label:'Término e entrega para vistoria' },
+  ];
+  const ISO_DATA = /^(\d{4})-(\d{2})-(\d{2})$/;
+  function dataBR(iso) { const m = String(iso || '').match(ISO_DATA); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; }
+  function _ms(iso) { const m = String(iso || '').match(ISO_DATA); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : null; }
+  function diasCorridosEntre(a, b) { const x = _ms(a), y = _ms(b); return x == null || y == null ? null : Math.round((y - x) / 86400000); }
+  function diasUteisEntre(a, b) {   // segunda a sexta, sem feriados; conta de a (exclusive) até b (inclusive)
+    const x = _ms(a), y = _ms(b); if (x == null || y == null || y < x) return null;
+    let n = 0; for (let t = x + 86400000; t <= y; t += 86400000) { const d = new Date(t).getUTCDay(); if (d !== 0 && d !== 6) n++; }
+    return n;
+  }
+  /* Cronograma efetivo: só se ativo, com prazo > 0; marcos só os marcados COM data válida. */
+  function cronogramaDoContrato(s) {
+    const c = s.cronograma || {};
+    const dias = parseInt(String(c.prazoDias || '').replace(/\D/g, ''), 10);
+    if (!c.ativo || !(dias > 0)) return null;
+    const marcos = (c.marcos || {});
+    const itens = MARCOS_CRONOGRAMA.filter((m) => marcos[m.id] && marcos[m.id].on && dataBR(marcos[m.id].data)).map((m) => ({ id: m.id, texto: m.label + ': ' + dataBR(marcos[m.id].data) }));
+    return { dias, criterio: c.criterio === 'corridos' || c.criterio === 'uteis' ? c.criterio : '', itens };
+  }
+  /* Aviso (nunca altera nada): início→término não bate com o prazo informado. */
+  function alertaCronograma(s) {
+    const c = s.cronograma || {}; const dias = parseInt(String(c.prazoDias || '').replace(/\D/g, ''), 10);
+    const m = c.marcos || {}; const a = m.inicio && m.inicio.on && m.inicio.data, b = m.termino && m.termino.on && m.termino.data;
+    if (!c.ativo || !(dias > 0) || !a || !b) return '';
+    const corr = diasCorridosEntre(a, b), ute = diasUteisEntre(a, b);
+    if (corr == null) return '';
+    if (corr < 0) return 'O término está antes do início.';
+    const confere = c.criterio === 'uteis' ? ute === dias : corr === dias;
+    if (confere) return '';
+    return 'Do início ao término há ' + corr + ' dias corridos (' + ute + ' úteis), mas o prazo informado é de ' + dias + '. Nada foi alterado: confirme com o Jurídico qual contagem vale.';
+  }
+  function andaresDe(s) {
+    const n = s.paradas === 'Personalizado' ? s.paradasCustom : s.paradas;
+    return String(n || '').trim() || '___';
+  }
+  function fasesDoContrato(s) {
+    if (s.equipamento !== 'elevador' || isRemocao(s)) return [];
+    const ativas = s.fasesAtivas || {}, txt = s.fasesTexto || {};
+    /* Fase marcada com o texto apagado NÃO conta (checkbox sem texto não supre a descrição). */
+    return FASES_MONTAGEM.filter(f => ativas[f.id] && !(txt[f.id] != null && !String(txt[f.id]).trim())).map(f => {
+      const t = (txt[f.id] != null) ? String(txt[f.id]).trim() : f.texto;
+      return t.replace(/\{andares\}/g, andaresDe(s));
+    });
+  }
 
   function activeConditionals(s) {
     const list = [];
@@ -365,7 +447,15 @@
     return `Faz parte do escopo desse serviço a ${verboModalidade(s)} de ${qtd} (${inteiroExtensoGen(qtd, fem)}) ${qtd > 1 ? eq.plural : eq.label} da Marca Vertical Parts.`;
   }
 
+  /* Data PREVISTA de cada parcela (opcional; não é a data de pagamento). Aceita ISO (aaaa-mm-dd) ou texto já formatado. */
+  function dataPrevistaTxt(v) {
+    const t = String(v || '').trim();
+    if (!t) return '';
+    const m = t.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return ' (data prevista: ' + (m ? m[3] + '/' + m[2] + '/' + m[1] : t) + ')';
+  }
   function buildPagamentoItems(s) {
+    const dp = (s.datasParcelas || []);
     const valor = moedaParaNumero(s.valorTotal);
     const valorFmt = valor ? 'R$ ' + fmtMoeda(valor) : 'R$ XX.XXX,XX';
     const valorExt = valor ? ' (' + valorExtenso(valor) + ')' : ' (valor por extenso)';
@@ -375,16 +465,16 @@
       const f = (v) => v ? 'R$ ' + fmtMoeda(v) : 'R$ XX.XXX,XX';
       const e = (v) => v ? ' (' + valorExtenso(v) + ')' : ' (valor por extenso)';
       items.push({ n:'5.1', text:`Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA o valor total de ${valorFmt}${valorExt}, a ser pago em 2 (duas) parcelas via depósito em conta bancária, da seguinte forma:` });
-      items.push({ n:'5.1.1', text:`${f(p1)}${e(p1)} na data de início dos trabalhos;` });
-      items.push({ n:'5.1.2', text:`${f(p2)}${e(p2)} após a finalização do serviço, com o equipamento apto ao pleno funcionamento e mediante nota fiscal de serviço.` });
+      items.push({ n:'5.1.1', text:`${f(p1)}${e(p1)} na data de início dos trabalhos${dataPrevistaTxt(dp[0])};` });
+      items.push({ n:'5.1.2', text:`${f(p2)}${e(p2)} após a finalização do serviço, com o equipamento apto ao pleno funcionamento e mediante nota fiscal de serviço${dataPrevistaTxt(dp[1])}.` });
     } else if (s.formaPagamento === '3') {
       const [p1, p2, p3] = dividirEmParcelas(valor, 3);
       const f = (v) => v ? 'R$ ' + fmtMoeda(v) : 'R$ XX.XXX,XX';
       const e = (v) => v ? ' (' + valorExtenso(v) + ')' : ' (valor por extenso)';
       items.push({ n:'5.1', text:`Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA o valor total de ${valorFmt}${valorExt}, a ser pago em 3 (três) parcelas via depósito em conta bancária, da seguinte forma:` });
-      items.push({ n:'5.1.1', text:`${f(p1)}${e(p1)} na data de início dos trabalhos;` });
-      items.push({ n:'5.1.2', text:`${f(p2)}${e(p2)} na metade da execução dos serviços;` });
-      items.push({ n:'5.1.3', text:`${f(p3)}${e(p3)} após a finalização do serviço, mediante nota fiscal de serviço.` });
+      items.push({ n:'5.1.1', text:`${f(p1)}${e(p1)} na data de início dos trabalhos${dataPrevistaTxt(dp[0])};` });
+      items.push({ n:'5.1.2', text:`${f(p2)}${e(p2)} na metade da execução dos serviços${dataPrevistaTxt(dp[1])};` });
+      items.push({ n:'5.1.3', text:`${f(p3)}${e(p3)} após a finalização do serviço, mediante nota fiscal de serviço${dataPrevistaTxt(dp[2])}.` });
     } else {
       items.push({ n:'5.1', text:`Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA o valor total de ${valorFmt}${valorExt}, a ser pago via depósito em conta bancária, da seguinte forma:` });
       const parc = (s.parcelas && s.parcelas.length) ? s.parcelas : [];
@@ -395,8 +485,8 @@
           const pv = moedaParaNumero(p.valor);
           const pf = pv ? 'R$ ' + fmtMoeda(pv) : 'R$ XX.XXX,XX';
           const pe = pv ? ' (' + valorExtenso(pv) + ')' : '';
-          const quando = p.descricao && p.descricao.trim() ? p.descricao.trim() : (p.data ? 'em ' + p.data : '');
-          items.push({ n:'5.1.'+(i+1), text:`${pf}${pe}${quando ? ' — ' + quando : ''};` });
+          const quando = p.descricao && p.descricao.trim() ? p.descricao.trim() : '';
+          items.push({ n:'5.1.'+(i+1), text:`${pf}${pe}${quando ? ' — ' + quando : ''}${dataPrevistaTxt(p.data)};` });
         });
       }
     }
@@ -408,8 +498,24 @@
        fixo em "5.1.3") — senão desalinha sempre que a forma de pagamento
        não é a de 2 parcelas (3 parcelas usa até 5.1.3, personalizado usa
        um número de itens variável). */
-    const lastN = items.length ? items[items.length - 1].n : '5.1';
-    items.push({ n: bumpItemNumber(lastN), text:'Dados bancários da CONTRATADA:', bank:{ banco, ag, conta, pix } });
+    /* Última parcela condicionada à vistoria e aos laudos (redação do Jurídico, 22/10/2026) — imediatamente antes dos dados bancários.
+       Só quando marcado (`=== true`: contratos criados antes não têm a chave e ficam como estavam). O valor é o da última parcela
+       da sequência efetiva, recalculado a cada edição; sem valor válido vira o marcador padrão do documento. */
+    let lastN = items.length ? items[items.length - 1].n : '5.1';
+    if (s.condicionarUltimaParcela === true) {
+      let vUlt = 0;
+      if (s.formaPagamento === '2') vUlt = dividirEmParcelas(valor, 2)[1];
+      else if (s.formaPagamento === '3') vUlt = dividirEmParcelas(valor, 3)[2];
+      else { const pp = (s.parcelas || []); vUlt = pp.length ? moedaParaNumero(pp[pp.length - 1].valor) : 0; }
+      const nCond = bumpItemNumber(lastN);
+      items.push({ n: nCond, text: `A liberação da última parcela (${vUlt ? 'R$ ' + fmtMoeda(vUlt) : 'R$ XX.XXX,XX'}) fica estritamente condicionada à aprovação do equipamento na vistoria técnica realizada pelo Supervisor da CONTRATANTE e à emissão dos laudos de conformidade.` });
+      lastN = nCond;
+    }
+    const nBanco = bumpItemNumber(lastN);
+    items.push({ n: nBanco, text:'Dados bancários da CONTRATADA:', bank:{ banco, ag, conta, pix } });
+    /* Trava de pagamento pelo envio diário do Acompanhamento de Obra (21/10/2026) — cláusula em destaque. */
+    const nTrava = String(nBanco).split('.')[0] + '.2';
+    items.push({ n: nTrava, destaque: true, text:'LIBERAÇÃO DOS PAGAMENTOS PELO ENVIO DIÁRIO DO ACOMPANHAMENTO DE OBRA: a CONTRATADA deverá enviar, DIARIAMENTE e a cada etapa concluída, o checklist do Acompanhamento de Obra pelo link individual que lhe for fornecido pela CONTRATANTE. Os envios registram o andamento real da obra e calculam, automaticamente, o seu percentual de evolução. Os pagamentos previstos no item 5.1 vinculados à metade da execução e à finalização somente serão liberados quando o percentual correspondente constar dos envios feitos. A ausência dos envios diários SUSPENDE a liberação de qualquer pagamento até a regularização, sem incidência de multa, juros ou correção sobre o período de suspensão. Solicitação de pagamento, por qualquer meio, não substitui nem antecipa os envios: quem libera os pagamentos são exclusivamente os envios do checklist.' });
     return items;
   }
 
@@ -448,25 +554,53 @@
       { n:'1.1', text: escopoFrase(s) },
     ];
     const equips = equipamentosDoContrato(s);
-    if (equips.length) objetoItems.push({ n:'1.1.1', text:`Equipamento${equips.length > 1 ? 's' : ''} objeto deste contrato (nº de série / identificação): ${equips.join(', ')}.` });
-    if (s.descricaoServicos && s.descricaoServicos.trim()) objetoItems.push({ n:'1.2', text:'Descrição dos serviços: ' + s.descricaoServicos.trim() });
-    else objetoItems.push({ n:'1.2', text:'Descrição dos serviços: (detalhar os serviços a executar)' });
+    if (equips.length) {
+      const desc = equipamentosDescritos(s);
+      const plural = desc.length > 1 ? 's' : '';
+      objetoItems.push({ n:'1.1.1', text: (s.equipamentosDetalhe && s.equipamentosDetalhe.length)
+        ? `Equipamento${plural} objeto deste contrato: ${desc.join('; ')}.`
+        : `Equipamento${plural} objeto deste contrato (nº de série / identificação): ${desc.join(', ')}.` });
+    }
+    const fases = fasesDoContrato(s);
+    const temLivre = descricaoLivreTemTexto(s);
+    if (temLivre) {
+      objetoItems.push({ n:'1.2', text:'Descrição dos serviços: ' + String(s.descricaoServicos).trim() });
+      if (fases.length) objetoItems.push({ n:'1.2.1', text:'A CONTRATADA executará as seguintes etapas:', list: fases });
+    } else if (fases.length) {
+      objetoItems.push({ n:'1.2', text:'Descrição dos serviços: a CONTRATADA executará as seguintes etapas:', list: fases });
+    } else {
+      objetoItems.push({ n:'1.2', text:'Descrição dos serviços: (detalhar os serviços a executar)' });
+    }
     objetoItems.push({ n:'1.3', text:'Local do serviço: ' + vBlank(s.localServico, '(endereço completo de onde será realizado o serviço)') });
     if (isRemocao(s)) {
       const lbl = s.modalidade === 'remocao_adequacao' ? 'Local da nova instalação' : 'Destino do equipamento removido';
       objetoItems.push({ n:'1.4', text:`${lbl}: ` + vBlank(s.destino, '(informar o destino / local)') });
     }
+    const cron = cronogramaDoContrato(s);
+    if (cron) {
+      const nCron = isRemocao(s) ? '1.5' : '1.4';   // em remoção a 1.4 já é o destino do equipamento
+      const crit = cron.criterio === 'corridos' ? ' corridos' : cron.criterio === 'uteis' ? ' úteis' : '';
+      const it = { n: nCron, text: `A CONTRATADA declara ciência e concordância de que o prazo total de execução dos serviços objeto deste contrato é de ${cron.dias} (${inteiroExtenso(cron.dias)}) dias${crit}${cron.itens.length ? ', observando o seguinte cronograma de evolução da obra:' : '.'}` };
+      if (cron.itens.length) it.list = cron.itens.map((x) => x.texto);
+      objetoItems.push(it);
+    }
+    /* Início do prazo condicionado à liberação da obra (pedido do advogado, 26/10/2026).
+       Vem depois do último item do objeto: 1.4 (ou 1.5 em remoção / com cronograma). */
+    const nLib = (isRemocao(s) ? 5 : 4) + (cron ? 1 : 0);
+    objetoItems.push({ n:`1.${nLib}`, text:'O prazo para execução dos serviços terá início somente após a liberação da obra pela CONTRATANTE, mediante confirmação das condições técnicas, estruturais, elétricas e de segurança necessárias à instalação dos equipamentos.' });
+    objetoItems.push({ n:`1.${nLib}.1`, text:'A CONTRATADA deverá verificar previamente as condições disponibilizadas para execução dos serviços, comunicando imediatamente à CONTRATANTE eventuais irregularidades ou impedimentos que comprometam a instalação, a segurança dos profissionais ou o cumprimento do cronograma contratado.' });
+    objetoItems.push({ n:`1.${nLib}.2`, text:'A ocorrência de impedimentos comprovadamente não imputáveis à CONTRATADA suspenderá a contagem do prazo exclusivamente em relação às atividades afetadas, devendo as partes registrar formalmente a ocorrência e a data de sua regularização.' });
     clauses.push({ id:'objeto', titulo:'DO OBJETO', baseNum:1, items:objetoItems });
 
     /* EQUIPAMENTO ESPECIAL (condicional) */
     if (isCargaEspecial(s)) {
       const cap = s.capacidadeCarga ? `${s.capacidadeCarga} kg` : 'superior a 1.000 kg';
       clauses.push({
-        id:'especial', titulo:'DO EQUIPAMENTO ESPECIAL', conditional:true,
+        id:'especial', titulo:'DO EQUIPAMENTO ESPECIAL', baseNum:2, conditional:true,
         items: [
-          { n:'EE.1', text:`Tendo em vista que o equipamento objeto deste contrato possui capacidade de carga ${cap}, caracterizando equipamento especial, a CONTRATADA deverá observar reforço integral às normas de segurança aplicáveis, em especial a NR-12 (Máquinas e Equipamentos) e a NR-18 (Construção), com planejamento específico de içamento e movimentação de cargas.` },
-          { n:'EE.2', text:'A CONTRATADA deverá apresentar, previamente ao início dos trabalhos, plano de rigging/içamento, com a indicação dos equipamentos de elevação (guindaste, talhas, etc.), pontos de ancoragem e Análise Preliminar de Risco (APR) específica para a operação de carga especial.' },
-          { n:'EE.3', text:'Toda a logística de içamento, isolamento de área e sinalização correrá por conta da CONTRATADA, que responderá integralmente por eventuais danos decorrentes da movimentação do equipamento.' },
+          { n:'2.1', text:`Tendo em vista que o equipamento objeto deste contrato possui capacidade de carga ${cap}, caracterizando equipamento especial, a CONTRATADA deverá observar reforço integral às normas de segurança aplicáveis, em especial a NR-12 (Máquinas e Equipamentos) e a NR-18 (Construção), com planejamento específico de içamento e movimentação de cargas.` },
+          { n:'2.2', text:'A CONTRATADA deverá apresentar, previamente ao início dos trabalhos, plano de rigging/içamento, com a indicação dos equipamentos de elevação (guindaste, talhas, etc.), pontos de ancoragem e Análise Preliminar de Risco (APR) específica para a operação de carga especial.' },
+          { n:'2.3', text:'Toda a logística de içamento, isolamento de área e sinalização correrá por conta da CONTRATADA, que responderá integralmente por eventuais danos decorrentes da movimentação do equipamento.' },
         ],
       });
     }
@@ -507,6 +641,9 @@
       items: [
         { n:'4.1', text:'A CONTRATADA responderá pelos encargos trabalhistas, fiscais, comerciais e previdenciários resultantes da execução deste contrato, não transferindo à CONTRATANTE, em caso de inadimplência da CONTRATADA com referência a esses encargos, a responsabilidade por seu pagamento, nem podendo onerar o objeto deste contrato.' },
         { n:'4.2', text:'Caberão à CONTRATADA os prejuízos causados à CONTRATANTE ou a terceiros, por atos de sua responsabilidade e decorrentes da execução dos serviços estipulados neste contrato, por culpa ou dolo, excluídos os casos em que a CONTRATANTE der causa, seja por sua ação ou omissão.' },
+        { n:'4.3', text:'A CONTRATADA responderá pelos danos materiais e demais prejuízos comprovadamente decorrentes de falhas na execução dos serviços, negligência, imprudência, imperícia ou inobservância das especificações técnicas e normas de segurança aplicáveis, inclusive quando praticados por profissionais regularmente contratados ou subcontratados sob sua responsabilidade.' },
+        { n:'4.3.1', text:'Na hipótese de a CONTRATANTE suportar prejuízos, despesas de reparação ou indenizações decorrentes de atos comprovadamente imputáveis à CONTRATADA, ficará assegurado o direito de regresso pelos valores correspondentes, observados o nexo causal e a efetiva extensão do dano.' },
+        { n:'4.3.2', text:'A responsabilidade da CONTRATADA não abrangerá defeitos de projeto, fabricação ou fornecimento dos equipamentos, tampouco irregularidades estruturais da obra que não lhe sejam imputáveis, ressalvada sua responsabilidade quando, tendo identificado condições inadequadas, prosseguir indevidamente na execução dos serviços.' },
       ],
     });
 
@@ -516,19 +653,17 @@
     /* LOGÍSTICA (condicional) */
     if (isLongaDistancia(s)) {
       const km = s.distancia;
-      const resp = s.logResponsavel === 'contratante' ? 'CONTRATANTE' : 'CONTRATADA';
       const local = vBlank(s.obraCidade, 'cidade da obra') + '/' + vBlank(s.obraEstado, 'UF');
+      /* Texto fixo definido pelo advogado (26/10/2026): logística por conta da CONTRATADA, incluída no preço. */
       const items = [
-        { n:'LG.1', text:`Considerando que o local de execução dos serviços (${local}) situa-se a aproximadamente ${km} km da sede da CONTRATANTE em Guarulhos/SP, distância igual ou superior a 100 (cem) quilômetros, aplica-se a presente cláusula de logística e deslocamento.` },
+        { n:'6.1', text:`Considerando que o local de execução dos serviços (${local}) situa-se a aproximadamente ${km} km da sede da CONTRATANTE em Guarulhos/SP, distância igual ou superior a 100 (cem) quilômetros, aplica-se a presente cláusula de logística e deslocamento.` },
+        { n:'6.2', text:'A CONTRATADA será responsável pelo planejamento e pela execução da logística necessária à prestação dos serviços contratados, compreendendo a mobilização e desmobilização de seus profissionais, ferramentas e equipamentos, bem como as despesas ordinárias de deslocamento, transporte, combustível, pedágios, estacionamento, alimentação e hospedagem, quando necessárias, considerando-se tais custos incluídos no preço ajustado, salvo disposição expressa em contrário neste instrumento.' },
+        { n:'6.3', text:'A CONTRATANTE não estará obrigada ao pagamento, reembolso ou adiantamento de despesas adicionais relacionadas à logística da CONTRATADA, salvo quando previamente acordado, mediante indicação da natureza, justificativa e valor estimado da despesa.' },
+        { n:'6.4', text:'Eventuais despesas extraordinárias decorrentes de alterações no cronograma, paralisações, impedimentos de acesso à obra ou necessidade de remobilização deverão ser comunicadas pela CONTRATADA à CONTRATANTE tão logo identificadas, acompanhadas da respectiva justificativa e documentação comprobatória, ficando sua exigibilidade condicionada à demonstração da causa, à definição da responsabilidade pelo evento e à prévia formalização do ajuste entre as partes, ressalvados os direitos legalmente assegurados.' },
+        { n:'6.5', text:'Serão de exclusiva responsabilidade da CONTRATADA as despesas decorrentes de atrasos, falhas de planejamento, ausência injustificada de profissionais, execução defeituosa dos serviços ou necessidade de correção de irregularidades que lhe sejam comprovadamente imputáveis, não sendo devido qualquer pagamento adicional pela CONTRATANTE nessas hipóteses.' },
+        { n:'6.6', text:'A eventual assunção, pela CONTRATANTE, de despesas logísticas específicas não implicará alteração das demais condições comerciais, nem constituirá obrigação de custeio de despesas futuras não expressamente avençadas.' },
       ];
-      if (s.logModo === 'prazo') {
-        const dias = vBlank(s.logDiasExtra, 'X');
-        items.push({ n:'LG.2', text:`Em razão do deslocamento, o prazo de execução dos serviços será estendido em ${dias} (${typeof dias === 'string' && /^\d+$/.test(dias) ? inteiroExtenso(parseInt(dias,10)) : '...'}) dias, sem ônus adicional para qualquer das partes a esse título.` });
-      } else {
-        items.push({ n:'LG.2', text:`As despesas de transporte, hospedagem e alimentação da equipe correrão por conta da ${resp}, sendo cobradas à parte e mediante comprovação, não estando incluídas no valor descrito na Cláusula de Pagamento.` });
-      }
-      items.push({ n:'LG.3', text:'As partes poderão, de comum acordo e por termo aditivo, ajustar a forma de rateio das despesas de deslocamento, observada a boa-fé contratual.' });
-      clauses.push({ id:'logistica', titulo:'DA LOGÍSTICA E DESLOCAMENTO', conditional:true, items });
+      clauses.push({ id:'logistica', titulo:'DA LOGÍSTICA E DESLOCAMENTO', baseNum:6, conditional:true, items });
     }
 
     /* CESSÃO */
@@ -561,6 +696,7 @@
     /* PENALIDADES */
     clauses.push({ id:'penalidades', titulo:'DAS PENALIDADES', baseNum:9, items:[
       { n:'9.1', text:'Em caso de rescisão sem justo motivo por uma das partes antes do prazo final do contrato, ou de qualquer uma das ocorrências previstas na Cláusula __RESCISAO__ deste instrumento, este Contrato será rescindido automaticamente e caberá à parte infratora multa equivalente a 20% (vinte por cento) sobre o total do contrato, a ser paga em até 5 (cinco) dias corridos da rescisão.', ref:'rescisao' },
+      { n:'9.2', text:'O atraso injustificado de etapa por fato imputável à CONTRATADA sujeitá-la-á à multa moratória de 0,5% (meio por cento) por dia corrido de atraso, calculada sobre o valor da etapa inadimplida, até o limite de 20% (vinte por cento) do valor total do contrato, após comunicação escrita da ocorrência e sem prejuízo da demonstração de causa excludente.' },
     ]});
 
     /* TOLERÂNCIA */
@@ -618,6 +754,77 @@
     };
   }
 
+  /* Distrato (30/10/2026) — rescisão motivada e bilateral de um contrato JÁ ASSINADO.
+     Reaproveita contratante/contratada/endereço do form_state ORIGINAL (mesmo `s` de
+     buildContract) — nenhum dado novo é digitado sobre as partes, só o motivo e,
+     opcionalmente, a transferência de valor pra outro contrato (troca de obra do
+     montador). Mesma forma do `doc` de buildContract (titulo/numero/contratante/
+     contratada/clauses/cidadeAssinatura/dataDia/Mes/Ano) — CIContractPreview renderiza
+     os dois sem precisar saber qual é qual. */
+  function buildDistratoContract(s, ctx, numeroDoc) {
+    ctx = ctx || {};
+    const numero = numeroDoc || 'VPNI________-DISTRATO';
+    const valorTxt = ctx.valorTotal != null ? fmtMoeda(ctx.valorTotal) : null;
+    const clauses = [];
+
+    clauses.push({
+      id:'contrato_original', titulo:'DO CONTRATO ORIGINAL', baseNum:1, items:[
+        { n:'1.1', text:`As partes abaixo identificadas, já qualificadas no Contrato de Prestação de Serviços nº ${vBlank(ctx.numeroContrato, '____')}, tendo por objeto ${vBlank(ctx.objetoResumo, '(objeto do contrato original)')}` + (valorTxt ? `, no valor de R$ ${valorTxt}` : '') + ', resolvem, de comum acordo, DISTRATAR o referido instrumento, nos termos deste Termo de Distrato.' },
+      ],
+    });
+
+    clauses.push({
+      id:'motivo', titulo:'DO MOTIVO DO DISTRATO', baseNum:2, items:[
+        { n:'2.1', text:'O presente distrato tem como motivo: ' + vBlank(ctx.motivo, '(motivo do distrato)') },
+      ],
+    });
+
+    const quitacaoItems = [
+      { n:'3.1', text:'Os valores já pagos à CONTRATADA até a presente data permanecem quitados, não sendo devida restituição à CONTRATANTE em razão deste distrato (quitação parcial).' },
+      { n:'3.2', text:'Ficam canceladas, a partir da assinatura deste distrato, quaisquer parcelas de pagamento ainda não realizadas, vinculadas ao contrato ora distratado.' },
+    ];
+    if (ctx.transferencia && ctx.transferencia.contrato_destino_numero) {
+      quitacaoItems.push({ n:'3.3', text:`Fica acordado entre as partes que o valor de R$ ${fmtMoeda(ctx.transferencia.valor)} já recebido pela CONTRATADA no âmbito do contrato ora distratado será aproveitado para o contrato nº ${ctx.transferencia.contrato_destino_numero}, referente a nova obra/prestação de serviços, não sendo devida qualquer restituição em dinheiro.` });
+    }
+    clauses.push({ id:'quitacao', titulo:'DA QUITAÇÃO E DOS VALORES', baseNum:3, items: quitacaoItems });
+
+    clauses.push({
+      id:'disposicoes_distrato', titulo:'DAS DISPOSIÇÕES FINAIS', baseNum:4, items:[
+        { n:'4.1', text:'Este distrato não gera, para qualquer das partes, direito a indenização, multa ou penalidade adicional além do disposto acima, ressalvadas eventuais responsabilidades já constituídas até a presente data.' },
+        { n:'4.2', text:'As partes convencionam que o Foro para dirimir quaisquer dúvidas ou questões oriundas do presente distrato é o Foro da Comarca de Guarulhos, São Paulo, com exclusão de qualquer outro, por mais privilegiado que seja.' },
+      ],
+    });
+
+    clauses.forEach((c, i) => { c.ord = ORDINAIS[i] || ('#' + (i + 1)); renumClauseItems(c, i + 1); });
+
+    return {
+      titulo: 'TERMO DE DISTRATO DE CONTRATO DE PRESTAÇÃO DE SERVIÇOS',
+      numero,
+      /* CIContractPreview usa isto pra trocar o texto fixo de abertura/fecho — o
+         boilerplate de "firmar um contrato novo" contradiria o título e as
+         cláusulas (que dizem o oposto: estão DISTRATANDO um contrato existente). */
+      ehDistrato: true,
+      contratante: CONTRATANTE,
+      contratada: {
+        razao: vBlank(s.c_razao, 'RAZÃO SOCIAL'),
+        cnpj: vBlank(s.c_cnpj, 'XX.XXX.XXX/XXXX-XX'),
+        endereco: buildEnderecoContratada(s),
+        responsavel: vBlank(s.r_nome, 'NOME DO RESPONSÁVEL'),
+        nacionalidade: vBlank(s.r_nacionalidade, 'nacionalidade'),
+        estadoCivil: vBlank(s.r_estadoCivil, 'estado civil'),
+        profissao: vBlank(s.r_profissao, 'profissão'),
+        rg: vBlank(s.r_rg, 'XXX'),
+        cpf: vBlank(s.r_cpf, 'XXX'),
+        enderecoResp: buildEnderecoResponsavel(s),
+      },
+      clauses,
+      cidadeAssinatura: vBlank(s.cidadeAssinatura, 'Guarulhos'),
+      dataDia: vBlank(s.dataDia, 'XX'),
+      dataMes: vBlank(s.dataMes, '(mês)'),
+      dataAno: vBlank(s.dataAno, '2026'),
+    };
+  }
+
   /* ---------- Exporta tudo em window.CI ---------- */
   window.CI = {
     CONTRATANTE, MODALIDADES, EQUIPAMENTOS, TIPOS_ELEVADOR, PARADAS_OPCOES, ANEXOS,
@@ -628,7 +835,7 @@
     dividirEmParcelas, inteiroExtensoGen, logradouro,
     equipamentosDoContrato, slugEquipamento, numeroBaseContrato, proximoNumeroLivre,
     defaultState, pad2,
-    isCargaEspecial, isLongaDistancia, isRemocao, activeConditionals,
-    buildContract,
+    isCargaEspecial, isLongaDistancia, isRemocao, activeConditionals, dataPrevistaTxt, MARCOS_CRONOGRAMA, cronogramaDoContrato, alertaCronograma, diasCorridosEntre, diasUteisEntre, dataBR, FASES_MONTAGEM, fasesDoContrato, andaresDe, descricaoLivreTemTexto, descricaoServicosValida, equipamentosDescritos,
+    buildContract, buildDistratoContract,
   };
 }());

@@ -58,6 +58,11 @@
     const [checklist, setChecklist] = React.useState(null);
     const [loading, setLoading] = React.useState(false);
     const [busca, setBusca] = React.useState('');
+    // Alçada do módulo: só quem tem 'editar' (ou Administrador) marca a documentação como enviada.
+    const [podeEditar, setPodeEditar] = React.useState(false);
+    React.useEffect(() => {
+      window.PropostaStore?.temCapacidade?.('central-documentos', 'editar').then(setPodeEditar).catch(() => {});
+    }, []);
 
     React.useEffect(() => {
       window.CentralDocumentos.listarObras().then(setObras);
@@ -82,6 +87,7 @@
 
     const marcarDocEnviado = async (obra) => {
       if (!obra) return;
+      if (!podeEditar) { window.toast?.('Sem permissão para marcar a documentação como enviada (alçada Central de Documentos › Editar).', 'warning'); return; }
       for (const id of obra.dossierIds) {
         await window.InstalacaoChecklistStore.marcarDocInstaladorEnviado(id);
       }
@@ -100,10 +106,17 @@
     const obraSelecionada = obras.find((o) => o.client_name === obraId);
 
     return (
-      <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
+      <div className="page fade-in">
+      <div className="page-head">
+        <div className="page-head__l">
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Entrega & Documentação</div>
+          <h1 className="page-head__title">Central de Documentos</h1>
+          <p className="page-head__sub">Biblioteca de documentos por obra: ART, termos, Data Book e documentação do instalador. Documento solto, sem obra, vai em Repositório Documentos; projeto/desenho para enviar ao cliente, em Projeto de Elevadores › Desenhos.</p>
+        </div>
+      </div>
+      <div style={{ display: 'flex', minHeight: 0 }}>
         {/* Coluna esquerda — seletor de obras (a "estante" da biblioteca) */}
         <div style={{ width: 300, borderRight: '1px solid #e5e5e5', padding: 16, overflowY: 'auto', flexShrink: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>📁 Central de Documentos</div>
           <input
             type="text" value={busca} onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar obra (cliente)…"
@@ -183,7 +196,7 @@
                       ✓ Documentação enviada por {obraSelecionada.docInstaladorEnviadoPor} em {new Date(obraSelecionada.docInstaladorEnviadoEm).toLocaleString('pt-BR')}
                     </div>
                   ) : (
-                    <button type="button" onClick={() => marcarDocEnviado(obraSelecionada)}
+                    <button type="button" disabled={!podeEditar} title={podeEditar ? '' : 'Requer a alçada Central de Documentos › Editar'} onClick={() => marcarDocEnviado(obraSelecionada)}
                       style={{ fontSize: 12, color: '#cc7700', fontWeight: 600, background: 'none', border: '1px solid #cc7700', borderRadius: 4, padding: '4px 10px', cursor: 'pointer', marginBottom: 10 }}>
                       📤 Marcar documentação do instalador como enviada
                     </button>
@@ -217,6 +230,7 @@
             </>
           )}
         </div>
+      </div>
       </div>
     );
   }

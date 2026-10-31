@@ -85,6 +85,37 @@ function PIItensSection({ itens, onChange, moeda }) {
   const add = () => onChange([...(itens || []), { descricao_produto: '', codigo_produto: '', quantidade: '', unidade_medida: 'un', ncm: '', valor_unitario: '' }]);
   const remove = (i) => onChange(itens.filter((_, idx) => idx !== i));
   const update = (i, field, v) => onChange(itens.map((it, idx) => (idx === i ? { ...it, [field]: v } : it)));
+  /* Código digitado → puxa descrição, unidade e NCM do cadastro (espera a pessoa parar de digitar) */
+  const itensRef = React.useRef(itens); itensRef.current = itens;
+  const onChangeRef = React.useRef(onChange); onChangeRef.current = onChange;
+  const timers = React.useRef({});
+  const autoRef = React.useRef({});
+  const [achado, setAchado] = React.useState({});
+  const mudarCodigo = (i, v) => {
+    update(i, 'codigo_produto', v);
+    clearTimeout(timers.current[i]);
+    setAchado((a) => ({ ...a, [i]: null }));
+    timers.current[i] = setTimeout(async () => {
+      const p = await store.buscarProdutoPorCodigo(v);
+      if (!p) { if (String(v || '').trim().length >= 3) setAchado((a) => ({ ...a, [i]: 'nao' })); return; }
+      const atual = itensRef.current || [];
+      if (!atual[i] || atual[i].codigo_produto !== v) return; /* mudou enquanto buscava */
+      /* Só preenche campo livre: vazio, ou ainda igual ao que o cadastro preencheu antes
+         (a pessoa não mexeu). O que ela digitou nunca é sobrescrito. */
+      const ant = autoRef.current[i] || {};
+      const livre = (atualV, antV, padrao) => !atualV || atualV === padrao && !antV || atualV === antV;
+      autoRef.current[i] = {};
+      onChangeRef.current(atual.map((it, idx) => {
+        if (idx !== i) return it;
+        const n = { ...it };
+        if (p.descricao && livre(it.descricao_produto, ant.descricao)) { n.descricao_produto = p.descricao; autoRef.current[i].descricao = p.descricao; }
+        if (p.unidade && livre(it.unidade_medida, ant.unidade, 'un')) { n.unidade_medida = p.unidade; autoRef.current[i].unidade = p.unidade; }
+        if (p.ncm && livre(it.ncm, ant.ncm)) { n.ncm = p.ncm; autoRef.current[i].ncm = p.ncm; }
+        return n;
+      }));
+      setAchado((a) => ({ ...a, [i]: 'sim' }));
+    }, 500);
+  };
   const total = store.calcTotalGeral(itens);
 
   return (
@@ -101,7 +132,11 @@ function PIItensSection({ itens, onChange, moeda }) {
               </div>
               <div className="grid-3" style={{ gap: 10 }}>
                 <PIField label="Descrição do produto *" span={2}><PIInput value={item.descricao_produto} onChange={(v) => update(i, 'descricao_produto', v)}/></PIField>
-                <PIField label="Código"><PIInput value={item.codigo_produto} onChange={(v) => update(i, 'codigo_produto', v)}/></PIField>
+                <PIField label="Código">
+                  <PIInput value={item.codigo_produto} onChange={(v) => mudarCodigo(i, v)} placeholder="Ex.: VPEL-031"/>
+                  {achado[i] === 'sim' && <span className="small" style={{ color: 'var(--vp-success, #1a7f37)' }}>✓ Campos vazios preenchidos pelo cadastro</span>}
+                  {achado[i] === 'nao' && <span className="small muted">Código não encontrado — preencha à mão</span>}
+                </PIField>
                 <PIField label="Quantidade *"><PIInput type="number" step="0.01" value={item.quantidade} onChange={(v) => update(i, 'quantidade', v)}/></PIField>
                 <PIField label="Unidade"><PISelect value={item.unidade_medida} onChange={(v) => update(i, 'unidade_medida', v)} options={PI_UNIDADES}/></PIField>
                 <PIField label="NCM"><PIInput value={item.ncm} onChange={(v) => update(i, 'ncm', v)}/></PIField>
@@ -345,6 +380,62 @@ function PIProducaoSection({ value, onChange, piId }) {
   );
 }
 
+/* ---------- Status em semáforo + instrução ao passar o mouse ---------- */
+/* Verde = tudo certo · Amarelo = em andamento · Vermelho = parada esperando algo · Cinza = cancelada. */
+const PI_SEMAFORO = {
+  'Concluída': { cor: '#1f9d55', fundo: 'rgba(31,157,85,.14)' },
+  'Em andamento': { cor: '#d99a00', fundo: 'rgba(245,184,0,.20)' },
+  'Aguardando documentos': { cor: '#d6342a', fundo: 'rgba(214,52,42,.14)' },
+  'Cancelada': { cor: '#8a8a8a', fundo: 'rgba(138,138,138,.16)' },
+};
+/* Diz ao operador, com base nos dados reais da P.I., o que falta ou o que vem a seguir. */
+function piInstrucaoStatus(pi, embarque) {
+  const itens = pi.itens || [];
+  const rascunho = window.PIStore.ehRascunhoAutomatico(pi) || String(pi.numero_pi || '').startsWith('RASCUNHO-');
+  const semCodigo = itens.filter((i) => !String(i.codigo_produto || '').trim()).length;
+  const semNcm = itens.filter((i) => !String(i.ncm || '').trim()).length;
+  const falta = [];
+  if (rascunho) falta.push('• Proforma Invoice (P.I.) assinada do fornecedor — informe o número real no lugar do provisório');
+  if (!itens.length) falta.push('• Itens da P.I. (nenhum item lançado)');
+  else {
+    if (semCodigo) falta.push(`• Código do produto em ${semCodigo} de ${itens.length} item(ns)`);
+    if (semNcm) falta.push(`• NCM em ${semNcm} de ${itens.length} item(ns)`);
+  }
+  if (!pi.data_abertura) falta.push('• Data de abertura da P.I.');
+  if (!pi.fornecedor) falta.push('• Fornecedor');
+  const quitado = pi.valor_total ? window.PIStore.calcValorQuitado(pi) / pi.valor_total * 100 : 0;
+  switch (pi.status) {
+    case 'Aguardando documentos':
+      return falta.length ? 'Aguardando documentos. Falta:\n' + falta.join('\n') + '\n\nClique em Editar para completar.'
+        : 'Aguardando documentos, mas os dados da P.I. estão completos. Se já recebeu tudo, mude o status para "Em andamento" ao editar.';
+    case 'Em andamento': {
+      const prox = [];
+      if (quitado < 100) prox.push(`• Pagamento: ${Math.round(quitado)}% pago`);
+      if (!embarque) prox.push('• Vincular a um embarque (botão do elo)');
+      if ((pi.producao || {}).status !== 'Concluída') prox.push('• Produção ainda não concluída');
+      return 'Em andamento.' + (prox.length ? '\nPendente:\n' + prox.join('\n') : '\nTudo em dia — conclua a P.I. quando o embarque chegar.');
+    }
+    case 'Concluída': {
+      const aberto = [];
+      if (quitado < 100) aberto.push(`• Pagamento: só ${Math.round(quitado)}% pago`);
+      if ((pi.producao || {}).status !== 'Concluída') aberto.push('• Produção não marcada como concluída');
+      if (!embarque) aberto.push('• Sem embarque vinculado');
+      return aberto.length ? 'Marcada como Concluída, mas confira:\n' + aberto.join('\n') : 'Concluída: pagamento e produção em dia; embarque vinculado (a etapa do embarque não é conferida aqui).';
+    }
+    case 'Cancelada': return 'Cancelada: esta P.I. não segue mais no fluxo.';
+    default: return pi.status || '';
+  }
+}
+function PIStatusSemaforo({ pi, embarque }) {
+  const m = PI_SEMAFORO[pi.status] || PI_SEMAFORO['Em andamento'];
+  return (
+    <span title={piInstrucaoStatus(pi, embarque)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 999, background: m.fundo, color: m.cor, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'help' }}>
+      <span style={{ width: 10, height: 10, borderRadius: '50%', background: m.cor, boxShadow: `0 0 0 2px ${m.fundo}` }}/>
+      {pi.status}
+    </span>
+  );
+}
+
 /* ---------- Formulário completo (Nova/Editar P.I.) ---------- */
 const PI_EMPTY = {
   numero_pi: '', fornecedor: '', incoterms: '', data_solicitacao_pagamento: '', numero_requisicao: '', numero_cotacao: '',
@@ -363,6 +454,9 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
   const [cotacaoInfo, setCotacaoInfo] = React.useState(null); // {checking} | {encontrada:false} | {encontrada:true, masterId, resumo}
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
   const store = window.PIStore;
+  /* Nº da cotação: antes só na criação (as 13 P.I. reais ficaram sem Nº e a cadeia Compra → P.I. → Embarque nunca
+     fechou). Agora P.I. salva sem Nº pode receber o Nº na edição; depois de gravado, fica travado. */
+  const cotacaoTravada = !!(isEdit && initialData && initialData.numero_cotacao != null && initialData.numero_cotacao !== '');
 
   /* O Nº da Cotação precisa corresponder a uma cotação de verdade — sem
      isso a P.I. fica "solta", sem ligação nenhuma com o que o cliente
@@ -373,7 +467,7 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
      popula automaticamente form.itens com os modelos/quantidades/valores
      da precificação. Só em Nova P.I., não em edição. */
   React.useEffect(() => {
-    if (isEdit || !form.numero_cotacao || !window.PropostaHeranca || !window.MasterIdEngine) { setCotacaoInfo(null); return; }
+    if (cotacaoTravada || !form.numero_cotacao || !window.PropostaHeranca || !window.MasterIdEngine) { setCotacaoInfo(null); return; }
     let cancelado = false;
     setCotacaoInfo({ checking: true });
     window.PropostaHeranca.buscarFontes(Number(form.numero_cotacao))
@@ -386,7 +480,7 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
         setCotacaoInfo({ encontrada: true, masterId, cliente, fornecedor });
 
         /* Herança automática dos Produtos (modelos da precificação) */
-        if (fontes.precificacao && fontes.precificacao.modelos && fontes.precificacao.modelos.length > 0) {
+        if (!isEdit && fontes.precificacao && fontes.precificacao.modelos && fontes.precificacao.modelos.length > 0) { // edição: não sobrescreve os itens já lançados
           const itensHerdados = fontes.precificacao.modelos.map((m) => ({
             descricao_produto: m.modelo || 'Equipamento',
             codigo_produto: '',
@@ -403,7 +497,7 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
       })
       .catch(() => { if (!cancelado) setCotacaoInfo({ encontrada: false }); });
     return () => { cancelado = true; };
-  }, [form.numero_cotacao, isEdit]);
+  }, [form.numero_cotacao, cotacaoTravada]);
 
   const valorTotalItens = store.calcTotalGeral(form.itens);
   const totalTaxas = store.calcTotalTaxas(form.taxas, valorTotalItens, form.moeda);
@@ -424,7 +518,7 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
      reabre decisão) e espera a digitação parar. Quem cria/reabre a decisão
      do CEO é só o submit abaixo, com a cotação confirmada. */
   React.useEffect(() => {
-    if (isEdit || !form.numero_cotacao || !window.DecisoesStore) { setGate(null); setCheckingGate(false); return; }
+    if (cotacaoTravada || !form.numero_cotacao || !window.DecisoesStore) { setGate(null); setCheckingGate(false); return; }
     let cancelado = false;
     setCheckingGate(true);
     const t = setTimeout(() => {
@@ -434,17 +528,17 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
         .finally(() => { if (!cancelado) setCheckingGate(false); });
     }, 500);
     return () => { cancelado = true; clearTimeout(t); };
-  }, [form.numero_cotacao, isEdit]);
+  }, [form.numero_cotacao, cotacaoTravada]);
 
   const submit = async () => {
     if (!form.numero_pi.trim()) return window.toast?.('Informe o número da P.I.', 'warning');
-    if (!isEdit && form.numero_cotacao && cotacaoInfo && cotacaoInfo.checking) {
+    if (!cotacaoTravada && form.numero_cotacao && cotacaoInfo && cotacaoInfo.checking) {
       return window.toast?.('Aguarde a verificação do Nº da cotação terminar.', 'warning');
     }
-    if (!isEdit && form.numero_cotacao && cotacaoInfo && cotacaoInfo.encontrada === false) {
+    if (!cotacaoTravada && form.numero_cotacao && cotacaoInfo && cotacaoInfo.encontrada === false) {
       return window.toast?.(`Nenhuma cotação Nº ${form.numero_cotacao} encontrada — confira o número antes de continuar.`, 'warning');
     }
-    if (!isEdit && form.numero_cotacao && window.DecisoesStore) {
+    if (!cotacaoTravada && form.numero_cotacao && window.DecisoesStore) {
       const r = await window.DecisoesStore.verificarGateCompra(Number(form.numero_cotacao));
       if (!r.ok) return window.toast?.(r.motivo, 'warning');
     }
@@ -464,7 +558,7 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
         <div className="stack" style={{ gap: 14, marginTop: 14 }}>
           <div className="grid-3" style={{ gap: 12 }}>
             <PIField label="Número da P.I. *"><PIInput value={form.numero_pi} onChange={set('numero_pi')}/></PIField>
-            <PIField label="Nº Cotação (gate de compra do CEO)"><PIInput type="number" value={form.numero_cotacao} onChange={set('numero_cotacao')} disabled={isEdit}/></PIField>
+            <PIField label="Nº Cotação — só para equipamento (vazio = varejo/estoque)"><PIInput type="number" value={form.numero_cotacao} onChange={set('numero_cotacao')} disabled={cotacaoTravada}/></PIField>
             <PIField label="Data de abertura *"><PIInput type="date" value={form.data_abertura} onChange={set('data_abertura')}/></PIField>
             <PIField label="Status"><PISelect value={form.status} onChange={set('status')} options={PI_STATUS}/></PIField>
             <PIField label="Data de prontidão do pedido"><PIInput type="date" value={form.data_prontidao} onChange={set('data_prontidao')}/></PIField>
@@ -489,7 +583,7 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
             <PIMultiText label="Categorias" values={form.categorias} onChange={set('categorias')} placeholder="Categoria do equipamento"/>
           </div>
 
-          {!isEdit && form.numero_cotacao && (
+          {!cotacaoTravada && form.numero_cotacao && (
             <div style={{
               padding: '10px 14px', borderRadius: 6, fontSize: 12.5,
               background: cotacaoInfo?.checking ? 'var(--vp-gray-50)' : cotacaoInfo?.encontrada ? '#eafaf0' : '#fdecea',
@@ -503,7 +597,7 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
             </div>
           )}
 
-          {!isEdit && form.numero_cotacao && (
+          {!cotacaoTravada && form.numero_cotacao && (
             <div style={{
               padding: '10px 14px', borderRadius: 6, fontSize: 12.5,
               background: checkingGate ? 'var(--vp-gray-50)' : gate?.ok ? '#eafaf0' : '#fff8e6',
@@ -599,23 +693,44 @@ function PIModalVincularEmbarque({ pi, embarques, onClose, onSaved }) {
 
 /* ---------- Página ---------- */
 function PIPage() {
-  console.log('🎯 PI PAGE LOADED - v12 - FIELD REORDER SHOULD BE VISIBLE');
+  console.log('🎯 PI PAGE LOADED - v13 - URL reflete Nova/Editar/Vincular');
   const [pis, setPis] = React.useState(null);
   const [embarques, setEmbarques] = React.useState([]);
-  const [showForm, setShowForm] = React.useState(false);
-  const [editing, setEditing] = React.useState(null);
-  const [vincular, setVincular] = React.useState(null);
   const [search, setSearch] = React.useState('');
   const [filterStatus, setFilterStatus] = React.useState('Todos');
   const [saving, setSaving] = React.useState(false);
+  const ord = window.useOrdenacao(); // 23/10 (pedido do usuário) — ordenação por coluna
+
+  /* Formulário (Nova/Editar) e o modal de vincular embarque refletidos na URL:
+     /gestao-importacao/pi-importacao              → lista
+     /gestao-importacao/pi-importacao/novo         → nova P.I.
+     /gestao-importacao/pi-importacao/<id>         → editar aquela P.I.
+     /gestao-importacao/pi-importacao/<id>/vincular → modal de vínculo, sobre a lista */
+  const [rotaId] = window.useRotaId('pi-importacao');
+  const [sub] = window.useRotaItem('pi-importacao', rotaId);
 
   const reload = React.useCallback(() => {
     window.PIStore.listarTodas().then(setPis).catch(() => setPis([]));
     window.__VP_SB?.sb?.from('embarques_importacao').select('id, nome_embarque, referencia_embarque, awb_bl').order('created_at', { ascending: false }).then(({ data }) => setEmbarques(data || []));
   }, []);
-  React.useEffect(() => { reload(); }, [reload]);
+  React.useEffect(() => {
+    reload();
+    /* Rede de segurança da P.I. automática: compra já liberada e ainda sem P.I. ganha o rascunho. */
+    window.PIStore.sincronizarRascunhosAutomaticos().then((n) => {
+      if (n > 0) { reload(); window.toast?.(`${n} P.I. automática(s) criada(s) a partir de compra liberada — confira e informe o número da P.I.`, 'success'); }
+    });
+  }, [reload]);
 
   const embarquesMap = React.useMemo(() => Object.fromEntries(embarques.map((e) => [e.id, e])), [embarques]);
+
+  const showForm = rotaId === 'novo' || (!!rotaId && sub !== 'vincular');
+  const editing = (pis && rotaId && rotaId !== 'novo' && sub !== 'vincular') ? (pis.find((p) => p.id === rotaId) || null) : null;
+  const vincular = (pis && rotaId && sub === 'vincular') ? (pis.find((p) => p.id === rotaId) || null) : null;
+
+  const abrirNova = () => { if (window.VpRouter) window.VpRouter.navigate('pi-importacao', 'novo'); };
+  const abrirEditar = (pi) => { if (window.VpRouter) window.VpRouter.navigate('pi-importacao', pi.id); };
+  const abrirVincular = (pi) => { if (window.VpRouter) window.VpRouter.navigate('pi-importacao', pi.id, 'vincular'); };
+  const fecharModal = () => { if (window.VpRouter) window.VpRouter.navigate('pi-importacao', null); };
 
   const salvar = async (form) => {
     setSaving(true);
@@ -623,7 +738,7 @@ function PIPage() {
       if (editing) await window.PIStore.atualizar(editing.id, form);
       else await window.PIStore.criar(form);
       window.toast?.(editing ? 'P.I. atualizada.' : 'P.I. criada.', 'success');
-      setShowForm(false); setEditing(null); reload();
+      fecharModal(); reload();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setSaving(false); }
   };
@@ -644,6 +759,18 @@ function PIPage() {
     const matchStatus = filterStatus === 'Todos' || pi.status === filterStatus;
     return matchSearch && matchStatus;
   });
+  const linhasOrdenadas = ord.aplicar(filtered, {
+    numeroPi: (pi) => pi.numero_pi,
+    numeroCotacao: (pi) => pi.numero_cotacao,
+    fornecedor: (pi) => pi.fornecedor,
+    abertura: (pi) => (pi.data_abertura ? new Date(pi.data_abertura).getTime() : null),
+    status: (pi) => pi.status,
+    producao: (pi) => (pi.producao || {}).status,
+    valorTotal: (pi) => (pi.valor_total != null ? Number(pi.valor_total) : null),
+    itens: (pi) => (pi.itens || []).length,
+    percPaga: (pi) => (pi.valor_total ? (window.PIStore.calcValorQuitado(pi) / pi.valor_total) * 100 : 0),
+    embarque: (pi) => embarqueLabel(embarquesMap[pi.embarque_id]),
+  });
 
   return (
     <div className="page fade-in">
@@ -654,14 +781,14 @@ function PIPage() {
           <p className="page-head__sub">Gerencie todas as P.I. e vincule-as aos embarques.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="primary" icon="plus" onClick={() => { setEditing(null); setShowForm(true); }}>Nova P.I.</Button>
+          <Button variant="primary" icon="plus" onClick={abrirNova}>Nova P.I.</Button>
         </div>
       </div>
 
       {showForm && (
         <div style={{ marginBottom: 20 }}>
           <PIForm embarques={embarques} initialData={editing} isEdit={!!editing} saving={saving}
-            onSubmit={salvar} onCancel={() => { setShowForm(false); setEditing(null); }}/>
+            onSubmit={salvar} onCancel={fecharModal}/>
         </div>
       )}
 
@@ -673,28 +800,38 @@ function PIPage() {
         </select>
       </div>
 
-      <div className="table-wrap">
+      {/* Cabeçalho congelado: a tabela rola dentro da própria caixa e o <thead> fica preso no topo. */}
+      <div className="table-wrap" style={{ maxHeight: 'calc(100vh - 290px)', overflowY: 'auto' }}>
         <table className="t">
           <thead><tr>
-            <th>Nº P.I.</th><th>Nº Cotação</th><th>Fornecedor</th><th>Abertura</th><th>Status</th><th>Produção</th>
-            <th>Valor total</th><th>Itens</th><th>% paga</th><th>Embarque</th><th></th>
+            {ord.th('numeroPi', 'Nº P.I.', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            {ord.th('numeroCotacao', 'Nº Cotação', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            {ord.th('fornecedor', 'Fornecedor', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            {ord.th('abertura', 'Abertura', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            {ord.th('status', 'Status', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            {ord.th('producao', 'Produção', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            {ord.th('valorTotal', 'Valor total', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            {ord.th('itens', 'Itens', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            {ord.th('percPaga', '% paga', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            {ord.th('embarque', 'Embarque', { style: { position: 'sticky', top: 0, zIndex: 2 } })}
+            <th style={{ position: 'sticky', top: 0, zIndex: 2 }}></th>
           </tr></thead>
           <tbody>
             {filtered.length === 0 && (
               <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma P.I. encontrada.</td></tr>
             )}
-            {filtered.map((pi) => {
+            {linhasOrdenadas.map((pi) => {
               const embarque = embarquesMap[pi.embarque_id];
               const itens = pi.itens || [];
               const percPaga = pi.valor_total ? (window.PIStore.calcValorQuitado(pi) / pi.valor_total) * 100 : 0;
               const prod = pi.producao || {};
               return (
                 <tr key={pi.id}>
-                  <td className="mono">{pi.numero_pi}</td>
+                  <td className="mono">{pi.numero_pi}{window.PIStore.ehRascunhoAutomatico(pi) && <div><Badge variant="warning">Rascunho automático</Badge></div>}</td>
                   <td className="mono small">{pi.numero_cotacao != null ? window.MasterIdEngine.etapaId('cotacao', pi.numero_cotacao) : <span className="muted">—</span>}</td>
                   <td>{pi.fornecedor || '—'}</td>
                   <td>{fmtDate(pi.data_abertura)}</td>
-                  <td><StatusBadge status={pi.status}/></td>
+                  <td><PIStatusSemaforo pi={pi} embarque={embarque}/></td>
                   <td>{prod.status ? <StatusBadge status={prod.status}/> : <span className="muted small">—</span>}</td>
                   <td className="cell-money">{pi.valor_total ? window.PIStore.fmtMoeda(pi.valor_total, pi.moeda) : '—'}</td>
                   <td>{itens.length}</td>
@@ -702,8 +839,8 @@ function PIPage() {
                   <td>{embarque ? <span className="small">{embarqueLabel(embarque)}</span> : <span className="muted small">Não vinculada</span>}</td>
                   <td>
                     <div className="row gap-1">
-                      <Button variant="ghost" size="sm" icon="edit" title="Editar" onClick={() => { setEditing(pi); setShowForm(true); }}/>
-                      <Button variant="ghost" size="sm" icon="link" title="Vincular embarque" onClick={() => setVincular(pi)}/>
+                      <Button variant="ghost" size="sm" icon="edit" title="Editar" onClick={() => abrirEditar(pi)}/>
+                      <Button variant="ghost" size="sm" icon="link" title="Vincular embarque" onClick={() => abrirVincular(pi)}/>
                       <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={() => excluir(pi)}/>
                     </div>
                   </td>
@@ -714,7 +851,7 @@ function PIPage() {
         </table>
       </div>
 
-      {vincular && <PIModalVincularEmbarque pi={vincular} embarques={embarques} onClose={() => setVincular(null)} onSaved={reload}/>}
+      {vincular && <PIModalVincularEmbarque pi={vincular} embarques={embarques} onClose={fecharModal} onSaved={reload}/>}
     </div>
   );
 }

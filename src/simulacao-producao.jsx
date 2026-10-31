@@ -73,7 +73,7 @@ function SimulacaoProducaoPage({ setRoute, setSubsel }) {
   const faltas = linhas.filter(l => l.falta > 0).length;
   const borrado = verCusto ? undefined : { filter: 'blur(7px)', userSelect: 'none' };
   const irParaItem = (codigo) => {
-    const mp = dados.prods[codigo]?.tipo_sped === '01';
+    const mp = window.pcpEhMateriaPrima(codigo);
     window.pcpIrPara?.({ setRoute, setSubsel }, mp ? 'cadastro-materias-primas' : 'cadastro-produtos', 'vp_pcp_busca', codigo);
   };
 

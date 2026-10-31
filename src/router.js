@@ -25,21 +25,21 @@
   const KNOWN_ROUTES = [
     'dashboard', 'notificacoes', 'decisoes', 'financeiro', 'inbox',
     'leads', 'lead-detail', 'crm-canais', 'crm-conversao', 'crm-automacao', 'crm-analise',
-    'formularios', 'formulario-elevador', 'formulario-quadro-comando', 'cotacao-quadro-comando', 'controle-cotacoes',
+    'formularios', 'formulario-elevador', 'formulario-escada', 'formulario-esteira', 'formulario-quadro-comando', 'cotacao-quadro-comando', 'controle-cotacoes',
     'cotacoes-fornecedor', 'cotacao-fornecedor-detail', 'contratos-sociais', 'precificacao', 'propostas', 'proposta-editor',
     'aval-financeiro',
     'cadastro-clientes', 'cadastro-fornecedores', 'cadastro-materias-primas', 'cadastro-produtos', 'ncm-catalogo', 'cadastro-instaladores', 'cadastro-custos',
     'juridico', 'contrato-venda-equipamentos', 'aval-juridico', 'contrato-instalador', 'contrato-editor',
     'importacao', 'importacao-detail', 'importacao-rastreamento',
     'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos',
-    'compras', 'pedidos-acompanhamento',
-    'engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'desenho-tecnico', 'ficha-tecnica',
+    'compras', 'cotacoes-varejo', 'pedidos-acompanhamento',
+    'engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'ficha-tecnica',
     'solicitacoes-produto',
     'ncm-kanban', 'ncm-detail',
-    'status-obras', 'linha-do-tempo', 'central-documentos', 'dossier-obra', 'vistorias-envio', 'vistorias', 'instalacao',
-    'art', 'cronograma', 'databook', 'handover',
+    'status-obras', 'linha-do-tempo', 'central-documentos', 'dossier-obra', 'vistorias-envio', 'vistorias', 'instalacao', 'mapa-obras',
+    'art', 'cronograma', 'databook', 'handover', 'repositorio-documentos',
     'rh-homologacao',
-    'almoxarifado', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'pcp', 'relatorios-pcp', 'expedicao', 'emissao-nf',
+    'almoxarifado', 'carga-maquina', 'montagem-produto', 'evolucao-fabricacao', 'fabricacao-corrimao', 'fabricacao-corte', 'simulacao-producao', 'pcp', 'mes', 'mes-cadastros', 'relatorios-pcp', 'expedicao', 'separacao', 'etiquetas', 'emissao-nf',
     'logs', 'configuracoes', 'comissoes', 'pagamentos-instalador',
   ];
   const KNOWN_ROUTES_SET = new Set(KNOWN_ROUTES);
@@ -61,7 +61,9 @@
     'Logística': 'logistica',
     'Importação': 'gestao-importacao',
     'Suprimentos': 'logistica',
-    'Instalação & Entrega': 'engenharia',
+    'Obras & Instalação': 'engenharia',
+    'Entrega & Documentação': 'engenharia',
+    'Parceiros & Instaladores': 'engenharia',
     'Financeiro': 'adm-financeiro',
     'RH Operacional': 'rh',
     'Admin': 'admin',
@@ -120,6 +122,10 @@
     if (path === window.location.pathname) return;
     if (opts.replace) window.history.replaceState({}, '', path);
     else window.history.pushState({}, '', path);
+    /* Avisa SÓ os hooks useRotaId/useRotaItem (rota-pcp.js), que leem a URL a cada render: sem isto, telas que abrem
+       modal chamando navigate() direto (Central de Decisões, Avais, Cadastros, P.I., Dashboard) trocavam a URL e o modal
+       não aparecia até outro re-render. Evento próprio de propósito: o App só escuta popstate/subscribe e não reage. */
+    try { window.dispatchEvent(new Event('vp:navigate')); } catch (e) { /* navegador sem Event construtor */ }
   }
 
   function subscribe(fn) {

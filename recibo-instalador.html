@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Recibo de pagamento — Vertical Parts">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Recibo de Pagamento · Vertical Parts</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1">
+  <link rel="icon" href="/favicon.ico?v=1" sizes="any">
+  <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Caveat:wght@700&display=swap" rel="stylesheet">
+  <style>
+    :root { --y: #F5C400; --yb: #FFD400; --yt: #FFF6CC; --k: #000; --g50: #F9F9F9; --g200: #E5E5E5; --g500: #808080; --g700: #4A4A4A; --danger: #C62828; --ok: #2E7D32; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Poppins', Arial, sans-serif; background: var(--g50); color: #1f1f1f; }
+    #rc-root { min-height: 100vh; }
+  </style>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+</head>
+<body>
+  <div id="rc-root"><div style="display:flex;align-items:center;justify-content:center;min-height:100vh;color:#666;font-size:14px;">Carregando…</div></div>
+  <!-- Cliente Supabase (sem SSO Guard — página pública por design; só chama RPCs por token) -->
+  <script>
+    (function () {
+      const URL_SB  = 'https://jxtqwzmpgofwctqajewt.supabase.co';
+      const ANON_SB = 'sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP';
+      window.__VP_SB = { sb: window.supabase.createClient(URL_SB, ANON_SB) };
+    }());
+  </script>
+  <script src="/src/contrato-instalador-engine.js?v=18"></script>
+  <script src="/src/instalador-recibos-store.js?v=1"></script>
+  <script type="text/babel" src="/src/recibo-instalador-app.jsx?v=1"></script>
+</body>
+</html>

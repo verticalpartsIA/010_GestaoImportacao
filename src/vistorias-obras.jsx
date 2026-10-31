@@ -1,8 +1,10 @@
 /* ============================================================
    vistorias-obras.jsx
    Módulo: Vistorias de Obras — fonte única de verdade pra vistoria
-   Descrição: Gerenciamento completo de vistorias com agendamento,
-   documentação (PDF), imagens e rastreamento de vistoriadores
+   Descrição: Resultado das vistorias da obra — progresso das 3 inclusas e
+   checklists digitais despachados (fonte: vistorias_atividades).
+   O agendamento manual (tabela vistorias_obras, vazia e sem leitor) foi
+   removido em 12/10/2026 (auditoria #843 A3): quem agenda é o Despachar.
 
    Consolidação (15/08): esta era uma de 3 implementações de vistoria
    que existiam em paralelo sem se falar (achado documentado no
@@ -31,29 +33,26 @@
 function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded, onChanged }) {
   const [obraId, setObraId] = React.useState(obraIdProp || null);
   const [obra, setObra] = React.useState(obraProp || null);
+  /* Bug real (varredura de URLs, 09/10): a rota "vistorias" não recebe
+     `setSubsel` de app.jsx (só `obraId={subsel}`), então escolher uma obra
+     no seletor (abaixo) nunca escrevia a URL — F5 ou compartilhar o link
+     sempre voltava pro seletor de obras, mesmo depois de escolher uma.
+     `obraIdProp` também só era lido uma vez no mount — Voltar/Avançar do
+     navegador (ou um link de outra tela, ex. Gatilhos, que PASSA setSubsel)
+     não trocava a obra aberta. Escreve/lê o 2º segmento direto
+     (/engenharia/vistorias/<obraId>) sem depender de setSubsel; não mexe
+     no modo `embedded` (usado dentro do Dossiê da Obra, sem rota própria). */
+  React.useEffect(() => { setObraId(obraIdProp || null); }, [obraIdProp]);
+  const escolherObra = (o) => {
+    setObraId(o.id); setObra({ nome: o.building_name });
+    if (!embedded && window.VpRouter) window.VpRouter.navigate('vistorias', o.id);
+  };
   const [obras, setObras] = React.useState([]);
   const [equipPorObra, setEquipPorObra] = React.useState({}); // dossier_id -> [numero_serie,...]
   const [loadingObras, setLoadingObras] = React.useState(!obraIdProp);
   const [buscaObra, setBuscaObra] = React.useState('');
   const [clienteAberto, setClienteAberto] = React.useState(null);
-  const [vistorias, setVistorias] = React.useState([]);
-  const [selectedVistoria, setSelectedVistoria] = React.useState(null);
-  const [showForm, setShowForm] = React.useState(false);
-  const [loading, setLoading] = React.useState(false);
-  const [filterStatus, setFilterStatus] = React.useState('todas');
   const [progressoReal, setProgressoReal] = React.useState({ fases: [1, 2, 3].map((n) => ({ numero: n, concluida: false })), liberada: false, concluidas: 0 });
-
-  // Form state
-  const [form, setForm] = React.useState({
-    data_agendada: '',
-    vistoriador: '',
-    tipo: 'vistoria',
-    numero_fase: '',
-    custo: '',
-    observacoes: '',
-    documentos: [],
-    imagens: [],
-  });
 
   // Sem obraId vindo de fora: carrega a lista de obras (dossier_obra) pra escolher
   React.useEffect(() => {
@@ -78,12 +77,6 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
       });
   }, [obraIdProp]);
 
-  // Load vistorias
-  React.useEffect(() => {
-    if (!obraId) return;
-    loadVistorias();
-  }, [obraId]);
-
   /* Progresso real (04/09) — trocado de `vistorias` (vistorias_obras,
      agendador manual obsoleto) pra window.InstalacaoObraStore, que agora
      lê `vistorias_atividades` (módulo real de campo). Ver comentário em
@@ -91,220 +84,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
   React.useEffect(() => {
     if (!obraId || !window.InstalacaoObraStore) return;
     window.InstalacaoObraStore.obterProgressoVistoria(obraId).then(setProgressoReal).catch(() => {});
-  }, [obraId, vistorias]);
-
-  const loadVistorias = async () => {
-    try {
-      setLoading(true);
-      const sb = window.__VP_SB?.sb;
-      if (!sb) return;
-
-      const { data, error } = await sb
-        .from('vistorias_obras')
-        .select('*')
-        .eq('obra_id', obraId)
-        .order('data_agendada', { ascending: false });
-
-      if (error) throw error;
-      setVistorias(data || []);
-    } catch (error) {
-      console.error('Erro ao carregar vistorias:', error);
-      window.toast?.('Erro ao carregar vistorias', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAddVistoria = async (e) => {
-    e.preventDefault();
-    try {
-      setLoading(true);
-
-      if (!form.data_agendada || !form.vistoriador) {
-        window.toast?.('Preencha todos os campos obrigatórios', 'warning');
-        return;
-      }
-
-      const sb = window.__VP_SB?.sb;
-      if (!sb) return;
-
-      const vistoriaData = {
-        obra_id: obraId,
-        data_agendada: form.data_agendada,
-        vistoriador: form.vistoriador,
-        tipo: form.tipo,
-        numero_fase: form.numero_fase ? Number(form.numero_fase) : null,
-        custo: form.custo !== '' ? Number(form.custo) : null,
-        status: 'agendada',
-        observacoes: form.observacoes,
-        documentos: form.documentos,
-        imagens: form.imagens,
-        criado_em: new Date().toISOString(),
-        atualizado_em: new Date().toISOString(),
-      };
-
-      const { error } = await sb
-        .from('vistorias_obras')
-        .insert([vistoriaData]);
-
-      if (error) throw error;
-
-      if (window.EventosFluxo) {
-        const { data: dossier } = await sb.from('dossier_obra').select('numero_cotacao, building_name').eq('id', obraId).maybeSingle();
-        window.EventosFluxo.registrar({
-          evento: 'VISTORIA_AGENDADA', numeroCotacao: dossier?.numero_cotacao ?? null,
-          alvoLabel: dossier?.building_name, alvoId: obraId,
-        });
-      }
-
-      window.toast?.('Vistoria agendada com sucesso! 📋', 'success');
-      setForm({
-        data_agendada: '',
-        vistoriador: '',
-        tipo: 'vistoria',
-        numero_fase: '',
-        custo: '',
-        observacoes: '',
-        documentos: [],
-        imagens: [],
-      });
-      setShowForm(false);
-      await loadVistorias();
-      onChanged && onChanged();
-    } catch (error) {
-      console.error('Erro ao agendar vistoria:', error);
-      window.toast?.('Erro ao agendar vistoria', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleFileUpload = (e, type) => {
-    const files = Array.from(e.target.files || []);
-    const maxFiles = type === 'imagens' ? 10 : 5;
-
-    if (files.length + form[type].length > maxFiles) {
-      window.toast?.(
-        `Máximo de ${maxFiles} ${type === 'imagens' ? 'imagens' : 'documentos'} permitidos`,
-        'warning'
-      );
-      return;
-    }
-
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const base64 = e.target?.result;
-        setForm((prev) => ({
-          ...prev,
-          [type]: [
-            ...prev[type],
-            { nome: file.name, tipo: file.type, tamanho: file.size, dados: base64 },
-          ],
-        }));
-      };
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const handleRemoveFile = (type, index) => {
-    setForm((prev) => ({
-      ...prev,
-      [type]: prev[type].filter((_, i) => i !== index),
-    }));
-  };
-
-  const handleCompleteVistoria = async (vistoriaId) => {
-    try {
-      const sb = window.__VP_SB?.sb;
-      if (!sb) return;
-
-      const { data: v, error } = await sb
-        .from('vistorias_obras')
-        .update({ status: 'concluida', atualizado_em: new Date().toISOString() })
-        .eq('id', vistoriaId).select().single();
-
-      if (error) throw error;
-
-      if (window.EventosFluxo && v?.obra_id) {
-        const { data: dossier } = await sb.from('dossier_obra').select('numero_cotacao, building_name').eq('id', v.obra_id).maybeSingle();
-        window.EventosFluxo.registrar({
-          evento: 'VISTORIA_REALIZADA', numeroCotacao: dossier?.numero_cotacao ?? null,
-          alvoLabel: dossier?.building_name, alvoId: v.obra_id,
-        });
-      }
-
-      window.toast?.('Vistoria marcada como concluída! ✅', 'success');
-      await loadVistorias();
-      onChanged && onChanged();
-      setSelectedVistoria(null);
-    } catch (error) {
-      console.error('Erro ao completar vistoria:', error);
-      window.toast?.('Erro ao atualizar vistoria', 'error');
-    }
-  };
-
-  const handleDeleteVistoria = async (vistoriaId) => {
-    if (!confirm('Tem certeza que deseja deletar esta vistoria?')) return;
-
-    try {
-      const sb = window.__VP_SB?.sb;
-      if (!sb) return;
-
-      const { error } = await sb
-        .from('vistorias_obras')
-        .delete()
-        .eq('id', vistoriaId);
-
-      if (error) throw error;
-      window.toast?.('Vistoria deletada com sucesso', 'success');
-      await loadVistorias();
-      onChanged && onChanged();
-      setSelectedVistoria(null);
-    } catch (error) {
-      console.error('Erro ao deletar vistoria:', error);
-      window.toast?.('Erro ao deletar vistoria', 'error');
-    }
-  };
-
-  // Filtrar vistorias
-  const vistoriasFiltered =
-    filterStatus === 'todas'
-      ? vistorias
-      : vistorias.filter((v) => v.status === filterStatus);
-
-  // Stats
-  const stats = {
-    total: vistorias.length,
-    agendadas: vistorias.filter((v) => v.status === 'agendada').length,
-    concluidas: vistorias.filter((v) => v.status === 'concluida').length,
-    canceladas: vistorias.filter((v) => v.status === 'cancelada').length,
-  };
-
-  const formatData = (dateStr) => {
-    if (!dateStr) return '—';
-    return new Date(dateStr).toLocaleDateString('pt-BR');
-  };
-
-  const formatDataHora = (dateStr) => {
-    if (!dateStr) return '—';
-    const d = new Date(dateStr);
-    return `${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    })}`;
-  };
-
-  const getStatusBadge = (status) => {
-    const statusConfig = {
-      agendada: { label: '📅 Agendada', color: '#0066ff' },
-      em_progresso: { label: '⏳ Em Progresso', color: '#ff9900' },
-      concluida: { label: '✅ Concluída', color: '#00aa00' },
-      cancelada: { label: '❌ Cancelada', color: '#cc0000' },
-    };
-    const config = statusConfig[status] || { label: status, color: '#666' };
-    return <span style={{ color: config.color, fontWeight: 'bold' }}>{config.label}</span>;
-  };
+  }, [obraId]);
 
   // Progresso real (04/09): vem de vistorias_atividades via InstalacaoObraStore,
   // não mais do agendador manual vistorias_obras — ver efeito acima.
@@ -316,17 +96,18 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
     return (
       <div className="vistorias-obras">
         {!embedded && (
-          <div className="page-header" style={{ marginBottom: '2rem' }}>
-            <div style={{ flex: 1 }}>
-              <h1 style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>🏗️ Resultado Vistorias de Obras</h1>
-              <p style={{ color: 'var(--vp-gray-500)', fontSize: '0.95rem' }}>Escolha a obra pra ver e registrar as vistorias.</p>
+          <div className="page-head">
+            <div className="page-head__l">
+              <div className="page-head__eyebrow"><span className="vp-rule"/>Obras & Instalação</div>
+              <h1 className="page-head__title">Resultado Vistorias de Obras</h1>
+              <p className="page-head__sub">Escolha a obra pra ver o andamento das vistorias.</p>
             </div>
           </div>
         )}
         {loadingObras ? (
           <div style={{ textAlign: 'center', padding: '2rem' }}>⏳ Carregando obras...</div>
         ) : obras.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem 2rem', background: '#f8f9fa', borderRadius: '8px', color: '#666' }}>
+          <div style={{ textAlign: 'center', padding: '3rem 2rem', background: 'var(--vp-gray-50)', borderRadius: '8px', color: 'var(--fg2)' }}>
             <p>Nenhuma obra cadastrada ainda (Dossiê da Obra).</p>
           </div>
         ) : (
@@ -337,7 +118,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
             setBusca={setBuscaObra}
             clienteAberto={clienteAberto}
             setClienteAberto={setClienteAberto}
-            onEscolher={(o) => { setObraId(o.id); setObra({ nome: o.building_name }); }}
+            onEscolher={escolherObra}
           />
         )}
       </div>
@@ -348,32 +129,22 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
     <div className="vistorias-obras">
       {/* HEADER */}
       {!embedded && (
-        <div className="page-header" style={{ marginBottom: '2rem' }}>
-          <div style={{ flex: 1 }}>
-            <h1 style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>
-              🏗️ Resultado Vistorias de Obras
-            </h1>
+        <div className="page-head">
+          <div className="page-head__l">
+            <div className="page-head__eyebrow"><span className="vp-rule"/>Obras & Instalação</div>
+            <h1 className="page-head__title">Resultado Vistorias de Obras</h1>
             {obra && (
-              <p style={{ color: 'var(--vp-gray-500)', fontSize: '0.95rem' }}>
+              <p className="page-head__sub">
                 Obra: <strong>{obra.nome || 'Sem nome'}</strong>
                 {obra.endereco && ` • ${obra.endereco}`}
               </p>
             )}
           </div>
-          <button
-            className="btn btn-primary"
-            onClick={() => setShowForm(!showForm)}
-            style={{ height: '2.5rem', whiteSpace: 'nowrap' }}>
-            {showForm ? '✕ Cancelar' : '+ Agendar Vistoria'}
-          </button>
         </div>
       )}
       {embedded && (
         <div className="row sb" style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 12, color: 'var(--fg3)' }}>3 vistorias inclusas no contrato · vistorias avulsas cobradas à parte · agendamento manual abaixo é opcional, o que libera a obra são as vistorias concluídas em "Checklists digitais despachados"</div>
-          <button className="btn btn-primary" onClick={() => setShowForm(!showForm)} style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
-            {showForm ? '✕ Cancelar' : '+ Agendar Vistoria'}
-          </button>
+          <div style={{ fontSize: 12, color: 'var(--fg3)' }}>3 vistorias inclusas no contrato · vistorias avulsas cobradas à parte · o que libera a obra são as vistorias concluídas em "Checklists digitais despachados"</div>
         </div>
       )}
 
@@ -382,12 +153,12 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
           manual desta tela. Sem conceito de "fase" numerada na vistoria
           de campo, então cada quadro é só a Nª vistoria concluída. */}
       <div style={{
-        background: obraLiberada ? '#f0fdf4' : '#f8f9fa',
-        border: '1px solid ' + (obraLiberada ? '#86efac' : '#e0e0e0'),
+        background: obraLiberada ? 'var(--vp-success-tint)' : 'var(--vp-gray-50)',
+        border: '1px solid ' + (obraLiberada ? 'var(--vp-success)' : 'var(--border)'),
         borderRadius: '8px', padding: '1rem 1.25rem', marginBottom: '1.5rem',
       }}>
         <div className="row sb" style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: '0.9rem', fontWeight: 700, color: obraLiberada ? '#166534' : 'inherit' }}>
+          <div style={{ fontSize: '0.9rem', fontWeight: 700, color: obraLiberada ? 'var(--vp-success-ink)' : 'inherit' }}>
             {obraLiberada ? '✅ Obra vistoriada e liberada (3 vistorias concluídas)' : `Progresso das vistorias inclusas — ${progressoReal.concluidas} de 3 concluídas`}
           </div>
         </div>
@@ -395,8 +166,8 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
           {fasesInclusas.map((f) => (
             <div key={f.numero} style={{
               flex: 1, textAlign: 'center', padding: '0.6rem', borderRadius: 6,
-              background: f.concluida ? '#dcfce7' : '#fff',
-              border: '1px solid ' + (f.concluida ? '#10b981' : '#ddd'),
+              background: f.concluida ? 'var(--vp-success-tint)' : 'var(--bg)',
+              border: '1px solid ' + (f.concluida ? 'var(--vp-success)' : 'var(--border)'),
               fontSize: '0.85rem', fontWeight: 600,
             }}>
               {f.concluida ? '✅' : '○'} {f.numero}ª vistoria
@@ -408,676 +179,6 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
       {/* CHECKLISTS DIGITAIS DESPACHADOS (Fase 4 — resultado de Vistorias de Obras/vistorias-envio.jsx) */}
       <ChecklistsDigitaisObra obraId={obraId}/>
 
-      {/* STATS CARDS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-        <div style={{
-          padding: '1.5rem',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          borderRadius: '8px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-        }}>
-          <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{stats.total}</div>
-          <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Vistorias Totais</div>
-        </div>
-        <div style={{
-          padding: '1.5rem',
-          background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-          color: 'white',
-          borderRadius: '8px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-        }}>
-          <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{stats.agendadas}</div>
-          <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Agendadas</div>
-        </div>
-        <div style={{
-          padding: '1.5rem',
-          background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-          color: 'white',
-          borderRadius: '8px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-        }}>
-          <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{stats.concluidas}</div>
-          <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Concluídas</div>
-        </div>
-      </div>
-
-      {/* FORM AGENDAR VISTORIA */}
-      {showForm && (
-        <div style={{
-          background: '#f8f9fa',
-          padding: '2rem',
-          borderRadius: '12px',
-          border: '2px solid #e0e0e0',
-          marginBottom: '2rem',
-        }}>
-          <h3 style={{ marginBottom: '1.5rem', fontSize: '1.2rem' }}>📋 Agendar Nova Vistoria</h3>
-          <form onSubmit={handleAddVistoria}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
-              {/* Data */}
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                  Data & Hora da Vistoria *
-                </label>
-                <input
-                  type="datetime-local"
-                  value={form.data_agendada}
-                  onChange={(e) => setForm({ ...form, data_agendada: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    border: '1px solid #ddd',
-                    borderRadius: '6px',
-                    fontSize: '0.95rem',
-                  }}
-                  required
-                />
-              </div>
-
-              {/* Vistoriador */}
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                  Vistoriador *
-                </label>
-                <input
-                  type="text"
-                  placeholder="Nome do vistoriador"
-                  value={form.vistoriador}
-                  onChange={(e) => setForm({ ...form, vistoriador: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    border: '1px solid #ddd',
-                    borderRadius: '6px',
-                    fontSize: '0.95rem',
-                  }}
-                  required
-                />
-              </div>
-
-              {/* Tipo de Vistoria */}
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                  Tipo de Vistoria
-                </label>
-                <select
-                  value={form.tipo}
-                  onChange={(e) => setForm({ ...form, tipo: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    border: '1px solid #ddd',
-                    borderRadius: '6px',
-                    fontSize: '0.95rem',
-                  }}>
-                  <option value="vistoria">Vistoria</option>
-                  <option value="pre_obra">Pré-Obra</option>
-                  <option value="insercao">Inserção</option>
-                  <option value="pos_venda">Pós-Venda</option>
-                </select>
-              </div>
-
-              {/* Fase (3 inclusas no contrato + avulsa) */}
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                  Fase
-                </label>
-                <select
-                  value={form.numero_fase}
-                  onChange={(e) => setForm({ ...form, numero_fase: e.target.value })}
-                  style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.95rem' }}>
-                  <option value="">Avulsa (cobrada à parte)</option>
-                  <option value="1">Fase 1 (inclusa)</option>
-                  <option value="2">Fase 2 (inclusa)</option>
-                  <option value="3">Fase 3 (inclusa)</option>
-                </select>
-              </div>
-
-              {/* Custo */}
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                  Custo (R$)
-                </label>
-                <input
-                  type="number"
-                  placeholder="0,00"
-                  value={form.custo}
-                  onChange={(e) => setForm({ ...form, custo: e.target.value })}
-                  style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.95rem' }}
-                />
-              </div>
-            </div>
-
-            {/* Observações */}
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                Observações
-              </label>
-              <textarea
-                placeholder="Observações adicionais sobre a vistoria..."
-                value={form.observacoes}
-                onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '1px solid #ddd',
-                  borderRadius: '6px',
-                  minHeight: '100px',
-                  fontSize: '0.95rem',
-                  fontFamily: 'inherit',
-                }}
-              />
-            </div>
-
-            {/* Upload Documentos */}
-            <div style={{ marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #ddd' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                📄 Documentos (PDF, máx. 5 arquivos)
-              </label>
-              <input
-                type="file"
-                multiple
-                accept=".pdf,.doc,.docx"
-                onChange={(e) => handleFileUpload(e, 'documentos')}
-                style={{ marginBottom: '0.75rem' }}
-              />
-              {form.documentos.length > 0 && (
-                <div style={{ marginTop: '1rem' }}>
-                  {form.documentos.map((doc, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '0.75rem',
-                        background: '#fff',
-                        border: '1px solid #e0e0e0',
-                        borderRadius: '6px',
-                        marginBottom: '0.5rem',
-                      }}>
-                      <span style={{ fontSize: '0.85rem' }}>
-                        📎 {doc.nome} ({(doc.tamanho / 1024).toFixed(1)} KB)
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveFile('documentos', idx)}
-                        style={{
-                          padding: '0.25rem 0.75rem',
-                          background: '#ff6b6b',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '0.8rem',
-                        }}>
-                        Remover
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Upload Imagens */}
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                🖼️ Imagens (máx. 10 imagens)
-              </label>
-              <input
-                type="file"
-                multiple
-                accept="image/*"
-                onChange={(e) => handleFileUpload(e, 'imagens')}
-                style={{ marginBottom: '0.75rem' }}
-              />
-              {form.imagens.length > 0 && (
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
-                  gap: '0.75rem',
-                  marginTop: '1rem',
-                }}>
-                  {form.imagens.map((img, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        position: 'relative',
-                        borderRadius: '6px',
-                        overflow: 'hidden',
-                        aspectRatio: '1',
-                        border: '2px solid #e0e0e0',
-                      }}>
-                      <img
-                        src={img.dados}
-                        alt={`preview-${idx}`}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveFile('imagens', idx)}
-                        style={{
-                          position: 'absolute',
-                          top: '0.25rem',
-                          right: '0.25rem',
-                          padding: '0.25rem 0.5rem',
-                          background: '#ff6b6b',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '3px',
-                          cursor: 'pointer',
-                          fontSize: '0.7rem',
-                        }}>
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Buttons */}
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <button
-                type="submit"
-                disabled={loading}
-                className="btn btn-primary"
-                style={{ padding: '0.75rem 1.5rem' }}>
-                {loading ? '⏳ Agendando...' : '✓ Agendar Vistoria'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  background: '#e0e0e0',
-                  color: '#333',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                }}>
-                Cancelar
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* FILTROS */}
-      <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-        {['todas', 'agendada', 'em_progresso', 'concluida', 'cancelada'].map((status) => (
-          <button
-            key={status}
-            onClick={() => setFilterStatus(status)}
-            style={{
-              padding: '0.5rem 1rem',
-              background: filterStatus === status ? 'var(--vp-primary)' : '#f0f0f0',
-              color: filterStatus === status ? 'white' : '#333',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: filterStatus === status ? 'bold' : 'normal',
-            }}>
-            {status === 'todas' ? '📋 Todas' : status === 'agendada' ? '📅 Agendadas' : status === 'em_progresso' ? '⏳ Em Progresso' : status === 'concluida' ? '✅ Concluídas' : '❌ Canceladas'}
-          </button>
-        ))}
-      </div>
-
-      {/* LISTA DE VISTORIAS */}
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '2rem' }}>⏳ Carregando vistorias...</div>
-      ) : vistoriasFiltered.length === 0 ? (
-        <div style={{
-          textAlign: 'center',
-          padding: '3rem 2rem',
-          background: '#f8f9fa',
-          borderRadius: '8px',
-          color: '#666',
-        }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>📭</div>
-          <p>Nenhuma vistoria encontrada</p>
-          {filterStatus !== 'todas' && (
-            <button
-              onClick={() => setFilterStatus('todas')}
-              style={{
-                marginTop: '1rem',
-                padding: '0.5rem 1rem',
-                background: 'var(--vp-primary)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}>
-              Ver Todas as Vistorias
-            </button>
-          )}
-        </div>
-      ) : (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
-          gap: '1rem',
-        }}>
-          {vistoriasFiltered.slice(0, 10).map((vistoria, idx) => (
-            <div
-              key={vistoria.id || idx}
-              style={{
-                background: 'white',
-                border: '1px solid #e0e0e0',
-                borderRadius: '8px',
-                padding: '1.5rem',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                transition: 'all 0.3s ease',
-                cursor: 'pointer',
-              }}
-              onClick={() => setSelectedVistoria(vistoria)}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.boxShadow = '0 8px 20px rgba(0,0,0,0.15)';
-                e.currentTarget.style.transform = 'translateY(-4px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}>
-              {/* Status Badge */}
-              <div style={{ marginBottom: '1rem' }}>
-                {getStatusBadge(vistoria.status)}
-              </div>
-
-              {/* Info Principal */}
-              <div style={{ marginBottom: '1rem' }}>
-                <div style={{ fontWeight: 'bold', fontSize: '1rem', marginBottom: '0.5rem' }}>
-                  {vistoria.tipo?.toUpperCase() || 'VISTORIA'}
-                  {vistoria.numero_fase ? ` · Fase ${vistoria.numero_fase}` : ' · Avulsa'}
-                </div>
-                <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>
-                  📅 {formatData(vistoria.data_agendada)}
-                </div>
-                <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: vistoria.custo != null ? '0.5rem' : 0 }}>
-                  👤 {vistoria.vistoriador}
-                </div>
-                {vistoria.custo != null && (
-                  <div style={{ fontSize: '0.9rem', color: '#666' }}>
-                    💰 {Number(vistoria.custo).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </div>
-                )}
-              </div>
-
-              {/* Observações */}
-              {vistoria.observacoes && (
-                <div style={{
-                  fontSize: '0.85rem',
-                  color: '#666',
-                  background: '#f8f9fa',
-                  padding: '0.75rem',
-                  borderRadius: '4px',
-                  marginBottom: '1rem',
-                  maxHeight: '80px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}>
-                  {vistoria.observacoes}
-                </div>
-              )}
-
-              {/* Arquivos */}
-              {(vistoria.documentos?.length > 0 || vistoria.imagens?.length > 0) && (
-                <div style={{
-                  display: 'flex',
-                  gap: '0.5rem',
-                  fontSize: '0.85rem',
-                  color: '#666',
-                  marginBottom: '1rem',
-                }}>
-                  {vistoria.documentos?.length > 0 && (
-                    <span>📄 {vistoria.documentos.length} doc(s)</span>
-                  )}
-                  {vistoria.imagens?.length > 0 && (
-                    <span>🖼️ {vistoria.imagens.length} img(s)</span>
-                  )}
-                </div>
-              )}
-
-              {/* Actions */}
-              <div style={{
-                display: 'flex',
-                gap: '0.5rem',
-                borderTop: '1px solid #eee',
-                paddingTop: '1rem',
-              }}>
-                {vistoria.status === 'agendada' && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleCompleteVistoria(vistoria.id);
-                    }}
-                    style={{
-                      flex: 1,
-                      padding: '0.5rem',
-                      background: '#00aa00',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '0.8rem',
-                    }}>
-                    ✓ Concluir
-                  </button>
-                )}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteVistoria(vistoria.id);
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: '0.5rem',
-                    background: '#ff6b6b',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '0.8rem',
-                  }}>
-                  🗑️ Deletar
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* MODAL DETALHES */}
-      {selectedVistoria && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
-          onClick={() => setSelectedVistoria(null)}>
-          <div
-            style={{
-              background: 'white',
-              borderRadius: '12px',
-              padding: '2rem',
-              maxWidth: '600px',
-              width: '90%',
-              maxHeight: '80vh',
-              overflowY: 'auto',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-            }}
-            onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 style={{ margin: 0 }}>Detalhes da Vistoria</h2>
-              <button
-                onClick={() => setSelectedVistoria(null)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  fontSize: '1.5rem',
-                  cursor: 'pointer',
-                  color: '#666',
-                }}>
-                ✕
-              </button>
-            </div>
-
-            {/* Status */}
-            <div style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f8f9fa', borderRadius: '6px' }}>
-              <strong>Status:</strong> {getStatusBadge(selectedVistoria.status)}
-            </div>
-
-            {/* Info */}
-            <div style={{ marginBottom: '1.5rem' }}>
-              <p>
-                <strong>📅 Data:</strong> {formatDataHora(selectedVistoria.data_agendada)}
-              </p>
-              <p>
-                <strong>👤 Vistoriador:</strong> {selectedVistoria.vistoriador}
-              </p>
-              <p>
-                <strong>🏷️ Tipo:</strong> {selectedVistoria.tipo?.replace(/_/g, ' ').toUpperCase()}
-              </p>
-              {selectedVistoria.observacoes && (
-                <p>
-                  <strong>📝 Observações:</strong> {selectedVistoria.observacoes}
-                </p>
-              )}
-            </div>
-
-            {/* Documentos */}
-            {selectedVistoria.documentos?.length > 0 && (
-              <div style={{ marginBottom: '1.5rem' }}>
-                <h4 style={{ marginBottom: '0.75rem' }}>📄 Documentos</h4>
-                {selectedVistoria.documentos.map((doc, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      padding: '0.75rem',
-                      background: '#f8f9fa',
-                      borderRadius: '4px',
-                      marginBottom: '0.5rem',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                    }}>
-                    <span>📎 {doc.nome}</span>
-                    <a
-                      href={doc.dados}
-                      download={doc.nome}
-                      style={{
-                        padding: '0.25rem 0.75rem',
-                        background: 'var(--vp-primary)',
-                        color: 'white',
-                        borderRadius: '3px',
-                        textDecoration: 'none',
-                        fontSize: '0.8rem',
-                      }}>
-                      Download
-                    </a>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Imagens */}
-            {selectedVistoria.imagens?.length > 0 && (
-              <div style={{ marginBottom: '1.5rem' }}>
-                <h4 style={{ marginBottom: '0.75rem' }}>🖼️ Imagens</h4>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-                  gap: '0.75rem',
-                }}>
-                  {selectedVistoria.imagens.map((img, idx) => (
-                    <a
-                      key={idx}
-                      href={img.dados}
-                      download={img.nome}
-                      style={{
-                        borderRadius: '6px',
-                        overflow: 'hidden',
-                        cursor: 'pointer',
-                      }}>
-                      <img
-                        src={img.dados}
-                        alt={`img-${idx}`}
-                        style={{
-                          width: '100%',
-                          height: '120px',
-                          objectFit: 'cover',
-                          borderRadius: '6px',
-                        }}
-                      />
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Actions */}
-            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem', borderTop: '1px solid #eee', paddingTop: '1rem' }}>
-              {selectedVistoria.status === 'agendada' && (
-                <button
-                  onClick={() => {
-                    handleCompleteVistoria(selectedVistoria.id);
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: '0.75rem',
-                    background: '#00aa00',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontWeight: 'bold',
-                  }}>
-                  ✓ Marcar Concluída
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  handleDeleteVistoria(selectedVistoria.id);
-                }}
-                style={{
-                  flex: 1,
-                  padding: '0.75rem',
-                  background: '#ff6b6b',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                }}>
-                🗑️ Deletar
-              </button>
-              <button
-                onClick={() => setSelectedVistoria(null)}
-                style={{
-                  flex: 1,
-                  padding: '0.75rem',
-                  background: '#e0e0e0',
-                  color: '#333',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                }}>
-                ✕ Fechar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -1116,10 +217,10 @@ function ChecklistsDigitaisObra({ obraId }) {
           const st = STATUS_ATIVIDADE_RESULTADO[a.status] || { label: a.status, variant: 'neutral' };
           return (
             <div key={a.id} onClick={() => setDetalhe(a)}
-              style={{ background: 'white', border: '1px solid #e0e0e0', borderRadius: 8, padding: '0.75rem 1rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+              style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 8, padding: '0.75rem 1rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
               <div>
                 <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{a.vistorias_questionarios?.nome}</div>
-                <div style={{ fontSize: '0.78rem', color: '#888', marginTop: 2 }}>
+                <div style={{ fontSize: '0.78rem', color: 'var(--fg3)', marginTop: 2 }}>
                   {a.equipamentos_obra?.numero_serie ? `${a.equipamentos_obra.numero_serie} · ` : ''}
                   {a.colaboradores_vpsistema?.nome || 'Técnico a definir'}
                   {a.concluido_em ? ` · concluída em ${new Date(a.concluido_em).toLocaleDateString('pt-BR')}` : ''}
@@ -1211,14 +312,14 @@ function CampoEditavel({ pergunta, resposta, onSalvar, atividadeId }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {(resposta?.anexos || []).length ? resposta.anexos.map((a, i) => (
             <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-              <img src={a.url} alt="" style={{ width: 70, height: 52, objectFit: 'cover', borderRadius: 4, border: '1px solid #eee', flexShrink: 0 }}/>
+              <img src={a.url} alt="" style={{ width: 70, height: 52, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)', flexShrink: 0 }}/>
               <div style={{ flex: 1 }}>
                 <input className="input" style={{ fontSize: 12 }} defaultValue={a.legenda || ''} placeholder="Legenda"
                   onBlur={(e) => onSalvar({ anexos: resposta.anexos.map((x, idx) => (idx === i ? { ...x, legenda: e.target.value } : x)) })}/>
                 <Button size="sm" variant="ghost" onClick={() => onSalvar({ anexos: resposta.anexos.filter((_, idx) => idx !== i) })}>Remover foto</Button>
               </div>
             </div>
-          )) : <span style={{ color: '#bbb', fontSize: 13 }}>— sem fotos —</span>}
+          )) : <span style={{ color: 'var(--fg3)', fontSize: 13 }}>— sem fotos —</span>}
           <label className="btn btn--outline btn--sm" style={{ alignSelf: 'flex-start', cursor: 'pointer' }}>
             {enviandoFoto ? 'Enviando…' : 'Adicionar foto'}
             <input type="file" accept="image/*" onChange={adicionarFoto} hidden disabled={enviandoFoto}/>
@@ -1227,11 +328,11 @@ function CampoEditavel({ pergunta, resposta, onSalvar, atividadeId }) {
       )}
       {pergunta.tipo_campo === 'assinatura' && (
         resposta?.anexo_url
-          ? <img src={resposta.anexo_url} alt="" style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: '1px solid #eee' }}/>
-          : <span style={{ color: '#bbb', fontSize: 13 }}>— sem assinatura — (não editável aqui)</span>
+          ? <img src={resposta.anexo_url} alt="" style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: '1px solid var(--border)' }}/>
+          : <span style={{ color: 'var(--fg3)', fontSize: 13 }}>— sem assinatura — (não editável aqui)</span>
       )}
       {!window.VistoriasQuestionariosStore.ehPerguntaCompanion(pergunta) && (
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#b91c1c', cursor: 'pointer' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--vp-danger-ink)', cursor: 'pointer' }}>
           <input type="checkbox" checked={!!resposta?.pendencia} onChange={(e) => onSalvar({ pendencia: e.target.checked })}/>
           Marcar como pendência
         </label>
@@ -1269,22 +370,22 @@ function ResultadoAtividadeModal({ atividade, onClose }) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {r.anexos.map((a, i) => (
             <div key={i}>
-              <img src={a.url} alt={pergunta.texto} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: '1px solid #eee', display: 'block' }}/>
-              {a.legenda && <div style={{ fontSize: 11, color: '#888', maxWidth: 160 }}>{a.legenda}</div>}
+              <img src={a.url} alt={pergunta.texto} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: '1px solid var(--border)', display: 'block' }}/>
+              {a.legenda && <div style={{ fontSize: 11, color: 'var(--fg3)', maxWidth: 160 }}>{a.legenda}</div>}
             </div>
           ))}
         </div>
-      ) : <span style={{ color: '#bbb' }}>— sem resposta —</span>;
+      ) : <span style={{ color: 'var(--fg3)' }}>— sem resposta —</span>;
     }
     if (pergunta.tipo_campo === 'assinatura') {
       return r?.anexo_url
-        ? <img src={r.anexo_url} alt={pergunta.texto} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: '1px solid #eee' }}/>
-        : <span style={{ color: '#bbb' }}>— sem resposta —</span>;
+        ? <img src={r.anexo_url} alt={pergunta.texto} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: '1px solid var(--border)' }}/>
+        : <span style={{ color: 'var(--fg3)' }}>— sem resposta —</span>;
     }
     if (pergunta.tipo_campo === 'multipla_escolha') {
-      return (r?.valor_lista || []).length ? r.valor_lista.join(', ') : <span style={{ color: '#bbb' }}>— sem resposta —</span>;
+      return (r?.valor_lista || []).length ? r.valor_lista.join(', ') : <span style={{ color: 'var(--fg3)' }}>— sem resposta —</span>;
     }
-    return r?.valor ? r.valor : <span style={{ color: '#bbb' }}>— sem resposta —</span>;
+    return r?.valor ? r.valor : <span style={{ color: 'var(--fg3)' }}>— sem resposta —</span>;
   };
 
   const [editando, setEditando] = React.useState(false);
@@ -1339,7 +440,7 @@ function ResultadoAtividadeModal({ atividade, onClose }) {
           <Button variant="primary" icon="download" onClick={baixarPdf} disabled={baixandoPdf || estrutura === null}>{baixandoPdf ? 'Gerando PDF…' : 'Baixar PDF'}</Button>
         </div>
       )}>
-      <div style={{ marginBottom: 14, fontSize: 13, color: '#666', display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <div style={{ marginBottom: 14, fontSize: 13, color: 'var(--fg2)', display: 'flex', flexDirection: 'column', gap: 3 }}>
         <div>Técnico: <b>{atividade.colaboradores_vpsistema?.nome || 'a definir'}</b></div>
         {atividade.checkin_em && (
           <div>Check-in: {new Date(atividade.checkin_em).toLocaleString('pt-BR')}
@@ -1354,24 +455,24 @@ function ResultadoAtividadeModal({ atividade, onClose }) {
       </div>
 
       {estrutura === null ? (
-        <div style={{ textAlign: 'center', padding: 24, color: '#888' }}>Carregando…</div>
+        <div style={{ textAlign: 'center', padding: 24, color: 'var(--fg3)' }}>Carregando…</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           {estrutura.map((categoria) => {
             const pavs = window.VistoriasQuestionariosStore.pavsDaCategoria(categoria, atividade.paradas);
             return (
               <div key={categoria.id}>
-                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, textTransform: 'uppercase', color: '#555' }}>{categoria.nome}</div>
+                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, textTransform: 'uppercase', color: 'var(--fg2)' }}>{categoria.nome}</div>
                 {pavs.map((pav) => (
                   <div key={pav} style={{ marginBottom: pavs.length > 1 ? 10 : 0 }}>
-                    {categoria.repete_por_pavimento && <div style={{ fontSize: 11, fontWeight: 700, color: '#999', textTransform: 'uppercase', marginBottom: 6 }}>Pavimento {pav}</div>}
+                    {categoria.repete_por_pavimento && <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg3)', textTransform: 'uppercase', marginBottom: 6 }}>Pavimento {pav}</div>}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {categoria.perguntas.filter((p) => visivel(p, pav)).map((p) => {
                         if (p.tipo_campo === 'informativa') return null;
                         const r = respostas[chave(p.id, pav)];
                         return (
-                          <div key={p.id + ':' + pav} style={{ borderBottom: '1px solid #f0f0f0', paddingBottom: 8 }}>
-                            <div style={{ fontSize: 13, color: '#333', marginBottom: 4 }}>{p.texto}</div>
+                          <div key={p.id + ':' + pav} style={{ borderBottom: '1px solid var(--vp-gray-100)', paddingBottom: 8 }}>
+                            <div style={{ fontSize: 13, color: 'var(--fg1)', marginBottom: 4 }}>{p.texto}</div>
                             {editando ? (
                               <CampoEditavel pergunta={p} resposta={r} atividadeId={atividade.id} onSalvar={(campos) => salvarResposta(p.id, pav, campos)}/>
                             ) : (
@@ -1423,17 +524,17 @@ function SeletorObrasPorCliente({ obras, equipPorObra, busca, setBusca, clienteA
         placeholder="Buscar por cliente, obra ou nº de série…"
         value={busca}
         onChange={(e) => setBusca(e.target.value)}
-        style={{ width: '100%', padding: '0.65rem 0.85rem', border: '1px solid #ddd', borderRadius: 6, fontSize: '0.9rem', marginBottom: '1rem' }}
+        style={{ width: '100%', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: 6, fontSize: '0.9rem', marginBottom: '1rem' }}
       />
       {clientes.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>Nenhuma obra encontrada.</div>
+        <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--fg2)' }}>Nenhuma obra encontrada.</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {clientes.map((cliente) => {
             const lista = porCliente[cliente];
             const aberto = forcarAberto || clienteAberto === cliente;
             return (
-              <div key={cliente} style={{ border: '1px solid #e0e0e0', borderRadius: 8, background: 'white', overflow: 'hidden' }}>
+              <div key={cliente} style={{ border: '1px solid var(--border)', borderRadius: 8, background: 'white', overflow: 'hidden' }}>
                 <div
                   onClick={() => setClienteAberto(clienteAberto === cliente ? null : cliente)}
                   style={{
@@ -1442,7 +543,7 @@ function SeletorObrasPorCliente({ obras, equipPorObra, busca, setBusca, clienteA
                   }}>
                   <span style={{ display: 'inline-block', transition: 'transform .15s', transform: aberto ? 'rotate(90deg)' : 'rotate(0deg)' }}>▸</span>
                   🏢 {cliente}
-                  <span style={{ fontWeight: 400, color: '#888', fontSize: '0.82rem' }}>({lista.length})</span>
+                  <span style={{ fontWeight: 400, color: 'var(--fg3)', fontSize: '0.82rem' }}>({lista.length})</span>
                 </div>
                 {aberto && (
                   <div style={{ padding: '0 0.75rem 0.75rem', display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1453,20 +554,20 @@ function SeletorObrasPorCliente({ obras, equipPorObra, busca, setBusca, clienteA
                           onClick={() => onEscolher(o)}
                           style={{
                             marginLeft: '1.5rem', padding: '0.6rem 0.85rem', borderRadius: 6,
-                            border: '1px solid #eee', cursor: 'pointer', display: 'flex',
+                            border: '1px solid var(--border)', cursor: 'pointer', display: 'flex',
                             justifyContent: 'space-between', alignItems: 'center', gap: 8,
                           }}
-                          onMouseEnter={(e) => { e.currentTarget.style.background = '#f8f9fa'; }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--vp-gray-50)'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
                           <div>
                             <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>{o.building_name || 'Obra sem nome'}</div>
                             {seriais.length > 0 && (
-                              <div style={{ fontSize: '0.78rem', color: '#888', marginTop: 2 }}>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--fg3)', marginTop: 2 }}>
                                 🔧 {seriais.join(', ')}
                               </div>
                             )}
                           </div>
-                          <span style={{ color: '#aaa', fontSize: '0.85rem' }}>›</span>
+                          <span style={{ color: 'var(--fg3)', fontSize: '0.85rem' }}>›</span>
                         </div>
                       );
                     })}

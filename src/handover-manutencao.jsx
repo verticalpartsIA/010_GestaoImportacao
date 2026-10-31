@@ -22,6 +22,17 @@ function HandoverManutencaoPage() {
 
   React.useEffect(() => { reload(); }, []);
 
+  /* O projeto aberto vive na URL (/engenharia/handover/<id>): F5, link direto e Voltar/Avançar reabrem o certo. */
+  const [idUrl] = window.useRotaId('handover');
+  React.useEffect(() => {
+    if (loading) return;
+    if (!idUrl) { if (selected) { setSelected(null); setHandover(null); } return; }
+    if (selected && selected.id === idUrl) return;
+    const p = projetos.find((x) => String(x.id) === String(idUrl));
+    if (p) handleSelectProjeto(p);
+    else window.toast?.('Projeto não encontrado.', 'warning');
+  }, [loading, idUrl]);
+
   const handleSelectProjeto = async (p) => {
     setSelected(p);
     if (window.HandoverManutencao) {
@@ -63,9 +74,9 @@ function HandoverManutencaoPage() {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Instalação & Entrega · Pós-venda</div>
-          <h1 className="page-head__title">Handover & Manutenção</h1>
-          <p className="page-head__sub">Entrega final, garantia e transição para Escamax (sistema de manutenção preventiva).</p>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Entrega & Documentação · Pós-venda</div>
+          <h1 className="page-head__title">Entrega Final</h1>
+          <p className="page-head__sub">Handover e pós-venda: entrega do equipamento ao cliente, garantia e transição para a Escamax (manutenção preventiva).</p>
         </div>
         <div className="page-head__r">
           <Button variant="primary" icon="check" onClick={() => setShowNovoHandover(true)}>Registrar Handover</Button>
@@ -99,7 +110,7 @@ function HandoverManutencaoPage() {
                   padding: 14,
                   cursor: "pointer",
                   position: "relative"
-                }} onClick={() => handleSelectProjeto(p)}>
+                }} onClick={() => window.VpRouter.navigate('handover', p.id)}>
                   <span style={{ position: "absolute", top: 0, left: 0, width: 24, height: 3, background: "var(--vp-yellow)" }}/>
                   <div className="row sb" style={{ marginBottom: 8 }}>
                     <div>
@@ -120,7 +131,7 @@ function HandoverManutencaoPage() {
         </Card>
 
         {selected ? (
-          <Card title={`Handover & Pós-venda · ${selected.id}`} sub={selected.building_name}>
+          <Card title={`Entrega Final · ${selected.id}`} sub={selected.building_name}>
             {!handover ? (
               <div style={{
                 textAlign: 'center',
@@ -317,6 +328,15 @@ function ModalEditarChecklist({ handover, projectId, onSaved, onCancel }) {
   const [checklistSelecionados, setChecklistSelecionados] = React.useState(
     new Set(handover.checklists_concluidos || [])
   );
+  /* "Data Book assinado" só pode ser marcado quando existe um DataBook anexado ao dossiê (Central de Documentos).
+     null = ainda consultando; falha ao consultar não trava (cai em liberado). */
+  const [temDataBook, setTemDataBook] = React.useState(null);
+  React.useEffect(() => {
+    let vivo = true;
+    window.__VP_SB.sb.from('dossier_documentos').select('id').eq('dossier_id', projectId).eq('tipo', 'DataBook').limit(1)
+      .then(({ data, error }) => { if (vivo) setTemDataBook(error ? true : (data || []).length > 0); });
+    return () => { vivo = false; };
+  }, [projectId]);
 
   const save = async () => {
     try {
@@ -338,21 +358,24 @@ function ModalEditarChecklist({ handover, projectId, onSaved, onCancel }) {
         <Button variant="primary" onClick={save}>Salvar</Button>
       </>}>
       <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-        {window.HandoverManutencao?.CHECKLIST_ENTREGA.map((item) => (
-          <label key={item.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', border:'1px solid var(--border)', borderRadius:4, cursor:'pointer', background: checklistSelecionados.has(item.id) ? 'var(--vp-gray-50)' : '#fff' }}>
-            <input type="checkbox" checked={checklistSelecionados.has(item.id)}
+        {window.HandoverManutencao?.CHECKLIST_ENTREGA.map((item) => {
+          const semDoc = item.id === 'databook_assinado' && temDataBook === false && !checklistSelecionados.has(item.id);
+          return (
+          <label key={item.id} title={semDoc ? 'Anexe o DataBook na Central de Documentos para poder marcar' : undefined} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', border:'1px solid var(--border)', borderRadius:4, cursor: semDoc ? 'not-allowed' : 'pointer', opacity: semDoc ? 0.6 : 1, background: checklistSelecionados.has(item.id) ? 'var(--vp-gray-50)' : '#fff' }}>
+            <input type="checkbox" checked={checklistSelecionados.has(item.id)} disabled={semDoc}
               onChange={(e) => {
                 const next = new Set(checklistSelecionados);
                 if (e.target.checked) next.add(item.id);
                 else next.delete(item.id);
                 setChecklistSelecionados(next);
               }} style={{ cursor:'pointer' }}/>
-            <span style={{ fontSize:13, flex:1 }}>{item.label}</span>
+            <span style={{ fontSize:13, flex:1 }}>{item.label}{semDoc && <span style={{ display:'block', fontSize:11, color:'var(--fg3)' }}>Anexe o DataBook na Central de Documentos para poder marcar.</span>}</span>
             <span style={{ fontSize:10, background:'var(--border)', color:'var(--fg3)', padding:'2px 6px', borderRadius:3 }}>
               {item.categoria}
             </span>
           </label>
-        ))}
+          );
+        })}
       </div>
     </Modal>
   );

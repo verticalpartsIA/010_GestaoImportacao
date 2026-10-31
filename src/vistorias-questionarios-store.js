@@ -51,12 +51,47 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
     TIPO_LABEL,
     ehPerguntaCompanion,
 
+    /* ---- Página pública /vistoria/:token ----
+       Segurança real (#571, F1): a atividade é lida por RPC `public_vistoria_obter` (recebe só o TOKEN; devolve a
+       atividade + cliente/prédio da obra + nº de série + questionário — sem o navegador ler dossier_obra). Interruptor de
+       emergência: localStorage.vp_public_rpc = 'off' volta ao caminho antigo. Se a RPC falhar (rede, ou migração ainda
+       não aplicada), cai no caminho antigo (select com join embutido). Mesmo formato de retorno nos dois caminhos. */
+    async obterAtividadePorToken(token) {
+      const c = sb();
+      if (!c || !token) return null;
+      let usarRpc = true;
+      try { usarRpc = localStorage.getItem('vp_public_rpc') !== 'off'; } catch (e) { usarRpc = true; }
+      if (usarRpc) {
+        try {
+          const { data, error } = await c.rpc('public_vistoria_obter', { p_token: token });
+          if (!error) return data || null;
+          console.warn('[VistoriasQuestionariosStore] RPC public_vistoria_obter falhou — usando caminho antigo', error);
+        } catch (e) { console.warn('[VistoriasQuestionariosStore] RPC public_vistoria_obter indisponível — usando caminho antigo', e); }
+      }
+      const { data, error } = await c.from('vistorias_atividades')
+        .select('*, dossier_obra(client_name, building_name), equipamentos_obra(numero_serie), vistorias_questionarios(id, nome, tipo)')
+        .eq('token', token).maybeSingle();
+      if (error) throw error;
+      return data || null;
+    },
+
     /* ---- Questionários ---- */
     async listarQuestionarios() {
       const { data, error } = await sb().from('vistorias_questionarios')
         .select('*').order('criado_em', { ascending: false });
       if (error) throw error;
       return data || [];
+    },
+
+    /* Usada só pra restaurar o editor a partir da URL (/vistorias-envio/
+       questionarios/<id>) — ListaQuestionarios já carrega a lista inteira
+       pra exibição normal, isto é só o caso de deep-link/F5/Voltar-Avançar. */
+    async obterQuestionario(id) {
+      if (!id) return null;
+      const { data, error } = await sb().from('vistorias_questionarios')
+        .select('*').eq('id', id).maybeSingle();
+      if (error) throw error;
+      return data || null;
     },
 
     async criarQuestionario({ nome, tipo }) {
@@ -305,7 +340,7 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
 
     async listarAtividades() {
       const { data, error } = await sb().from('vistorias_atividades')
-        .select('*, dossier_obra(id, client_name, building_name, numero_cotacao), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome, tipo)')
+        .select('*, dossier_obra(id, client_name, building_name, numero_cotacao, codigo_obra), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome, tipo)')
         .order('criado_em', { ascending: false })
         .limit(50);
       if (error) throw error;
@@ -315,7 +350,7 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
     /* ---- Calendário/Agenda (Módulo ADM) — todas as atividades com data marcada ---- */
     async listarAtividadesAgendadas() {
       const { data, error } = await sb().from('vistorias_atividades')
-        .select('*, dossier_obra(id, client_name, building_name, numero_cotacao), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome, tipo)')
+        .select('*, dossier_obra(id, client_name, building_name, numero_cotacao, codigo_obra), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome, tipo)')
         .not('agendado_para', 'is', null)
         .order('agendado_para', { ascending: true });
       if (error) throw error;
@@ -357,10 +392,18 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
 
     async resolverPorMasterId(raw) {
       const parsed = this.parseMasterId(raw);
-      const OBRA_SELECT = 'id, client_name, building_name, city, state, numero_cotacao, equip_type';
+      const OBRA_SELECT = 'id, client_name, building_name, city, state, numero_cotacao, equip_type, codigo_obra';
 
       let obra = null;
-      if (parsed) {
+      /* Código oficial da obra (VPNI-0955 / VPNI-OB0025): procura primeiro pelo valor gravado — sem isso um código de
+         obra legada (VPNI-OB0025) seria lido como "cotação 25" pelo parse abaixo. */
+      const codigoObra = String(raw || '').trim().toUpperCase();
+      if (/^VPNI-/.test(codigoObra)) {
+        const { data, error } = await sb().from('dossier_obra').select(OBRA_SELECT).eq('codigo_obra', codigoObra).limit(1).maybeSingle();
+        if (error) throw error;
+        obra = data;
+      }
+      if (!obra && parsed) {
         const { data, error } = await sb().from('dossier_obra')
           .select(OBRA_SELECT).eq('numero_cotacao', parsed.numero).maybeSingle();
         if (error) throw error;

@@ -35,8 +35,8 @@ function FormularioClientePublicApp() {
   if (status === 'enviado') {
     return (
       <div style={{ textAlign: 'center', padding: '80px 20px', maxWidth: 460, margin: '0 auto' }}>
-        <h1 style={{ fontSize: 20 }}>✓ Formulário já enviado</h1>
-        <p style={{ color: '#666', fontSize: 13.5 }}>Recebemos seus dados e nossa equipe já está preparando a cotação.</p>
+        <h1 style={{ fontSize: 20 }}>✓ Formulário devolvido para a VerticalParts</h1>
+        <p style={{ color: '#666', fontSize: 13.5 }}>Recebemos seus dados e nossa equipe vai conferir as informações e dar andamento à cotação.</p>
       </div>
     );
   }

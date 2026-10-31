@@ -5,15 +5,21 @@
    Formulário de Elevadores (formularios_elevador). Ver issues #76/#79.
    window.ControleCotacoesPage — rota "controle-cotacoes".
    ============================================================ */
-const CC_STATUS_COR = {
-  Conquistado: '#059669', Perdido: '#9f1239', Suspenso: '#b45309',
-  'Em andamento': '#2563eb', rascunho: '#64748b', enviado: '#2563eb', em_cotacao: '#b45309', concluido: '#059669',
+const CC_STATUS_VARIANT = {
+  Conquistado: 'success', concluido: 'success', Perdido: 'danger',
+  Suspenso: 'warning', em_cotacao: 'warning',
+  'Em andamento': 'info', enviado: 'info', rascunho: 'neutral',
 };
 
 function CcStatusChip({ status }) {
   if (!status) return <span className="muted">—</span>;
-  const cor = CC_STATUS_COR[status] || '#64748b';
-  return <span className="la-setor" style={{ background: cor }}>{status}</span>;
+  return <Badge variant={CC_STATUS_VARIANT[status] || 'neutral'} style={{ whiteSpace: 'nowrap' }}>{status}</Badge>;
+}
+
+/* "2026-09-30" -> "30/09/2026" (texto puro: new Date() cairia um dia no fuso BR) */
+function ccDataBR(d) {
+  const m = String(d || '').slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : (d ? String(d).slice(0, 10) : '—');
 }
 
 /* Reabre a cadeia de tratativas (Formulário → Cotação a Fornecedor →
@@ -38,6 +44,21 @@ function ModalCadeiaCotacao({ numeroCotacao, setRoute, setSubsel, onClose }) {
     if (!window.GatilhosEngine) return;
     const alvo = await window.GatilhosEngine.navegarPara(g);
     if (!alvo) return;
+    /* Contrato de Venda guarda o item aberto no 3º segmento, dentro da aba
+       "painel" (/contrato-venda-equipamentos/painel/<id>) — setSubsel só
+       escreve o 2º segmento, então navega direto pro 3º (mesmo padrão já
+       usado em financeiro.jsx/dashboard.jsx/decisoes.jsx). */
+    if (alvo.rota === 'contrato-venda-equipamentos' && alvo.subsel != null) {
+      setRoute?.(alvo.rota);
+      onClose();
+      if (window.VpRouter) {
+        setTimeout(() => {
+          window.VpRouter.navigate(alvo.rota, 'painel', alvo.subsel);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }, 0);
+      }
+      return;
+    }
     if (alvo.subsel !== null) setSubsel?.(alvo.subsel);
     setRoute?.(alvo.rota);
     onClose();
@@ -74,8 +95,14 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
   const [busca, setBusca] = React.useState('');
   const [fStatus, setFStatus] = React.useState('Todos');
   const [refreshing, setRefreshing] = React.useState(false);
-  const [cadeiaDe, setCadeiaDe] = React.useState(null);
+  // Modal "Tratativas — Cotação Nº X" (cadeia de Gatilhos) refletido na URL
+  // (/comercial/controle-cotacoes/<nº da cotação>) — antes era só useState.
+  const [rotaCadeiaDe, setRotaCadeiaDe] = window.useRotaId('controle-cotacoes');
+  const cadeiaDe = rotaCadeiaDe ? Number(rotaCadeiaDe) : null;
   const [abrindo, setAbrindo] = React.useState(null);
+  const [abrindoTrat, setAbrindoTrat] = React.useState(null);
+  const [escolherForn, setEscolherForn] = React.useState(null);
+  const ord = window.useOrdenacao(); // 23/10 (pedido do usuário) — ordenação por coluna
 
   const carregar = React.useCallback(async () => {
     setRefreshing(true);
@@ -116,6 +143,32 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
     }
   };
 
+  /* Tratativas com o fornecedor: leva à aba Tratativas da cotação a fornecedor
+     (/comercial/cotacao-fornecedor-detail/<id>/tratativas). Com mais de um
+     fornecedor na cotação, pergunta de qual. */
+  const irParaTratativas = (cot) => {
+    const caminho = '/comercial/cotacao-fornecedor-detail/' + cot.id + '/tratativas';
+    try { window.history.pushState({}, '', caminho); window.dispatchEvent(new PopStateEvent('popstate')); }
+    catch (e) { window.location.assign(caminho); }
+  };
+  const abrirTratativas = async (r) => {
+    setAbrindoTrat(r.id);
+    try {
+      const lista = await window.CotacaoElevadorFornecedorStore.listarPorFormulario(r.id);
+      if (!lista || lista.length === 0) {
+        window.toast?.('Esta cotação ainda não foi enviada a nenhum fornecedor — não há tratativas.', 'warning');
+      } else if (lista.length === 1) {
+        irParaTratativas(lista[0]);
+      } else {
+        setEscolherForn({ numero: r.numero_cotacao, lista });
+      }
+    } catch (e) {
+      window.toast?.('Erro ao abrir tratativas: ' + e.message, 'error');
+    } finally {
+      setAbrindoTrat(null);
+    }
+  };
+
   const statusDisponiveis = React.useMemo(() => {
     if (!rows) return [];
     return [...new Set(rows.map((r) => r.status).filter(Boolean))];
@@ -133,6 +186,25 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
     });
   }, [rows, busca, fStatus]);
 
+  const contagem = React.useMemo(() => {
+    const c = {};
+    (rows || []).forEach((r) => { if (r.status) c[r.status] = (c[r.status] || 0) + 1; });
+    return c;
+  }, [rows]);
+  const conquistadas = contagem['Conquistado'] || 0;
+  const decididas = conquistadas + (contagem['Perdido'] || 0);
+  const emAberto = (rows || []).filter((r) => !['Conquistado', 'Perdido', 'Suspenso', 'concluido'].includes(r.status)).length;
+
+  const linhasOrdenadas = ord.aplicar(filtradas, {
+    numeroCotacao: (r) => r.numero_cotacao,
+    data: (r) => (r.data ? new Date(r.data).getTime() : null),
+    cliente: (r) => r.nome_cliente,
+    vendedor: (r) => r.vendedor,
+    uf: (r) => r.estado_instalacao,
+    status: (r) => r.status,
+    origem: (r) => (r.origem === 'historico' ? 'Planilha' : 'Formulário'),
+  });
+
   return (
     <div className="page fade-in">
       <div className="page-head">
@@ -148,71 +220,90 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
       </div>
 
       <div className="grid-3" style={{ margin: '20px 0' }}>
-        <KPI label="Cotações (filtro atual)" value={rows ? filtradas.length : '…'} sub={`de ${rows ? rows.length : '…'} no total`} icon="history"/>
-        <KPI label="Nº mais recente" value={rows && rows.length ? window.MasterIdEngine.etapaId('cotacao', rows[0].numero_cotacao) : '—'} sub="maior Nº Cotação registrado" icon="grid"/>
-        <KPI label="Conquistadas" value={rows ? rows.filter((r) => r.status === 'Conquistado').length : '…'} sub="status Conquistado" icon="check"/>
+        <KPI label="Em aberto" value={rows ? emAberto : '…'} sub="rascunho, enviadas e em andamento" icon="history"/>
+        <KPI label="Conquistadas" value={rows ? conquistadas : '…'} sub={rows && decididas ? `${Math.round(conquistadas / decididas * 100)}% das decididas` : 'status Conquistado'} icon="check"/>
+        <KPI label="Cotação mais recente" value={rows && rows.length ? window.MasterIdEngine.etapaId('cotacao', rows[0].numero_cotacao) : '—'} sub={`${rows ? rows.length : '…'} no total`} icon="grid"/>
       </div>
 
-      <div className="tbar">
-        <div className="seg">
-          {['Todos'].concat(statusDisponiveis).map((s) => (
-            <button key={s} className={fStatus === s ? 'is-active' : ''} onClick={() => setFStatus(s)}>{s}</button>
-          ))}
-        </div>
-        <div className="spacer"/>
-        <div className="search">
-          <Icon.search size={12} color="var(--fg3)"/>
-          <input placeholder="Buscar por cliente, vendedor, CNPJ ou nº da cotação…" value={busca} onChange={(e) => setBusca(e.target.value)}/>
-        </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+        <input className="input" style={{ maxWidth: 340 }} placeholder="Buscar por cliente, vendedor, CNPJ ou nº da cotação…" value={busca} onChange={(e) => setBusca(e.target.value)}/>
+        <span className="small" style={{ color: 'var(--fg3)' }}>{rows ? filtradas.length : '…'} cotação(ões)</span>
       </div>
 
-      <div className="table-wrap">
-        <table className="t la-table">
-          <thead><tr>
-            <th style={{ width: 90 }}>Nº Cotação</th>
-            <th style={{ width: 110 }}>Data</th>
-            <th>Cliente</th>
-            <th style={{ width: 90 }}>Vendedor</th>
-            <th style={{ width: 60 }}>UF</th>
-            <th style={{ width: 110 }}>Status</th>
-            <th style={{ width: 90 }}>Origem</th>
-            <th style={{ width: 150 }}></th>
-          </tr></thead>
-          <tbody>
-            {rows === null && (
-              <tr><td colSpan={99}><div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fg3)' }}>Carregando…</div></td></tr>
-            )}
-            {rows !== null && filtradas.length === 0 && (
-              <tr><td colSpan={99}><div className="empty"><h4>Nenhuma cotação encontrada</h4><p>Nada encontrado com os filtros atuais.</p></div></td></tr>
-            )}
-            {filtradas.map((r, i) => {
-              const clicavel = r.origem === 'formulario' && r.numero_cotacao != null;
-              return (
-                <tr key={r.id ? `${r.origem}-${r.id}` : `${r.origem}-${r.numero_cotacao}-${i}`}
-                  style={clicavel ? { cursor: 'pointer' } : undefined}
-                  title={clicavel ? 'Abrir tratativas desta cotação' : undefined}
-                  onClick={clicavel ? () => setCadeiaDe(r.numero_cotacao) : undefined}>
-                  <td><span className="mono small">{r.numero_cotacao != null ? window.MasterIdEngine.etapaId('cotacao', r.numero_cotacao) : '—'}</span></td>
-                  <td><span className="mono small" style={{ whiteSpace: 'nowrap' }}>{r.data ? String(r.data).slice(0, 10) : '—'}</span></td>
-                  <td style={{ fontSize: 12.5 }}>{r.nome_cliente || <span className="muted">—</span>}</td>
-                  <td>{r.vendedor || <span className="muted">—</span>}</td>
-                  <td>{r.estado_instalacao || <span className="muted">—</span>}</td>
-                  <td><CcStatusChip status={r.status}/></td>
-                  <td className="small" style={{ color: 'var(--fg2)' }}>{r.origem === 'historico' ? 'Planilha' : 'Formulário'}</td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <Button variant="outline" size="sm" icon="ruler" disabled={abrindo === r.id}
-                      onClick={() => abrirNoFormulario(r)}>
-                      {abrindo === r.id ? 'Abrindo…' : 'Abrir no Formulário'}
-                    </Button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+        {['Todos'].concat(statusDisponiveis).map((s) => (
+          <Button key={s} size="sm" variant={fStatus === s ? 'primary' : 'ghost'} onClick={() => setFStatus(s)}>
+            {s} <span style={{ opacity: .7 }}>({s === 'Todos' ? (rows ? rows.length : 0) : (contagem[s] || 0)})</span>
+          </Button>
+        ))}
       </div>
+
+      <Card title="Cotações" sub="Planilha legada + Formulário digital · clique numa linha do Formulário para abrir a cadeia de tratativas">
+        <div className="table-wrap table-wrap--sticky" style={{ border: 0 }}>
+          <table className="t pcp-grid">
+            <thead><tr>
+              {ord.th('numeroCotacao', 'Nº Cotação')}
+              {ord.th('data', 'Data')}
+              {ord.th('cliente', 'Cliente')}
+              {ord.th('vendedor', 'Vendedor')}
+              {ord.th('uf', 'UF')}
+              {ord.th('status', 'Status')}
+              {ord.th('origem', 'Origem')}
+              <th></th>
+            </tr></thead>
+            <tbody>
+              {rows === null && (
+                <tr><td colSpan={99}><div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fg3)' }}>Carregando…</div></td></tr>
+              )}
+              {rows !== null && filtradas.length === 0 && (
+                <tr><td colSpan={99}><div className="empty"><h4>Nenhuma cotação encontrada</h4><p>Nada encontrado com os filtros atuais.</p></div></td></tr>
+              )}
+              {linhasOrdenadas.map((r, i) => {
+                const clicavel = r.origem === 'formulario' && r.numero_cotacao != null;
+                return (
+                  <tr key={r.id ? `${r.origem}-${r.id}` : `${r.origem}-${r.numero_cotacao}-${i}`}
+                    style={clicavel ? { cursor: 'pointer' } : undefined}
+                    title={clicavel ? 'Abrir tratativas desta cotação' : undefined}
+                    onClick={clicavel ? () => setRotaCadeiaDe(String(r.numero_cotacao)) : undefined}>
+                    <td style={{ whiteSpace: 'nowrap' }}><span className="mono small">{r.numero_cotacao != null ? window.MasterIdEngine.etapaId('cotacao', r.numero_cotacao) : '—'}</span></td>
+                    <td style={{ whiteSpace: 'nowrap' }}><span className="mono small">{ccDataBR(r.data)}</span></td>
+                    <td style={{ fontSize: 12.5 }}>{r.nome_cliente || <span className="muted">—</span>}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{r.vendedor || <span className="muted">—</span>}</td>
+                    <td>{r.estado_instalacao || <span className="muted">—</span>}</td>
+                    <td><CcStatusChip status={r.status}/></td>
+                    <td className="small" style={{ color: 'var(--fg3)' }}>{r.origem === 'historico' ? 'Planilha' : 'Formulário'}</td>
+                    <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
+                      {r.origem === 'formulario' && (
+                        <Button variant="outline" size="sm" icon="message" disabled={abrindoTrat === r.id}
+                          onClick={() => abrirTratativas(r)} style={{ marginRight: 6 }}>
+                          {abrindoTrat === r.id ? 'Abrindo…' : 'Tratativas'}
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="sm" icon="ruler" disabled={abrindo === r.id}
+                        title="Abrir no Formulário" aria-label="Abrir no Formulário"
+                        onClick={() => abrirNoFormulario(r)}/>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+      {escolherForn && (
+        <Modal title={`Tratativas — Cotação Nº ${escolherForn.numero}`} onClose={() => setEscolherForn(null)} width={460}>
+          <p style={{ fontSize: 13, color: 'var(--fg2)', marginTop: 0 }}>Esta cotação foi enviada a mais de um fornecedor. Escolha com qual abrir as tratativas:</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {escolherForn.lista.map((c) => (
+              <Button key={c.id} variant="outline" onClick={() => { setEscolherForn(null); irParaTratativas(c); }}>
+                {c.fornecedor || c.recipient?.nome || c.numero_documento || 'Fornecedor'}{c.status ? ` · ${c.status}` : ''}
+              </Button>
+            ))}
+          </div>
+        </Modal>
+      )}
       {cadeiaDe != null && (
-        <ModalCadeiaCotacao numeroCotacao={cadeiaDe} setRoute={setRoute} setSubsel={setSubsel} onClose={() => setCadeiaDe(null)}/>
+        <ModalCadeiaCotacao numeroCotacao={cadeiaDe} setRoute={setRoute} setSubsel={setSubsel} onClose={() => setRotaCadeiaDe(null)}/>
       )}
     </div>
   );

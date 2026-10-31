@@ -10,7 +10,15 @@
   const URL_SB  = 'https://jxtqwzmpgofwctqajewt.supabase.co';
   const ANON_SB = 'sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP';
 
-  const sb = window.supabase.createClient(URL_SB, ANON_SB);
+  /* F0 (Gelson, 09/10/2026): as consultas passam por VpAuth.fetchDados, que põe a sessão individual da pessoa
+     (quando o modo está 'on' para ela — ver vp-auth.js) e, se o banco recusar, refaz com a chave pública. */
+  const sb = window.supabase.createClient(URL_SB, ANON_SB, {
+    global: {
+      fetch: function (input, init) {
+        return (window.VpAuth && window.VpAuth.fetchDados) ? window.VpAuth.fetchDados(input, init) : fetch(input, init);
+      },
+    },
+  });
 
   // ---- SSO Guard — acesso exclusivo via vpsistema.com ------------------
   // O vpsistema.com injeta sso_token + sso_refresh na URL ao abrir o card.
@@ -135,9 +143,9 @@
       window.history.replaceState({}, '', voltarPara);
     }
 
-    // Segurança real (#571) — MODO SOMBRA: troca o login do vpsistema por uma sessão nativa do vpprd
-    // (Edge Function sso-exchange). Só observa: o cliente de dados abaixo continua com a chave pública,
-    // então nada muda para o usuário e uma falha aqui nunca quebra o app (VpAuth.init não lança).
+    // Segurança real (#571) — troca o login do vpsistema por uma sessão nativa do vpprd (Edge Function
+    // sso-exchange). Em modo 'shadow' só observa; em 'on' (piloto F0) o cliente de dados acima passa a usar a
+    // sessão. Uma falha aqui nunca quebra o app (VpAuth.init não lança; sem sessão = chave pública).
     try {
       if (window.VpAuth) {
         window.VpAuth.init({ ssoToken: ssoToken || null }).then(function () {
@@ -229,6 +237,15 @@
       sb.from('contratos_instalador').select('id, valor_total, proposta_id, ativos_indices, status'),
     ]);
 
+    /* #1216 A.1: o supabase-js não lança exceção em erro do PostgREST — sem isto, uma tabela que falha (RLS, rede)
+       virava lista vazia e o Dashboard mostrava zeros como se estivesse tudo certo. `erros` lista o que não carregou
+       (nome legível); a tela avisa. Os números seguem calculados com o que veio. */
+    const ROTULOS = ['leads', 'alertas', 'tarefas', 'embarques', 'contratos', 'comissões', 'etapas (gatilhos)', 'fichas técnicas',
+      'catálogo', 'propostas', 'avais financeiros', 'formulários', 'clientes', 'contratos de instalador'];
+    const erros = [lR, alertR, tarR, embR, ctR, comR, gatR, fichasR, catalogoR, propR, avaisR, formR, cliR, instR]
+      .map((r, i) => (r && r.error ? ROTULOS[i] : null)).filter(Boolean);
+    if (erros.length) console.warn('[Dashboard] consultas com erro:', erros);
+
     const leads     = lR.data    || [];
     const alertas   = (alertR.data || []).map(a => ({ ...a, time: timeAgo(a.created_at) }));
     const tarefas   = tarR.data  || [];
@@ -318,6 +335,7 @@
       kpis, pipelineStages: comercial.pipelineStages, originBars: comercial.originBars,
       alertasCriticos: admin.alertasCriticos.length,
       ganttToday: gantt.ganttToday, ganttProjetos: gantt.ganttProjetos,
+      erros,
     };
   }
 

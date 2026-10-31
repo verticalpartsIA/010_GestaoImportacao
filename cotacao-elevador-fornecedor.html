@@ -6,6 +6,9 @@
   <meta name="description" content="Cotação técnica de elevador — fornecedor — VerticalParts">
   <meta name="robots" content="noindex, nofollow">
   <title>Cotação Técnica · VerticalParts</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1">
+  <link rel="icon" href="/favicon.ico?v=1" sizes="any">
+  <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=1">
 
   <link rel="stylesheet" href="/colors_and_type.css">
   <link rel="stylesheet" href="/styles/cotacao.css?v=2">
@@ -36,7 +39,7 @@
   </script>
 
   <!-- Padrão universal de codificação de IDs (Master ID) — Fase 1 -->
-  <script src="/src/master-id-engine.js?v=3"></script>
+  <script src="/src/master-id-engine.js?v=5"></script>
 
   <!-- window.parseMoeda — sanitiza preço digitado pelo fornecedor (aceita
        "$18,990", "18.990,50" etc.) antes de salvar, pra nunca mais virar
@@ -48,15 +51,15 @@
   <script src="/src/cambio-api.js?v=1"></script>
 
   <!-- Store (CRUD + portal público) -->
-  <script src="/src/vp-log.js?v=2"></script>
+  <script src="/src/vp-log.js?v=4"></script>
   <!-- Gatilhos & Prazo — motor precisa estar carregado ANTES de
        eventos-fluxo-store.js também nas páginas públicas, senão o
        evento que o fornecedor dispara (respondeu) não avança a cadeia. -->
-  <script src="/src/gatilhos-engine.js?v=11"></script>
+  <script src="/src/gatilhos-engine.js?v=24"></script>
   <script src="/src/eventos-fluxo-store.js?v=8"></script>
-  <script src="/src/cotacao-elevador-fornecedor-store.js?v=21"></script>
+  <script src="/src/cotacao-elevador-fornecedor-store.js?v=25"></script>
 
   <!-- App do portal de cotação técnica -->
-  <script type="text/babel" src="/src/cotacao-elevador-fornecedor.jsx?v=14"></script>
+  <script type="text/babel" src="/src/cotacao-elevador-fornecedor.jsx?v=15"></script>
 </body>
 </html>

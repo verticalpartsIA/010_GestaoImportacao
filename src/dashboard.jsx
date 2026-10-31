@@ -178,29 +178,64 @@ function Dashboard({ role, setRoute, setSubsel }) {
   const [projectView, setProjectView] = React.useState('gantt');
   const [period, setPeriod] = React.useState('Hoje');
   const [showTask, setShowTask] = React.useState(false);
-  const [detalheProjeto, setDetalheProjeto] = React.useState(null);
+  // Projeto aberto no modal de detalhe refletido na URL (/geral/dashboard/<id>) —
+  // 3 pontos de entrada (Gantt/Lista/Kanban) abrem o MESMO modal; antes era só
+  // useState, perdido no F5/Voltar e sem link direto pra um projeto específico.
+  const [rotaProjetoId] = window.useRotaId('dashboard');
+  const abrirProjeto = (p) => { if (window.VpRouter) window.VpRouter.navigate('dashboard', p && p.id != null ? String(p.id) : null); };
+  const fecharProjeto = () => { if (window.VpRouter) window.VpRouter.navigate('dashboard', null); };
   const periods = ['Hoje','7 dias','30 dias','90 dias'];
+  /* #1216 A.2: antes, passados 3 s sem resposta, a tela mostrava KPIs e alertas ZERADOS como se fossem o resultado
+     real. Agora continua "carregando" e, depois de 3 s, só avisa que está demorando — nunca inventa zero.
+     #1216 A.3: só a carga mais recente vale (trocar período/perfil não é sobrescrito por resposta antiga).
+     #1216 A.1: `falhou` = a carga inteira falhou; `sbData.erros` = consultas que falharam (os números ficam incompletos). */
+  const [demorando, setDemorando] = React.useState(false);
+  const [falhou, setFalhou] = React.useState(false);
+  const cargaRef = React.useRef(0);
+  const carregadoEm = React.useRef(0);
   const reloadDashboard = React.useCallback(() => {
     if (!window.__VP_SB) { setLoading(false); return Promise.resolve(); }
-    setLoading(true);
-    // Timeout de 3s: se Supabase não responder, renderiza vazio
-    const timeoutId = setTimeout(() => {
-      setSbData({ kpis: {}, tarefas: [], alertas: [], ganttProjetos: [], alertasCriticos: 0 });
-      setLoading(false);
-    }, 3000);
+    const minha = ++cargaRef.current;
+    const atual = () => minha === cargaRef.current;
+    setLoading(true); setDemorando(false);
+    const timeoutId = setTimeout(() => { if (atual()) setDemorando(true); }, 3000);
     return window.__VP_SB.loadDashboardData(role, period)
-      .then(data => { clearTimeout(timeoutId); setSbData(data); setLoading(false); })
-      .catch((err) => { clearTimeout(timeoutId); setLoading(false); window.toast?.('Erro ao atualizar dashboard: ' + err.message, 'error'); });
+      .then((data) => { if (!atual()) return; setSbData(data); setFalhou(false); carregadoEm.current = Date.now(); })
+      .catch((err) => {
+        if (!atual()) return;
+        setFalhou(true);
+        window.toast?.('Erro ao atualizar dashboard: ' + (err && err.message ? err.message : err), 'error');
+      })
+      .finally(() => { clearTimeout(timeoutId); if (atual()) { setLoading(false); setDemorando(false); } });
   }, [role, period]);
 
   React.useEffect(() => {
     reloadDashboard();
+  }, [reloadDashboard]);
+  /* #1216 A.5: ao voltar para a aba do navegador, recarrega se a última carga tem mais de 5 min (sem polling contínuo:
+     a carga do Dashboard lê 14 tabelas). */
+  React.useEffect(() => {
+    const vis = () => { if (!document.hidden && Date.now() - carregadoEm.current > 300000) reloadDashboard(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => document.removeEventListener('visibilitychange', vis);
   }, [reloadDashboard]);
 
   const kpis        = sbData?.kpis?.[role] || [];
   const tasks       = sbData?.tarefas || [];
   const projetos    = sbData?.ganttProjetos || [];
   const alertasCrit = sbData?.alertasCriticos ?? 0;
+  const detalheProjeto = rotaProjetoId ? projetos.find((p) => String(p.id) === rotaProjetoId) || null : null;
+  const errosCarga = (sbData && sbData.erros) || [];
+  /* #1216 A.4: link /geral/dashboard/<id> de projeto que não está (mais) na esteira — avisa e limpa a URL, em vez de
+     não abrir nada sem explicação. Só depois de a carga terminar (antes disso a lista ainda está vazia). */
+  const avisouSemProjeto = React.useRef(null);
+  React.useEffect(() => {
+    if (!rotaProjetoId || loading || !sbData || falhou || detalheProjeto) return;
+    if (avisouSemProjeto.current === rotaProjetoId) return;
+    avisouSemProjeto.current = rotaProjetoId;
+    window.toast?.('Este projeto não está mais entre os projetos em andamento.', 'warning');
+    fecharProjeto();
+  }, [rotaProjetoId, loading, sbData, falhou, detalheProjeto]);
 
   const u         = (window.ROLE_MAP || {})[role] || { name: 'VP Gestão', initials: 'VP', title: 'Sistema' };
   const firstName = (u.name || 'Usuário').split(" ")[0];
@@ -221,6 +256,9 @@ function Dashboard({ role, setRoute, setSubsel }) {
           </div>
           <h1 className="page-head__title">{greet}, {firstName.toUpperCase()}.</h1>
           <p className="page-head__sub">
+            {!sbData
+              ? <>{dateLabel}. {falhou ? 'Não foi possível carregar seus números agora.' : demorando ? 'Ainda carregando seus números — o banco está demorando…' : 'Carregando seus números…'}</>
+              : <>
             {dateLabel}. Você tem{" "}
             {alertasCrit > 0
               ? <b className="dash-alert-link" style={{ cursor: 'pointer', textDecoration: 'underline' }}
@@ -229,7 +267,8 @@ function Dashboard({ role, setRoute, setSubsel }) {
                 </b>
               : <b>{alertasCrit} alertas críticos</b>}{" "}
             e <b>{tasks.length} tarefa{tasks.length !== 1 ? "s" : ""}</b> hoje.
-            {loading && <span className="muted" style={{ marginLeft: 8, fontSize: 11 }}>Atualizando…</span>}
+            </>}
+            {loading && sbData && <span className="muted" style={{ marginLeft: 8, fontSize: 11 }}>{demorando ? 'Atualizando — o banco está demorando…' : 'Atualizando…'}</span>}
           </p>
         </div>
         <div className="page-head__r">
@@ -244,6 +283,14 @@ function Dashboard({ role, setRoute, setSubsel }) {
         </div>
       </div>
 
+      {(falhou || errosCarga.length > 0) && (
+        <div className="small" style={{ padding: '10px 14px', marginBottom: 16, border: '1px solid var(--vp-danger, #c62828)', borderRadius: 6, background: 'rgba(198,40,40,.06)' }}>
+          {falhou
+            ? 'Não foi possível carregar o Dashboard agora.'
+            : `Alguns dados não carregaram (${errosCarga.join(', ')}) — os números abaixo podem estar incompletos.`}{' '}
+          <Button variant="outline" size="sm" onClick={reloadDashboard} disabled={loading}>Tentar novamente</Button>
+        </div>
+      )}
       <div className="grid-5" style={{ marginBottom: 20 }}>
         {kpis.map((k, i) => (
           <KPI key={i} {...k}
@@ -269,9 +316,9 @@ function Dashboard({ role, setRoute, setSubsel }) {
               mais antigo de cada cotação — muda sozinha quando a etapa
               real fecha, por isso não há mais botão de "mover fase"
               manual (não existe ação real por trás disso agora). */}
-          {projectView === 'gantt'  && <GanttChart projetos={projetos} onClick={setDetalheProjeto} today={sbData?.ganttToday ?? 60}/>}
-          {projectView === 'lista'  && <ProjectList projetos={projetos} onClick={setDetalheProjeto}/>}
-          {projectView === 'kanban' && <ProjectKanban projetos={projetos} onClick={setDetalheProjeto}/>}
+          {projectView === 'gantt'  && <GanttChart projetos={projetos} onClick={abrirProjeto} today={sbData?.ganttToday ?? 60}/>}
+          {projectView === 'lista'  && <ProjectList projetos={projetos} onClick={abrirProjeto}/>}
+          {projectView === 'kanban' && <ProjectKanban projetos={projetos} onClick={abrirProjeto}/>}
         </Card>
 
         <Card title="Tarefas de Hoje" sub={tasks.length + " pendentes"} action={<Button variant="ghost" size="sm" icon="plus" onClick={() => setShowTask(true)}/>}>
@@ -301,8 +348,8 @@ function Dashboard({ role, setRoute, setSubsel }) {
 
       {showTask && <ModalNovaTask role={role} onClose={() => setShowTask(false)} onSaved={reloadDashboard}/>}
       {detalheProjeto && (
-        <Modal title={detalheProjeto.name || 'Projeto'} onClose={() => setDetalheProjeto(null)} width={420}
-          footer={<Button variant="ghost" onClick={() => setDetalheProjeto(null)}>Fechar</Button>}>
+        <Modal title={detalheProjeto.name || 'Projeto'} onClose={fecharProjeto} width={420}
+          footer={<Button variant="ghost" onClick={fecharProjeto}>Fechar</Button>}>
           <div className="stack" style={{ gap: 10, fontSize: 13 }}>
             <div><span className="muted">ID</span> <span className="mono">{detalheProjeto.id}</span></div>
             <div><span className="muted">Cliente</span> {detalheProjeto.client || '—'}</div>
@@ -408,10 +455,23 @@ function OndeParouWidget({ gatilhos, setRoute, setSubsel }) {
   const abrir = async (g) => {
     if (!window.GatilhosEngine) return;
     const dest = await window.GatilhosEngine.navegarPara(g);
-    if (dest?.rota) {
-      if (dest.subsel != null && setSubsel) setSubsel(dest.subsel);
+    if (!dest?.rota) return;
+    /* Contrato de Venda guarda o item aberto no 3º segmento, dentro da aba
+       "painel" (/contrato-venda-equipamentos/painel/<id>) — setSubsel só
+       escreve o 2º segmento, então navega direto pro 3º (mesmo padrão já
+       usado em financeiro.jsx/decisoes.jsx). */
+    if (dest.rota === 'contrato-venda-equipamentos' && dest.subsel != null) {
       setRoute(dest.rota);
+      if (window.VpRouter) {
+        setTimeout(() => {
+          window.VpRouter.navigate(dest.rota, 'painel', dest.subsel);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }, 0);
+      }
+      return;
     }
+    if (dest.subsel != null && setSubsel) setSubsel(dest.subsel);
+    setRoute(dest.rota);
   };
 
   return (

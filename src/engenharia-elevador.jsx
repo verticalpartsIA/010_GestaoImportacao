@@ -205,8 +205,16 @@ function ProjetoElevadorEspecificacao({ abas }) {
   const store = window.ProjetoElevadorStore;
   const [projetos, setProjetos] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
-  const [edit, setEdit] = React.useState(null);
-  const [showModal, setShowModal] = React.useState(false);
+  /* Bug real (varredura de URLs, 09/10): "Novo"/abrir uma linha pra editar
+     era só useState — F5/link direto/Voltar-Avançar sempre voltavam pra
+     lista. Usa o 3º segmento sob a aba "especificacao"
+     (/engenharia/eng-projeto-elevadores/especificacao/novo|<id>). */
+  const [rotaId, setRotaId] = window.useRotaItem('eng-projeto-elevadores', 'especificacao');
+  const showModal = rotaId === 'novo' || !!rotaId;
+  const edit = (rotaId && rotaId !== 'novo') ? (projetos.find((p) => p.id === rotaId) || null) : null;
+  const abrirNovo = () => setRotaId('novo');
+  const abrirEditar = (p) => setRotaId(p.id);
+  const fecharModal = () => setRotaId(null);
 
   const reload = React.useCallback(() => {
     setLoading(true);
@@ -225,7 +233,7 @@ function ProjetoElevadorEspecificacao({ abas }) {
           <p className="page-head__sub">Especificação técnica do poço/cabine/porta de cada unidade — trata e traduz os desenhos que o fornecedor manda, amarrado ao Nº da Cotação.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="primary" icon="plus" onClick={() => { setEdit(null); setShowModal(true); }}>Novo projeto de elevadores</Button>
+          <Button variant="primary" icon="plus" onClick={abrirNovo}>Novo projeto de elevadores</Button>
         </div>
       </div>
 
@@ -239,14 +247,14 @@ function ProjetoElevadorEspecificacao({ abas }) {
       </div>
 
       <div className="table-wrap">
-        <table className="t">
+        <table className="t tab-cruz">
           <thead><tr><th>Referência</th><th>Nº Cotação</th><th>Unidades</th><th>Anexos</th><th>Status</th><th></th></tr></thead>
           <tbody>
             {projetos.length === 0 && (
               <tr><td colSpan={99}><div className="empty"><h4>Nenhum projeto de elevadores</h4><p>Clique em "Novo projeto de elevadores" para tratar o desenho técnico de uma cotação.</p></div></td></tr>
             )}
             {projetos.map(p => (
-              <tr key={p.id} style={{ cursor: "pointer" }} onClick={() => { setEdit(p); setShowModal(true); }}>
+              <tr key={p.id} style={{ cursor: "pointer" }} onClick={() => abrirEditar(p)}>
                 <td><div className="cell-main">{p.referencia || "—"}</div><div className="cell-sub">{p.responsavel || "—"}</div></td>
                 <td><span className="mono small">{p.numero_cotacao ?? "—"}</span></td>
                 <td><span className="small">{(p.unidades || []).length} unid. · {(p.unidades || []).map(u => u.identificador).join(", ")}</span></td>
@@ -259,7 +267,7 @@ function ProjetoElevadorEspecificacao({ abas }) {
         </table>
       </div>
 
-      {showModal && <ProjetoElevadorModal projeto={edit} onClose={() => { setShowModal(false); setEdit(null); }} onSaved={reload}/>}
+      {showModal && <ProjetoElevadorModal projeto={edit} onClose={fecharModal} onSaved={reload}/>}
     </div>
   );
 }
@@ -675,7 +683,7 @@ function ProjetoElevadorDesenhos({ abas }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Engenharia · Projeto de Elevadores</div>
           <h1 className="page-head__title">Projeto de Elevadores</h1>
-          <p className="page-head__sub">Repositório dos projetos e desenhos dos elevadores, para enviar aos clientes.</p>
+          <p className="page-head__sub">Repositório dos projetos e desenhos dos elevadores, por cotação, para enviar aos clientes. Documento de obra (ART, termos, Data Book) fica na Central de Documentos; arquivo solto, em Repositório Documentos.</p>
         </div>
         <div className="page-head__r row gap-2">
           <Button variant="outline" onClick={carregar} disabled={loading}>{loading ? "Atualizando…" : "Atualizar"}</Button>
@@ -691,7 +699,7 @@ function ProjetoElevadorDesenhos({ abas }) {
       </Card>
 
       <div className="table-wrap">
-        <table className="t">
+        <table className="t tab-cruz">
           <thead><tr><th>Prédio / Cliente</th><th>Nº Cotação</th><th>Equipamento(s)</th><th>Documento</th><th>Arquivo</th><th>Tamanho</th><th>Salvo por</th><th>Data</th><th style={{ width: 230 }}></th></tr></thead>
           <tbody>
             {loading && <tr><td colSpan={99}><div style={{ padding: 24 }}>Carregando…</div></td></tr>}
@@ -726,6 +734,8 @@ function ProjetoElevadorDesenhos({ abas }) {
           </tbody>
         </table>
       </div>
+
+      <AvalEngenhariaCard versao={Object.keys(assinaturas).map((k) => k + (assinaturas[k].status || '')).join('|') + itens.length}/>
 
       {modal && <DesenhoModal onClose={() => setModal(false)} onSaved={() => { setModal(false); carregar(); }}/>}
       {modalAssin && <ModalAssinaturaProjeto key={modalAssin.id + (assinaturas[modalAssin.id] ? assinaturas[modalAssin.id].id : "")} item={modalAssin} linha={assinaturas[modalAssin.id] || null} onClose={() => setModalAssin(null)} onChanged={carregarAssinaturas}/>}

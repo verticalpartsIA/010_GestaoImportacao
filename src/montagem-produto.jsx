@@ -140,11 +140,13 @@ function MontagemProdutoPage({ setRoute, setSubsel }) {
 
   const custoTotal = dados && pai ? mpCustoUnit(pai, dados.filhos, dados.prods) : null;
   const irParaItem = (codigo) => {
-    const mp = dados.prods[codigo]?.tipo_sped === '01';
+    const mp = window.pcpEhMateriaPrima(codigo);
     window.pcpIrPara?.({ setRoute, setSubsel }, mp ? 'cadastro-materias-primas' : 'cadastro-produtos', 'vp_pcp_busca', codigo);
   };
   const ctx = dados && { filhos: dados.filhos, prods: dados.prods, abertos: new Set([...abertos, '/' + pai]), alternar, verCusto, podeEditar, editarQtd, remover, irParaItem };
   const itensSelecionaveis = dados ? Object.keys(dados.prods).sort() : [];
+
+  if (pai === 'lista-de-fios' && window.ListaFiosView) return <window.ListaFiosView setPai={setPai}/>;
 
   return (
     <div className="page fade-in">
@@ -163,6 +165,7 @@ function MontagemProdutoPage({ setRoute, setSubsel }) {
             <option value="">Selecione o produto…</option>
             {pais.map(c => <option key={c} value={c}>{c} — {dados.prods[c]?.descricao || ''}</option>)}
           </select>
+          <button className="btn btn--ghost" onClick={() => setPai('lista-de-fios')}>Lista de fios do quadro</button>
         </div>
         {!pai && <div style={{ padding: 24, color: 'var(--fg3)' }}>Escolha um produto para ver a estrutura.</div>}
         {pai && (<>

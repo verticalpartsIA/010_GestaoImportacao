@@ -59,7 +59,7 @@ function caminhoSeguro(caminho) {
 }
 
 /* Endereço completo da tela = origem do próprio site (vinda do servidor, não do formulário) + caminho.
-   Origem inválida/ausente -> só o caminho. Ex.: https://vpgestaoimportacao.vpsistema.com/geral/decisoes */
+   Origem inválida/ausente -> só o caminho. Ex.: https://hub.vpsistema.com/geral/decisoes */
 function enderecoCompleto(base, caminho) {
   if (!caminho) return '';
   const b = /^https?:\/\/[A-Za-z0-9.\-]+(:\d{1,5})?$/.test(String(base || '')) ? String(base) : '';

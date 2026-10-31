@@ -25,7 +25,7 @@
     'Geral', 'CRM', 'Cadastros Mestres', 'Comercial | Pré-venda', 'Financeiro & Preços',
     'Contratos & Jurídico', 'Suprimentos & Importação', 'Engenharia & Produto',
     'Obras & Instalação', 'Entrega & Documentação', 'Parceiros & Instaladores',
-    'Logística Interna', 'Administração',
+    'Logística Interna', 'Fabricação', 'Administração',
   ];
 
   async function listarColaboradores() {
@@ -131,7 +131,12 @@
     { grupo: 'Geral', itens: [
       { modulo: 'dashboard', label: 'Dashboard' },
       { modulo: 'notificacoes', label: 'Notificações' },
-      { modulo: 'decisoes', label: 'Central de Decisões' },
+      /* 13/10/2026: as duas alçadas de decisão que o vpsistema declara existiam no banco mas sem caixa nesta tela. */
+      { modulo: 'decisoes', label: 'Central de Decisões', capacidades: [
+        ...ACOES_PADRAO,
+        { chave: 'ceo', label: 'Decide como CEO' },
+        { chave: 'gestor_comercial', label: 'Decide como Gestor Comercial' },
+      ]},
       { modulo: 'financeiro', label: 'Prazos & Pendências' },
       /* 04/10/2026 — Inbox na grade de alçadas. Dono do e-mail = LOGIN de quem enviou (a resposta herda o dono do
          e-mail que responde; senão o dono da cotação; senão "sem dono"). Quem vê o dos outros é por pessoa.
@@ -158,7 +163,7 @@
       { modulo: 'cadastro-fornecedores', label: 'Fornecedores' },
       { modulo: 'cadastro-materias-primas', label: 'Matérias-Primas' },
       { modulo: 'cadastro-produtos', label: 'Produtos' },
-      { modulo: 'ncm-catalogo', label: 'Produtos' },
+      { modulo: 'ncm-catalogo', label: 'Catálogo Siscomex' },
       { modulo: 'cadastro-instaladores', label: 'Empresas Instaladoras' },
       { modulo: 'cadastro-custos', label: 'Atualização de Custos' },
     ]},
@@ -169,6 +174,8 @@
         /* 02/10/2026: sem esta alçada o vendedor só vê/edita as cotações que ELE criou
            (formulario-elevador-store.js). Quem não tem fica restrito aos próprios. */
         { chave: 'ver_de_outros', label: 'Vê e edita formulários/cotações de outros vendedores' },
+        /* 12/10/2026: depois da 1ª Precificação o formulário trava; só quem tem esta alçada (o Líder, ex.: Regiane) destrava, com motivo. */
+        { chave: 'destravar', label: 'Destrava formulário/cotação após a precificação (Líder)' },
       ]},
       { modulo: 'propostas', label: 'Propostas', capacidades: [
         { chave: 'ver_todas', label: 'Vê propostas de outros vendedores' },
@@ -177,6 +184,10 @@
         { chave: 'excluir', label: 'Exclui propostas' },
       ]},
       { modulo: 'controle-cotacoes', label: 'Controle de Cotações' },
+      /* 13/10/2026: declarada no vpsistema (só esta ação, sem Ver/Criar/Editar/Excluir) — antes sem caixa nesta tela. */
+      { modulo: 'quadro_comando', label: 'Quadro de Comando', capacidades: [
+        { chave: 'decidir_fabricacao', label: 'Decide fabricar interno ou comprar pronto' },
+      ]},
       { modulo: 'contratos-sociais', label: 'Contratos Social' },
     ]},
     { grupo: 'ADM/ Financeiro', itens: [
@@ -200,13 +211,14 @@
       { modulo: 'embarques-importacao', label: 'Embarques' },
       { modulo: 'gi-analise-precos', label: 'Análise de Preços' },
       { modulo: 'compras', label: 'Importação Varejo' },
+      { modulo: 'cotacoes-varejo', label: 'Cotações de Varejo' },
       { modulo: 'pedidos-acompanhamento', label: 'Pedidos' },
     ]},
     { grupo: 'Engenharia', itens: [
       { modulo: 'engenharia', label: 'Engenharia' },
       { modulo: 'eng-projeto-elevadores', label: 'Projeto de Elevadores' },
+      { modulo: 'repositorio-documentos', label: 'Repositório Documentos' },
       { modulo: 'eng-configurador', label: 'Projeto de Equipamento' },
-      { modulo: 'desenho-tecnico', label: 'Projetos ER/Es' },
       { modulo: 'solicitacoes-produto', label: 'Solicitações de Produto' },
       { modulo: 'ficha-tecnica', label: 'Ficha Técnica', capacidades: [
         { chave: 'ver', label: 'Ver' },
@@ -216,11 +228,25 @@
         { chave: 'publicar_omie', label: 'Publica (ou republica) a ficha como anexo no Omie' },
       ]},
       { modulo: 'vistorias', label: 'Vistorias de Obras' },
-      { modulo: 'instalacao', label: 'Instalação em Campo' },
+      { modulo: 'instalacao', label: 'Instalação em Campo', capacidades: [
+        ...ACOES_PADRAO,
+        /* 13/10/2026: declarada no vpsistema; antes sem caixa nesta tela. */
+        { chave: 'editar_status_obra', label: 'Edita status do Acompanhamento de Obra' },
+      ]},
+      { modulo: 'mapa-obras', label: 'Mapa de Obras', capacidades: [
+        ...ACOES_PADRAO,
+        /* 25/10/2026: pausa de obra legitimamente parada (para de cobrar o Felipe até a data). */
+        { chave: 'pausar', label: 'Pausa a obra (some da cobrança diária até a data)' },
+      ]},
       { modulo: 'status-obras', label: 'Status de Obras' },
       { modulo: 'linha-do-tempo', label: 'Linha do Tempo da Cotação' },
-      { modulo: 'art', label: 'ART' },
+      { modulo: 'art', label: 'ART', capacidades: [
+        ...ACOES_PADRAO,
+        /* 30/10/2026: a Juliana (Financeiro) marca o boleto da ART como pago. */
+        { chave: 'confirmar_pagamento', label: 'Marca o boleto da ART como pago' },
+      ]},
       { modulo: 'cronograma', label: 'Cronograma' },
+      { modulo: 'central-documentos', label: 'Central de Documentos' },
       { modulo: 'databook', label: 'Data Book & Termo' },
       { modulo: 'handover', label: 'Entrega Final' },
     ]},
@@ -240,9 +266,38 @@
       ]},
       { modulo: 'carga-maquina', label: 'Carga Máquina' },
       { modulo: 'montagem-produto', label: 'Montagem do Produto' },
+      { modulo: 'lista-fios', label: 'Lista de fios do quadro (Montagem do Produto)' },
       { modulo: 'simulacao-producao', label: 'Simulação' },
+      { modulo: 'mes', label: 'MES — Sistema de Execução da Manufatura' },
+      { modulo: 'mes-cadastros', label: 'MES — Cadastros do chão de fábrica' },
       { modulo: 'relatorios-pcp', label: 'Relatórios do PCP' },
       { modulo: 'expedicao', label: 'Expedição' },
+      { modulo: 'separacao', label: 'Separação (painel TV dos pedidos a separar)', capacidades: [
+        { chave: 'ver', label: 'Vê os links do painel TV e o SLA da separação' },
+        { chave: 'editar', label: 'Gera e revoga links do painel TV e muda o SLA da separação' },
+        { chave: 'enviar_fabricacao', label: 'Envia item da separação para Fabricação Corte ou Corrimão (cria a OP na hora)' },
+      ]},
+      { modulo: 'fabricacao-corrimao', label: 'Fabricação Corrimão' },
+      { modulo: 'fabricacao-corte', label: 'Fabricação Corte' },
+      /* Etiquetas (endereço, item…). Spec: docs/superpowers/specs/2026-10-17-modulo-etiquetas-design.md. As chaves são as que o SQL confere
+         (migration 20261017160000: política de etiqueta_impressoes). Só quem tem 'imprimir' imprime; 'reimprimir' é outra alçada e exige motivo. */
+      { modulo: 'etiquetas', label: 'Etiquetas (endereço, item, palete…)', capacidades: [
+        { chave: 'ver', label: 'Vê a tela de Etiquetas, os modelos e o histórico de impressões' },
+        { chave: 'imprimir', label: 'Imprime etiquetas' },
+        { chave: 'reimprimir', label: 'Reimprime uma etiqueta já impressa (exige motivo)' },
+        { chave: 'editar_modelos', label: 'Cria e edita modelos de etiqueta da empresa (fase 3)' },
+        { chave: 'administrar', label: 'Administra modelos padrão, vínculos e impressoras (fase 3)' },
+      ]},
+      /* VP Estoque (app de coleta, 013_Estoque). As chaves abaixo são as que o SQL confere por e-mail
+         (estoque_cap_email / estoque_exige) — migrations 20261013120000 e 20261013130000. Não renomeie sem mudar o SQL. */
+      { modulo: 'estoque', label: 'VP Estoque — app de coleta (recebimento, contagem, saída, inventário)', capacidades: [
+        { chave: 'contar', label: 'Conta o estoque no app (contagem e inventário)' },
+        { chave: 'receber', label: 'Registra recebimento de mercadoria no app' },
+        { chave: 'saida', label: 'Registra saída de material no app (ordem de produção, obra, consumo interno)' },
+        { chave: 'abrir_sessao', label: 'Abre sessões de contagem/inventário e congela a lista esperada' },
+        { chave: 'revisar', label: 'Revisa as sessões: vê o saldo do sistema e as diferenças, pede recontagem, decide e rejeita leituras' },
+        { chave: 'aprovar', label: 'Aprova a contagem (grava o contado no hub) e fecha a sessão' },
+      ]},
       { modulo: 'pcp', label: 'PCP — Planejamento e Controle da Produção', capacidades: [
         { chave: 'ver', label: 'Ver' },
         { chave: 'criar', label: 'Criar' },
@@ -270,12 +325,18 @@
     'Comercial | Pré-venda': ['formularios', 'controle-cotacoes', 'cotacoes-fornecedor', 'propostas', 'contratos-sociais'],
     'Financeiro & Preços': ['cadastro-custos', 'precificacao', 'aval-financeiro', 'emissao-nf'],
     'Contratos & Jurídico': ['contrato-venda-equipamentos', 'aval-juridico', 'juridico'],
-    'Suprimentos & Importação': ['importacao', 'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos', 'compras', 'pedidos-acompanhamento'],
-    'Engenharia & Produto': ['engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'desenho-tecnico', 'solicitacoes-produto', 'ficha-tecnica', 'ncm-catalogo', 'linha-do-tempo'],
-    'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'cronograma', 'art'],
-    'Entrega & Documentação': ['databook', 'handover'],
-    'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador'],
-    'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'pcp', 'relatorios-pcp', 'expedicao'],
+    'Suprimentos & Importação': ['importacao', 'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos', 'ncm-catalogo', 'compras', 'cotacoes-varejo', 'pedidos-acompanhamento'],
+    'Engenharia & Produto': ['engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'solicitacoes-produto', 'ficha-tecnica', 'ncm-catalogo', 'linha-do-tempo'],
+    /* 29/10/2026: 'cronograma' mudou de lugar no menu (ver shell.jsx) — fica também aqui.
+       Mantido também em 'Obras & Instalação' de propósito, pra quem já tinha esse
+       grupo alocado não perder a alçada (mesmo padrão de Matérias-Primas/Produtos, 18/10). */
+    'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'mapa-obras', 'cronograma', 'art'],
+    'Entrega & Documentação': ['central-documentos', 'databook', 'handover', 'repositorio-documentos'],
+    'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador', 'cronograma'],
+    'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'pcp', 'mes', 'mes-cadastros', 'relatorios-pcp', 'expedicao', 'separacao', 'etiquetas', 'fabricacao-corrimao', 'fabricacao-corte'],
+    /* Fabricação saiu de Logística Interna (17/10/2026). Logística Interna mantém a lista completa de propósito: quem já tinha o grupo alocado não perde nada. */
+    /* Matérias-Primas e Produtos passaram a morar aqui no menu (18/10/2026); continuam também em Cadastros Mestres acima, para ninguém perder a alçada já concedida. */
+    'Fabricação': ['pcp', 'mes', 'mes-cadastros', 'carga-maquina', 'cadastro-materias-primas', 'cadastro-produtos', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'relatorios-pcp', 'fabricacao-corrimao', 'fabricacao-corte'],
     'Administração': ['logs'],
   };
 
@@ -290,28 +351,11 @@
     return out;
   }
 
-  /* Concede (ou retira) em lote todas as ações do grupo. Devolve a lista
-     afetada pra tela atualizar os checkboxes sem reler o banco. */
-  async function concederGrupoInteiro(colaboradorId, grupo, conceder) {
-    const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const lista = capacidadesDoGrupo(grupo);
-    if (!lista.length) return lista;
-    if (conceder) {
-      const por = (window.__VP_USER || {}).email || null;
-      const agora = new Date().toISOString();
-      const { error } = await c.from('alcadas_capacidade').upsert(
-        lista.map((l) => ({ perfil_id: colaboradorId, modulo: l.modulo, capacidade: l.capacidade, concedido_por: por, concedido_em: agora })),
-        { onConflict: 'perfil_id,modulo,capacidade' },
-      );
-      if (error) throw error;
-    } else {
-      const modulos = [...new Set(lista.map((l) => l.modulo))];
-      const { error } = await c.from('alcadas_capacidade').delete().eq('perfil_id', colaboradorId).in('modulo', modulos);
-      if (error) throw error;
-    }
-    if (window.PropostaStore) window.PropostaStore.resetAlcadasCache();
-    return lista;
-  }
+  /* Conceder/retirar alçadas saiu do HUB (árvore de alçadas, Gelson
+     09/10/2026): quem concede agora é o vpsistema.com/administracao, que
+     alimenta alcadas_capacidade pela edge function vpsistema-sync. O banco
+     já recusa gravação vinda do navegador; aqui só deixamos a mensagem clara. */
+  async function concederGrupoInteiro() { throw new Error('As alçadas agora são geridas em vpsistema.com/administracao.'); }
 
   async function listarCapacidadesConcedidas() {
     const c = sb(); if (!c) return [];
@@ -320,22 +364,29 @@
     return data || [];
   }
 
-  async function concederCapacidade(colaboradorId, modulo, capacidade, conceder) {
-    const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    if (conceder) {
-      const por = (window.__VP_USER || {}).email || null;
-      const { error } = await c.from('alcadas_capacidade').upsert(
-        { perfil_id: colaboradorId, modulo, capacidade, concedido_por: por, concedido_em: new Date().toISOString() },
-        { onConflict: 'perfil_id,modulo,capacidade' },
-      );
-      if (error) throw error;
-    } else {
-      const { error } = await c.from('alcadas_capacidade').delete()
-        .eq('perfil_id', colaboradorId).eq('modulo', modulo).eq('capacidade', capacidade);
-      if (error) throw error;
-    }
-    if (window.PropostaStore) window.PropostaStore.resetAlcadasCache();
+  async function concederCapacidade() { throw new Error('As alçadas agora são geridas em vpsistema.com/administracao.'); }
+
+  /* Modo MANUAL por pessoa (14/10/2026, Gelson): com perfis.acesso_manual o
+     vpsistema-sync não mexe nas alçadas nem no menu dela; um Administrador
+     marca/desmarca aqui. Gravação só pelas RPCs (conferem Administrador no banco). */
+  async function acessoManual(perfilId) {
+    const c = sb(); if (!c) return false;
+    const { data } = await c.from('perfis').select('acesso_manual').eq('id', perfilId).maybeSingle();
+    return !!(data && data.acesso_manual);
   }
+  async function rpcManual(nome, args) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.rpc(nome, args);
+    if (error) throw error;
+    if (!data || data.ok !== true) {
+      const m = { so_administrador: 'Só Administrador pode fazer isso.', perfil_nao_esta_em_modo_manual: 'Esta pessoa não está em modo manual.', perfil_inexistente: 'Perfil não encontrado.' };
+      throw new Error(m[data && data.motivo] || 'O banco recusou a alteração.');
+    }
+    return data;
+  }
+  const definirAcessoManual = (perfilId, manual) => rpcManual('hub_set_acesso_manual', { p_perfil: perfilId, p_manual: !!manual });
+  const definirAlcadaManual = (perfilId, modulo, capacidade, concedida) => rpcManual('hub_set_alcada_manual', { p_perfil: perfilId, p_modulo: modulo, p_capacidade: capacidade, p_concedida: !!concedida });
+
 
   /* Roda quando a identidade chega (evento 'vpprd:user' de supabase.js) —
      acha o colaborador correspondente pelo id (vem do JWT do vpsistema,
@@ -363,5 +414,6 @@
     alocar, desalocar, removerTodasAlocacoes, enriquecerUsuarioLogado,
     ACOES_PADRAO, CATALOGO_MODULOS, listarCapacidadesConcedidas, concederCapacidade,
     MODULOS_POR_GRUPO_SIDEBAR, capacidadesDoGrupo, concederGrupoInteiro,
+    acessoManual, definirAcessoManual, definirAlcadaManual,
   };
 }());

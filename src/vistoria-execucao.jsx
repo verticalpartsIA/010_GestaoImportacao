@@ -407,10 +407,8 @@ function VistoriaExecucaoApp() {
     if (!token) { setNaoEncontrada(true); setCarregando(false); return; }
     (async () => {
       try {
-        const { data: ativ, error: eAtiv } = await sb.from('vistorias_atividades')
-          .select('*, dossier_obra(client_name, building_name), equipamentos_obra(numero_serie), vistorias_questionarios(id, nome, tipo)')
-          .eq('token', token).maybeSingle();
-        if (eAtiv) throw eAtiv;
+        /* Segurança real (#571, F1): leitura por RPC com queda para o caminho antigo — ver obterAtividadePorToken. */
+        const ativ = await window.VistoriasQuestionariosStore.obterAtividadePorToken(token);
         if (!ativ) { setNaoEncontrada(true); setCarregando(false); return; }
 
         const [est, { data: resp, error: eResp }] = await Promise.all([

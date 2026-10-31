@@ -11,6 +11,24 @@
      é criado inline e atribuído a window.__VP_SB.sb antes de carregar este script. */
   function sb() { return (window.__VP_SB || {}).sb; }
 
+  /* 22/10 (Task 5) — WhatsApp do montador vem do CADASTRO (parceiros_instaladores.telefone), não só digitado.
+     Acha o parceiro pelo acordo de preço do contrato (parceiro_instalador_id) e, sem acordo, pelo nome da contratada. */
+  async function telefoneDoCadastro(rec) {
+    const c = sb();
+    if (!c || !rec) return null;
+    try {
+      let parceiroId = null;
+      const ac = await c.from('instalador_acordos').select('parceiro_instalador_id').eq('contrato_id', rec.id).not('parceiro_instalador_id', 'is', null).limit(1);
+      if (ac && ac.data && ac.data[0]) parceiroId = ac.data[0].parceiro_instalador_id;
+      let q = c.from('parceiros_instaladores').select('id, nome, telefone, contato').limit(1);
+      q = parceiroId ? q.eq('id', parceiroId) : q.eq('nome', rec.contratada_nome || '');
+      const { data } = await q;
+      const p = data && data[0];
+      if (!p || String(p.telefone || '').replace(/\D/g, '').length < 10) return null;
+      return { telefone: p.telefone, nome: p.contato || p.nome, parceiro: p.nome };
+    } catch (e) { return null; }
+  }
+
   /* ---------- IDs / token público ---------- */
   function uuid() {
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -108,6 +126,9 @@
     assinado:    { id:'assinado',    label:'Assinado',    icon:'✍',  tone:'green',  order:3 },
     expirado:    { id:'expirado',    label:'Expirado',    icon:'⚠',  tone:'red',    order:4 },
     recusado:    { id:'recusado',    label:'Recusado',    icon:'✕',  tone:'red',    order:4 },
+    /* Distrato do Contrato do Instalador (30/10/2026) — a Contratada e a fila da
+       VerticalParts assinaram o distrato (contratos_instalador_distratos). */
+    distratado:  { id:'distratado',  label:'Distratado',  icon:'📄', tone:'gray',   order:5 },
   };
 
   /* ---------- Notificação interna (Geral › Notificações) ---------- */
@@ -332,17 +353,22 @@
     if (error) throw error;
     if (window.ContratoInstaladorParcelasStore) {
       try { await window.ContratoInstaladorParcelasStore.criarParcelas(rec.id, formState); }
-      catch (e) { console.warn('[CIStore] criarParcelas falhou', e); }
+      catch (e) {
+        console.warn('[CIStore] criarParcelas falhou', e);
+        rec._parcelasFalharam = true;
+        window.toast?.('O contrato foi criado, mas as parcelas de pagamento NÃO foram geradas (' + (e.message || 'erro') + '). Avise o Financeiro.', 'error');
+      }
+    }
+    /* Preço combinado do(s) Dossiê(s) passa a 'contratado' (não pode mais ser alterado). Falha aqui não desfaz o contrato. */
+    if (window.InstaladorAcordosStore) {
+      for (const d of (formState.dossierIds || [])) { try { await window.InstaladorAcordosStore.vincularContrato(d, rec.id); } catch (_) { /* aviso no console do store */ } }
     }
     if (window.VPLog) window.VPLog.registrar({ modulo: 'Contrato Instalador', acao: 'criou o contrato', alvo: rec.numero_documento, alvo_id: rec.id, detalhe: { contratada: rec.contratada_nome } });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
       evento: 'CONTRATO_INSTALADOR_GERADO', numeroCotacao: formState.numeroCotacao ?? null,
       alvoLabel: rec.numero_documento, alvoId: rec.id,
     });
-    if (window.AvalFinanceiroStore && formState.numeroCotacao != null) window.AvalFinanceiroStore.registrarCustoReal({
-      numeroCotacao: formState.numeroCotacao, origem: 'contrato_instalador',
-      descricao: 'Contrato Instalador ' + rec.numero_documento, valor: valorTotal,
-    });
+    /* O custo real só entra quando o instalador ASSINA (rascunho/recusado não é gasto) — ver lancarCustoReal. */
     return rec;
   }
 
@@ -491,7 +517,20 @@
       evento: 'CONTRATO_INSTALADOR_ASSINADO', numeroCotacao: cur.form_state?.numeroCotacao ?? null,
       alvoLabel: cur.numero_documento, alvoId: cur.id,
     });
+    await lancarCustoReal(cur);
     return updated;
+  }
+
+  /* Custo real do contrato (alimenta o teto de custo da cotação). Só na assinatura;
+     idempotente (não repete se já existe a linha deste contrato). */
+  async function lancarCustoReal(rec) {
+    const c = sb();
+    const num = rec && rec.form_state ? rec.form_state.numeroCotacao : null;
+    if (!c || !window.AvalFinanceiroStore || num == null || num === '') return;
+    const descricao = 'Contrato Instalador ' + rec.numero_documento;
+    const { data: ja } = await c.from('cotacao_custos_reais').select('id').eq('numero_cotacao', num).eq('origem', 'contrato_instalador').eq('descricao', descricao).limit(1);
+    if (ja && ja.length) return;
+    await window.AvalFinanceiroStore.registrarCustoReal({ numeroCotacao: num, origem: 'contrato_instalador', descricao, valor: Number(rec.valor_total) || 0 });
   }
 
   /* 01/10 — mesmo achado real do Contrato de Venda (cotação 955/AKAI):
@@ -554,6 +593,73 @@
     if (!data || !data.length) throw new Error('Só é possível excluir contratos em rascunho.');
   }
 
+  /* Anula um contrato já enviado/assinado (ex.: link foi para o montador errado).
+     Nada é apagado: a assinatura e a auditoria antigas ficam guardadas em audit.anulacao.assinaturaAnterior.
+     O contrato vira 'expirado' (o link público deixa de assinar), o acordo de preço volta a 'combinado'
+     (pode trocar o montador em Pagamentos a Instaladores > Preços combinados) e as parcelas AINDA PENDENTES saem
+     (as do novo contrato nascem na criação dele). Bloqueia se já houver parcela paga ou recibo ativo. */
+  async function anularAssinatura(id, motivo) {
+    const c = sb(); if (!c) throw new Error('Supabase indisponível');
+    const m = String(motivo || '').trim();
+    if (m.length < 10) throw new Error('Explique o motivo (mínimo 10 letras).');
+    const u = window.__VP_USER || {};
+    const nome = u.nome || u.email || 'usuário';
+    const { data, error } = await c.rpc('anular_contrato_instalador', { p_id: id, p_motivo: m, p_nome: nome });
+    if (error) throw error;
+    if (!data || !data.ok) {
+      const msg = {
+        sem_sessao: 'Sessão não identificada — entre de novo pelo portal.',
+        sem_permissao: 'Você não tem a alçada "Contrato Instalador › Editar".',
+        motivo_curto: 'Explique o motivo (mínimo 10 letras).',
+        nao_encontrado: 'Contrato não encontrado.',
+        rascunho: 'Rascunho não precisa ser anulado: exclua-o.',
+        ja_anulado: 'Este contrato já foi anulado.',
+        parcela_paga: 'Há parcela já paga neste contrato — fale com o Financeiro antes de anular.',
+        recibo_ativo: 'Há recibo vinculado a este contrato — cancele o recibo antes de anular.',
+      }[data && data.erro];
+      throw new Error(msg || 'Não foi possível anular.');
+    }
+    try {
+      window.VPLog?.registrar({ modulo: 'Contrato Instalador', acao: 'Anulou a assinatura do contrato', alvo: id, alvo_id: id, detalhe: { motivo: m } });
+    } catch (_) { /* log nunca impede */ }
+    return data;
+  }
+
+  /* Contrato anulado (link ao montador errado) volta a poder ser enviado: LINK NOVO (o antigo continua expirado),
+     status rascunho, parcelas recriadas e acordo de preço religado. A anulação fica no histórico (audit.anulacoes). */
+  async function reabrirAnulado(id) {
+    const c = sb(); if (!c) throw new Error('Supabase indisponível');
+    const cur = await getById(id);
+    if (!cur) throw new Error('Contrato não encontrado.');
+    const an = cur.audit && cur.audit.anulacao;
+    if (cur.status !== 'expirado' || !an) throw new Error('Este contrato não está anulado.');
+    const u = window.__VP_USER || {};
+    const nome = u.nome || u.email || 'usuário';
+    const now = new Date().toISOString();
+    const patch = {
+      status: 'rascunho', token: shortToken(), channel: null, sent_at: null, signed_at: null, expires_at: null,
+      audit: { anulacoes: [...((cur.audit && cur.audit.anulacoes) || []), an] },
+      log: [...(cur.log || []), { status: 'rascunho', at: now, meta: { reaberto: true, nome } }],
+      atualizado_em: now,
+    };
+    const { data, error } = await c.from('contratos_instalador').update(patch).eq('id', id).eq('status', 'expirado').select('id');
+    if (error) throw error;
+    if (!data || !data.length) throw new Error('Não foi possível gerar o novo link (contrato mudou de estado).');
+    try {
+      const { data: ex } = await c.from('contrato_instalador_parcelas').select('id').eq('contrato_id', id).limit(1);
+      if (!ex || !ex.length) await window.ContratoInstaladorParcelasStore.criarParcelas(id, cur.form_state || {});
+    } catch (e) { console.warn('[CIStore] reabrir: parcelas não recriadas', e); }
+    try {
+      for (const d of ((cur.form_state && cur.form_state.dossierIds) || [])) {
+        if (window.InstaladorAcordosStore) await window.InstaladorAcordosStore.vincularContrato(d, id);
+      }
+    } catch (e) { console.warn('[CIStore] reabrir: acordo não religado', e); }
+    try {
+      window.VPLog?.registrar({ modulo: 'Contrato Instalador', acao: 'Gerou novo link após anulação', alvo: cur.numero_documento, alvo_id: id });
+    } catch (_) { /* log nunca impede */ }
+    return { ...cur, ...patch };
+  }
+
   /* ---------- expor ---------- */
   /* Efeito de uma ação pública do Contrato do Instalador, executado por um usuário interno via fila `fluxo_pendentes`
      (src/fluxo-pendentes.js): o evento CONTRATO_INSTALADOR_ASSINADO que o navegador do instalador disparava ao assinar. */
@@ -566,6 +672,75 @@
       alvoLabel: p.label, alvoId: p.contrato_id, atorNome: p.signerName || 'Instalador (link público)',
     });
     if (!r) throw new Error('evento não registrado');
+    const cur = await getById(p.contrato_id);
+    if (cur) await lancarCustoReal(cur);
+  }
+
+  /* 21/10 — "Enviar" de um rascunho = pedir o aval do Diego. Grava o WhatsApp do montador (contrato continua em rascunho) e, se o
+     aval já estava aprovado, o banco dispara os avisos na hora. Devolve { estado: 'aguardando_aval' | 'enviado' }. */
+  async function pedirEnvio(id, nome, contato) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.rpc('ci_pedir_envio', { p_id: id, p_nome: nome || null, p_contato: contato || null });
+    if (error) throw error;
+    if (!data || !data.ok) {
+      const m = { sem_sessao: 'Entre no sistema para enviar.', contato_invalido: 'Informe o WhatsApp do montador com DDD.', nao_encontrado: 'Contrato não encontrado.' };
+      throw new Error(m[data && data.erro] || (data && data.erro && String(data.erro).indexOf('status_') === 0 ? 'Este contrato já foi enviado.' : 'Não foi possível pedir o envio.'));
+    }
+    return data;
+  }
+
+  /* 22/10 (Jurídico, Task 11) — editar o documento. Rascunho: edita no próprio lugar (com controle de concorrência).
+     Já enviado/assinado: NOVA REVISÃO — a anterior (documento, dados, assinatura e hash) fica em `revisoes`, o contrato volta a
+     rascunho com link novo, a fila de assinaturas e as parcelas pendentes saem e o aval do Diego é reaberto. Nada é sobrescrito. */
+  async function salvarEdicao(id, formState, opts) {
+    opts = opts || {};
+    const c = sb(); if (!c) throw new Error('Supabase indisponível');
+    const cur = await getById(id);
+    if (!cur) throw new Error('Contrato não encontrado.');
+    const fs = { ...formState };
+    const doc = window.CI.buildContract(fs, cur.numero_documento);
+    const eq = (window.CI.EQUIPAMENTOS.find(e => e.id === fs.equipamento) || {}).label || '';
+    const modal = (window.CI.MODALIDADES.find(m => m.id === fs.modalidade) || {}).label || '';
+    const u = window.__VP_USER || {};
+    const cols = {
+      nome: u.nome || u.email || '', titulo: doc.titulo, contratada_nome: doc.contratada.razao, contratada_cnpj: doc.contratada.cnpj,
+      responsavel_nome: doc.contratada.responsavel, responsavel_cpf: doc.contratada.cpf, valor_total: String(window.CI.moedaParaNumero(fs.valorTotal)),
+      objeto_resumo: `${fs.quantidade || 1}× ${eq} · ${modal}`, master_id: fs.masterId || '', proposta_id: fs.propostaId || '',
+      ativos_indices: fs.ativosIndices || [], dossier_ids: fs.dossierIds || [],
+    };
+    const { data, error } = await c.rpc('ci_salvar_edicao', { p_id: id, p_form_state: fs, p_doc: doc, p_cols: cols, p_motivo: opts.motivo || null, p_esperado: opts.esperado || null });
+    if (error) throw error;
+    if (!data || !data.ok) {
+      const msg = {
+        sem_sessao: 'Sessão não identificada — entre de novo pelo portal.',
+        sem_permissao: 'Você não tem a alçada "Contrato Instalador › Editar".',
+        nao_encontrado: 'Contrato não encontrado.',
+        conflito: 'Outra pessoa alterou este contrato enquanto você editava. Feche a edição, abra de novo e refaça a alteração.',
+        motivo_curto: 'Explique o motivo da nova revisão (mínimo 10 letras).',
+        parcela_paga: 'Há parcela já paga neste contrato — fale com o Financeiro antes de criar uma nova revisão.',
+        recibo_ativo: 'Há recibo vinculado a este contrato — cancele o recibo antes de criar uma nova revisão.',
+      }[data && data.erro];
+      throw new Error(msg || 'Não foi possível salvar a alteração.');
+    }
+    if (data.nova_revisao || data.refazer_parcelas) {   // rascunho editado também refaz as parcelas pendentes (o banco já as removeu)
+      try { await window.ContratoInstaladorParcelasStore.criarParcelas(id, fs); }
+      catch (e) { console.warn('[CIStore] nova revisão: parcelas não recriadas', e); data.aviso = 'As parcelas de pagamento não foram recriadas (' + (e.message || 'erro') + '). Avise o Financeiro.'; }
+      try { for (const d of (fs.dossierIds || [])) { if (window.InstaladorAcordosStore) await window.InstaladorAcordosStore.vincularContrato(d, id); } }
+      catch (e) { console.warn('[CIStore] nova revisão: acordo não religado', e); }
+    }
+    try {
+      window.VPLog?.registrar({ modulo: 'Contrato Instalador', acao: data.nova_revisao ? 'Criou a revisão ' + data.revisao + ' do contrato' : 'Editou o rascunho do contrato', alvo: cur.numero_documento, alvo_id: id,
+        detalhe: data.nova_revisao ? { motivo: opts.motivo, revisaoAnterior: data.revisao - 1 } : null });
+    } catch (_) { /* log nunca impede */ }
+    return { ...data, rec: await getById(id) };
+  }
+
+  /* Eventos do log que pertencem à revisão ATUAL (a linha do tempo recomeça a cada nova revisão; as anteriores ficam em `revisoes`). */
+  function logDaRevisaoAtual(rec) {
+    const log = (rec && rec.log) || [];
+    let ini = 0;
+    log.forEach((l, i) => { if (l && l.meta && l.meta.nova_revisao) ini = i; });
+    return log.slice(ini);
   }
 
   window.CIStore = {
@@ -575,9 +750,9 @@
     fmtDateTime, fmtDate, relative,
     signUrl, prettyUrl, whatsAppHref, mailtoHref,
     listAll, listPainel, getById, getByToken,
-    createDraft, updateFormState, reservarNumero,
-    markSent, markViewed, markSigned, refuse,
-    sweepExpired, remove,
+    createDraft, updateFormState, reservarNumero, salvarEdicao, logDaRevisaoAtual,
+    markSent, pedirEnvio, telefoneDoCadastro, markViewed, markSigned, refuse,
+    sweepExpired, remove, anularAssinatura, reabrirAnulado,
     getPublicIP, deviceLabel, sha256Hex,
   };
 }());

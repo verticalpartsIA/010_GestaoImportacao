@@ -63,6 +63,7 @@ function AJRow({ row, onOpenModal }) {
         <div className="small muted">{row.contrato
           ? `Contrato ${row.contrato.numero_documento || ''} · ${row.contrato.status === 'assinado' ? 'assinado' : (row.contrato.status || '—')}`
           : 'Contrato de Venda ainda não gerado'}</div>
+        <AvaisDaCotacao numeroCotacao={a.numero_cotacao} juridicoStatus={a.status}/>
       </div>
       <AJBadge status={a.status}/>
       {a.status === 'pendente' && (
@@ -78,7 +79,13 @@ function AJRow({ row, onOpenModal }) {
 function AvalJuridicoPage({ setRoute }) {
   const [fila, setFila] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
-  const [modal, setModal] = React.useState(null); // { type, row }
+  // Modal aberto na URL — /aval-juridico/<row.key>/<tipo> ('aprovar'|'reprovar'),
+  // mesmo padrão do Aval Financeiro (ver comentário lá).
+  const [rotaId] = window.useRotaId('aval-juridico');
+  const [tipoUrl] = window.useRotaItem('aval-juridico', rotaId);
+  const modal = (tipoUrl && rotaId) ? { type: tipoUrl, row: fila.find((r) => String(r.key) === rotaId) || null } : null;
+  const abrirModal = (type, row) => { if (window.VpRouter) window.VpRouter.navigate('aval-juridico', row.key, type); };
+  const fecharModal = () => { if (window.VpRouter) window.VpRouter.navigate('aval-juridico', null); };
 
   const reload = React.useCallback(() => {
     setLoading(true);
@@ -118,13 +125,13 @@ function AvalJuridicoPage({ setRoute }) {
             </div>
           )}
           {fila.map((row) => (
-            <AJRow key={row.key} row={row} onOpenModal={(type, row) => setModal({ type, row })}/>
+            <AJRow key={row.key} row={row} onOpenModal={abrirModal}/>
           ))}
         </div>
       </Card>
 
-      {modal?.type === 'aprovar' && <AJModalAval row={modal.row} aprovado onClose={() => setModal(null)} onSaved={reload}/>}
-      {modal?.type === 'reprovar' && <AJModalAval row={modal.row} aprovado={false} onClose={() => setModal(null)} onSaved={reload}/>}
+      {modal?.type === 'aprovar' && modal.row && <AJModalAval row={modal.row} aprovado onClose={fecharModal} onSaved={reload}/>}
+      {modal?.type === 'reprovar' && modal.row && <AJModalAval row={modal.row} aprovado={false} onClose={fecharModal} onSaved={reload}/>}
     </div>
   );
 }

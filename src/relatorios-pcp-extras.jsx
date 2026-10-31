@@ -37,10 +37,10 @@ function rpDataHoraBR(iso) {
 }
 
 async function rpCarregarPeriodo(sb, dias) {
-  const antes = new Set((await rpLerTudo(() => sb.from('pcp_pedidos').select('numero_pedido').order('codigo_pedido'))).map(p => p.numero_pedido));
+  const antes = new Set((await rpLerTudo(() => sb.from('pcp_pedidos').select('numero_pedido').eq('so_separacao', false).order('codigo_pedido'))).map(p => p.numero_pedido));
   const res = await rpAtualizarDoOmie(sb, { dias });
   if (!res.ok) return res;
-  const depois = await rpLerTudo(() => sb.from('pcp_pedidos').select('numero_pedido, etapa').order('codigo_pedido'));
+  const depois = await rpLerTudo(() => sb.from('pcp_pedidos').select('numero_pedido, etapa').eq('so_separacao', false).order('codigo_pedido'));
   const novos = Array.from(new Set(depois.filter(p => !antes.has(p.numero_pedido) && Number(p.etapa) >= 60).map(p => p.numero_pedido)));
   let marcados = 0;
   if (novos.length) {
@@ -56,7 +56,7 @@ function RPCobertura({ sb, onAtualizado }) {
   const [busy, setBusy] = React.useState(null);
   const carregar = React.useCallback(async () => {
     try {
-      const rows = await rpLerTudo(() => sb.from('pcp_pedidos').select('numero_pedido, data_pedido, atualizado_em, cancelado').order('codigo_pedido'));
+      const rows = await rpLerTudo(() => sb.from('pcp_pedidos').select('numero_pedido, data_pedido, atualizado_em, cancelado').eq('so_separacao', false).order('codigo_pedido'));
       const vivos = rows.filter(r => !r.cancelado);
       let de = null, ate = null, lido = null;
       vivos.forEach(r => { if (r.data_pedido && (!de || r.data_pedido < de)) de = r.data_pedido; if (r.data_pedido && (!ate || r.data_pedido > ate)) ate = r.data_pedido; });
@@ -155,7 +155,7 @@ function RPEstoque({ ctx }) {
 
   if (erro) return <div style={{ padding: 16, color: 'var(--vp-danger)' }}>Não foi possível carregar: {erro}</div>;
   if (!d) return <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>;
-  const doGrupo = d.linhas.filter(l => grupo === 'mp' ? l.p.tipo_sped === '01' : l.p.tipo_sped !== '01');
+  const doGrupo = d.linhas.filter(l => grupo === 'mp' ? window.pcpEhMateriaPrima(l.codigo) : !window.pcpEhMateriaPrima(l.codigo));
   const conta = (...s) => doGrupo.filter(l => s.includes(l.status)).length;
   const q = busca.trim().toLowerCase();
   const visiveis = doGrupo.filter(l => (!filtro || (filtro === 'giro' ? ['sem_giro', 'sem_historico'].includes(l.status) : filtro === 'outros' ? ['fabricado', 'nao_repor'].includes(l.status) : l.status === filtro))

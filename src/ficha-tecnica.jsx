@@ -34,7 +34,9 @@ function FtCatIcon({ name }) {
    ============================================================ */
 function FtFichaLinha({ l }) {
   const val = l.unidade ? `${l.valor} ${l.unidade}` : l.valor;
-  const longo = l.tipo === 'text' && val.length > 22;
+  /* Valor longo quebra linha em largura total, de qualquer tipo de campo (antes só 'text': um número/seleção
+     com texto grande ficava em 1 linha só e passava por trás da coluna de imagens). */
+  const longo = String(val).length > 22;
   return longo
     ? <div className="ft-fz-line solo"><span className="ft-fz-lk2">{l.nome}</span><span className="ft-fz-lv">{val}</span></div>
     : <div className="ft-fz-line"><span className="ft-fz-lk">{l.nome}</span><span className="ft-fz-lv">{val}</span></div>;
@@ -728,7 +730,12 @@ function FtGenerator({ initial, onSaved, onCancel }) {
                 user.nome,
                 user.setor
               );
-              if (res) setState((s) => ({ ...s, omie_publicado_em: new Date().toISOString() }));
+              if (res) setState((s) => ({
+                ...s,
+                omie_publicado_em: new Date().toISOString(),
+                // produto novo: herda o código gerado no Omie (ex.: VPEL-1000)
+                identificacao: res.codigo_produto ? { ...s.identificacao, codigoProduto: res.codigo_produto } : s.identificacao,
+              }));
             } catch (e) { console.error('[Omie publish]', e); }
           }}
           title={(() => {

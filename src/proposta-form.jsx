@@ -228,10 +228,10 @@ function S_Proposta({ d, set, herdar, herdando, heranca }) {
           <input className="pe-input" inputMode="numeric" placeholder="ex.: 902"
             value={d.numeroCotacao || ""}
             onChange={(e) => set("numeroCotacao", e.target.value.replace(/\D/g, ""))}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); herdar && herdar(); } }}/>
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); herdar && herdar({ atualizar: true }); } }}/>
           <button type="button" className="pe-heranca__btn"
             disabled={herdando || !String(d.numeroCotacao || "").trim()}
-            onClick={() => herdar && herdar()}>
+            onClick={() => herdar && herdar({ atualizar: true })}>
             {herdando ? "Buscando…" : "Herdar dados"}
           </button>
         </div>
@@ -424,7 +424,10 @@ function S_EspecElevador({ d, set }) {
 /* ---- Acabamentos: campo com checkbox "ativo" (só o marcado entra no PDF)
    + valor inline quando marcado — mesmo padrão da Ficha Técnica. ---- */
 function S_AcabField({ fld, onToggle, onValue, onRemove }) {
-  const opts = fld.opcoesKey ? OPTIONS[fld.opcoesKey] : null;
+  const base = fld.opcoesKey ? OPTIONS[fld.opcoesKey] : null;
+  /* Valor herdado do Formulário (ex.: "Aço 430", "COP-05C") pode não estar na lista parcial do editor: entra como
+     opção para o select mostrar o que está gravado em vez de parecer vazio. */
+  const opts = base && fld.valor && !base.some((o) => (o.value || o) === fld.valor) ? [fld.valor, ...base] : base;
   return (
     <div className="pe-acab-row">
       <label className={"pe-acab-check" + (fld.ativo ? " on" : "")}>
@@ -484,6 +487,76 @@ function S_AcabAddCategoryModal({ onAdd, onClose }) {
   );
 }
 
+/* "Separar por tipo": proposta com equipamentos de tipos diferentes (Carga / Passageiro / Panorâmico) mas um único bloco de
+   acabamentos/texto. Cria os perfis a partir do Formulário (+ texto-base) e preserva o que o vendedor já digitou no perfil
+   de origem. Aparece só quando há 2+ tipos e ainda não há perfis; "Voltar ao bloco único" desfaz (o bloco global nunca
+   é apagado, só deixa de valer enquanto há perfis). */
+function S_SepararPorTipo({ d, set, perfis }) {
+  const [busy, setBusy] = React.useState(false);
+  const O = window.PropostaOpcoes;
+  const H = window.PropostaHeranca;
+  const tipos = O ? O.contagemPorTipo(d.elevador).filter((x) => O.tipoChave(x.tipo)) : [];
+  const nEspec = (d.elevador.especificacoes || []).length;
+  const btn = { marginTop: 0, display: "inline-block", marginRight: 8 };
+  if (perfis.length > 0) {
+    const divisivel = H && perfis.some((p) => Array.isArray(p.unidadeIds) && p.unidadeIds.length > 1);
+    return (
+      <div style={{ marginBottom: 10 }}>
+        {divisivel && (
+          <button type="button" className="pe-acab-addfield" style={btn}
+            onClick={() => {
+              if (!window.confirm("Separar cada equipamento? Cada especificação passa a ter o seu próprio bloco, começando com uma cópia do que está preenchido no tipo dela. Nada é apagado.")) return;
+              set("elevador.perfis", H.dividirPerfisPorEquipamento(d.elevador));
+              window.toast?.("Cada equipamento agora tem o seu bloco. Ajuste um por um.", "success");
+            }}>
+            Separar cada equipamento
+          </button>
+        )}
+        <button type="button" className="pe-acab-addfield" style={btn}
+          onClick={() => { if (window.confirm("Voltar ao bloco único? Os blocos por equipamento/tipo deixam de valer (o texto digitado neles se perde) e o bloco único anterior volta a aparecer.")) set("elevador.perfis", []); }}>
+          ↩ Voltar ao bloco único
+        </button>
+      </div>
+    );
+  }
+  if (!O || !H || nEspec < 2) return null;
+  const nomes = tipos.map((x) => O.nomePerfil(x.tipo)).join(", ").replace(/, ([^,]*)$/, " e $1");
+  const separar = async (modo) => {
+    const porEquip = modo === "equipamento";
+    if (!window.confirm(porEquip
+      ? "Separar por equipamento? Cada especificação (Unidade) ganha o seu próprio bloco de acabamentos e texto, herdado do Formulário. O que já está digitado fica no equipamento de origem (quando der para identificar) e nada é apagado."
+      : `Separar por tipo (${nomes})? Cada tipo passa a ter os seus acabamentos e textos, herdados do Formulário. O que já está digitado fica no tipo de origem (quando der para identificar) e nada é apagado.`)) return;
+    setBusy(true);
+    try {
+      let fontes = null;
+      const num = String(d.numeroCotacao || "").trim();
+      if (num) { try { const f = await H.buscarFontes(num); fontes = f && f.encontrado ? f : null; } catch (e) { fontes = null; } }
+      const r = H.perfisAPartirDaProposta(d.elevador, fontes || { unidades: [], cotacao: null }, modo);
+      if (!r.perfis.length) { window.toast?.(porEquip ? "Não encontrei 2 ou mais equipamentos nas especificações." : "Não encontrei 2 ou mais tipos de equipamento nas especificações.", "warning"); return; }
+      set("elevador.perfis", r.perfis);
+      window.toast?.(
+        (fontes ? "Separado com os dados do Formulário." : "Separado (sem Formulário encontrado — acabamentos em branco).")
+        + (r.origemNome ? ` O que você já digitou ficou em "${r.origemNome}".` : " Revise cada bloco."),
+        "success");
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="pe-hint" style={{ marginBottom: 12, padding: "10px 12px", border: "1px solid #FFC72C", borderRadius: 8, background: "#FFF9E5" }}>
+      Esta proposta tem {nEspec} especificações{tipos.length > 1 ? ` de tipos diferentes (${nomes})` : ""} mas um único conjunto de acabamentos e texto — o que vale para um equipamento aparece para todos.
+      <div style={{ marginTop: 6 }}>
+        <button type="button" className="pe-acab-addfield" style={btn} disabled={busy} onClick={() => separar("equipamento")}>
+          {busy ? "Separando…" : "Separar por equipamento"}
+        </button>
+        {tipos.length > 1 && (
+          <button type="button" className="pe-acab-addfield" style={btn} disabled={busy} onClick={() => separar("tipo")}>
+            Separar por tipo
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* Categorias/campos dinâmicos com checkbox "ativo" — mesmo padrão da Ficha
    Técnica (engenharia/ficha-tecnica): o vendedor marca o que quer que entre
    na proposta e pode criar campo/categoria novos, que ficam disponíveis
@@ -491,39 +564,11 @@ function S_AcabAddCategoryModal({ onAdd, onClose }) {
    propostas_lib_categorias/propostas_lib_campos, PropostaAcabamentosStore).
    Os 13 campos que já existiam viram a categoria nativa "Acabamentos" —
    proposta salva antes dessa mudança migra sozinha, sem perder valor. */
-function S_Acabamentos({ d, set }) {
+/* Editor das categorias/campos de acabamento de UM conjunto (o bloco único da proposta ou o de um equipamento). */
+function S_AcabEditor({ cats, updateCats }) {
   const engine = window.PropostaAcabamentosEngine;
   const store = window.PropostaAcabamentosStore;
-  const [libLoaded, setLibLoaded] = React.useState(false);
   const [modal, setModal] = React.useState(null); // { type: 'campo'|'categoria', catId? }
-
-  React.useEffect(() => {
-    let cancelado = false;
-    (async () => {
-      if (!store || !engine) return;
-      const lib = await store.loadLibrary();
-      if (cancelado) return;
-      engine.setLibraryExtras(lib);
-      setLibLoaded((n) => !n); // força recomputar cats com a lib carregada
-    })();
-    return () => { cancelado = true; };
-  }, []);
-
-  const cats = engine ? engine.garantirCats(d.elevador) : [];
-
-  /* Só na 1ª vez (proposta ainda sem acabamentosCats): grava o resultado da
-     migração como estado real, pra não ficar recalculando do legado a
-     cada render. */
-  React.useEffect(() => {
-    if (engine && !(Array.isArray(d.elevador.acabamentosCats) && d.elevador.acabamentosCats.length)) {
-      set("elevador.acabamentosCats", cats);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [libLoaded]);
-
-  if (!engine) return <div className="pe-hint">Carregando…</div>;
-
-  const updateCats = (novo) => set("elevador.acabamentosCats", novo);
 
   const toggleField = (catId, k) => updateCats(cats.map((c) => c.id !== catId ? c : {
     ...c, campos: c.campos.map((f) => f.k !== k ? f : { ...f, ativo: !f.ativo }),
@@ -562,7 +607,7 @@ function S_Acabamentos({ d, set }) {
   };
 
   return (
-    <div className="pe-acab">
+    <>
       {cats.map((c) => (
         <div className="pe-acab-cat" key={c.id}>
           <div className="pe-acab-cat-head">
@@ -593,6 +638,87 @@ function S_Acabamentos({ d, set }) {
       {modal?.type === "categoria" && (
         <S_AcabAddCategoryModal onClose={() => setModal(null)} onAdd={(nome) => { addCategory(nome); setModal(null); }}/>
       )}
+    </>
+  );
+}
+
+function S_Acabamentos({ d, set }) {
+  const engine = window.PropostaAcabamentosEngine;
+  const store = window.PropostaAcabamentosStore;
+  const [libLoaded, setLibLoaded] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      if (!store || !engine) return;
+      const lib = await store.loadLibrary();
+      if (cancelado) return;
+      engine.setLibraryExtras(lib);
+      setLibLoaded((n) => !n); // força recomputar cats com a lib carregada
+    })();
+    return () => { cancelado = true; };
+  }, []);
+
+  /* Perfis (um por equipamento/Unidade ou um por tipo): cotação separada ganha um bloco por perfil, TODOS abertos e
+     editáveis um a um — o mesmo desenho de "Especificações Técnicas". Sem perfis (proposta antiga ou que nunca foi
+     separada) tudo funciona como sempre, no bloco único. */
+  const perfis = Array.isArray(d.elevador.perfis) ? d.elevador.perfis : [];
+  const O = window.PropostaOpcoes;
+
+  const catsGlobais = engine ? engine.garantirCats(d.elevador) : [];
+
+  /* Só na 1ª vez (proposta ainda sem acabamentosCats): grava o resultado da
+     migração como estado real, pra não ficar recalculando do legado a
+     cada render. */
+  React.useEffect(() => {
+    if (engine && !perfis.length && !(Array.isArray(d.elevador.acabamentosCats) && d.elevador.acabamentosCats.length)) {
+      set("elevador.acabamentosCats", catsGlobais);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libLoaded]);
+
+  if (!engine) return <div className="pe-hint">Carregando…</div>;
+
+  const atualizarPerfil = (id, novo) => set("elevador.perfis", perfis.map((p) => p.id !== id ? p : { ...p, acabamentosCats: novo }));
+  const copiarDe = (destino, outroId) => {
+    const outro = perfis.find((p) => p.id === outroId);
+    if (!outro) return;
+    const rot = (p) => (O && O.tituloPerfil({ nome: p.nome, codigos: p.codigos })) || p.nome;
+    if (!window.confirm(`Copiar os acabamentos de "${rot(outro)}" para "${rot(destino)}"? O que está preenchido aqui será substituído.`)) return;
+    atualizarPerfil(destino.id, JSON.parse(JSON.stringify(engine.garantirCats({ acabamentosCats: outro.acabamentosCats }))));
+  };
+
+  return (
+    <div className="pe-acab">
+      <S_SepararPorTipo d={d} set={set} perfis={perfis}/>
+      {perfis.length === 0 && (
+        <S_AcabEditor cats={catsGlobais} updateCats={(novo) => set("elevador.acabamentosCats", novo)}/>
+      )}
+      {perfis.map((p, i) => {
+        const titulo = (O && O.tituloPerfil({ nome: p.nome, codigos: p.codigos })) || p.nome;
+        return (
+          <div className="pe-rep" key={p.id}>
+            <div className="pe-rep__head">
+              <div>
+                <span className="pe-rep__idx">{String(i + 1).padStart(2, "0")}</span>
+                {titulo} <span style={{ opacity: .55, fontFamily: "var(--font-mono)", fontSize: 11, marginLeft: 6 }}>de {perfis.length}</span>
+              </div>
+            </div>
+            <div className="pe-rep__body">
+              <div className="pe-hint" style={{ marginBottom: 6 }}>
+                Estes acabamentos valem só para {(O && O.faixaCodigos(p.codigos)) || p.nome}. Vieram do Formulário e você pode ajustar.
+              </div>
+              {perfis.length > 1 && (
+                <select className="pe-input" style={{ maxWidth: 320, marginBottom: 10 }} value="" onChange={(e) => { if (e.target.value) copiarDe(p, e.target.value); }}>
+                  <option value="">Copiar de outro equipamento…</option>
+                  {perfis.filter((x) => x.id !== p.id).map((x) => <option key={x.id} value={x.id}>{(O && O.tituloPerfil({ nome: x.nome, codigos: x.codigos })) || x.nome}</option>)}
+                </select>
+              )}
+              <S_AcabEditor cats={engine.garantirCats({ acabamentosCats: p.acabamentosCats })} updateCats={(novo) => atualizarPerfil(p.id, novo)}/>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -691,8 +817,9 @@ function S_ItemDescontoLog({ log }) {
   );
 }
 
-function S_ItensValores({ eq, itens, onChangeItens, proposta }) {
+function S_ItensValores({ eq, itens, onChangeItens, proposta, ocultos, onToggleOculto, bloqueioOcultar, ocupado, podeOcultarMais }) {
   const [modalItem, setModalItem] = React.useState(null);
+  const ocSet = new Set(ocultos || []);
   const engine = window.PropostaDesconto;
   const fmt = (n) => "R$ " + (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -724,15 +851,24 @@ function S_ItensValores({ eq, itens, onChangeItens, proposta }) {
 
   return (
     <div style={{ marginBottom: 16 }}>
-      {itens.map((it) => {
+      {[...itens.filter((x) => !ocSet.has(x.id)), ...itens.filter((x) => ocSet.has(x.id))].map((it, idx, arr) => {
+        const oculto = ocSet.has(it.id);
+        const primeiroOculto = oculto && !(idx > 0 && ocSet.has(arr[idx - 1].id));
         const original = engine ? engine.parseNum(it.valorOriginal ?? it.valorUnit) : Number(it.valorUnit) || 0;
         const atual = engine ? engine.parseNum(it.valorUnit) : Number(it.valorUnit) || 0;
         const qtd = Number(it.quantidade) || 1;
         const temDesconto = it.desconto && atual < original;
         return (
-          <div key={it.id} className="pe-acab-cat">
+          <React.Fragment key={it.id}>
+          {primeiroOculto && (
+            <div className="small muted" style={{ margin: "14px 0 6px", fontWeight: 600 }}>
+              Equipamentos ocultos da proposta ({arr.filter((x) => ocSet.has(x.id)).length}) — não aparecem para o cliente nem entram no total
+            </div>
+          )}
+          <div className="pe-acab-cat" style={oculto ? { opacity: 0.6, borderStyle: "dashed" } : undefined}>
             <div className="pe-acab-cat-head">
               <span className="pe-acab-cat-nome">{it.id || it.equipamento}</span>
+              {oculto && <span className="pe-tag" style={{ marginLeft: 8 }}>Oculto</span>}
             </div>
             <div className="row gap-2" style={{ alignItems: "baseline", flexWrap: "wrap" }}>
               {temDesconto && <span className="small muted" style={{ textDecoration: "line-through" }}>{fmt(original * qtd)}</span>}
@@ -748,9 +884,17 @@ function S_ItensValores({ eq, itens, onChangeItens, proposta }) {
               {temDesconto && !it.descontoPendente && (
                 <button type="button" className="pe-acab-addfield" onClick={() => remover(it)}>Remover desconto</button>
               )}
+              {onToggleOculto && (oculto || podeOcultarMais) && (
+                <button type="button" className="pe-acab-addfield" disabled={!!ocupado || !!bloqueioOcultar || (!oculto && !!it.descontoPendente)}
+                  title={bloqueioOcultar || (!oculto && it.descontoPendente ? "Resolva o pedido de desconto antes de ocultar" : (oculto ? "Volta a aparecer na proposta, no PDF e no total" : "Tira este equipamento da proposta, do PDF e do total (o dado continua guardado)"))}
+                  onClick={() => onToggleOculto(it, !oculto)}>
+                  {oculto ? "Reexibir na proposta" : "Ocultar da proposta"}
+                </button>
+              )}
             </div>
             <S_ItemDescontoLog log={it.descontoLog}/>
           </div>
+          </React.Fragment>
         );
       })}
       {modalItem && (
@@ -765,20 +909,22 @@ function S_ItensValores({ eq, itens, onChangeItens, proposta }) {
    vista e 4 parcelas"), agora gerado de verdade a partir da Quantidade de
    Parcelas escolhida, em vez de vir só como sugestão estática no default. */
 function gerarParcelasAutomaticas(qtd, total) {
-  const n = Math.max(1, Number(qtd) || 0);
-  const fmt2 = (x) => x.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  if (n <= 1) return [{ desc: "Pagamento integral na assinatura do contrato", valor: fmt2(total) }];
-  const sinal = total * 0.4;
-  const restCount = n - 1;
-  const cadaParcela = restCount > 0 ? (total - sinal) / restCount : 0;
-  const linhas = [{ desc: "Sinal de 40% na assinatura do contrato", valor: fmt2(sinal) }];
-  for (let i = 1; i <= restCount; i++) linhas.push({ desc: `${i}ª Parcela`, valor: fmt2(cadaParcela) });
-  return linhas;
+  return window.PropostaOpcoes.parcelasPadrao(qtd, total); // centavos exatos; a última parcela absorve a sobra
 }
 const QTD_PARCELAS_OPTIONS = Array.from({ length: 11 }, (_, i) => String(i + 2)); // 2..12
 
-function S_Valores({ d, set, eq, recordId }) {
+function S_Valores({ d, set, eq, recordId, travada }) {
   const v = d[eq].valores;
+  const O = window.PropostaOpcoes;
+  /* Ocultar/reexibir equipamento individual (VPPR-0990): dono da proposta ou Líder (alçada), proposta destravada. */
+  const [podeOcultar, setPodeOcultar] = React.useState(!recordId);
+  const [ocupado, setOcupado] = React.useState(false);
+  React.useEffect(() => {
+    let cancelado = false;
+    if (!recordId || !window.PropostaStore || !window.PropostaStore.podeOcultarEquipamento) { setPodeOcultar(true); return undefined; }
+    window.PropostaStore.podeOcultarEquipamento(recordId).then((ok) => { if (!cancelado) setPodeOcultar(ok); });
+    return () => { cancelado = true; };
+  }, [recordId]);
   const u = (k) => (val) => set(`${eq}.valores.${k}`, val);
   const parcelas = v.parcelas || [];
   const setParcelas = (arr) => set(`${eq}.valores.parcelas`, arr);
@@ -786,11 +932,13 @@ function S_Valores({ d, set, eq, recordId }) {
 
   const qtd = parseFloat(v.quantidade) || 0;
   const unit = parseFloat((v.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
-  const difal = parseFloat((v.difal || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
-  const totalEq = temItens
+  /* DIFAL não aparece na proposta (Financeiro, 13/10/2026): o preço de venda já o contém. */
+  const totalEq = temItens && O
+    ? O.totalOficial(d, eq) // só os equipamentos visíveis (ocultos ficam de fora)
+    : temItens
     ? v.itens.reduce((s, it) => s + (parseFloat((it.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0) * (Number(it.quantidade) || 1), 0)
     : qtd * unit;
-  const totalDifal = totalEq + difal;
+  const totalDifal = totalEq; // nome histórico: é o total da proposta
   /* Parcelas eram digitadas aqui mas a soma delas nunca aparecia nem era
      conferida contra o Total com DIFAL — vendedor só descobria a conta
      errada depois, olhando o PDF (achado real, 19/08). */
@@ -838,6 +986,51 @@ function S_Valores({ d, set, eq, recordId }) {
     setParcelas(gerarParcelasAutomaticas(qtd, totalDifal));
   };
 
+  const ocultosAtuais = O ? O.ocultosDe(d, eq) : [];
+  const bloqueioOcultar = travada ? "Proposta enviada ao cliente está travada — peça o destrave ao Líder."
+    : !podeOcultar ? "Só o dono da proposta ou a Regiane (Líder) pode ocultar/reexibir equipamentos."
+    : (O && O.temOpcao90(d, eq)) ? "Proposta com entrega em 90 dias (1 equipamento): não há equipamento para ocultar." : "";
+  const alternarOculto = async (item, ocultar) => {
+    if (ocupado || !O) return;
+    const r = O.alternarOculto(d, item.id, ocultar, eq);
+    if (r.erro) { window.toast?.(r.erro, "warning"); return; }
+    const antes = O.totalOficial(d, eq), depois = O.totalOficial(r.data, eq);
+    const rs = (n) => "R$ " + formatBR(n);
+    const msg = ocultar
+      ? `Ocultar ${item.id}?
+
+Ele deixa de aparecer na proposta, no PDF e no contrato, e sai do total:
+${rs(antes)} → ${rs(depois)}
+As parcelas serão recalculadas. Você pode reexibir depois.` + (O.qtdVisiveis(r.data, eq) <= O.MINIMO_VISIVEIS ? `
+
+ATENÇÃO — limite de ocultação: depois desta ação a proposta fica com ${O.MINIMO_VISIVEIS} equipamentos, que é o mínimo. O botão "Ocultar" some dos demais.
+Motivo: a Precificação é calculada com o container dividido por 2 só quando a cotação tem UM equipamento; com 2 ou mais o container é pago inteiro e rateado. Se o cliente quer um único equipamento, peça uma Precificação própria.` : "")
+      : `Reexibir ${item.id}?
+
+Ele volta para a proposta, o PDF e o total:
+${rs(antes)} → ${rs(depois)}
+As parcelas serão recalculadas.`;
+    if (!window.confirm(msg)) return;
+    setOcupado(true);
+    const anterior = { ocultos: v.ocultos || [], parcelas: v.parcelas || [] };
+    set(`${eq}.valores.ocultos`, r.data[eq].valores.ocultos);
+    set(`${eq}.valores.parcelas`, r.data[eq].valores.parcelas);
+    try {
+      if (recordId && window.PropostaStore) {
+        const valorTotal = typeof calcularValorTotal === "function" ? calcularValorTotal(r.data, eq) : undefined;
+        const res = await window.PropostaStore.salvar({ data: r.data, eq, editId: recordId, valorTotal });
+        if (res && res.erro) {
+          set(`${eq}.valores.ocultos`, anterior.ocultos);
+          set(`${eq}.valores.parcelas`, anterior.parcelas);
+          window.toast?.("Não foi possível salvar: " + res.erro, "error");
+          return;
+        }
+        try { window.VPLog?.registrar({ modulo: "Propostas", acao: ocultar ? "Ocultou equipamento da proposta" : "Reexibiu equipamento na proposta", alvo: "Proposta", alvo_id: recordId, detalhe: { codigo: item.id, valor: item.valorUnit, total_antes: antes, total_depois: depois } }); } catch (_) {}
+      }
+      window.toast?.(ocultar ? `${item.id} oculto da proposta.` : `${item.id} reexibido na proposta.`, "success");
+    } finally { setOcupado(false); }
+  };
+
   const propostaRef = { id: recordId, numeroCotacao: d.numeroCotacao, cliente: d.cliente, titulo: d.cliente?.nome };
 
   /* Solicitar/remover desconto precisa ficar salvo na hora, não só no state
@@ -862,6 +1055,11 @@ function S_Valores({ d, set, eq, recordId }) {
           itens={v.itens}
           proposta={propostaRef}
           onChangeItens={persistirItens}
+          ocultos={ocultosAtuais}
+          onToggleOculto={O ? alternarOculto : null}
+          bloqueioOcultar={bloqueioOcultar}
+          ocupado={ocupado}
+          podeOcultarMais={!O || O.podeOcultarMais(d, eq)}
         />
       ) : (
         <div className="pe-grid cols-4">
@@ -874,7 +1072,6 @@ function S_Valores({ d, set, eq, recordId }) {
           </PEField>
           <PEField label="Quantidade"><PENumber value={v.quantidade} onChange={u("quantidade")} placeholder="1"/></PEField>
           <PEField label="Valor Unitário"><PECurrency value={v.valorUnit} onChange={u("valorUnit")} placeholder="480.000,00"/></PEField>
-          <PEField label="DIFAL" tag="diferencial alíquota"><PECurrency value={v.difal} onChange={u("difal")} placeholder="0,00"/></PEField>
           <PEField label={formaPagLabel} span={formaTipo === "parcelado" ? "1" : "2"}>
             <PESelect value={formaTipo} onChange={aplicarFormaTipo} options={[{ value: "vista", label: "À vista" }, { value: "parcelado", label: "Parcelado" }]}/>
           </PEField>
@@ -885,9 +1082,14 @@ function S_Valores({ d, set, eq, recordId }) {
           )}
         </div>
       )}
+      {temItens && O && ocultosAtuais.length > 0 && (
+        <div className="small" style={{ margin: "0 0 12px", padding: "8px 10px", background: "var(--vp-warning-tint, #f8eed7)", borderRadius: 6 }}>
+          <b>Total comercial: R$ {formatBR(totalEq)}</b> — {ocultosAtuais.length} equipamento{ocultosAtuais.length > 1 ? "s" : ""} oculto{ocultosAtuais.length > 1 ? "s" : ""} (não entra{ocultosAtuais.length > 1 ? "m" : ""} no total, PDF nem contrato).
+          {O.semEquipamentoVisivel(d, eq) && <div style={{ color: "#b00020", marginTop: 4 }}>Todos os equipamentos estão ocultos: não será possível publicar nem enviar até reexibir pelo menos um.</div>}
+        </div>
+      )}
       {temItens && (
         <div className="pe-grid cols-4">
-          <PEField label="DIFAL" tag="diferencial alíquota"><PECurrency value={v.difal} onChange={u("difal")} placeholder="0,00"/></PEField>
           <PEField label={formaPagLabel} span={formaTipo === "parcelado" ? "1" : "2"}>
             <PESelect value={formaTipo} onChange={aplicarFormaTipo} options={[{ value: "vista", label: "À vista" }, { value: "parcelado", label: "Parcelado" }]}/>
           </PEField>
@@ -944,17 +1146,9 @@ function S_Valores({ d, set, eq, recordId }) {
       })()}
 
       <div className="pe-totais">
-        <div className="pe-totais-row">
-          <span>Total dos Equipamentos</span>
-          <b>R$ {formatBR(totalEq)}</b>
-        </div>
-        <div className="pe-totais-row">
-          <span>DIFAL aplicado</span>
-          <b>R$ {formatBR(difal)}</b>
-        </div>
         <div className="pe-totais-row final">
-          <span>Total com DIFAL</span>
-          <b>R$ {formatBR(totalDifal)}</b>
+          <span>Total da Proposta</span>
+          <b>R$ {formatBR(totalEq)}</b>
         </div>
         {parcelas.length > 0 && (
           <div className="pe-totais-row" style={parcelasBatem ? undefined : { color: 'var(--vp-danger, #c62828)' }}>
@@ -975,7 +1169,7 @@ function S_Ajustes({ d, set, eq }) {
       <div style={{ marginBottom: 16 }}>
         <div className="pe-field-label" style={{ marginBottom: 6 }}>Preset Financeiro</div>
         <PEPresets value={a.preset} onChange={u("preset")} options={[
-          { value: "fora", label: "Fora do Estado", sub: "DIFAL aplicável" },
+          { value: "fora", label: "Fora do Estado", sub: "outro estado" },
           { value: "sp",   label: "São Paulo",     sub: "alíquota interna" },
           { value: "livre", label: "Diferenciado", sub: "livre / negociado" },
         ]}/>
@@ -989,7 +1183,7 @@ function S_Ajustes({ d, set, eq }) {
         <PEField label="Reajuste" span={eq === "elevador" ? "3" : "2"}><PETextarea rows={2} value={a.reajuste} onChange={u("reajuste")} placeholder="Reajuste anual conforme IPCA acumulado..."/></PEField>
         <PEField label="Taxas e Impostos Inclusos" span="3"><PETextarea rows={2} value={a.taxasIn} onChange={u("taxasIn")} placeholder="II, IPI, PIS/COFINS sobre importação..."/></PEField>
         <PEField label="Taxas e Impostos Exclusos" span="3"><PETextarea rows={2} value={a.taxasOut} onChange={u("taxasOut")} placeholder="ICMS interestadual, taxa de inspeção CREA..."/></PEField>
-        {eq === "elevador" ? <>
+        {true ? <>
           <PEField label='Cláusula de Reajuste Cambial (página "Ajustes e Impostos")' span="3"><PETextarea rows={3} value={a.clausulaCambial} onChange={u("clausulaCambial")} placeholder="O valor total desta proposta está baseado na taxa de câmbio..."/></PEField>
           <PEField label='Faturamento (página "Ajustes e Impostos")' span="3"><PETextarea rows={2} value={a.faturamentoTexto} onChange={u("faturamentoTexto")} placeholder="Venda de Equipamentos serão faturadas pela empresa..."/></PEField>
           <PEField label="Taxas e Impostos Inclusos no Preço" span="3"><PETextarea rows={2} value={a.taxasInclusas} onChange={u("taxasInclusas")} placeholder="Inclusos no preço todos os impostos decorrentes de..."/></PEField>
@@ -1096,18 +1290,34 @@ function S_Conteudo({ d, set }) {
     return () => { cancelado = true; };
   }, []);
 
-  const cats = engine ? engine.garantirCats(d.elevador) : [];
+  /* Perfis por tipo de equipamento (fase 2): com perfis, cada um tem os SEUS benefícios/diferenciais/características/
+     recursos/linha de modelos; a aba "Geral" guarda o que vale para a proposta inteira (infraestrutura, responsabilidades). */
+  const perfis = Array.isArray(d.elevador.perfis) ? d.elevador.perfis : [];
+  const [aba, setAba] = React.useState(null); // id do perfil ou "geral"
+  const emGeral = perfis.length > 0 && aba === "geral";
+  const perfil = perfis.length && !emGeral ? (perfis.find((p) => p.id === aba) || perfis[0]) : null;
+  const contaCod = (p) => (Array.isArray(p.codigos) && p.codigos.length) || (Array.isArray(p.unidadeIds) ? p.unidadeIds.length : 0);
 
-  const persistirCats = (novosCats) => {
-    set("elevador.conteudoCats", novosCats);
+  const catsTodas = engine ? engine.garantirCats(d.elevador) : [];
+  const cats = !engine ? [] : perfil ? engine.garantirCatsPerfil(perfil) : emGeral ? engine.catsGerais(catsTodas) : catsTodas;
+
+  const persistirGlobal = (completo) => {
+    set("elevador.conteudoCats", completo);
     if (!engine) return;
-    const legado = engine.derivarLegado(novosCats);
+    const legado = engine.derivarLegado(completo);
     Object.keys(legado).forEach((k) => set(`elevador.${k}`, legado[k]));
+  };
+  const persistirCats = (novosCats) => {
+    if (perfil) {
+      set("elevador.perfis", perfis.map((p) => p.id !== perfil.id ? p : { ...p, conteudoCats: novosCats, ...engine.legadoDoPerfil(novosCats) }));
+      return;
+    }
+    persistirGlobal(emGeral ? [...catsTodas.filter(engine.ehDoPerfil), ...novosCats] : novosCats);
   };
 
   React.useEffect(() => {
     if (engine && !(Array.isArray(d.elevador.conteudoCats) && d.elevador.conteudoCats.length)) {
-      persistirCats(cats);
+      persistirGlobal(catsTodas);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [libLoaded]);
@@ -1156,6 +1366,33 @@ function S_Conteudo({ d, set }) {
 
   return (
     <div className="pe-acab">
+      <S_SepararPorTipo d={d} set={set} perfis={perfis}/>
+      {perfis.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }} role="tablist" aria-label="Conteúdo por tipo de equipamento">
+            {[...perfis.map((p) => ({ id: p.id, rotulo: `${(window.PropostaOpcoes && window.PropostaOpcoes.tituloPerfil({ nome: p.nome, codigos: p.codigos })) || p.nome} (${contaCod(p)})` })), { id: "geral", rotulo: "Geral" }].map((t) => {
+              const ativa = emGeral ? t.id === "geral" : (perfil && t.id === perfil.id);
+              return (
+                <button key={t.id} type="button" role="tab" aria-selected={!!ativa} onClick={() => setAba(t.id)}
+                  style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", font: "inherit", fontSize: 13,
+                    border: "1px solid " + (ativa ? "#111" : "#d4d4d4"), background: ativa ? "#FFC72C" : "#fff", color: "#111", fontWeight: ativa ? 600 : 400 }}>
+                  {t.rotulo}
+                </button>
+              );
+            })}
+          </div>
+          <div className="pe-hint" style={{ marginBottom: 6 }}>
+            {perfil
+              ? `Benefícios, diferenciais, características e recursos valem só para ${window.PropostaOpcoes ? window.PropostaOpcoes.faixaCodigos(perfil.codigos) || perfil.nome : perfil.nome}. O texto-base do tipo é um rascunho — revise.`
+              : "Infraestrutura e responsabilidades valem para a proposta inteira."}
+          </div>
+          {perfil && (
+            <PEField label="Linha de modelos (este perfil)" tag="descrição da linha">
+              <PETextarea rows={2} value={perfil.textoModelos || ""} onChange={(v) => set("elevador.perfis", perfis.map((p) => p.id !== perfil.id ? p : { ...p, textoModelos: v }))} placeholder="Linha de elevadores…"/>
+            </PEField>
+          )}
+        </div>
+      )}
       {cats.map((c) => (
         <div className="pe-acab-cat" key={c.id}>
           <div className="pe-acab-cat-head">
@@ -1268,6 +1505,8 @@ function S_ContSidebarNav({ d, set, isActive, icon, onHeaderClick }) {
     store && store.saveCategoryToLibrary({ id, nome });
   };
 
+  /* Com perfis por tipo, benefícios/recursos são editados nas abas do painel "Conteúdo da Proposta" (cada perfil tem os seus). */
+  const temPerfis = Array.isArray(d.elevador.perfis) && d.elevador.perfis.length > 0;
   const IconComp = icon || Icon.bolt;
   const totalAtivos = cats.reduce((s, c) => s + c.campos.filter((f) => f.ativo).length, 0);
 
@@ -1277,10 +1516,10 @@ function S_ContSidebarNav({ d, set, isActive, icon, onHeaderClick }) {
         onClick={() => { onHeaderClick(); setExpanded((e) => !e); }}>
         <span className="pe__sidenav-icon"><IconComp/></span>
         <span style={{ flex: 1 }}>Conteúdo da Proposta</span>
-        {totalAtivos > 0 && <span className="pe__conttree-badge">{totalAtivos}</span>}
+        {!temPerfis && totalAtivos > 0 && <span className="pe__conttree-badge">{totalAtivos}</span>}
         <svg className={"pe__conttree-chev" + (expanded ? " on" : "")} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
       </div>
-      {expanded && (
+      {expanded && !temPerfis && (
         <div className="pe__conttree-body">
           {cats.map((c) => {
             const aberto = !!openCat[c.id];
@@ -1329,15 +1568,16 @@ function S_ContSidebarNav({ d, set, isActive, icon, onHeaderClick }) {
   );
 }
 
-function S_Responsabilidades({ d, set }) {
-  const r = d.elevador.responsabilidades;
+function S_Responsabilidades({ d, set, eq = "elevador" }) {
+  const r = d[eq].responsabilidades || {};
+  const nomeEq = eq === "escada" ? "escadas rolantes" : eq === "esteira" ? "esteiras rolantes" : "elevadores";
   return (
     <>
       <div className="pe-field-label" style={{ marginBottom: 6 }}>A cargo do Vendedor (VerticalParts)</div>
-      <S_RepText items={r.vendedor || []} setItems={(v) => set("elevador.responsabilidades.vendedor", v)}
-        addLabel="+ Adicionar item" placeholder="Ex.: Montagem completa dos elevadores"/>
+      <S_RepText items={r.vendedor || []} setItems={(v) => set(`${eq}.responsabilidades.vendedor`, v)}
+        addLabel="+ Adicionar item" placeholder={`Ex.: Montagem completa das ${nomeEq}`}/>
       <div className="pe-field-label" style={{ margin: "18px 0 6px" }}>A cargo do Comprador</div>
-      <S_RepText items={r.comprador || []} setItems={(v) => set("elevador.responsabilidades.comprador", v)}
+      <S_RepText items={r.comprador || []} setItems={(v) => set(`${eq}.responsabilidades.comprador`, v)}
         addLabel="+ Adicionar item" placeholder="Ex.: Preparo do(s) poço(s) e caixa(s) de acordo com as nossas indicações"/>
     </>
   );
@@ -1363,14 +1603,14 @@ function S_GarantiaCondicoes({ d, set, eq }) {
     <div className="pe-grid cols-1">
       <PEField label="Garantia"><PETextarea rows={3} value={g.garantia} onChange={u("garantia")} placeholder="24 (vinte e quatro) meses contra defeitos de fabricação + 12 meses de serviço..."/></PEField>
       <PEField label="Condições Gerais"><PETextarea rows={4} value={g.condicoes} onChange={u("condicoes")} placeholder="Esta proposta é válida por 30 dias. Quaisquer alterações no escopo deverão ser formalizadas por aditivo..."/></PEField>
-      {eq === "elevador" ? <PEField label="Horário dos Serviços de Instalação/Montagem"><PETextInput value={g.horario} onChange={u("horario")} placeholder="Segunda à Sexta das 08:00 às 17:12hs"/></PEField> : null}
+      <PEField label="Horário dos Serviços de Instalação/Montagem"><PETextInput value={g.horario} onChange={u("horario")} placeholder="Segunda à Sexta das 08:00 às 17:12hs"/></PEField>
     </div>
   );
 }
 
-function S_CondPagamentoElev({ d, set }) {
-  const c = d.elevador.condicoesPagto;
-  const u = (k) => (v) => set(`elevador.condicoesPagto.${k}`, v);
+function S_CondPagamentoElev({ d, set, eq = "elevador" }) {
+  const c = d[eq].condicoesPagto || {};
+  const u = (k) => (v) => set(`${eq}.condicoesPagto.${k}`, v);
   return (
     <div className="pe-grid cols-1">
       <PEField label="Venda de Equipamentos"><PETextarea rows={2} value={c.venda} onChange={u("venda")} placeholder="Condições aplicáveis sobre a venda dos equipamentos..."/></PEField>
@@ -1411,7 +1651,7 @@ function S_CaracteristicasEquip({ d, set }) {
 
 /* === Item nomeado (nome + descrição) — usado em Recursos Inclusos e
    Infraestrutura e Instalação === */
-function S_RepNomeDesc({ items, setItems, addLabel }) {
+function S_RepNomeDesc({ items, setItems, addLabel, nomePh = "Ex.: Retorno Automático", descPh = "Descreva o recurso..." }) {
   const update = (i, k, v) => { const arr = [...items]; arr[i] = { ...arr[i], [k]: v }; setItems(arr); };
   const add = () => setItems([...items, { nome: "", desc: "" }]);
   const remove = (i) => setItems(items.filter((_, j) => j !== i));
@@ -1419,8 +1659,8 @@ function S_RepNomeDesc({ items, setItems, addLabel }) {
     <>
       {items.map((it, i) => (
         <div key={i} className="pe-grid cols-1" style={{ position: "relative", marginBottom: 10, paddingBottom: 10, borderBottom: "1px dashed var(--border)" }}>
-          <PEField label="Nome"><PETextInput value={it.nome} onChange={(v) => update(i, "nome", v)} placeholder="Ex.: Retorno Automático"/></PEField>
-          <PEField label="Descrição"><PETextarea rows={2} value={it.desc} onChange={(v) => update(i, "desc", v)} placeholder="Descreva o recurso..."/></PEField>
+          <PEField label="Nome"><PETextInput value={it.nome} onChange={(v) => update(i, "nome", v)} placeholder={nomePh}/></PEField>
+          <PEField label="Descrição"><PETextarea rows={2} value={it.desc} onChange={(v) => update(i, "desc", v)} placeholder={descPh}/></PEField>
           <button type="button" onClick={() => remove(i)} className="pe-parcela-row__del"
             style={{ position: "absolute", top: 0, right: 0, height: 28, width: 28 }}>
             <Icon.x size={12}/>
@@ -1434,6 +1674,17 @@ function S_RepNomeDesc({ items, setItems, addLabel }) {
 
 function S_RecursosNomeados({ d, set }) {
   return <S_RepNomeDesc items={d.elevador.recursosNomeados || []} setItems={(v) => set("elevador.recursosNomeados", v)} addLabel="+ Adicionar recurso"/>;
+}
+
+/* Escada/Esteira: páginas "Acabamento" e "Características Técnicas" (lista nome + texto, como no elevador). */
+function S_AcabamentoEscEst({ d, set, eq }) {
+  return <S_RepNomeDesc items={d[eq].acabamentosLista || []} setItems={(v) => set(`${eq}.acabamentosLista`, v)} addLabel="+ Adicionar item de acabamento"
+    nomePh="Ex.: Tipo de Balaustrada" descPh="Descreva o acabamento..."/>;
+}
+
+function S_CaracTecEscEst({ d, set, eq }) {
+  return <S_RepNomeDesc items={d[eq].caracteristicasTec || []} setItems={(v) => set(`${eq}.caracteristicasTec`, v)} addLabel="+ Adicionar característica"
+    nomePh="Ex.: Comando" descPh="Descreva a característica técnica..."/>;
 }
 
 function S_InfraestruturaNomeada({ d, set }) {
@@ -1602,4 +1853,5 @@ Object.assign(window, {
   S_RepText, S_Valores, S_Ajustes, S_PrazoEntrega, S_Responsabilidades,
   S_InstalacaoMontagem, S_GarantiaCondicoes, S_CondPagamentoElev,
   S_DescricaoSimples, S_EspecEscada, S_Especificidades,
+  S_AcabamentoEscEst, S_CaracTecEscEst,
 });

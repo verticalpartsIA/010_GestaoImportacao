@@ -11,7 +11,7 @@ function makeDefaultProposta() {
   const hoje = new Date();
   const meses = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
   const anoAtual = hoje.getFullYear();
-  return {
+  const base = {
     numero: `VP-${anoAtual}-001`,
     dataLinha: `São Paulo, ${hoje.getDate()} de ${meses[hoje.getMonth()]} de ${anoAtual}`,
     validade: "30 dias",
@@ -118,9 +118,9 @@ function makeDefaultProposta() {
         faturamentoTexto: "Venda de Equipamentos serão faturadas pela empresa VerticalParts – Indústria e Comércio Ltda, com sede na Rua Armandina Braga de Almeida, 383 - Guarulhos – SP - CEP: 07141-003.",
         reajuste: "Reajuste anual conforme IPCA acumulado.",
         taxasIn: "II, IPI, PIS/COFINS sobre importação. ICMS interestadual.",
-        taxasOut: "ICMS final destino (DIFAL conforme localização da obra). Taxa CREA/CAU.",
+        taxasOut: "Taxa CREA/CAU.",
         taxasInclusas: "Inclusos no preço todos os impostos decorrentes de Emissão de Notas Fiscais de Venda/Serviços, Montagem, Instalação dos Equipamentos, bem como ART'S.",
-        taxasExcluidas: "Não estão inclusos no preço taxas de alvará de funcionamento ou outras licenças de qualquer natureza vinculadas às obrigações do COMPRADOR, bem como majorações de taxas e impostos, a exemplo de DIFAL de ICMS e de tributos e encargos incidentes sobre a importação e nacionalização das mercadorias (incluindo, sem limitação, Imposto de Importação (II), IPI, PIS/COFINS-Importação, ICMS-importação, AFRMM e taxa SISCOMEX), havidos após a emissão desta proposta ou da NF de venda.",
+        taxasExcluidas: "Não estão inclusos no preço taxas de alvará de funcionamento ou outras licenças de qualquer natureza vinculadas às obrigações do COMPRADOR, bem como majorações de taxas e impostos, a exemplo de tributos e encargos incidentes sobre a importação e nacionalização das mercadorias (incluindo, sem limitação, Imposto de Importação (II), IPI, PIS/COFINS-Importação, ICMS-importação, AFRMM e taxa SISCOMEX), havidos após a emissão desta proposta ou da NF de venda.",
       },
       prazo: { prazo: "prazo de 120 (cento e vinte) a 150 (cento e cinquenta) dias", condCovid: "Os prazos poderão ser revisados em caso de eventos extraordinários relacionados a pandemia, escassez global de semicondutores ou bloqueios portuários." },
       responsabilidades: {
@@ -170,6 +170,40 @@ function makeDefaultProposta() {
       garantia: { garantia: "", condicoes: "" },
     }
   };
+  /* Escada/Esteira nascem com o MESMO conteúdo do elevador (Financeiro, 16/10/2026): Garantia, Condições Gerais,
+     Condições de Pagamento, Ajustes, Prazo (vêm do bloco do elevador acima) + os textos próprios do equipamento
+     (Acabamento, Características Técnicas, Instalação, Responsabilidades — proposta-padroes-escest.js). */
+  base.escada = { ...base.escada, ...padroesEscEst("escada", base.elevador) };
+  base.esteira = { ...base.esteira, ...padroesEscEst("esteira", base.elevador) };
+  return base;
+}
+
+/* Conteúdo padrão de escada/esteira = comuns do elevador + textos do equipamento (ver acima). Também usado para
+   completar rascunhos antigos (só campos VAZIOS — nunca sobrescreve o que o vendedor digitou). */
+function padroesEscEst(eq, elevador) {
+  const ele = elevador || makeDefaultProposta().elevador;
+  const PE = window.PropostaPadroesEscEst;
+  const proprios = PE ? PE.padroes(eq) : {};
+  const comuns = {
+    condicoesPagto: ele.condicoesPagto,
+    ajustes: { clausulaCambial: ele.ajustes.clausulaCambial, faturamentoTexto: ele.ajustes.faturamentoTexto, reajuste: ele.ajustes.reajuste,
+      taxasIn: ele.ajustes.taxasIn, taxasOut: ele.ajustes.taxasOut, taxasInclusas: ele.ajustes.taxasInclusas, taxasExcluidas: ele.ajustes.taxasExcluidas },
+    prazo: { prazo: ele.prazo.prazo, condCovid: ele.prazo.condCovid },
+    garantia: { garantia: ele.garantia.garantia, condicoes: ele.garantia.condicoes, horario: ele.garantia.horario },
+  };
+  const out = { ...comuns, ...proprios };
+  /* "Frete marítimo" por contêiner de esteira não é do elevador — cada equipamento mantém os seus campos próprios. */
+  return out;
+}
+
+/* Rascunho de escada/esteira aberto no editor: completa o que está vazio com os textos padrão. Proposta já enviada,
+   assinada ou travada NÃO é tocada (o documento do cliente não muda sozinho). */
+function completarPadroesEscEst(data, eq, status) {
+  if ((eq !== "escada" && eq !== "esteira") || !data || !data[eq]) return data;
+  if (status && status !== "rascunho") return data;
+  const PE = window.PropostaPadroesEscEst;
+  if (!PE) return data;
+  return { ...data, [eq]: PE.completar(data[eq], padroesEscEst(eq)) };
 }
 
 /* deep set/get via dot-notation */
@@ -225,10 +259,14 @@ function getSections(eq) {
     { id: "descricao", title: "Descrição do Produto", icon: "package", group: "Produto" },
     { id: "espec", title: "Especificações Técnicas", icon: "ruler", group: "Produto" },
     { id: "especificidades", title: "Especificidades", icon: "tool", group: "Produto" },
+    { id: "acabamentosLista", title: "Acabamento", icon: "star", group: "Produto" },
+    { id: "caracteristicasTec", title: "Características Técnicas", icon: "ruler", group: "Produto" },
     { id: "valores", title: "Valores e Pagamento", icon: "dollar", group: "Comercial" },
+    { id: "condicoesPagto", title: "Condições Gerais de Pagamento", icon: "scale", group: "Comercial" },
     { id: "ajustes", title: "Ajustes, Impostos e Câmbio", icon: "globe", group: "Comercial" },
     { id: "prazo", title: "Prazo e Entrega", icon: "truck", group: "Operacional" },
     { id: "instalacao", title: "Instalação e Montagem", icon: "hardhat", group: "Operacional" },
+    { id: "responsabilidades", title: "Responsabilidades", icon: "hardhat", group: "Operacional" },
     { id: "garantia", title: "Garantia e Condições", icon: "award", group: "Operacional" },
   ];
 }
@@ -334,7 +372,9 @@ function tempoRelativo(ts) {
 /* Total da proposta a partir do que está no formulário (preço unitário ×
    quantidade da aba ativa) — o mesmo número que o cliente vê no PDF e que
    agora também vai pra coluna valor_total, alimentando a listagem. */
-function calcularValorTotal(data, eq) {
+function calcularValorTotal(dataBruta, eq) {
+  /* Total COMERCIAL: equipamentos ocultados na seção 09 não entram (proposta-opcoes.js › projetar). */
+  const data = window.PropostaOpcoes ? window.PropostaOpcoes.projetar(dataBruta, eq) : dataBruta;
   const v = (data[eq] && data[eq].valores) || {};
   /* Mais de 1 equipamento (v.itens): soma item a item, pra refletir na
      hora um desconto aprovado nalgum deles — senão o total ficava preso
@@ -421,14 +461,14 @@ function PropostaSendModal({ record, onClose, onSent }) {
            com RFQ/Contrato de Venda/Contrato Instalador); sucesso/falha
            continuam decididos aqui, sem mudança de comportamento. */
         const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
-          to: contact, subject: `Proposta ${record.numero_documento} — VerticalParts`, text: message,
+          to: contact, subject: `Proposta ${record.numero_documento} - VerticalParts`, text: message,
           numeroCotacao: record.numeroCotacao ?? null, referenciaTipo: 'proposta', referenciaId: record.id,
         });
         if (enviouDireto) {
           await store.markSent(record.id, channel, { name, contact });
           window.toast?.(`E-mail enviado para ${contact}.`, 'success');
         } else {
-          window.open(store.mailtoHref(contact, `Proposta ${record.numero_documento} — VerticalParts`, message), '_blank');
+          window.open(store.mailtoHref(contact, `Proposta ${record.numero_documento} - VerticalParts`, message), '_blank');
           window.toast?.('O envio automático por e-mail FALHOU — nada foi enviado ao cliente e a proposta NÃO foi marcada como enviada. Abrindo seu e-mail padrão para envio manual; depois de enviar, use o WhatsApp/link para registrar o envio.', 'error');
           return;
         }
@@ -548,7 +588,7 @@ function PropostaEditor({ setRoute, subsel }) {
      travada — não faz sentido consultar alçada em proposta nova. */
   const [podeDestravar, setPodeDestravar] = React.useState(false);
   const [destravando, setDestravando] = React.useState(false);
-  const travada = meta?.status === 'aprovada' && !meta?.destravada_em;
+  const travada = ['enviada','visualizada','revisao_solicitada','aprovada'].includes(meta?.status) && !meta?.destravada_em;
   React.useEffect(() => {
     if (!travada) { setPodeDestravar(false); return; }
     let cancelado = false;
@@ -557,9 +597,11 @@ function PropostaEditor({ setRoute, subsel }) {
   }, [travada]);
   const destravarAgora = async () => {
     if (!recordId) return;
+    const motivo = window.prompt('Motivo do destrave (obrigatório — mínimo 10 letras):');
+    if (motivo == null) return;
     setDestravando(true);
     try {
-      const r = await window.PropostaStore.destravar(recordId);
+      const r = await window.PropostaStore.destravar(recordId, motivo);
       setMeta((m) => ({ ...(m || {}), destravada_em: r.destravada_em, destravada_por: r.destravada_por }));
       window.toast?.('Proposta destravada — fica editável até o próximo Salvar.', 'success');
     } catch (e) {
@@ -610,6 +652,7 @@ function PropostaEditor({ setRoute, subsel }) {
      enviar, ou pra REpublicar depois de editar uma proposta já enviada. */
   const publicar = React.useCallback(async () => {
     if (publicando || !window.PropostaStore) return;
+    if (window.PropostaOpcoes?.semEquipamentoVisivel(data, eq)) { window.toast?.('Todos os equipamentos estão ocultos — reexiba ao menos um antes de publicar.', 'warning'); return; }
     setPublicando(true);
     try {
       let id = recordId;
@@ -633,13 +676,14 @@ function PropostaEditor({ setRoute, subsel }) {
     } finally {
       setPublicando(false);
     }
-  }, [publicando, recordId, saveToSupabase]);
+  }, [publicando, recordId, saveToSupabase, data, eq]);
 
   // Salva e abre o modal de envio por assinatura digital — gera o link
   // público (/assinar/:token) igual ao Contrato Instalador/Venda, em vez de
   // só marcar status='enviada' sem nunca produzir nenhum link real.
   const abrirEnvio = React.useCallback(async () => {
     if (!window.PropostaStore) { window.toast?.('Store de assinatura não carregado.', 'error'); return; }
+    if (window.PropostaOpcoes?.semEquipamentoVisivel(data, eq)) { window.toast?.('Todos os equipamentos estão ocultos — reexiba ao menos um antes de enviar.', 'warning'); return; }
     const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(data.numeroCotacao) ?? null;
     if (window.DecisoesStore && numeroCotacao != null) {
       const gate = await window.DecisoesStore.podeEnviarProposta(numeroCotacao);
@@ -687,7 +731,10 @@ function PropostaEditor({ setRoute, subsel }) {
         const carregado = ehLegado
           ? { ...deepMergeProposta(makeDefaultProposta(), convertido), __legadoOriginal: dj }
           : (row.data_json || makeDefaultProposta());
-        setData(carregado);
+        /* Rascunho de escada/esteira antigo: completa só o que está vazio com os textos padrão (Garantia,
+           Condições, Acabamento…). O eq real é resolvido logo abaixo; antes de saber, tenta os dois. */
+        const eqReal = window.PropostaStore.resolverEq(row, convertido);
+        setData(completarPadroesEscEst(carregado, eqReal, row.status));
         /* eq deduzido do conteúdo, não de proposal_type: o campo está NULO
            em 290 das 311 propostas (todas as importadas), e o antigo
            `proposal_type || 'elevador'` fazia 16 propostas de Escada e 23 de
@@ -758,7 +805,12 @@ function PropostaEditor({ setRoute, subsel }) {
   const [herdando, setHerdando] = React.useState(false);
   const [heranca, setHeranca] = React.useState(null);
 
-  const herdar = React.useCallback(async () => {
+  const herdar = React.useCallback(async (opts) => {
+    /* `atualizar` só vem do CLIQUE no botão (nunca da herança automática ao abrir):
+       a Precificação foi recalculada depois da 1ª herança e o merge só preenche
+       campo vazio, então o preço novo nunca entrava ("clico em Herdar e o valor
+       não muda"). No clique explícito os VALORES passam a seguir a Precificação. */
+    const atualizar = !!(opts && opts.atualizar === true);
     const num = String(data.numeroCotacao || '').trim();
     if (!num) return;
     if (!window.PropostaHeranca) {
@@ -772,8 +824,62 @@ function PropostaEditor({ setRoute, subsel }) {
       if (!r.encontrado) {
         setHeranca({ tipo: 'aviso', texto: `Nenhum formulário encontrado para a Cotação nº ${num}. Você pode seguir preenchendo a proposta manualmente.` });
       } else {
-        setData((d) => deepMergeHeranca(d, r.prefill));
-        setEq('elevador');
+        /* Herança mantém o equipamento da proposta (13/10→15/10/2026): antes um
+           `setEq('elevador')` fixo trocava Escada/Esteira Rolante para Elevador
+           ao clicar em "Herdar dados". O motor de herança monta só o bloco
+           `elevador` (especificações/valores da Precificação de elevador); em
+           Escada/Esteira herdamos o que é comum (nº da cotação, cliente, obra)
+           e a quantidade das unidades DAQUELE tipo no Formulário. */
+        let prefill = r.prefill;
+        if (eq === 'escada' || eq === 'esteira') {
+          const { elevador: _descartado, ...comum } = prefill;
+          prefill = comum;
+          const bloco = window.PropostaHeranca.montarBlocoEscadaEsteira(r.fontes, eq);
+          if (bloco) prefill[eq] = bloco;
+        }
+        /* Atualiza os preços: troca itens/parcelas/forma de pagamento/opção 90d pelos da
+           Precificação atual. Só pede confirmação se algo vai mudar de verdade. */
+        let valoresNovos = null;
+        if (atualizar && eq === 'elevador' && prefill.elevador && prefill.elevador.valores
+            && Array.isArray(prefill.elevador.valores.itens) && prefill.elevador.valores.itens.length) {
+          const v = prefill.elevador.valores;
+          const atuais = (data.elevador && data.elevador.valores) || {};
+          const mudou = JSON.stringify(atuais.itens || []) !== JSON.stringify(v.itens)
+            || JSON.stringify(atuais.parcelas || []) !== JSON.stringify(v.parcelas || []);
+          if (!mudou) {
+            window.toast?.('Os valores já estão iguais aos da Precificação.', 'info');
+          } else if (confirm('A Precificação desta cotação tem valores diferentes dos da proposta.\n\n'
+              + 'Atualizar equipamentos, valores e parcelas com os da Precificação?\n'
+              + '(Descontos e parcelas ajustados na mão serão substituídos.)')) {
+            valoresNovos = {
+              itens: v.itens, parcelas: v.parcelas, formaTipo: v.formaTipo,
+              qtdParcelas: v.qtdParcelas, forma: v.forma, opcao90: v.opcao90 || null, escolhaEntrega: null,
+            };
+          }
+        }
+        setData((d) => {
+          /* A lista padrão de escada/esteira nasce com 1 unidade em branco, e o
+             merge só preenche lista vazia: sem esvaziá-la a herança não entrava. */
+          let base = d;
+          const lista = d[eq] && d[eq].especificacoes;
+          if ((eq === 'escada' || eq === 'esteira') && Array.isArray(lista)
+              && lista.every((u) => !Object.entries(u || {}).some(([k, v]) => k !== 'qtd' && v))) {
+            base = { ...d, [eq]: { ...d[eq], especificacoes: [] } };
+          }
+          /* Perfis por tipo (acabamentos): se o vendedor já digitou acabamentos no bloco global, NÃO criamos perfis
+             sozinhos — eles passariam a valer no lugar do que ele digitou e o texto sumiria da proposta. */
+          let pf = prefill;
+          const O = window.PropostaOpcoes;
+          if (pf.elevador && pf.elevador.perfis && O && O.linhasAcabamento(base.elevador).length) {
+            const { perfis: _p, ...restoElev } = pf.elevador;
+            pf = { ...pf, elevador: restoElev };
+          }
+          const merged = deepMergeHeranca(base, pf);
+          if (valoresNovos) {
+            merged.elevador = { ...merged.elevador, valores: { ...(merged.elevador.valores || {}), ...valoresNovos } };
+          }
+          return merged;
+        });
         setHeranca({ tipo: 'ok', texto: 'Herdado de: ' + window.PropostaHeranca.resumoFontes(r.fontes) });
         window.toast?.(`✓ Dados herdados da cotação ${num}`, 'success');
       }
@@ -782,7 +888,7 @@ function PropostaEditor({ setRoute, subsel }) {
     } finally {
       setHerdando(false);
     }
-  }, [data.numeroCotacao]);
+  }, [data.numeroCotacao, data.elevador, eq]);
 
   /* Auto-herda uma vez ao abrir — pedido do usuário 19/08: "conforme os
      inputs forem acontecendo a proposta vai se auto preenchendo". Uma
@@ -867,7 +973,7 @@ function PropostaEditor({ setRoute, subsel }) {
           if (au.signedAt) assinaturas = [{ papel: 'Cliente (contratante)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }];
         }
       } catch (e) { console.warn('Assinatura digital não carregada pro PDF da proposta:', e); }
-      const r = await window.PropostaReactPdf.baixar(data, filename, assinaturas);
+      const r = await window.PropostaReactPdf.baixar(window.PropostaOpcoes ? window.PropostaOpcoes.projetar(data, eq) : data, filename, assinaturas, eq);
       /* Sem este aviso, uma falha de carregamento de imagem produzia um
          PDF completo mas SEM logo nem foto de capa, e ninguém ficava
          sabendo até abrir o arquivo (achado 20/08). */
@@ -879,7 +985,7 @@ function PropostaEditor({ setRoute, subsel }) {
     } finally {
       setBaixandoPdf(false);
     }
-  }, [data]);
+  }, [data, eq, recordId]);
 
   const resetProposal = () => {
     if (confirm("Descartar todas as alterações e reiniciar a proposta?")) {
@@ -970,7 +1076,7 @@ function PropostaEditor({ setRoute, subsel }) {
                   <Icon.warning size={11}/> Travada
                 </span>
               )}
-              {meta?.destravada_em && meta?.status === 'aprovada' && (
+              {meta?.destravada_em && (
                 <span className="pe-top__publicado" title={"Destravada por " + (meta.destravada_por || '—')}>
                   <Icon.check size={11}/> Destravada — edite e salve
                 </span>
@@ -1146,7 +1252,7 @@ function PropostaEditor({ setRoute, subsel }) {
                   fill={f}
                   collapsed={isCollapsed}
                   onToggle={() => setCollapsed((c) => ({ ...c, [s.id]: !c[s.id] }))}>
-                  {renderSection(s.id, eq, data, set, { herdar, herdando, heranca, recordId })}
+                  {renderSection(s.id, eq, data, set, { herdar, herdando, heranca, recordId, travada })}
                 </PESection>
               );
             })}
@@ -1220,8 +1326,11 @@ function renderSection(sid, eq, data, set, extras) {
     case "conteudo": return <S_Conteudo d={data} set={set}/>;
     case "fotos": return <S_FotosEquipamento d={data} set={set}/>;
 
-    case "valores": return <S_Valores d={data} set={set} eq={eq} recordId={extras.recordId}/>;
-    case "condicoesPagto": return <S_CondPagamentoElev d={data} set={set}/>;
+    case "valores": return <S_Valores d={data} set={set} eq={eq} recordId={extras.recordId} travada={!!extras.travada}/>;
+    case "acabamentosLista": return <S_AcabamentoEscEst d={data} set={set} eq={eq}/>;
+    case "caracteristicasTec": return <S_CaracTecEscEst d={data} set={set} eq={eq}/>;
+    case "responsabilidades": return <S_Responsabilidades d={data} set={set} eq={eq}/>;
+    case "condicoesPagto": return <S_CondPagamentoElev d={data} set={set} eq={eq}/>;
     case "ajustes": return <S_Ajustes d={data} set={set} eq={eq}/>;
     case "prazo": return <S_PrazoEntrega d={data} set={set} eq={eq}/>;
     case "instalacao": return <S_InstalacaoMontagem d={data} set={set} eq={eq}/>;

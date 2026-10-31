@@ -44,6 +44,7 @@
     PROJETO_ELEVADOR_FINALIZADO: { modulo: 'Engenharia',              label: 'Projeto de Elevadores finalizado',             papel: 'Engenharia' },
     AVAL_JURIDICO_APROVADO:      { modulo: 'Aval Jurídico',           label: 'Jurídico deu o aval ao contrato',              papel: 'Jurídico' },
     AVAL_JURIDICO_REPROVADO:     { modulo: 'Aval Jurídico',           label: 'Jurídico reprovou o contrato',                 papel: 'Jurídico' },
+    PROJETO_INSTALACAO_ASSINADO: { modulo: 'Engenharia',             label: 'Cliente assinou o Projeto de Instalação',      papel: 'Cliente' },
     DESENHO_INSTALACAO_ANEXADO:  { modulo: 'Contrato de Venda',       label: 'Desenho do Projeto de Instalação anexado',     papel: 'Engenharia' },
     DESENHO_INSTALACAO_ENVIADO:  { modulo: 'Contrato de Venda',       label: 'Desenho do Projeto de Instalação enviado ao cliente', papel: 'Engenharia' },
 

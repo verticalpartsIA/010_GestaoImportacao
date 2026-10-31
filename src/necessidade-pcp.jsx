@@ -102,21 +102,22 @@ function AlmoxarifadoNecessidade() {
     if (!sb) { setErro('Supabase não carregou.'); return; }
     try {
       const campos = 'codigo, descricao, unidade' + (custoOk ? ', preco_custo, custo_manual, custo_compra' : '');
-      const [cfg, pedidos, acomp, itens, ordens, estr, prods, pos, est, prevPed, prevItens] = await Promise.all([
+      const [cfg, pedidos, acomp, itens, ordens, estr, prods, pos, compras, est, prevPed, prevItens] = await Promise.all([
         sb.from('pcp_reposicao_config').select('*').eq('id', true).maybeSingle(),
-        necLerTudo(() => sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, cliente_nome, cliente_fantasia, data_previsao, atualizado_em').eq('faturado', false).eq('cancelado', false).order('codigo_pedido')),
+        necLerTudo(() => sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, cliente_nome, cliente_fantasia, data_previsao, atualizado_em').eq('faturado', false).eq('cancelado', false).eq('so_separacao', false).order('codigo_pedido')),
         necLerTudo(() => sb.from('pcp_pedido_acompanhamento').select('numero_pedido, historico').order('numero_pedido')),
         necLerTudo(() => sb.from('pcp_pedido_itens').select('codigo_pedido, codigo, quantidade').eq('item_pcp', true).order('id')),
         necLerTudo(() => sb.from('pcp_ordens').select('id, numero, produto, quantidade, qtd_produzida, status, prazo_entrega, pedido_codigo, ordem_mae_id, cliente, observacao').not('status', 'in', '(concluida,cancelada)').order('created_at')),
         necLerTudo(() => sb.from('pcp_estrutura').select('codigo_pai, codigo_filho, quantidade, perda_pct').order('id')),
         necLerTudo(() => sb.from('pcp_produtos').select(campos).order('codigo')),
-        necLerTudo(() => sb.from('pcp_posicao_compra').select('codigo, fisico, pendente').order('codigo')),
+        necLerTudo(() => sb.from('pcp_posicao_compra').select('codigo, fisico').order('codigo')),
+        necLerTudo(() => sb.from('pcp_compras_itens').select('codigo, quantidade, qtde_recebida').order('pedido_id').order('item_id')),
         necLerTudo(() => sb.from('pcp_estoque').select('codigo, quantidade').order('codigo')),
         necLerTudo(() => sb.from('pcp_previsao_pedidos').select('codigo_pedido, numero_pedido, cliente_nome, cliente_fantasia, data_pedido, data_previsao').order('codigo_pedido')),
         necLerTudo(() => sb.from('pcp_previsao_itens').select('codigo_pedido, codigo, quantidade').order('id')),
       ]);
       if (cfg.error) throw cfg.error;
-      setD({ cfg: cfg.data, pedidos, historico: new Set(acomp.filter(a => a.historico).map(a => a.numero_pedido)), itens, ordens, estr, prods, pos, est, prevPed, prevItens });
+      setD({ cfg: cfg.data, pedidos, historico: new Set(acomp.filter(a => a.historico).map(a => a.numero_pedido)), itens, ordens, estr, prods, pos, compras, est, prevPed, prevItens });
       setErro(null);
     } catch (e) { setErro(e.message || String(e)); }
   }, [sb, custoOk]);
@@ -148,7 +149,10 @@ function AlmoxarifadoNecessidade() {
     const fis = {}; d.est.forEach(e => { fis[e.codigo] = Number(e.quantidade || 0); });
     const estoque = {};
     d.prods.forEach(p => { estoque[p.codigo] = { fisico: fis[p.codigo] || 0, aCaminho: 0 }; });
-    d.pos.forEach(p => { estoque[p.codigo] = { fisico: Number(p.fisico || 0), aCaminho: Number(p.pendente || 0) }; });
+    // "A caminho" = falta chegar nos pedidos de compra abertos (pcp_compras_itens); o nPendente do Omie é de pedidos de VENDA (#843 A2).
+    const cam = {}; d.compras.forEach(x => { const f = Number(x.quantidade || 0) - Number(x.qtde_recebida || 0); if (f > 1e-9) cam[x.codigo] = (cam[x.codigo] || 0) + f; });
+    d.pos.forEach(p => { estoque[p.codigo] = { fisico: Number(p.fisico || 0), aCaminho: 0 }; });
+    Object.keys(cam).forEach(c => { estoque[c] = { fisico: (estoque[c] ? estoque[c].fisico : fis[c] || 0), aCaminho: cam[c] }; });
     const r = window.PcpNecessidade.calcular({ demanda, filhos, estoque, hoje, cfg: d.cfg });
     // Previsão (etapa 10): só pedidos que ainda não estão em pcp_pedidos e que não estão parados há muito tempo.
     const conhecidos = new Set(d.pedidos.map(p => p.numero_pedido));

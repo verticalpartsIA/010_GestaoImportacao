@@ -435,6 +435,52 @@ button.nav-item {
 }
 .sidebar__collapse:hover { background: var(--vp-yellow); color: #000; border-color: var(--vp-yellow); }
 
+/* ---- Sidebar: degradê amarelo -> preto no alto (marca + 1º grupo); abaixo é quase preto, para o texto manter contraste.
+   Logo oficial branco (assets/logo-*-white.png) flutuando sobre o amarelo. ---- */
+.app { --sidebar-w: 256px; }
+.app[data-sidebar="collapsed"] { --sidebar-w: 72px; }
+.sidebar {
+  background: linear-gradient(180deg, #F5C400 0, #C9A000 72px, #4a3b00 206px, #151100 346px, #0B0B0B 476px);
+}
+.sidebar::after { display: none; }
+.sidebar__brand { height: 72px; border-bottom: 0; padding: 0 44px 0 18px; }
+/* Logo branco com fundo transparente (PNG com alfa): a sombra segue o contorno das letras e dá o efeito de flutuar. */
+.sidebar__brand img.sidebar__brand-logo {
+  width: 100%; max-width: 204px; height: auto; flex: none;
+  filter: drop-shadow(0 7px 7px rgba(0,0,0,.40)) drop-shadow(0 1px 1px rgba(0,0,0,.45));
+}
+.sidebar__brand img.sidebar__brand-mark {
+  width: 46px; height: 46px; object-fit: contain; flex: none;
+  filter: drop-shadow(0 6px 6px rgba(0,0,0,.40)) drop-shadow(0 1px 1px rgba(0,0,0,.45));
+}
+.app[data-sidebar="collapsed"] .sidebar__brand { padding: 0; }
+.sidebar__scroll { padding: 14px 10px 24px; }
+.sidebar__group { margin-top: 18px; }
+.sidebar__group-label {
+  padding: 8px 8px 8px 12px; font-size: 11px; font-weight: 600; letter-spacing: .08em;
+  color: rgba(255,255,255,.58);
+}
+.sidebar__group-sublabel { font-size: 9px; letter-spacing: .1em; color: rgba(255,255,255,.42); }
+.nav-item, button.nav-item {
+  align-items: center; gap: 12px; padding: var(--nav-py, 9px) 12px; margin-bottom: 2px;
+  border: 0; border-left: 0; border-radius: 10px; color: rgba(255,255,255,.84);
+}
+.nav-item .nav-item__icon { margin-top: 0; }
+.nav-item__icon, .nav-item__icon svg { width: 20px; height: 20px; }
+.nav-item:hover { background: rgba(255,255,255,.07); color: #fff; }
+.nav-item.is-active {
+  background: linear-gradient(90deg, rgba(245,196,0,.24), rgba(245,196,0,.08));
+  color: #FFE27A; border-left: 0;
+}
+.nav-item__badge { border-radius: 10px; padding: 1px 7px; }
+.app[data-sidebar="collapsed"] .nav-item:hover::after { border-left: 0; border-radius: 8px; }
+.sidebar__foot { border-top-color: rgba(255,255,255,.08); padding: 12px 10px; }
+.sidebar__user { border-radius: 12px; border-color: rgba(255,255,255,.08); background: rgba(255,255,255,.06); }
+.sidebar__user-role { color: rgba(255,255,255,.55); }
+.sidebar__version { border-top-color: rgba(255,255,255,.08); color: rgba(255,255,255,.45); }
+.sidebar__collapse { border-radius: 8px; top: 25px; right: 10px; }
+.app[data-sidebar="collapsed"] .sidebar__collapse { top: 68px; right: 25px; }
+
 /* ========== HEADER ================================================= */
 .header {
   grid-area: header;
@@ -667,6 +713,49 @@ button.nav-item {
 .btn--icon { padding: 0; width: 36px; justify-content: center; }
 .btn[disabled] { opacity: .4; cursor: not-allowed; }
 
+:root { --mes-retrabalho: #7b3fa0; } /* roxo = OP em retrabalho (MES); sem equivalente na paleta da marca */
+
+/* ========== CALLOUT / PANEL-SOFT / STEP-CARD (piloto Leads) ========
+   Substituem caixas montadas com style={{}} e cores hexadecimais soltas.
+   Só usam tokens de colors_and_type.css. */
+.callout {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; font-size: 13px;
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--vp-gray-50); color: var(--fg1);
+}
+.callout__icon { font-size: 16px; font-weight: 700; flex: none; }
+.callout__title { font-weight: 600; }
+.callout__sub { margin-top: 2px; font-size: 12px; color: var(--fg3); }
+.callout--success { background: var(--vp-success-tint); border-color: var(--vp-success); }
+.callout--success .callout__icon, .callout--success .callout__title { color: var(--vp-success-ink); }
+.callout--info { background: var(--vp-info-tint); border-color: var(--vp-info); }
+.callout--info .callout__icon, .callout--info .callout__title { color: var(--vp-info); }
+.callout--warning { background: var(--vp-warning-tint); border-color: var(--vp-warning); }
+.callout--warning .callout__icon, .callout--warning .callout__title { color: var(--vp-warning-ink); }
+
+.panel-soft {
+  background: var(--vp-gray-50); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 14px 16px;
+}
+.text-warning, .cell-sub.text-warning { color: var(--vp-warning-ink); }
+
+.step-card {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: var(--r-lg); background: #fff;
+}
+.step-card--current { background: var(--vp-yellow-tint); border-color: var(--vp-yellow); }
+.step-card--next { border-color: var(--border-strong); }
+.step-card--future { background: var(--vp-gray-50); opacity: .7; }
+.step-card__icon {
+  width: 34px; height: 34px; border-radius: var(--r-md); flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--vp-gray-100); color: var(--fg2);
+}
+.step-card--current .step-card__icon { background: var(--vp-black); color: var(--vp-yellow); }
+.step-card__body { flex: 1; min-width: 0; }
+.step-card__label { font-size: 13px; font-weight: 600; color: var(--fg1); }
+
 /* ========== CARDS ================================================== */
 .card {
   background: #fff;
@@ -824,6 +913,24 @@ table.t tbody tr { cursor: pointer; transition: background var(--dur-fast) var(-
 table.t tbody tr:hover { background: var(--vp-gray-50); }
 table.t tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 0 var(--vp-yellow); }
 table.t tbody tr:last-child td { border-bottom: 0; }
+
+/* 23/10 — cabeçalho fixo opt-in (pedido do usuário, várias telas de lista):
+   .table-wrap--sticky dá rolagem vertical própria à tabela (sem depender da
+   altura de cada página, que varia tela a tela) e o cabeçalho acompanha a
+   rolagem. Lista curta não aciona a barra (max-height só limita, não força).
+   Classe nova — não muda nada nas ~45 telas que já usam .table-wrap puro.
+
+   Achado real do usuário (cadastro de Clientes, 1000+ linhas): com o visual
+   "Suave" ligado (html[data-ui="suave"]), a regra `html[data-ui="suave"]
+   .table-wrap { overflow-y: hidden; }` de ui-suave.css tem especificidade
+   MAIOR que .table-wrap--sticky sozinha e vencia, cortando a lista em 70vh
+   sem deixar rolar ("congelou a tela"). Mesma pegadinha já documentada em
+   pcp-tabelas.css pro .pcp-rolagem — resolvida do mesmo jeito: combinar as
+   duas classes no seletor (.table-wrap.table-wrap--sticky) pra ganhar
+   especificidade e vencer de vez, não só empatar por ordem de arquivo. */
+.table-wrap--sticky { max-height: 70vh; overflow-y: auto; }
+html[data-ui="suave"] .table-wrap.table-wrap--sticky { overflow-y: auto; }
+.table-wrap--sticky table.t thead th { position: sticky; top: 0; z-index: 1; }
 
 .cell-main { font-weight: 600; color: var(--fg1); }
 .cell-sub { font-size: 11px; color: var(--fg3); margin-top: 2px; font-family: var(--font-mono); }
@@ -1172,3 +1279,11 @@ select.input { appearance: none; -webkit-appearance: none; background-image: lin
 .w-full { width: 100%; }
 .fade-in { animation: fadeIn .2s var(--ease-out); }
 .slide-up { animation: slideUp .25s var(--ease-out); }
+
+/* :is(table.t:not(.pcp-grid), table.tab-cruz) (opt-in): linhas intercaladas; linha e coluna acendem ao passar o mouse (coluna marcada por src/rota-pcp.js). */
+:is(table.t:not(.pcp-grid), table.tab-cruz) tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--vp-gray-50) 55%, transparent); }
+:is(table.t:not(.pcp-grid), table.tab-cruz) tbody tr:hover td { background: color-mix(in srgb, var(--vp-yellow) 16%, var(--vp-gray-50)); }
+:is(table.t:not(.pcp-grid), table.tab-cruz) tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 0 var(--vp-yellow); }
+:is(table.t:not(.pcp-grid), table.tab-cruz) tbody td.pcp-col-hot { background: color-mix(in srgb, var(--vp-yellow) 9%, var(--vp-gray-50)); }
+:is(table.t:not(.pcp-grid), table.tab-cruz) thead th.pcp-col-hot { background: color-mix(in srgb, var(--vp-yellow) 28%, var(--vp-gray-50)); }
+:is(table.t:not(.pcp-grid), table.tab-cruz) tbody tr:hover td.pcp-col-hot { background: color-mix(in srgb, var(--vp-yellow) 34%, var(--vp-gray-50)); }

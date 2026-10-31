@@ -58,6 +58,16 @@ const COMISSAO_PADRAO_PCT = 2;
 const comissaoDoLead = (lead) => (lead && lead.comissao_pct != null && Number.isFinite(Number(lead.comissao_pct)) ? Number(lead.comissao_pct) : COMISSAO_PADRAO_PCT);
 const LEAD_STATUSES = ['Em qualificação', 'Aguardando cotação', 'Proposta enviada', 'Negociação', 'Convertido', 'Sem retorno'];
 
+/* Link do WhatsApp (wa.me) — fonte única (Leads/Detalhe/Canais, issue #1202). Até 11 dígitos = número do Brasil sem DDI
+   (prefixa 55); 12+ dígitos já trazem o DDI (inclusive número estrangeiro) e ficam como estão. Sem telefone → null. */
+function waLink(phone, nome) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return null;
+  const numero = digits.length <= 11 ? '55' + digits : digits;
+  const msg = encodeURIComponent('Olá' + (nome ? ' ' + nome : '') + ', tudo bem? Aqui é da VerticalParts.');
+  return 'https://wa.me/' + numero + '?text=' + msg;
+}
+
 /* "Está no Omie desde" (26/09) — a data pertence ao CLIENTE (CNPJ/CPF),
    guardada em clientes.omie_cadastrado_desde (+ codigo_cliente_omie,
    omie_verificado_em). Grava o resultado de uma consulta ao Omie:
@@ -106,10 +116,10 @@ function precisaVerificarOmie(cli) {
 
 function OmieStatusBox({ status }) {
   const tone = status.encontrado === true
-    ? { bg: '#ecfdf5', border: '#10b981', fg: '#059669', icon: '✓' }
+    ? { cls: 'callout--success', icon: '✓' }
     : status.encontrado === false
-      ? { bg: '#f0f9ff', border: '#3b82f6', fg: '#0284c7', icon: 'ℹ' }
-      : { bg: '#fffbeb', border: '#f59e0b', fg: '#b45309', icon: '!' };
+      ? { cls: 'callout--info', icon: 'ℹ' }
+      : { cls: 'callout--warning', icon: '!' };
   const titulo = status.encontrado === true
     ? 'Cliente cadastrado no ERP' + (status.data_cadastro ? ' desde ' + status.data_cadastro : '')
     : status.encontrado === false ? 'Não encontrado no ERP' : 'Não foi possível consultar o ERP';
@@ -118,11 +128,11 @@ function OmieStatusBox({ status }) {
     : status.encontrado === false ? 'Seguindo com a consulta pública de CNPJ'
       : (status.erro ? status.erro + ' — ' : '') + 'seguindo com a consulta pública de CNPJ';
   return (
-    <div style={{ background: tone.bg, border: '1px solid ' + tone.border, padding: '10px 12px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span style={{ color: tone.fg, fontSize: 16, fontWeight: 700 }}>{tone.icon}</span>
+    <div className={'callout ' + tone.cls}>
+      <span className="callout__icon">{tone.icon}</span>
       <div>
-        <div style={{ fontWeight: 600, color: tone.fg }}>{titulo}</div>
-        {sub ? <div style={{ color: 'var(--fg3)', fontSize: 12, marginTop: 2 }}>{sub}</div> : null}
+        <div className="callout__title">{titulo}</div>
+        {sub ? <div className="callout__sub">{sub}</div> : null}
       </div>
     </div>
   );
@@ -137,13 +147,14 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
     origin: lead.origin || 'Site', status: lead.status || 'Em qualificação',
     owner: lead.owner || '', value: lead.value != null ? String(lead.value) : '',
     comissaoPct: lead.comissao_pct != null ? String(lead.comissao_pct) : '',
+    contribuinteIcms: typeof lead.contribuinte_icms === 'boolean' ? String(lead.contribuinte_icms) : '',
     priority: ({ alta: 'Alta', media: 'Média', baixa: 'Baixa' }[String(lead.priority || '').toLowerCase()] || lead.priority || 'Alta'),
     next: lead.next_action || lead.next || '',
   } : {
     building:'', contact:'', role:'', phone:'', email:'',
     tipoPessoa:'PJ', cnpj:'', cpf:'', documentoPendente:false, razaoSocial:'',
     origin:'Site', status:'Em qualificação',
-    owner:'', value:'', comissaoPct:'', priority:'Alta', next:'',
+    owner:'', value:'', comissaoPct:'', contribuinteIcms:'', priority:'Alta', next:'',
   });
   const [buscandoCnpj, setBuscandoCnpj] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
@@ -229,6 +240,7 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
       const v = window.EnderecoAPI.validarDocumento(f.tipoPessoa, f.tipoPessoa === 'PF' ? f.cpf : f.cnpj);
       if (!v.ok) return window.toast(v.msg, 'warning');
     }
+    if (f.contribuinteIcms !== 'true' && f.contribuinteIcms !== 'false') return window.toast('Informe se o cliente é Contribuinte de ICMS (Sim ou Não) — define quem recolhe o DIFAL na venda.', 'warning');
     const comissaoTxt = String(f.comissaoPct == null ? '' : f.comissaoPct).replace(',', '.').trim();
     if (comissaoTxt !== '' && !(Number(comissaoTxt) >= 0 && Number(comissaoTxt) <= 100)) return window.toast('Comissão deve ser um percentual entre 0 e 100 (deixe em branco para usar 2%).', 'warning');
     const sb = comercialSb();
@@ -243,6 +255,7 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
       priority: ({ 'Alta': 'alta', 'Média': 'media', 'Baixa': 'baixa' }[f.priority] || 'media'),
       next_action: f.next || null,
       documento_pendente: f.documentoPendente,
+      contribuinte_icms: f.contribuinteIcms === 'true',
       // Comissão manual; em branco = padrão de 2% (COMISSAO_PADRAO_PCT) — grava null para não "congelar" o padrão.
       comissao_pct: comissaoTxt === '' ? null : Number(comissaoTxt),
     };
@@ -256,6 +269,22 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
       error = e;
     }
     if (error) { setSaving(false); return window.toast('Erro: ' + (error.message || error), 'error'); }
+
+    /* Auditoria (issue #1201): criação/edição entram no histórico do lead (vp_logs). Só nomes dos campos alterados e
+       status de→para — nunca telefone/e-mail/valores. registrar() é best-effort (não lança); o await garante que a linha
+       já existe quando a tela recarrega o histórico. */
+    if (window.VPLog) {
+      let detalhe = { status: payload.status };
+      if (isEdit) {
+        const campos = Object.keys(payload).filter((k) => String(lead[k] == null ? '' : lead[k]) !== String(payload[k] == null ? '' : payload[k]));
+        detalhe = { campos };
+        if (lead.status !== payload.status) detalhe.status = { de: lead.status, para: payload.status };
+      }
+      await window.VPLog.registrar({
+        modulo: 'Comercial', acao: isEdit ? 'Lead editado' : 'Lead criado',
+        alvo: f.building, alvo_id: id, detalhe,
+      });
+    }
 
     /* CNPJ/CPF informado (e não marcado como "será inserido depois") →
        resolve/cria o cliente (mesma dedup por documento do Formulário,
@@ -282,6 +311,7 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
           razao_social: f.razaoSocial || f.building,
           contato: f.contact, telefone: f.phone || null, email: f.email || null,
           clienteIdProvisorio: isEdit ? (lead.cliente_id || null) : null,
+          contribuinte_icms: f.contribuinteIcms === 'true',
         });
         if (cliente.id !== (isEdit ? lead.cliente_id : null)) {
           const { error: vincErr } = await sb.from('leads').update({ cliente_id: cliente.id }).eq('id', id);
@@ -302,11 +332,16 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
        idempotente, não duplica se já tem cliente_id. */
     if (payload.status === "Convertido" && !clienteId && window.CadastrosClientesStore) {
       try {
-        const vinculado = await window.CadastrosClientesStore.criarOuVincularDeLead({ id, building: f.building, contact: f.contact, phone: f.phone || null, email: f.email || null });
+        const vinculado = await window.CadastrosClientesStore.criarOuVincularDeLead({ id, building: f.building, contact: f.contact, phone: f.phone || null, email: f.email || null, contribuinte_icms: f.contribuinteIcms === 'true' });
         if (vinculado) clienteId = vinculado;
       } catch (e) {
         console.warn("[comercial] Erro ao converter lead em cliente:", e);
       }
+    }
+    /* Lead convertido que já tinha cliente (CNPJ resolvido acima não passa por criarOuVincularDeLead): os pedidos
+       de Quadro de Comando dele também passam a apontar para o cliente. */
+    if (payload.status === "Convertido" && clienteId && window.CadastrosClientesStore?.vincularQuadrosDoLead) {
+      await window.CadastrosClientesStore.vincularQuadrosDoLead(id, clienteId);
     }
 
     /* "Está no Omie desde": grava no cliente vinculado, em segundo plano
@@ -382,13 +417,13 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
           )}
         </>}>
         <div className="stack" style={{ gap: 12 }}>
-          <div style={{ background:'var(--vp-gray-50)', border:'1px solid var(--border)', padding:'14px 16px' }}>
+          <div className="panel-soft">
             <div className="up-eyebrow muted" style={{ marginBottom:6 }}>Lead criado com sucesso</div>
             <div style={{ fontWeight:700, fontSize:15 }}>{savedLead.building}</div>
             <div className="cell-sub" style={{ marginTop:4 }}>{savedLead.id}</div>
             {savedLead.cliente_id
               ? <div className="cell-sub" style={{ marginTop:4 }}>Cliente vinculado: {savedLead.razaoSocial || savedLead.building}</div>
-              : <div className="cell-sub" style={{ marginTop:4, color:'var(--vp-orange, #b45309)' }}>Sem CNPJ/CPF vinculado ainda — pode ser resolvido no Formulário.</div>}
+              : <div className="cell-sub text-warning" style={{ marginTop:4 }}>Sem CNPJ/CPF vinculado ainda — pode ser resolvido no Formulário.</div>}
           </div>
           <p style={{ fontSize:13, color:'var(--fg2)', margin:0 }}>
             Deseja abrir o Formulário agora e alocar os equipamentos deste lead?
@@ -459,6 +494,17 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
             <label className="up-eyebrow muted">Razão Social</label>
             <input className="input" type="text" value={f.razaoSocial}
               onChange={e => set('razaoSocial', e.target.value)} placeholder="Preenchido automaticamente pelo CNPJ"/>
+          </div>
+          <div className="stack" style={{ gap:4 }}>
+            <label className="up-eyebrow muted">Contribuinte de ICMS? *</label>
+            <select className="input" value={f.contribuinteIcms} onChange={e => set('contribuinteIcms', e.target.value)}>
+              <option value="">Selecione…</option>
+              <option value="true">Sim — contribuinte (tem inscrição estadual)</option>
+              <option value="false">Não — não contribuinte</option>
+            </select>
+            <span style={{ fontSize:11.5, color:'var(--fg3)' }}>
+              Obrigatório. Define quem paga o DIFAL nas vendas interestaduais: não contribuinte = a VerticalParts recolhe (custo na Precificação); contribuinte = o próprio cliente recolhe.
+            </span>
           </div>
           <p style={{ fontSize:11.5, color:'var(--fg3)', margin:0 }}>
             Sem CNPJ/CPF ainda? Marque a opção acima, ou deixe em branco e complete depois — direto no
@@ -554,7 +600,7 @@ function ModalExcluirLead({ lead, onClose, onExcluido }) {
         </Button>
       </>}>
       <div className="stack" style={{ gap: 12 }}>
-        <div style={{ background: 'var(--vp-gray-50)', border: '1px solid var(--border)', padding: '12px 14px' }}>
+        <div className="panel-soft">
           <div style={{ fontWeight: 700, fontSize: 15 }}>{lead.building || '—'}</div>
           <div className="cell-sub" style={{ marginTop: 4 }}>
             {lead.id}{lead.contact ? ' · ' + lead.contact : ''}{lead.date ? ' · criado em ' + fmtDate(lead.date) : ''}
@@ -564,9 +610,9 @@ function ModalExcluirLead({ lead, onClose, onExcluido }) {
           <div className="muted small">Verificando dossiês, formulários e cotações ligados a este lead…</div>
         )}
         {itens.length > 0 && (
-          <div style={{ background: '#fffbeb', border: '1px solid #f59e0b', padding: '10px 12px', fontSize: 13 }}>
-            <div style={{ fontWeight: 600, color: '#b45309' }}>Este lead tem registros ligados: {itens.join(', ')}.</div>
-            <div style={{ color: 'var(--fg3)', fontSize: 12, marginTop: 2 }}>
+          <div className="callout callout--warning" style={{ display: 'block' }}>
+            <div className="callout__title">Este lead tem registros ligados: {itens.join(', ')}.</div>
+            <div className="callout__sub">
               Eles não são apagados e continuam acessíveis nos seus módulos — só o lead sai da lista.
             </div>
           </div>
@@ -674,10 +720,18 @@ function LeadsPage({ setRoute, setSubsel }) {
       setLeads((prev) => (prev || []).map((l) => (l.id === lead.id ? { ...l, status: anterior } : l)));
       return;
     }
-    const { error } = await sb.from("leads").update({ status: novoStatus }).eq("id", lead.id);
-    if (error) {
+    // .select('id') confirma que a linha foi mesmo alterada: update barrado por RLS volta sem erro e sem linhas.
+    let falha = null;
+    try {
+      const { data, error } = await sb.from("leads").update({ status: novoStatus }).eq("id", lead.id).select("id");
+      if (error) falha = error.message || String(error);
+      else if (!data || !data.length) falha = "nenhum registro foi alterado";
+    } catch (e) {
+      falha = (e && e.message) || String(e);
+    }
+    if (falha) {
       setLeads((prev) => (prev || []).map((l) => (l.id === lead.id ? { ...l, status: anterior } : l)));
-      window.toast("Erro ao mover lead: " + error.message, "error");
+      window.toast("Erro ao mover lead: " + falha, "error");
       return;
     }
     window.VPLog && window.VPLog.registrar({
@@ -692,9 +746,15 @@ function LeadsPage({ setRoute, setSubsel }) {
     if (novoStatus === "Convertido" && window.CadastrosClientesStore) {
       try {
         const clienteId = await window.CadastrosClientesStore.criarOuVincularDeLead(lead);
-        if (clienteId) setLeads((prev) => (prev || []).map((l) => (l.id === lead.id ? { ...l, cliente_id: l.cliente_id || clienteId } : l)));
+        if (clienteId) {
+          setLeads((prev) => (prev || []).map((l) => (l.id === lead.id ? { ...l, cliente_id: l.cliente_id || clienteId } : l)));
+          window.toast("Lead convertido — agora ele está em Cadastros › Clientes.", "success");
+        } else {
+          window.toast("Lead convertido, mas o cliente não foi criado (sem nome). Ele só aparece no filtro Convertido de Leads.", "warning");
+        }
       } catch (e) {
         console.warn("[comercial] Erro ao converter lead em cliente (Kanban):", e);
+        window.toast("Lead convertido, mas não foi possível criar o cliente: " + (e.message || e) + ". Ele só aparece no filtro Convertido de Leads.", "warning");
       }
     }
   };
@@ -703,7 +763,11 @@ function LeadsPage({ setRoute, setSubsel }) {
   const allLeads = leads || [];
   const owners = ["Todos", ...Array.from(new Set(allLeads.filter(l => l.owner).map(l => l.owner))).sort()];
 
+  /* Lead convertido deixa de morar em Leads e passa a morar em Cadastros › Clientes (pedido do usuário, 14/10/2026).
+     "Todos" = só os em aberto; o filtro "Convertido" continua existindo para consultar o histórico, e os
+     indicadores (stats, Dashboard, CRM) seguem contando os convertidos. */
   const rows = allLeads.filter(l => {
+    if (status === "Todos" && l.status === "Convertido") return false;
     if (status !== "Todos" && l.status !== status) return false;
     if (owner !== "Todos" && l.owner !== owner) return false;
     if (search && !((l.building || "") + (l.contact || "")).toLowerCase().includes(search.toLowerCase())) return false;
@@ -712,6 +776,7 @@ function LeadsPage({ setRoute, setSubsel }) {
   // Kanban ignora o filtro de status (as colunas SÃO os status) mas
   // respeita responsável/busca, iguais à lista.
   const kanbanRows = allLeads.filter(l => {
+    if (l.status === "Convertido") return false; // convertido já está em Clientes
     if (owner !== "Todos" && l.owner !== owner) return false;
     if (search && !((l.building || "") + (l.contact || "")).toLowerCase().includes(search.toLowerCase())) return false;
     return true;
@@ -724,6 +789,8 @@ function LeadsPage({ setRoute, setSubsel }) {
 
   const stats = {
     total: allLeads.length,
+    // "Leads ativos" = em aberto: os convertidos já moram em Cadastros › Clientes e a lista "Em aberto" os esconde (issue #1202).
+    abertos: allLeads.filter(l => l.status !== "Convertido").length,
     qualif: allLeads.filter(l => l.status === "Em qualificação").length,
     proposta: allLeads.filter(l => l.status === "Proposta enviada").length,
     // pipeline = só o que ainda está em aberto (Convertido e Sem retorno já saíram do funil — issue #663)
@@ -751,7 +818,7 @@ function LeadsPage({ setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>CRM · Leads</div>
           <h1 className="page-head__title">Pipeline de Leads</h1>
-          <p className="page-head__sub">{allLeads.length} leads ativos · pipeline {fmtBRL(stats.valor)} · {stats.convertidos} convertido{stats.convertidos === 1 ? "" : "s"} ({stats.total ? Math.round((stats.convertidos / stats.total) * 100) : 0}%)</p>
+          <p className="page-head__sub">{stats.abertos} leads em aberto · pipeline {fmtBRL(stats.valor)} · {stats.convertidos} convertido{stats.convertidos === 1 ? "" : "s"} ({stats.total ? Math.round((stats.convertidos / stats.total) * 100) : 0}%)</p>
         </div>
         <div className="page-head__r">
           <div className="seg" role="group" aria-label="Modo de visualização">
@@ -768,7 +835,7 @@ function LeadsPage({ setRoute, setSubsel }) {
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
         {/* Sem "variação" inventada: não há comparação com mês anterior nesta tela (issue #663). */}
-        <KPI label="Leads ativos" value={stats.total} sub="no total" icon="flag"/>
+        <KPI label="Leads ativos" value={stats.abertos} sub="em aberto" icon="flag"/>
         <KPI label="Em qualificação" value={stats.qualif} sub="em avaliação" icon="zap"/>
         <KPI label="Propostas no ar" value={stats.proposta} sub="aguardando o cliente" icon="fileText"/>
         <KPI label="Valor pipeline" value={fmtBRL(stats.valor)} sub="em aberto" icon="dollar"/>
@@ -779,7 +846,8 @@ function LeadsPage({ setRoute, setSubsel }) {
           <>
             <div className="seg">
               {statuses.map(s => (
-                <button key={s} className={status === s ? "is-active" : ""} onClick={() => setStatus(s)}>{s}</button>
+                <button key={s} className={status === s ? "is-active" : ""} onClick={() => { setStatus(s); setPage(0); }}
+                  title={s === "Todos" ? "Leads em aberto — os convertidos já estão em Cadastros › Clientes (use o filtro Convertido para ver o histórico)" : undefined}>{s === "Todos" ? "Em aberto" : s}</button>
               ))}
             </div>
             <div className="divider-v"/>
@@ -797,7 +865,7 @@ function LeadsPage({ setRoute, setSubsel }) {
         <div className="spacer"/>
         <div className="search">
           <Icon.search size={12} color="var(--fg3)"/>
-          <input placeholder="Buscar prédio, contato…" value={search} onChange={(e) => setSearch(e.target.value)}/>
+          <input placeholder="Buscar prédio, contato…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }}/>
         </div>
       </div>
 
@@ -882,7 +950,7 @@ function LeadsPage({ setRoute, setSubsel }) {
       )}
 
       {view === "kanban" && (
-        <LeadsKanban rows={kanbanRows} onOpen={(l) => { setSubsel(l); setRoute("lead-detail"); }} onMove={moverLeadStatus}/>
+        <LeadsKanban rows={kanbanRows} convertidos={stats.convertidos} onOpen={(l) => { setSubsel(l); setRoute("lead-detail"); }} onMove={moverLeadStatus}/>
       )}
 
       {leadExcluir && (
@@ -923,12 +991,14 @@ function LeadsPage({ setRoute, setSubsel }) {
    LEAD_STATUSES (dado antigo, pre-26/09) caem numa coluna "Outros" so de
    leitura - nao da pra arrastar PARA la (nao e um status valido) mas o
    lead continua visivel em vez de desaparecer do quadro. */
-function LeadsKanban({ rows, onOpen, onMove }) {
+function LeadsKanban({ rows, convertidos, onOpen, onMove }) {
   const [dragId, setDragId] = React.useState(null);
   const [overCol, setOverCol] = React.useState(null);
 
   const conhecidos = new Set(LEAD_STATUSES);
-  const colunas = LEAD_STATUSES.map((s) => ({ status: s, label: s, leads: rows.filter((l) => l.status === s) }));
+  /* "Convertido" é só o destino do arrastar: o lead convertido vira cliente e sai do quadro (rows já vem sem
+     eles), então a coluna não lista cards — mostra só quantos já foram convertidos. */
+  const colunas = LEAD_STATUSES.map((s) => ({ status: s, label: s, destino: s === "Convertido", leads: rows.filter((l) => l.status === s) }));
   const outros = rows.filter((l) => !conhecidos.has(l.status));
   if (outros.length) colunas.push({ status: null, label: "Outros", leads: outros });
 
@@ -953,11 +1023,13 @@ function LeadsKanban({ rows, onOpen, onMove }) {
             }}>
             <div className="row sb" style={{ marginBottom: 4 }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>{col.label}</div>
-              <Badge variant="neutral">{col.leads.length}</Badge>
+              <Badge variant="neutral">{col.destino ? (convertidos || 0) : col.leads.length}</Badge>
             </div>
-            <div style={{ fontSize: 11, color: "var(--fg3)", marginBottom: 10 }}>{fmtBRL(valorTotal)}</div>
+            <div style={{ fontSize: 11, color: "var(--fg3)", marginBottom: 10 }}>{col.destino ? "já viraram cliente" : fmtBRL(valorTotal)}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {col.leads.length === 0 ? (
+              {col.destino ? (
+                <div style={{ fontSize: 11, color: "var(--fg3)", textAlign: "center", padding: "16px 0" }}>Arraste para cá para converter — o lead vira cliente e sai do quadro.</div>
+              ) : col.leads.length === 0 ? (
                 <div style={{ fontSize: 11, color: "var(--fg3)", textAlign: "center", padding: "16px 0" }}>Sem leads</div>
               ) : col.leads.map((l) => (
                 <div key={l.id}
@@ -1031,6 +1103,11 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
     return () => { alive = false; };
   }, [lead.cliente_id]);
 
+  const abrirWhatsApp = () => {
+    const link = waLink(lead.phone, lead.contact);
+    link ? window.open(link, '_blank', 'noopener') : window.toast('Telefone não cadastrado.', 'warning');
+  };
+
   const abrirFormulario = () => {
     setSubsel({ __prefillFromLead: lead });
     setRoute('formulario-elevador');
@@ -1049,16 +1126,20 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
     const hasTime = typeof ts === "string" && ts.includes("T");
     return hasTime ? dateStr + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : dateStr;
   };
+  const [histVersao, setHistVersao] = React.useState(0); // sobe depois de editar o lead: recarrega o histórico
+  const histLeadId = React.useRef(null);
   React.useEffect(() => {
     let alive = true;
-    setHistory(null); // E11: não mostra o histórico do lead anterior enquanto carrega
+    // E11: não mostra o histórico do lead anterior enquanto carrega — só zera ao TROCAR de lead (recarga após edição mantém a lista).
+    if (histLeadId.current !== lead.id) { setHistory(null); histLeadId.current = lead.id; }
     (async () => {
       const rows = [];
       if (lead.date) rows.push({ t: "Lead criado" + (lead.origin ? " via " + lead.origin : ""), who: lead.owner || "Sistema", ts: lead.date, icon: "plus" });
       try {
         const sb = comercialSb();
         if (sb && lead.id != null) {
-          const { data } = await sb.from("vp_logs").select("*").eq("alvo_id", String(lead.id)).order("criado_em", { ascending: false }).limit(50);
+          const { data, error } = await sb.from("vp_logs").select("*").eq("alvo_id", String(lead.id)).order("criado_em", { ascending: false }).limit(50);
+          if (error) console.warn("[comercial] histórico do lead não carregou:", error.message);
           (data || []).forEach((l) => rows.push({
             t: l.acao + (l.alvo ? " — " + l.alvo : ""),
             who: l.ator_nome + (l.ator_setor ? " · " + l.ator_setor : ""),
@@ -1071,7 +1152,7 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
       if (alive) setHistory(rows);
     })();
     return () => { alive = false; };
-  }, [lead.id]);
+  }, [lead.id, histVersao]);
 
   /* 14/09 — achado real (auditoria do tour.md): "Qualificar → Dossier"
      sempre criava um Dossier novo, nunca checava se este Lead já tinha
@@ -1079,14 +1160,21 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
      prontuário da obra. Agora checa por lead_id antes de criar; se já
      existe, o botão abre o existente em vez de criar outro. */
   const [dossierExistente, setDossierExistente] = React.useState(undefined); // undefined = carregando, null = não existe
+  const [dossierErro, setDossierErro] = React.useState(false); // consulta falhou: não dá pra saber se existe (não liberar a criação)
   React.useEffect(() => {
     let alive = true;
     setDossierExistente(undefined); // E11: senão "Abrir Dossier" abriria o dossier do lead anterior
+    setDossierErro(false);
     const sb = comercialSb();
     if (!sb || lead.id == null) { setDossierExistente(null); return; }
-    Promise.resolve(sb.from('dossier_obra').select('id').eq('lead_id', lead.id).maybeSingle())
-      .then(({ data }) => { if (alive) setDossierExistente(data || null); })
-      .catch(() => { if (alive) setDossierExistente(null); });
+    // limit(1) em vez de maybeSingle(): dossier_obra.lead_id não é único e maybeSingle() dá erro com 2+ dossiês.
+    Promise.resolve(sb.from('dossier_obra').select('id').eq('lead_id', lead.id).order('id').limit(1))
+      .then(({ data, error }) => {
+        if (!alive) return;
+        if (error) { setDossierErro(true); setDossierExistente(null); return; }
+        setDossierExistente((data && data[0]) || null);
+      })
+      .catch(() => { if (alive) { setDossierErro(true); setDossierExistente(null); } });
     return () => { alive = false; };
   }, [lead.id]);
 
@@ -1094,6 +1182,7 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
     // Checagem de dossier existente ainda em andamento — criar agora podia
     // duplicar o prontuário (mesma proteção do achado de 14/09).
     if (dossierExistente === undefined) return window.toast('Verificando se este lead já tem Dossier… tente de novo em instantes.', 'info');
+    if (dossierErro) return window.toast('Não foi possível verificar se este lead já tem Dossier. Recarregue a página e tente de novo.', 'error');
     if (dossierExistente) {
       setSubsel?.(dossierExistente.id);
       setRoute('dossier-obra');
@@ -1145,7 +1234,7 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
           </div>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="message" onClick={() => { const p0 = (lead.phone || '').replace(/\D/g,''); const p = (p0.length > 11 && p0.startsWith('55')) ? p0.slice(2) : p0; p ? window.open('https://wa.me/55'+p,'_blank') : window.toast('Telefone não cadastrado.','warning'); }}>WhatsApp</Button>
+          <Button variant="outline" icon="message" onClick={abrirWhatsApp}>WhatsApp</Button>
           <Button variant="outline" icon="mail" onClick={() => { lead.email ? window.open('mailto:'+lead.email) : window.toast('Email não cadastrado.','warning'); }}>Email</Button>
           <Button variant="outline" icon="edit" onClick={() => setShowEditLead(true)}>Editar Lead</Button>
           <Button variant="outline" icon="ruler" onClick={abrirFormulario}>Abrir Formulário</Button>
@@ -1221,10 +1310,24 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
             <KvBlock label="Telefone" value={lead.phone} mono/>
             <KvBlock label="Email" value={lead.email} mono/>
             <div className="row gap-2" style={{ marginTop: 14 }}>
-              <Button variant="secondary" size="sm" icon="message" onClick={() => { const p0 = (lead.phone || '').replace(/\D/g,''); const p = (p0.length > 11 && p0.startsWith('55')) ? p0.slice(2) : p0; p ? window.open('https://wa.me/55'+p,'_blank') : window.toast('Telefone não cadastrado.','warning'); }}>WhatsApp</Button>
+              <Button variant="secondary" size="sm" icon="message" onClick={abrirWhatsApp}>WhatsApp</Button>
               <Button variant="outline" size="sm" icon="mail" onClick={() => { lead.email ? window.open('mailto:'+lead.email) : window.toast('Email não cadastrado.','warning'); }}>Email</Button>
             </div>
           </Card>
+
+          {lead.especificacao_tecnica && typeof lead.especificacao_tecnica === 'object' ? (() => {
+            /* Respostas do formulário público (Quadro de Comando): só leitura, genérico por chave. */
+            const fmt = (v) => Array.isArray(v) ? v.filter((x) => x != null && x !== '').join(', ')
+              : (v && typeof v === 'object') ? Object.entries(v).filter(([, x]) => x != null && x !== '' && x !== false).map(([k, x]) => (x === true ? k : k + ': ' + x)).join('; ')
+              : v === true ? 'Sim' : v === false ? 'Não' : String(v ?? '');
+            const linhas = Object.entries(lead.especificacao_tecnica).map(([k, v]) => [k, fmt(v)]).filter(([, v]) => v !== '');
+            if (!linhas.length) return null;
+            return (
+              <Card title="Especificação técnica" sub="respondida no formulário público">
+                {linhas.map(([k, v]) => <KvBlock key={k} label={k.replace(/_/g, ' ')} value={v}/>)}
+              </Card>
+            );
+          })() : null}
 
           <Card title="Atribuição">
             <KvBlock label="Vendedor" value={lead.owner || '—'}/>
@@ -1240,6 +1343,7 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
           onClose={() => setShowEditLead(false)}
           onSaved={(updatedLead, clienteAtualizado) => {
             setSubsel?.(updatedLead);
+            setHistVersao((v) => v + 1);
             // lead.cliente_id pode não mudar (só os DADOS do cliente
             // mudaram, ex.: razão social) — o efeito acima só refaz a busca
             // quando o id muda, então atualiza aqui direto pra não deixar
@@ -1262,23 +1366,14 @@ function KvBlock({ label, value, mono }) {
 }
 function SuggestedStep({ icon, label, sub, status }) {
   const I = Icon[icon] || Icon.bolt;
-  const stylesByStatus = {
-    current: { background: "#FFFBE6", borderColor: "var(--vp-yellow)" },
-    next:    { background: "#fff", borderColor: "var(--border-strong)" },
-    future:  { background: "var(--vp-gray-50)", borderColor: "var(--border)", opacity: .7 },
-  };
+  const variante = ['current', 'next', 'future'].includes(status) ? status : 'future';
   return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 12,
-      padding: "12px 14px",
-      border: "1px solid var(--border)",
-      ...(stylesByStatus[status] || stylesByStatus.future)
-    }}>
-      <div style={{ width: 34, height: 34, background: status === "current" ? "#000" : "var(--vp-gray-100)", color: status === "current" ? "var(--vp-yellow)" : "var(--fg2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div className={'step-card step-card--' + variante}>
+      <div className="step-card__icon">
         <I size={18}/>
       </div>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg1)" }}>{label}</div>
+      <div className="step-card__body">
+        <div className="step-card__label">{label}</div>
         <div className="cell-sub">{sub}</div>
       </div>
       <Icon.chevRight size={16} color="var(--fg3)"/>
@@ -1329,4 +1424,4 @@ function FormulariosPage({ setRoute, setSubsel }) {
   );
 }
 
-Object.assign(window, { LeadsPage, LeadDetail, comercialSb, LEAD_STATUSES });
+Object.assign(window, { LeadsPage, LeadDetail, comercialSb, LEAD_STATUSES, waLink });

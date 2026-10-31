@@ -89,6 +89,7 @@
   function erroDaRpc(res) {
     const e = res && res.erro;
     if (e === 'link_invalido') return new Error('Link inválido ou expirado.');
+    if (e === 'ainda_nao_e_sua_vez') return new Error('Ainda não é a sua vez de assinar. Você receberá o link assim que a pessoa anterior assinar.');
     if (e && String(e).indexOf('status_') === 0) return new Error('Este documento não está mais disponível para esta ação (situação atual: ' + String(e).slice(7) + ').');
     return new Error('Não foi possível concluir a ação. Tente novamente.');
   }
@@ -103,6 +104,41 @@
     }
     const { data } = await c.from('documento_signatarios').select('*').eq('token', token).maybeSingle();
     return data || null;
+  }
+
+  /* Segurança real (#571, F1): desenho do Projeto de Instalação para a página pública — RPC `public_projeto_desenho_obter`
+     (TOKEN do signatário; devolve só as colunas que a página usa). Mesmo interruptor `vp_public_rpc='off'`; se a RPC falhar
+     ou ainda não existir, cai na leitura antiga de `projetos_elevador_desenhos` pelo ID do documento. */
+  async function obterDesenhoProjeto(token, documentoId) {
+    const c = sb(); if (!c) return null;
+    if (token && usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_projeto_desenho_obter', { p_token: token });
+      if (!r.falhou) return r.data || null;
+    }
+    if (!documentoId) return null;
+    const r = await c.from('projetos_elevador_desenhos')
+      .select('id,referencia,cliente_nome,numero_cotacao,equipamentos,arquivo_nome,arquivo_url,tipo_documento')
+      .eq('id', documentoId).maybeSingle();
+    return (r && r.data) || null;
+  }
+
+  /* Contrato do Instalador (16/10/2026): fila de assinaturas (Diego → Juliana → Maurício) lida pelo TOKEN (contrato ou signatário),
+     para o documento mostrar quem já assinou. Falha = lista vazia (o documento só não mostra os blocos). */
+  async function filaInstalador(token) {
+    const c = sb(); if (!c || !token) return [];
+    try { const { data, error } = await c.rpc('public_ci_fila', { p_token: token }); if (error) return []; return Array.isArray(data) ? data : []; }
+    catch (e) { return []; }
+  }
+  /* Painel do HUB: reenvia o aviso de quem está na vez (função ci_reenviar_aviso_vez, exige sessão + alçada Editar). */
+  async function reenviarAvisoVezInstalador(contratoId) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.rpc('ci_reenviar_aviso_vez', { p_id: contratoId });
+    if (error) throw error;
+    if (!data || !data.ok) {
+      const m = { sem_sessao: 'Entre no sistema para reenviar.', sem_permissao: 'Você não tem permissão para reenviar este aviso.', ninguem_na_vez: 'Ninguém está na vez de assinar agora.', nao_encontrado: 'Contrato não encontrado.' };
+      throw new Error(m[data && data.erro] || 'Não foi possível reenviar o aviso.');
+    }
+    return data;
   }
 
   async function listarPorDocumento(documentoTipo, documentoId) {
@@ -277,8 +313,9 @@
   }
 
   window.DocumentoSignatariosStore = {
-    shortToken, signUrl, getByToken, listarPorDocumento, listarPorTipo, contarPendentes,
+    shortToken, signUrl, getByToken, obterDesenhoProjeto, listarPorDocumento, listarPorTipo, contarPendentes,
     criar, remover, marcarEnviado, markViewed, markSigned, refuse,
+    filaInstalador, reenviarAvisoVezInstalador,
     getPublicIP, deviceLabel, sha256Hex,
     /* achado real (01/10, teste E2E): a tela final de assinatura chama
        `source.store.fmtDateTime(...)` genericamente — faltava aqui e

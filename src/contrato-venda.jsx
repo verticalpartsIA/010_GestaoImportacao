@@ -386,7 +386,7 @@ function CVSendModal({ record, onClose, onSent }) {
             `Olá${nomeExtra ? ' ' + nomeExtra.split(' ')[0] : ''}! A Vertical Parts enviou o contrato ${record.numero_documento} também para a sua assinatura digital.\n\n` +
             `${record.titulo}\nValor: ${valorFmt}\n\nAssine pelo seu link individual e seguro (válido por 7 dias):\n${url}`;
           const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
-            to: emailExtra, subject: `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, text: msgExtra,
+            to: emailExtra, subject: `Contrato ${record.numero_documento} - Assinatura digital`, text: msgExtra,
             numeroCotacao, referenciaTipo: 'contrato_venda', referenciaId: record.id,
           });
           if (enviouDireto) {
@@ -402,7 +402,7 @@ function CVSendModal({ record, onClose, onSent }) {
           `Olá${nomeExtra ? ' ' + nomeExtra.split(' ')[0] : ''}! Você está recebendo, em cópia informativa, o contrato ${record.numero_documento} enviado pela Vertical Parts para assinatura de ${name || record.comprador_razao_social}.\n\n` +
           `${record.titulo}\nValor: ${valorFmt}\n\nEste e-mail é só um aviso — não é necessário assinar nada aqui.`;
         const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
-          to: emailExtra, subject: `[Cópia] Contrato ${record.numero_documento} — Vertical Parts`, text: msgCopia,
+          to: emailExtra, subject: `[Copia] Contrato ${record.numero_documento} - Vertical Parts`, text: msgCopia,
           numeroCotacao, referenciaTipo: 'contrato_venda', referenciaId: record.id,
         });
         if (!enviouDireto) window.toast?.(`Falha ao enviar cópia informativa para ${emailExtra}.`, 'error');
@@ -441,14 +441,14 @@ function CVSendModal({ record, onClose, onSent }) {
            decididos aqui, sem mudança de comportamento. */
         const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(record.numero_documento) ?? null;
         const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
-          to: contact, subject: `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, text: message,
+          to: contact, subject: `Contrato ${record.numero_documento} - Assinatura digital`, text: message,
           numeroCotacao, referenciaTipo: 'contrato_venda', referenciaId: record.id,
         });
         if (enviouDireto) {
           updated = await window.CVStore.markSent(record.id, channel, { name, contact });
           window.toast?.(`E-mail enviado para ${contact}.`, 'success');
         } else {
-          window.open(window.CVStore.mailtoHref(contact, `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, message), '_blank');
+          window.open(window.CVStore.mailtoHref(contact, `Contrato ${record.numero_documento} - Assinatura digital`, message), '_blank');
           window.toast?.('O envio automático por e-mail FALHOU — nada foi enviado e o contrato NÃO foi marcado como enviado. Abrindo seu e-mail padrão para envio manual; depois de enviar, use WhatsApp/Link para registrar o envio.', 'error');
           return;
         }
@@ -630,7 +630,8 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
      sem redigitar (a Proposta já tem os dados vindos do Formulário +
      Precificação — ver Fase 1). */
   const aplicarProposta = (p) => {
-    const dj = p.data_json || {};
+    /* Equipamentos ocultados na Proposta não vão para o contrato (visão comercial; ver proposta-opcoes.js › projetar). */
+    const dj = window.PropostaOpcoes ? window.PropostaOpcoes.projetar(p.data_json || {}, 'elevador') : (p.data_json || {});
     const cli = dj.cliente || {};
     const obra = dj.obra || {};
     const valores = dj.elevador?.valores || {};
@@ -1199,7 +1200,7 @@ function CVDocumentoSignatariosSection({ rec }) {
         const msg = `Olá${s.nome ? ' ' + s.nome.split(' ')[0] : ''}! Lembrete: o contrato ${rec.numero_documento} ainda aguarda sua assinatura digital.\n\nAssine pelo seu link individual:\n${url}`;
         const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(rec.numero_documento) ?? null;
         const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
-          to: s.email, subject: `Lembrete — Contrato ${rec.numero_documento} — Assinatura digital | Vertical Parts`, text: msg,
+          to: s.email, subject: `Lembrete - Contrato ${rec.numero_documento} - Assinatura digital`, text: msg,
           numeroCotacao, referenciaTipo: 'contrato_venda', referenciaId: rec.id,
         });
         if (enviouDireto) { await window.DocumentoSignatariosStore.marcarEnviado(s.id, 'email', { name: s.nome, contact: s.email }); window.toast?.('Lembrete enviado.', 'success'); }
@@ -1381,7 +1382,7 @@ function CVAuditDrawer({ rec, onClose, onResend, onRefresh }) {
   const a = rec.audit || {};
   const del = async () => {
     if (!window.confirm('Excluir este contrato do painel?')) return;
-    await window.CVStore.remove(rec.id);
+    try { await window.CVStore.remove(rec.id); } catch (e) { alert('Erro ao excluir: ' + (e.message || e)); return; }
     onClose(); onRefresh();
   };
   const valorFmt = rec.valor_total_num ? window.CV.brl(rec.valor_total_num) : '—';
@@ -1463,10 +1464,17 @@ function CVDashboard({ onCriarDeProposta, onContinuarRascunho }) {
   const [loading, setLoading] = _cvUS(true);
   const [filter, setFilter] = _cvUS('todos');
   const [query, setQuery] = _cvUS('');
-  const [drawerId, setDrawerId] = _cvUS(null);
+  // Item aberto (drawer de auditoria) vive na URL — /contrato-venda-equipamentos/painel/<id>,
+  // mesmo padrão de useRotaItem já usado no PCP (src/rota-pcp.js). Reload/compartilhar o
+  // link reabre o drawer do contrato certo.
+  const [drawerId, setDrawerId] = window.useRotaItem('contrato-venda-equipamentos', 'painel');
   const [sendRec, setSendRec] = _cvUS(null);
   const [aguardando, setAguardando] = _cvUS([]);
   const [rascunhos, setRascunhos] = _cvUS([]);
+  // 23/10 (pedido do usuário) — ordenação por coluna, uma instância por tabela.
+  const ordAguardando = window.useOrdenacao();
+  const ordRascunhos = window.useOrdenacao();
+  const ordContratos = window.useOrdenacao();
 
   const excluirRascunho = async (r) => {
     if (!window.confirm('Excluir este rascunho (' + (r.comprador_razao_social || 'sem comprador') + ')? Não dá pra desfazer.')) return;
@@ -1522,6 +1530,22 @@ function CVDashboard({ onCriarDeProposta, onContinuarRascunho }) {
     return l ? window.CVStore.relative(l.at) : '';
   };
 
+  const aguardandoOrd = ordAguardando.aplicar(aguardando, {
+    proposta: (p) => p.numero_documento, cliente: (p) => p.data_json?.cliente?.nome || p.titulo,
+    valor: (p) => (p.valor_total != null ? Number(p.valor_total) : null),
+    assinada: (p) => (p.aprovada_em ? new Date(p.aprovada_em).getTime() : null),
+  });
+  const rascunhosOrd = ordRascunhos.aplicar(rascunhos, {
+    comprador: (r) => r.comprador_razao_social, objeto: (r) => r.objeto_resumo,
+    valor: (r) => r.valor_total_num, criadoPor: (r) => (((r.log || [])[0] || {}).meta || {}).por,
+    atualizado: (r) => (r.atualizado_em ? new Date(r.atualizado_em).getTime() : null),
+  });
+  const filteredOrd = ordContratos.aplicar(filtered, {
+    contrato: (c) => c.numero_documento, objeto: (c) => c.objeto_resumo,
+    valor: (c) => c.valor_total_num, status: (c) => c.status,
+    atividade: (c) => { const l = (c.log || [])[c.log.length - 1]; return l ? new Date(l.at).getTime() : null; },
+  });
+
   return (
     <div className="ci-dash">
       <div className="ci-dash-stats">
@@ -1546,9 +1570,12 @@ function CVDashboard({ onCriarDeProposta, onContinuarRascunho }) {
             <h2>Propostas assinadas aguardando contrato <span className="ci-cell-num">({aguardando.length})</span></h2>
           </div>
           <table className="ci-table">
-            <thead><tr><th>Proposta</th><th>Cliente</th><th>Valor</th><th>Assinada</th><th style={{ textAlign: 'right' }}>Ação</th></tr></thead>
+            <thead><tr>
+              {ordAguardando.th('proposta', 'Proposta')}{ordAguardando.th('cliente', 'Cliente')}{ordAguardando.th('valor', 'Valor')}
+              {ordAguardando.th('assinada', 'Assinada')}<th style={{ textAlign: 'right' }}>Ação</th>
+            </tr></thead>
             <tbody>
-              {aguardando.map((p) => (
+              {aguardandoOrd.map((p) => (
                 <tr key={p.id}>
                   <td><div className="ci-cell-num">{p.numero_documento}</div><div className="ci-cell-resp">{p.master_id || ''}</div></td>
                   <td><div className="ci-cell-co">{p.data_json?.cliente?.nome || p.titulo || '—'}</div></td>
@@ -1572,9 +1599,12 @@ function CVDashboard({ onCriarDeProposta, onContinuarRascunho }) {
             <h2>Rascunhos em preenchimento <span className="ci-cell-num">({rascunhos.length})</span></h2>
           </div>
           <table className="ci-table">
-            <thead><tr><th>Comprador</th><th>Objeto</th><th>Valor</th><th>Criado por</th><th>Atualizado</th><th style={{ textAlign: 'right' }}>Ações</th></tr></thead>
+            <thead><tr>
+              {ordRascunhos.th('comprador', 'Comprador')}{ordRascunhos.th('objeto', 'Objeto')}{ordRascunhos.th('valor', 'Valor')}
+              {ordRascunhos.th('criadoPor', 'Criado por')}{ordRascunhos.th('atualizado', 'Atualizado')}<th style={{ textAlign: 'right' }}>Ações</th>
+            </tr></thead>
             <tbody>
-              {rascunhos.map((r) => {
+              {rascunhosOrd.map((r) => {
                 const por = (((r.log || [])[0] || {}).meta || {}).por;
                 return (
                   <tr key={r.id}>
@@ -1609,14 +1639,16 @@ function CVDashboard({ onCriarDeProposta, onContinuarRascunho }) {
         ) : filtered.length === 0 ? (
           <div className="ci-empty">Nenhum contrato {filter !== 'todos' ? 'com este status' : ''}. Crie um novo no gerador.</div>
         ) : (
+          <div className="ci-table-scroll">
           <table className="ci-table">
             <thead>
               <tr>
-                <th>Contrato</th><th>Objeto</th><th>Valor</th><th>Status</th><th>Atividade</th><th style={{ textAlign: 'right' }}>Ações</th>
+                {ordContratos.th('contrato', 'Contrato')}{ordContratos.th('objeto', 'Objeto')}{ordContratos.th('valor', 'Valor')}
+                {ordContratos.th('status', 'Status')}{ordContratos.th('atividade', 'Atividade')}<th style={{ textAlign: 'right' }}>Ações</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map(c => (
+              {filteredOrd.map(c => (
                 <tr key={c.id} onClick={() => setDrawerId(c.id)}>
                   <td><div className="ci-cell-co">{c.comprador_razao_social}</div><div className="ci-cell-num">{c.numero_documento}</div></td>
                   <td><div className="ci-cell-obj">{c.objeto_resumo}</div><div className="ci-cell-resp">{c.responsavel_nome || '—'}</div></td>
@@ -1635,6 +1667,7 @@ function CVDashboard({ onCriarDeProposta, onContinuarRascunho }) {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -1648,11 +1681,44 @@ function CVDashboard({ onCriarDeProposta, onContinuarRascunho }) {
    PAGE — abas Painel / Novo
    ============================================================ */
 function ContratoVendaEquipamentosPage() {
-  const [tab, setTab] = _cvUS('painel');
+  // Aba (Painel/Novo) na URL — /contrato-venda-equipamentos/novo, mesmo padrão
+  // de useRouteTab já usado no PCP/Almoxarifado (router.js).
+  const [tab, setTab] = window.useRouteTab('contrato-venda-equipamentos', 'painel', ['painel', 'novo']);
+  // Qual proposta/rascunho originou o assistente "Novo contrato" — vai no 3º
+  // segmento da URL (prop-<id> / rasc-<id>) pra reload/link direto reabrir o
+  // mesmo assistente em vez de um formulário em branco.
+  const [novoItem, setNovoItem] = window.useRotaItem('contrato-venda-equipamentos', 'novo');
   const [prefillProposta, setPrefillProposta] = _cvUS(null);
   const [rascunhoEdit, setRascunhoEdit] = _cvUS(null);
-  const criarDeProposta = (p) => { setRascunhoEdit(null); setPrefillProposta(p); setTab('novo'); };
-  const continuarRascunho = (r) => { setPrefillProposta(null); setRascunhoEdit(r); setTab('novo'); };
+  // Ordem importa: setTab() navega sem 3º segmento (o padrão de useRouteTab sem
+  // id), então setNovoItem() tem que vir DEPOIS — é a chamada que fixa aba+item
+  // juntos na URL final (useRotaItem sempre grava os dois segmentos de uma vez).
+  const criarDeProposta = (p) => { setRascunhoEdit(null); setPrefillProposta(p); setTab('novo'); setNovoItem('prop-' + p.id); };
+  const continuarRascunho = (r) => { setPrefillProposta(null); setRascunhoEdit(r); setTab('novo'); setNovoItem('rasc-' + r.id); };
+
+  // Deep link / reload na aba "Novo" com item na URL, mas sem o prefill em
+  // memória ainda (reload de verdade, não clique local) — refaz a busca.
+  _cvUE(() => {
+    if (tab !== 'novo' || !novoItem || prefillProposta || rascunhoEdit) return;
+    let vivo = true;
+    (async () => {
+      try {
+        if (novoItem.indexOf('prop-') === 0) {
+          const id = novoItem.slice(5);
+          const lista = await window.CVStore.listarPropostasAguardandoContrato();
+          const p = (lista || []).find((x) => x.id === id);
+          if (vivo && p) setPrefillProposta(p);
+        } else if (novoItem.indexOf('rasc-') === 0) {
+          const id = novoItem.slice(5);
+          const lista = await window.CVStore.listarRascunhos();
+          const r = (lista || []).find((x) => x.id === id);
+          if (vivo && r) setRascunhoEdit(r);
+        }
+      } catch (e) { /* fica no assistente em branco, melhor que travar */ }
+    })();
+    return () => { vivo = false; };
+  }, [tab, novoItem]);
+
   return (
     <div className="ci-page">
       <div className="ci-page-head">
@@ -1664,14 +1730,14 @@ function ContratoVendaEquipamentosPage() {
         <div className="ci-page-actions-wrap">
           <div className="ci-page-actions">
             <button className={'ci-tab' + (tab === 'painel' ? ' on' : '')} onClick={() => setTab('painel')}>▦ Painel</button>
-            <button className={'ci-tab' + (tab === 'novo' ? ' on' : '')} onClick={() => { setPrefillProposta(null); setRascunhoEdit(null); setTab('novo'); }}>+ Novo contrato</button>
+            <button className={'ci-tab' + (tab === 'novo' ? ' on' : '')} onClick={() => { setPrefillProposta(null); setRascunhoEdit(null); setNovoItem(null); setTab('novo'); }}>+ Novo contrato</button>
           </div>
         </div>
       </div>
       <div className="ci-page-body">
         {tab === 'painel'
           ? <CVDashboard onCriarDeProposta={criarDeProposta} onContinuarRascunho={continuarRascunho}/>
-          : <CVWizard key={rascunhoEdit ? rascunhoEdit.id : 'novo'} rascunho={rascunhoEdit} prefillProposta={prefillProposta} onCreated={() => { setPrefillProposta(null); setRascunhoEdit(null); setTab('painel'); }}/>}
+          : <CVWizard key={rascunhoEdit ? rascunhoEdit.id : 'novo'} rascunho={rascunhoEdit} prefillProposta={prefillProposta} onCreated={() => { setPrefillProposta(null); setRascunhoEdit(null); setNovoItem(null); setTab('painel'); }}/>}
       </div>
     </div>
   );

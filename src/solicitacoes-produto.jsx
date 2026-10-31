@@ -3,7 +3,16 @@
    Fluxo: Comercial (preenche) → Engenharia (completa) → Ficha Técnica
    ============================================================ */
 
-function SolicitacoesProdutoPage({ solicitacaoId }) {
+/* Cores dos selos de status (texto branco por cima, então todas escuras). Fonte única para a lista e o detalhe. */
+const SP_STATUS_CORES = {
+  novo: 'var(--vp-info)',
+  em_analise: 'var(--vp-warning-ink)',
+  aguardando_desenho: 'var(--fg2)',
+  pronto: 'var(--vp-success)',
+  convertido_em_ficha: 'var(--vp-black)',
+};
+
+function SolicitacoesProdutoPage({ solicitacaoId, setRoute, setSubsel }) {
   const [view, setView] = React.useState(solicitacaoId ? 'detalhe' : 'lista');
   const [solicitacoes, setSolicitacoes] = React.useState([]);
   const [atual, setAtual] = React.useState(null);
@@ -130,6 +139,8 @@ function SolicitacoesProdutoPage({ solicitacaoId }) {
         />
       ) : (
         <DetalheView
+          setRoute={setRoute}
+          setSubsel={setSubsel}
           solicitacao={atual}
           loading={loading}
           onVoltar={_voltarParaLista}
@@ -188,7 +199,7 @@ function ModalExcluirSolicitacao({ solicitacao, onClose, onExcluida }) {
 
         <div style={styles.modalInfo}>
           <div style={{ fontWeight: 700 }}>{solicitacao.numero_solicitacao}</div>
-          <div style={{ color: '#666', marginTop: '4px' }}>
+          <div style={{ color: 'var(--fg2)', marginTop: '4px' }}>
             {solicitacao.cliente_nome ? solicitacao.cliente_nome + ' · ' : ''}
             {solicitacao.categoria_sku || '—'} · {solicitacao.status.replace(/_/g, ' ').toUpperCase()}
           </div>
@@ -236,13 +247,7 @@ function ModalExcluirSolicitacao({ solicitacao, onClose, onExcluida }) {
 }
 
 function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo, onFiltroStatusChange, onFiltroTipoChange, onNovaClick, onAbrirClick, podeExcluir, onExcluirClick, user }) {
-  const statusCores = {
-    novo: '#3b82f6',
-    em_analise: '#f59e0b',
-    aguardando_desenho: '#ec4899',
-    pronto: '#10b981',
-    convertido_em_ficha: '#8b5cf6',
-  };
+  const statusCores = SP_STATUS_CORES;
 
   const tiposLabel = {
     elevador: 'Elevador',
@@ -323,12 +328,12 @@ function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo,
         </div>
       ) : (
         <div style={styles.tabelaContainer}>
-          <table style={styles.tabela}>
+          <table className="tab-cruz" style={styles.tabela}>
             <thead>
               <tr style={styles.theadTr}>
                 <th style={styles.th}>SOLICITAÇÃO</th>
                 <th style={styles.th}>TIPO</th>
-                <th style={styles.th}>CATEGORIA</th>
+                <th style={styles.th}>CÓDIGO</th>
                 <th style={styles.th}>CLIENTE</th>
                 <th style={styles.th}>SOLICITANTE</th>
                 <th style={styles.th}>STATUS</th>
@@ -380,8 +385,12 @@ function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo,
   );
 }
 
+const SP_FOTOS = ['Foto principal', 'Foto das laterais do produto', 'Foto do verso do produto'];
+
 function NovaView({ onSalvar, onCancelar, user }) {
+  const S = window.SolicitacoesProdutoStore;
   const [form, setForm] = React.useState({
+    tipo_cadastro: 'pecas',
     tipo_equipamento: 'elevador',
     categoria_sku: '',
     solicitante_nome: user.nome || 'Usuário',
@@ -394,6 +403,7 @@ function NovaView({ onSalvar, onCancelar, user }) {
     cliente_nome: '',
     cliente_industria: '',
     cliente_contato: '',
+    dc: {},
     anexos: [],
   });
 
@@ -401,11 +411,22 @@ function NovaView({ onSalvar, onCancelar, user }) {
   const [enviandoAnexo, setEnviandoAnexo] = React.useState(false);
   // Todos os anexos desta solicitação nova caem na mesma pasta temporária —
   // a solicitação ainda não tem id (só existe depois do insert).
-  const pastaTempRef = React.useRef(window.SolicitacoesProdutoStore._pastaTemp());
+  const pastaTempRef = React.useRef(S._pastaTemp());
+
+  const [prefixos, setPrefixos] = React.useState((S.CATEGORIAS_SKU || []).map((c) => ({ prefixo: c.valor, qtd: 0, geracao: true, descricao: c.label.split('—')[1] ? c.label.split('—')[1].trim() : '' })));
+  React.useEffect(() => {
+    let vivo = true;
+    S.listarPrefixosCodigo().then((l) => { if (vivo && l.length) setPrefixos(l); }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+  const prefixoEscolhido = prefixos.find((p) => p.prefixo === form.categoria_sku);
+  const pecas = form.tipo_cadastro === 'pecas';
+  const dc = form.dc;
+  const setDc = (k, v) => setForm((s) => ({ ...s, dc: { ...s.dc, [k]: v } }));
+  const familias = pecas ? S.FAMILIAS_PECAS : S.FAMILIAS_INSUMO;
 
   function _validar() {
     const novosErros = {};
-    if (!form.categoria_sku) novosErros.categoria_sku = 'Categoria é obrigatória';
     if (!form.descricao_inicial) novosErros.descricao_inicial = 'Explique o que você precisa';
     setErros(novosErros);
     return Object.keys(novosErros).length === 0;
@@ -416,35 +437,99 @@ function NovaView({ onSalvar, onCancelar, user }) {
     await onSalvar(form);
   }
 
-  async function _onAnexoChange(e) {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
+  async function _enviarArquivos(files, slot) {
     setEnviandoAnexo(true);
     try {
       for (const file of files) {
-        const anexo = await window.SolicitacoesProdutoStore.uploadAnexo(file, pastaTempRef.current);
+        const anexo = await S.uploadAnexo(file, pastaTempRef.current);
+        if (slot) anexo.slot = slot;
         setForm((s) => ({ ...s, anexos: [...s.anexos, anexo] }));
       }
     } catch (err) {
       alert('Erro ao enviar anexo: ' + (err.message || err));
     } finally {
       setEnviandoAnexo(false);
-      e.target.value = '';
     }
+  }
+
+  async function _onAnexoChange(e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length) await _enviarArquivos(files, null);
+  }
+
+  async function _onFotoChange(slot, e) {
+    const file = (e.target.files || [])[0];
+    e.target.value = '';
+    if (!file) return;
+    const antigo = form.anexos.find((a) => a.slot === slot);
+    if (antigo) _removerAnexo(form.anexos.indexOf(antigo));
+    await _enviarArquivos([file], slot);
   }
 
   function _removerAnexo(idx) {
     const anexo = form.anexos[idx];
-    if (anexo && anexo.path) window.SolicitacoesProdutoStore.removerAnexo(anexo.path).catch(() => {});
+    if (anexo && anexo.path) S.removerAnexo(anexo.path).catch(() => {});
     setForm((s) => ({ ...s, anexos: s.anexos.filter((_, i) => i !== idx) }));
+  }
+
+  function campoTexto(chave, rotulo, extra = {}) {
+    return (
+      <div style={styles.formGroup}>
+        <label style={styles.label}>{rotulo} <span style={styles.opc}>(opcional)</span></label>
+        {extra.ajuda && <div style={styles.ajuda}>{extra.ajuda}</div>}
+        <input
+          type={extra.numero ? 'number' : 'text'}
+          min={extra.numero ? 0 : undefined}
+          value={dc[chave] || ''}
+          onChange={(e) => setDc(chave, e.target.value)}
+          style={styles.input}
+          placeholder={extra.placeholder}
+        />
+      </div>
+    );
+  }
+
+  function campoLista(chave, rotulo, opcoes, ajuda) {
+    return (
+      <div style={styles.formGroup}>
+        <label style={styles.label}>{rotulo} <span style={styles.opc}>(opcional)</span></label>
+        {ajuda && <div style={styles.ajuda}>{ajuda}</div>}
+        <select value={dc[chave] || ''} onChange={(e) => setDc(chave, e.target.value)} style={styles.input}>
+          <option value="">Selecione…</option>
+          {opcoes.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      </div>
+    );
   }
 
   return (
     <div style={styles.viewContainer}>
       <div style={styles.formContainer}>
         <div style={styles.formTitle}>NOVA SOLICITAÇÃO DE PRODUTO</div>
-        <div style={{ fontSize: '12px', color: '#666', marginBottom: '16px' }}>
-          Só <b>Tipo</b>, <b>Categoria</b> e a <b>Descrição</b> são obrigatórios — preencha o resto que souber, o que faltar a Engenharia completa depois.
+        <div style={{ fontSize: '12px', color: 'var(--fg2)', marginBottom: '16px' }}>
+          Aqui entram os produtos que <b>ainda não fornecemos</b>. Só <b>Tipo</b> e <b>O que você precisa</b> são obrigatórios — todo o resto é opcional (inclusive o código, o site de referência e o Part Number),
+          mas quanto mais você informar (site de referência, fotos, marca, modelo, contato do cliente), mais fácil é para a Engenharia e a Compra.
+          Dados fiscais, NCM e código são preenchidos depois pelo setor responsável.
+        </div>
+
+        <div style={styles.formGroup}>
+          <label style={styles.label}>Tipo de cadastro *</label>
+          <div style={styles.segRow}>
+            {S.TIPOS_CADASTRO.map((t) => (
+              <label key={t.valor} style={{ ...styles.segOpt, ...(form.tipo_cadastro === t.valor ? styles.segOptOn : {}) }}>
+                <input
+                  type="radio"
+                  name="tipo_cadastro"
+                  checked={form.tipo_cadastro === t.valor}
+                  onChange={() => setForm((s) => ({ ...s, tipo_cadastro: t.valor, dc: { ...s.dc, familia: '' } }))}
+                  style={{ marginRight: '8px' }}
+                />
+                <b>{t.label}</b>
+                <div style={styles.ajuda}>{t.ajuda}</div>
+              </label>
+            ))}
+          </div>
         </div>
 
         <div style={styles.formRow}>
@@ -462,34 +547,85 @@ function NovaView({ onSalvar, onCancelar, user }) {
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.label}>Categoria (SKU) *</label>
+            <label style={styles.label}>Código <span style={styles.opc}>(opcional)</span></label>
+            <div style={styles.ajuda}>Só o prefixo (ex.: VPER). O número é gerado na publicação: o próximo livre no Omie.</div>
             <select
               value={form.categoria_sku}
               onChange={(e) => setForm({ ...form, categoria_sku: e.target.value })}
-              style={{ ...styles.input, borderColor: erros.categoria_sku ? '#ef4444' : '' }}
+              style={styles.input}
             >
-              <option value="">Selecione…</option>
-              {(window.SolicitacoesProdutoStore.CATEGORIAS_SKU || []).map((c) => (
-                <option key={c.valor} value={c.valor}>{c.label}</option>
+              <option value="">Ainda não sei</option>
+              {prefixos.map((p) => (
+                <option key={p.prefixo} value={p.prefixo}>
+                  {p.prefixo}{p.descricao ? ' — ' + p.descricao : ''}{p.qtd ? ' (' + p.qtd + ' ativos)' : ''}
+                </option>
               ))}
             </select>
-            {erros.categoria_sku && <div style={styles.erro}>{erros.categoria_sku}</div>}
+            {prefixoEscolhido && !prefixoEscolhido.geracao && (
+              <div style={styles.ajuda}>Este prefixo ainda não tem geração automática: a Engenharia informa o código completo na Ficha Técnica.</div>
+            )}
           </div>
         </div>
+
+        <div style={styles.secaoTitulo}>Cabeçalho do produto</div>
 
         <div style={styles.formGroup}>
           <label style={styles.label}>O que você precisa? *</label>
           <textarea
             value={form.descricao_inicial}
             onChange={(e) => setForm({ ...form, descricao_inicial: e.target.value })}
-            style={{ ...styles.textarea, borderColor: erros.descricao_inicial ? '#ef4444' : '' }}
+            style={{ ...styles.textarea, borderColor: erros.descricao_inicial ? 'var(--vp-danger)' : '' }}
             placeholder="Explique com suas palavras o que é o produto e pra que serve — não precisa ser técnico, a Engenharia completa os detalhes depois."
           />
           {erros.descricao_inicial && <div style={styles.erro}>{erros.descricao_inicial}</div>}
         </div>
 
+        {campoTexto('descricao_comercial', 'Descrição (nome comercial)', { ajuda: 'Nome comercial conforme sairá na nota' })}
+        {pecas && campoTexto('referencia', 'Referência', { ajuda: 'Qual equipamento o produto pode ser utilizado' })}
+
+        <div style={styles.formRow}>
+          {pecas && campoTexto('marca', 'Marca do produto')}
+          {campoTexto('modelo', 'Modelo / Part Number')}
+        </div>
+        <div style={styles.formRow}>
+          {campoLista('unidade', 'Unidade de medida', S.UNIDADES)}
+          {campoLista('familia', 'Família do produto (sugerida)', familias)}
+        </div>
+
+        <div style={styles.secaoTitulo}>Aplicação do produto</div>
         <div style={styles.formGroup}>
-          <label style={styles.label}>Detalhes adicionais (opcional)</label>
+          <label style={styles.label}>Função / Finalidade <span style={styles.opc}>(opcional)</span></label>
+          <textarea value={dc.funcao || ''} onChange={(e) => setDc('funcao', e.target.value)} style={styles.textarea} />
+        </div>
+        {campoTexto('material', 'Material de composição')}
+
+        <div style={styles.secaoTitulo}>Referências e contatos</div>
+        <div style={styles.formRow}>
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Site de referência da peça (opcional)</label>
+            <div style={styles.ajuda}>Link do fabricante, catálogo, marketplace… ajuda muito a Compra a achar a peça.</div>
+            <input
+              type="text"
+              value={form.link_produto}
+              onChange={(e) => setForm({ ...form, link_produto: e.target.value })}
+              style={styles.input}
+              placeholder="https://…"
+            />
+          </div>
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Contato do fornecedor (opcional)</label>
+            <div style={styles.ajuda}>Nome, telefone, e-mail — o que você já tiver</div>
+            <input
+              type="text"
+              value={form.fornecedor_contato}
+              onChange={(e) => setForm({ ...form, fornecedor_contato: e.target.value })}
+              style={styles.input}
+            />
+          </div>
+        </div>
+
+        <div style={styles.formGroup}>
+          <label style={styles.label}>Observações / detalhes adicionais (opcional)</label>
           <textarea
             value={form.observacoes_comercial}
             onChange={(e) => setForm({ ...form, observacoes_comercial: e.target.value })}
@@ -497,41 +633,56 @@ function NovaView({ onSalvar, onCancelar, user }) {
             placeholder="Qualquer informação a mais que possa ajudar"
           />
         </div>
+        {pecas && campoTexto('serie', 'Nº de série / ID TAG do equipamento')}
 
+        <div style={styles.secaoTitulo}>Dados complementares</div>
         <div style={styles.formRow}>
-          <div style={styles.formGroup}>
-            <label style={styles.label}>Contato do fornecedor (opcional)</label>
-            <input
-              type="text"
-              value={form.fornecedor_contato}
-              onChange={(e) => setForm({ ...form, fornecedor_contato: e.target.value })}
-              style={styles.input}
-              placeholder="Nome, telefone, e-mail — o que você já tiver"
-            />
-          </div>
-          <div style={styles.formGroup}>
-            <label style={styles.label}>Link do produto (opcional)</label>
-            <input
-              type="text"
-              value={form.link_produto}
-              onChange={(e) => setForm({ ...form, link_produto: e.target.value })}
-              style={styles.input}
-              placeholder="Site do fabricante, catálogo, marketplace…"
-            />
-          </div>
+          {campoLista('compra', 'Local de compra do produto', S.LOCAIS_COMPRA)}
+          {campoTexto('leadtime', 'Lead time (dias)', { ajuda: 'Dias para o material chegar na VP', numero: true })}
+        </div>
+        <div style={styles.formGroup}>
+          <label style={styles.label}>Característica <span style={styles.opc}>(opcional)</span></label>
+          <textarea value={dc.caracteristica || ''} onChange={(e) => setDc('caracteristica', e.target.value)} style={styles.textarea} />
+        </div>
+        <div style={styles.formRow}>
+          {campoTexto('part_number', 'Part Number')}
+          {campoTexto('cor', 'Cor')}
+        </div>
+        {campoLista('aplicacao', 'Aplicação', S.APLICACOES)}
+
+        <div style={styles.secaoTitulo}>Fotos do produto</div>
+        <div style={{ fontSize: '12px', color: 'var(--fg2)', marginBottom: '10px' }}>
+          Opcional, mas a foto principal ajuda muito a identificar a peça.
+        </div>
+        <div style={styles.fotosGrid}>
+          {SP_FOTOS.map((nome, i) => {
+            const a = form.anexos.find((x) => x.slot === nome);
+            return (
+              <div key={nome}>
+                <label style={styles.label}>{i + 1}. {nome}</label>
+                <input type="file" accept="image/*" disabled={enviandoAnexo} onChange={(e) => _onFotoChange(nome, e)} />
+                {a && (
+                  <div>
+                    <img src={a.url} alt={nome} style={styles.fotoPrev} />
+                    <button type="button" onClick={() => _removerAnexo(form.anexos.indexOf(a))} style={{ border: 'none', background: 'none', color: 'var(--vp-danger)', cursor: 'pointer', fontSize: '12px' }}>remover</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
-        <div style={styles.formGroup}>
-          <label style={styles.label}>Imagem ou PDF do produto (opcional)</label>
+        <div style={{ ...styles.formGroup, marginTop: '20px' }}>
+          <label style={styles.label}>Outras imagens ou PDFs do produto (opcional)</label>
           <input type="file" accept="image/*,.pdf" multiple onChange={_onAnexoChange} disabled={enviandoAnexo}/>
-          {enviandoAnexo && <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>Enviando…</div>}
-          {form.anexos.length > 0 && (
+          {enviandoAnexo && <div style={{ fontSize: '12px', color: 'var(--fg2)', marginTop: '6px' }}>Enviando…</div>}
+          {form.anexos.filter((a) => !a.slot).length > 0 && (
             <div style={{ marginTop: '8px' }}>
-              {form.anexos.map((a, idx) => (
+              {form.anexos.map((a, idx) => a.slot ? null : (
                 <div key={a.path} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', padding: '4px 0' }}>
                   <span>{a.tipo === 'imagem' ? '🖼️' : '📄'}</span>
-                  <a href={a.url} target="_blank" style={{ color: '#3b82f6' }}>{a.nome}</a>
-                  <button type="button" onClick={() => _removerAnexo(idx)} style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer' }}>remover</button>
+                  <a href={a.url} target="_blank" style={{ color: 'var(--vp-info)' }}>{a.nome}</a>
+                  <button type="button" onClick={() => _removerAnexo(idx)} style={{ border: 'none', background: 'none', color: 'var(--vp-danger)', cursor: 'pointer' }}>remover</button>
                 </div>
               ))}
             </div>
@@ -550,7 +701,7 @@ function NovaView({ onSalvar, onCancelar, user }) {
         </div>
 
         {form.foiPedidoCliente && (
-          <div style={{ padding: '12px', background: '#f8fafc', borderRadius: '4px', marginBottom: '16px' }}>
+          <div style={{ padding: '12px', background: 'var(--vp-gray-50)', borderRadius: '4px', marginBottom: '16px' }}>
             <div style={styles.formRow}>
               <div style={styles.formGroup}>
                 <label style={styles.label}>Cliente (opcional)</label>
@@ -571,19 +722,33 @@ function NovaView({ onSalvar, onCancelar, user }) {
                 />
               </div>
             </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Contato do cliente (opcional)</label>
-              <input
-                type="text"
-                value={form.cliente_contato}
-                onChange={(e) => setForm({ ...form, cliente_contato: e.target.value })}
-                style={styles.input}
-                placeholder="Telefone, e-mail…"
-              />
+            <div style={styles.formRow}>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>WhatsApp do cliente (opcional)</label>
+                <div style={styles.ajuda}>A Engenharia pode chamar o cliente para entender melhor a aplicação.</div>
+                <input
+                  type="text"
+                  value={dc.cliente_whatsapp || ''}
+                  onChange={(e) => setDc('cliente_whatsapp', e.target.value)}
+                  style={styles.input}
+                  placeholder="(DDD) 9 0000-0000"
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Outro contato do cliente (opcional)</label>
+                <div style={styles.ajuda}>E-mail, telefone fixo…</div>
+                <input
+                  type="text"
+                  value={form.cliente_contato}
+                  onChange={(e) => setForm({ ...form, cliente_contato: e.target.value })}
+                  style={styles.input}
+                />
+              </div>
             </div>
           </div>
         )}
 
+        <div style={styles.secaoTitulo}>Validação comercial — responsável pela solicitação</div>
         <div style={styles.formRow}>
           <div style={styles.formGroup}>
             <label style={styles.label}>Solicitante *</label>
@@ -604,12 +769,19 @@ function NovaView({ onSalvar, onCancelar, user }) {
             />
           </div>
         </div>
+        {campoLista('estoque_min', 'Sugestão de estoque mínimo', S.ESTOQUE_MIN)}
+        {dc.estoque_min && (
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Justifique a sugestão de estoque mínimo <span style={styles.opc}>(opcional)</span></label>
+            <textarea value={dc.estoque_min_justif || ''} onChange={(e) => setDc('estoque_min_justif', e.target.value)} style={styles.textarea} />
+          </div>
+        )}
 
         <div style={styles.formActions}>
           <button onClick={onCancelar} style={styles.btnSecondary}>
             CANCELAR
           </button>
-          <button onClick={_salvar} style={styles.btnPrimary}>
+          <button onClick={_salvar} style={styles.btnPrimary} disabled={enviandoAnexo}>
             ENVIAR PARA ENGENHARIA
           </button>
         </div>
@@ -618,7 +790,12 @@ function NovaView({ onSalvar, onCancelar, user }) {
   );
 }
 
-function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
+function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user, setRoute, setSubsel }) {
+  // Navegação padrão do projeto (setSubsel + setRoute vindos do App), sem PopStateEvent manual.
+  const irParaFicha = (fichaId) => {
+    if (setSubsel && setRoute) { setSubsel(fichaId); setRoute('ficha-tecnica'); return; }
+    if (window.VpRouter) { window.VpRouter.navigate('ficha-tecnica', fichaId); window.dispatchEvent(new PopStateEvent('popstate')); }
+  };
   if (loading || !solicitacao) {
     return <div style={styles.loadingContainer}>⏳ Carregando…</div>;
   }
@@ -630,13 +807,7 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
     complementos_descobertos: solicitacao.complementos_descobertos || '',
   });
 
-  const statusCores = {
-    novo: '#3b82f6',
-    em_analise: '#f59e0b',
-    aguardando_desenho: '#ec4899',
-    pronto: '#10b981',
-    convertido_em_ficha: '#8b5cf6',
-  };
+  const statusCores = SP_STATUS_CORES;
 
   async function _iniciarAnalise() {
     if (!confirm('Iniciar análise desta solicitação?')) return;
@@ -677,19 +848,40 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
         ? `${solicitacao.tipo_equipamento} — ${solicitacao.cliente_nome}`
         : solicitacao.tipo_equipamento;
       state.identificacao.descricaoComercial = solicitacao.descricao_inicial || '';
-      state.identificacao.descricaoTecnica = solicitacao.complementos_descobertos || '';
+      // Antes só nome e descrições passavam e a Engenharia redigitava o resto (auditoria de 11/10). Agora também:
+      // categoria (tipo de equipamento), especificações levantadas (entram na descrição técnica, que é pública na ficha —
+      // por isso contato do fornecedor, link do produto e dados do cliente NÃO são copiados) e a imagem anexada → foto/desenho.
+      state.identificacao.categoriaProduto = solicitacao.tipo_equipamento || '';
+      const specs = solicitacao.especificacoes_completas;
+      const linhasSpec = (specs && typeof specs === 'object' && !Array.isArray(specs))
+        ? Object.entries(specs).filter(([, v]) => v != null && String(v).trim() !== '').map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
+        : [];
+      state.identificacao.descricaoTecnica = [solicitacao.complementos_descobertos || '', linhasSpec.length ? 'Especificações:\n' + linhasSpec.join('\n') : '']
+        .filter(Boolean).join('\n\n');
+
+      const copiarImagem = async (url, slot) => {
+        try {
+          const blob = await (await fetch(url)).blob();
+          if (!/^image\//.test(blob.type)) return false;
+          const dataURL = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); });
+          const { path } = await window.FTImg.compressAndUpload(dataURL, { fichaId: state.__id, tipo: slot, nomeProduto: state.identificacao.nomeProduto });
+          state.midia[slot] = path;
+          return true;
+        } catch (e) { console.warn('[Solicitação→Ficha] imagem não copiada', slot, e); return false; }
+      };
+      let semImagem = false;
+      if (window.FTImg) {
+        const imgAnexo = (solicitacao.anexos || []).find((a) => a && a.tipo === 'imagem' && a.url);
+        if (imgAnexo && !(await copiarImagem(imgAnexo.url, 'foto'))) semImagem = true;
+        if (solicitacao.desenho_url && !(await copiarImagem(solicitacao.desenho_url, 'desenho'))) semImagem = true;
+      }
 
       const rec = await window.FTStore.createDraft(state);
       await window.SolicitacoesProdutoStore.converterEmFicha(solicitacao.id, rec.id);
       onAtualizar({});
-      alert('Ficha técnica criada! Abrindo editor…');
-      if (window.VpRouter) {
-        window.VpRouter.navigate('ficha-tecnica', rec.id);
-        // navigate() só faz pushState (não dispara popstate); o app.jsx só
-        // troca de página reagindo a popstate, então disparamos manualmente
-        // pra simular uma navegação real do browser.
-        window.dispatchEvent(new PopStateEvent('popstate'));
-      }
+      const familia = solicitacao.categoria_sku ? ` Prefixo do código: ${solicitacao.categoria_sku} — na publicação o sistema usa o próximo número livre no Omie (ou informe o Código do Produto completo).` : '';
+      alert('Ficha técnica criada!' + familia + (semImagem ? '\nA imagem anexada não pôde ser copiada — anexe a foto na ficha.' : '') + '\nAbrindo editor…');
+      irParaFicha(rec.id);
     } catch (e) {
       alert('Erro ao converter em ficha técnica: ' + e.message);
     }
@@ -735,12 +927,46 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
           )}
           {solicitacao.link_produto && (
             <div style={styles.detalheRow}>
-              <div style={styles.detalheLabel}>Link do produto:</div>
+              <div style={styles.detalheLabel}>Site de referência:</div>
               <div style={styles.detalheValue}>
                 <a href={solicitacao.link_produto} target="_blank" style={styles.btnLink}>{solicitacao.link_produto}</a>
               </div>
             </div>
           )}
+          {(() => {
+            const d = solicitacao.dados_cadastro || {};
+            const ROT = [['descricao_comercial', 'Descrição comercial'], ['referencia', 'Referência'], ['marca', 'Marca'], ['modelo', 'Modelo / Part Number'],
+              ['part_number', 'Part Number'], ['unidade', 'Unidade'], ['familia', 'Família sugerida'], ['funcao', 'Função / Finalidade'], ['material', 'Material'],
+              ['serie', 'Nº de série / ID TAG'], ['compra', 'Local de compra'], ['leadtime', 'Lead time (dias)'], ['caracteristica', 'Característica'],
+              ['cor', 'Cor'], ['aplicacao', 'Aplicação'], ['estoque_min', 'Estoque mínimo sugerido'], ['estoque_min_justif', 'Justificativa do estoque']];
+            const wa = String(d.cliente_whatsapp || '').replace(/\D/g, '');
+            return (
+              <>
+                {solicitacao.tipo_cadastro && (
+                  <div style={styles.detalheRow}>
+                    <div style={styles.detalheLabel}>Tipo de cadastro:</div>
+                    <div style={styles.detalheValue}>{solicitacao.tipo_cadastro === 'insumo' ? 'Insumo, consumo, matéria-prima ou ativo' : 'Peças e equipamentos'}</div>
+                  </div>
+                )}
+                {d.cliente_whatsapp && (
+                  <div style={styles.detalheRow}>
+                    <div style={styles.detalheLabel}>WhatsApp do cliente:</div>
+                    <div style={styles.detalheValue}>
+                      {wa.length >= 10
+                        ? <a href={'https://wa.me/' + (wa.length <= 11 ? '55' + wa : wa)} target="_blank" style={styles.btnLink}>{d.cliente_whatsapp}</a>
+                        : d.cliente_whatsapp}
+                    </div>
+                  </div>
+                )}
+                {ROT.filter(([k]) => d[k]).map(([k, r]) => (
+                  <div key={k} style={styles.detalheRow}>
+                    <div style={styles.detalheLabel}>{r}:</div>
+                    <div style={styles.detalheValue}>{d[k]}</div>
+                  </div>
+                ))}
+              </>
+            );
+          })()}
           <div style={styles.detalheRow}>
             <div style={styles.detalheLabel}>Solicitante:</div>
             <div style={styles.detalheValue}>{solicitacao.solicitante_nome} ({solicitacao.solicitante_email})</div>
@@ -750,7 +976,7 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
             <div style={styles.detalheValue}>{solicitacao.tipo_equipamento}</div>
           </div>
           <div style={styles.detalheRow}>
-            <div style={styles.detalheLabel}>Categoria (SKU):</div>
+            <div style={styles.detalheLabel}>Código (prefixo):</div>
             <div style={styles.detalheValue}>{solicitacao.categoria_sku || '—'}</div>
           </div>
           <div style={styles.detalheRow}>
@@ -840,11 +1066,7 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
       {solicitacao.status === 'convertido_em_ficha' && solicitacao.ficha_tecnica_id && (
         <div style={styles.formActions}>
           <button
-            onClick={() => {
-              if (!window.VpRouter) return;
-              window.VpRouter.navigate('ficha-tecnica', solicitacao.ficha_tecnica_id);
-              window.dispatchEvent(new PopStateEvent('popstate'));
-            }}
+            onClick={() => irParaFicha(solicitacao.ficha_tecnica_id)}
             style={styles.btnPrimary}
           >
             ABRIR FICHA TÉCNICA
@@ -894,71 +1116,79 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
 const styles = {
   container: { padding: '20px', maxWidth: '1400px', margin: '0 auto', fontFamily: 'sans-serif' },
   header: { marginBottom: '30px' },
-  breadcrumb: { fontSize: '11px', color: '#666', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' },
+  breadcrumb: { fontSize: '11px', color: 'var(--fg2)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' },
   title: { fontSize: '28px', fontWeight: 700, marginBottom: '8px' },
-  subtitle: { fontSize: '13px', color: '#666', lineHeight: 1.5 },
-  viewContainer: { background: '#fff', borderRadius: '8px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
+  subtitle: { fontSize: '13px', color: 'var(--fg2)', lineHeight: 1.5 },
+  viewContainer: { background: 'var(--bg)', borderRadius: '8px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
 
   titleSection: { borderBottom: 'none' },
   toolbar: { display: 'flex', gap: '12px', marginBottom: '20px', justifyContent: 'space-between', alignItems: 'center' },
 
-  btnPrimary: { padding: '10px 20px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '12px' },
-  btnSecondary: { padding: '10px 20px', background: '#e5e7eb', color: '#333', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '12px' },
-  btnLink: { color: '#3b82f6', textDecoration: 'none', fontWeight: 600, cursor: 'pointer', fontSize: '12px', background: 'none', border: 'none', padding: 0 },
-  btnDanger: { padding: '10px 20px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '12px' },
+  btnPrimary: { padding: '10px 20px', background: 'var(--vp-yellow)', color: 'var(--vp-black)', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '12px' },
+  btnSecondary: { padding: '10px 20px', background: 'var(--border)', color: 'var(--fg1)', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '12px' },
+  btnLink: { color: 'var(--vp-info)', textDecoration: 'none', fontWeight: 600, cursor: 'pointer', fontSize: '12px', background: 'none', border: 'none', padding: 0 },
+  btnDanger: { padding: '10px 20px', background: 'var(--vp-danger)', color: 'var(--vp-white)', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '12px' },
   acoesCell: { display: 'flex', gap: '10px', alignItems: 'center' },
   btnIconTrash: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px', padding: '2px 4px', lineHeight: 1 },
 
   modalShroud: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-  modalBox: { background: '#fff', borderRadius: '8px', width: '460px', maxWidth: '92vw', padding: '22px', boxShadow: '0 10px 40px rgba(0,0,0,0.25)' },
+  modalBox: { background: 'var(--bg)', borderRadius: '8px', width: '460px', maxWidth: '92vw', padding: '22px', boxShadow: '0 10px 40px rgba(0,0,0,0.25)' },
   modalTitle: { fontSize: '16px', fontWeight: 700, marginBottom: '14px' },
-  modalInfo: { background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '4px', padding: '10px 12px', marginBottom: '14px', fontSize: '12px' },
-  modalWarn: { background: '#fffbeb', border: '1px solid #f59e0b', borderRadius: '4px', padding: '10px 12px', marginBottom: '14px', fontSize: '12px', color: '#b45309' },
-  modalText: { fontSize: '13px', color: '#444', lineHeight: 1.5, marginBottom: '14px' },
+  modalInfo: { background: 'var(--vp-gray-50)', border: '1px solid var(--border)', borderRadius: '4px', padding: '10px 12px', marginBottom: '14px', fontSize: '12px' },
+  modalWarn: { background: 'var(--vp-warning-tint)', border: '1px solid var(--vp-warning)', borderRadius: '4px', padding: '10px 12px', marginBottom: '14px', fontSize: '12px', color: 'var(--vp-warning-ink)' },
+  modalText: { fontSize: '13px', color: 'var(--fg2)', lineHeight: 1.5, marginBottom: '14px' },
   modalCheckboxRow: { display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: '13px', marginBottom: '18px', cursor: 'pointer' },
   modalActions: { display: 'flex', gap: '10px', justifyContent: 'flex-end' },
 
   filtros: { display: 'flex', gap: '16px', marginBottom: '20px', alignItems: 'flex-end', flexWrap: 'wrap' },
   filtroGrupo: { display: 'flex', flexDirection: 'column', gap: '6px' },
-  filtroLabel: { fontSize: '11px', fontWeight: 600, color: '#666', textTransform: 'uppercase' },
-  filtroSelect: { padding: '8px 12px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '12px' },
+  filtroLabel: { fontSize: '11px', fontWeight: 600, color: 'var(--fg2)', textTransform: 'uppercase' },
+  filtroSelect: { padding: '8px 12px', border: '1px solid var(--border-strong)', borderRadius: '4px', fontSize: '12px' },
 
   statsGrupo: { display: 'flex', gap: '16px', marginLeft: 'auto' },
   stat: { textAlign: 'center' },
   statNumero: { fontSize: '18px', fontWeight: 700 },
-  statLabel: { fontSize: '10px', color: '#666', fontWeight: 600, marginTop: '4px' },
+  statLabel: { fontSize: '10px', color: 'var(--fg2)', fontWeight: 600, marginTop: '4px' },
 
-  loadingContainer: { textAlign: 'center', padding: '40px', fontSize: '14px', color: '#666' },
+  loadingContainer: { textAlign: 'center', padding: '40px', fontSize: '14px', color: 'var(--fg2)' },
   emptyState: { textAlign: 'center', padding: '40px' },
   emptyIcon: { fontSize: '40px', marginBottom: '12px' },
   emptyTitle: { fontSize: '16px', fontWeight: 700, marginBottom: '6px' },
-  emptyText: { fontSize: '13px', color: '#666' },
+  emptyText: { fontSize: '13px', color: 'var(--fg2)' },
 
   tabelaContainer: { overflowX: 'auto', marginTop: '20px' },
   tabela: { width: '100%', borderCollapse: 'collapse', fontSize: '12px' },
-  theadTr: { background: '#f9fafb', borderBottom: '2px solid #e5e7eb' },
-  th: { padding: '12px', textAlign: 'left', fontWeight: 600, color: '#666', textTransform: 'uppercase', fontSize: '10px' },
-  tbodyTr: { borderBottom: '1px solid #e5e7eb', '&:hover': { background: '#f9fafb' } },
+  theadTr: { background: 'var(--vp-gray-50)', borderBottom: '2px solid var(--border)' },
+  th: { padding: '12px', textAlign: 'left', fontWeight: 600, color: 'var(--fg2)', textTransform: 'uppercase', fontSize: '10px' },
+  tbodyTr: { borderBottom: '1px solid var(--border)', '&:hover': { background: 'var(--vp-gray-50)' } },
   td: { padding: '12px', verticalAlign: 'top' },
-  badge: { display: 'inline-block', padding: '4px 8px', borderRadius: '4px', color: '#fff', fontSize: '10px', fontWeight: 600 },
+  badge: { display: 'inline-block', padding: '4px 8px', borderRadius: '4px', color: 'var(--vp-white)', fontSize: '10px', fontWeight: 600 },
 
-  formContainer: { background: '#fafafa', padding: '20px', borderRadius: '8px', marginTop: '20px' },
+  formContainer: { background: 'var(--vp-gray-50)', padding: '20px', borderRadius: '8px', marginTop: '20px' },
   formTitle: { fontSize: '16px', fontWeight: 700, marginBottom: '20px' },
   formGroup: { marginBottom: '20px' },
   formRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' },
-  label: { display: 'block', fontSize: '12px', fontWeight: 600, color: '#333', marginBottom: '6px' },
-  input: { width: '100%', padding: '8px 12px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace' },
-  textarea: { width: '100%', padding: '8px 12px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '13px', minHeight: '80px', fontFamily: 'monospace', resize: 'vertical' },
-  erro: { fontSize: '11px', color: '#ef4444', marginTop: '4px' },
+  label: { display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--fg1)', marginBottom: '6px' },
+  input: { width: '100%', padding: '8px 12px', border: '1px solid var(--border-strong)', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace' },
+  textarea: { width: '100%', padding: '8px 12px', border: '1px solid var(--border-strong)', borderRadius: '4px', fontSize: '13px', minHeight: '80px', fontFamily: 'monospace', resize: 'vertical' },
+  opc: { fontWeight: 400, color: 'var(--fg2)' },
+  ajuda: { fontSize: '11px', color: 'var(--fg2)', fontWeight: 400, marginBottom: '4px' },
+  secaoTitulo: { fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--fg1)', borderBottom: '1px solid var(--border)', paddingBottom: '6px', margin: '8px 0 14px' },
+  segRow: { display: 'flex', gap: '10px', flexWrap: 'wrap' },
+  segOpt: { flex: '1 1 240px', border: '1px solid var(--border-strong)', borderRadius: '6px', padding: '10px 12px', cursor: 'pointer', fontSize: '13px' },
+  segOptOn: { borderColor: 'var(--vp-yellow)', background: 'var(--vp-warning-tint)' },
+  fotosGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' },
+  fotoPrev: { width: '100%', height: '110px', objectFit: 'cover', borderRadius: '6px', marginTop: '6px', border: '1px solid var(--border)' },
+  erro: { fontSize: '11px', color: 'var(--vp-danger)', marginTop: '4px' },
   formActions: { display: 'flex', gap: '12px', marginTop: '20px', justifyContent: 'flex-end' },
 
-  detalheHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '30px', borderBottom: '1px solid #e5e7eb', paddingBottom: '20px' },
+  detalheHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '30px', borderBottom: '1px solid var(--border)', paddingBottom: '20px' },
   detalheNum: { fontSize: '20px', fontWeight: 700 },
   detalheGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' },
-  detalheSection: { background: '#fafafa', padding: '16px', borderRadius: '8px' },
-  detalheSectionTitle: { fontSize: '12px', fontWeight: 700, color: '#333', textTransform: 'uppercase', marginBottom: '12px', borderBottom: '1px solid #e5e7eb', paddingBottom: '8px' },
+  detalheSection: { background: 'var(--vp-gray-50)', padding: '16px', borderRadius: '8px' },
+  detalheSectionTitle: { fontSize: '12px', fontWeight: 700, color: 'var(--fg1)', textTransform: 'uppercase', marginBottom: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '8px' },
   detalheRow: { display: 'grid', gridTemplateColumns: '120px 1fr', gap: '12px', marginBottom: '12px', fontSize: '12px' },
-  detalheLabel: { fontWeight: 600, color: '#666' },
-  detalheValue: { color: '#333' },
-  detalheText: { fontSize: '12px', color: '#333', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordWrap: 'break-word' },
+  detalheLabel: { fontWeight: 600, color: 'var(--fg2)' },
+  detalheValue: { color: 'var(--fg1)' },
+  detalheText: { fontSize: '12px', color: 'var(--fg1)', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordWrap: 'break-word' },
 };

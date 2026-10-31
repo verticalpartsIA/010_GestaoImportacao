@@ -208,9 +208,36 @@
     if (window.VPLog) window.VPLog.registrar({ modulo: 'Pedido a Fornecedor', acao: 'excluiu a cotação', alvo_id: id });
   }
 
-  /* ---------- Portal público (página /cotacao/:token) ---------- */
+  /* ---------- Portal público (página /cotacao/:token) ----------
+     Segurança real (#571, F1): a página pública fala com o banco por RPC `public_pfo_*` (recebem só o TOKEN e mexem só
+     naquele pedido; devolvem só o que a página mostra — sem destinatário, canal, `doc` ou o `_meta` da resposta; status,
+     expiração e campos aceitos na resposta são decididos no servidor). Interruptor de emergência:
+     localStorage.vp_public_rpc = 'off' volta ao caminho antigo (tabela direto). Se a RPC falhar ou ainda não existir no
+     banco, cai no caminho antigo. O aviso interno (alertas) e o log continuam saindo daqui, como antes. */
+  function usarRpcPublica() {
+    try { return localStorage.getItem('vp_public_rpc') !== 'off'; } catch (e) { return true; }
+  }
+  async function chamarRpcPublica(c, nome, args) {
+    try {
+      const { data, error } = await c.rpc(nome, args);
+      if (error) { console.warn('[PFStore] RPC ' + nome + ' falhou — usando caminho antigo', error); return { falhou: true }; }
+      return { data };
+    } catch (e) { console.warn('[PFStore] RPC ' + nome + ' indisponível — usando caminho antigo', e); return { falhou: true }; }
+  }
+  function erroDaRpc(res) {
+    const e = String((res && res.erro) || '');
+    if (e === 'link_invalido') return new Error('Link inválido / Invalid link');
+    if (e === 'expirado') return new Error('Este link expirou / This link has expired');
+    if (e.indexOf('status_') === 0) return new Error('Esta cotação já foi respondida / This quotation was already answered (' + e.slice(7) + ')');
+    return new Error('Não foi possível enviar, tente novamente / Could not submit, please try again');
+  }
+
   async function getByToken(token) {
     const c = sb(); if (!c || !token) return null;
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_pfo_obter', { p_token: token });
+      if (!r.falhou) return r.data || null;
+    }
     const { data } = await c.from('pedidos_fornecedor').select('*').eq('token', token).maybeSingle();
     return data || null;
   }
@@ -218,6 +245,14 @@
   /* Fornecedor abriu o link → avança enviado/rascunho p/ visualizado (nunca regride). */
   async function marcarVisualizado(token) {
     const c = sb();
+    if (c && token && usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_pfo_visualizado', { p_token: token });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) return null;
+        if (r.data.mudou) await pushNotification(r.data.rec, 'visualizado', { ip: await getPublicIP() });
+        return r.data.rec;
+      }
+    }
     const cur = await getByToken(token);
     if (!cur) return null;
     if (cur.status !== 'enviado' && cur.status !== 'rascunho') return cur;
@@ -235,9 +270,19 @@
                   itens:[{produto_id, preco_unit, moq, lead_time, obs}] } */
   async function salvarResposta(token, resposta) {
     const c = sb();
+    const ip = await getPublicIP();
+    if (c && token && usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_pfo_responder', {
+        p_token: token, p_resposta: resposta, p_meta: { ip, ua: navigator.userAgent },
+      });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        await efeitosResposta(r.data.rec, resposta, r.data.ip || ip);
+        return r.data.rec;
+      }
+    }
     const cur = await getByToken(token);
     if (!cur) return null;
-    const ip = await getPublicIP();
     const now = new Date().toISOString();
     const payload = {
       ...resposta,
@@ -246,14 +291,18 @@
     const patch = { status: 'respondido', resposta: payload, responded_at: now, updated_at: now };
     await c.from('pedidos_fornecedor').update(patch).eq('token', token);
     const updated = { ...cur, ...patch };
-    await pushNotification(updated, 'respondido', { ip });
+    await efeitosResposta(updated, resposta, ip);
+    return updated;
+  }
+  /* Depois de gravar a resposta (RPC ou caminho antigo): aviso interno + log, iguais aos de antes. */
+  async function efeitosResposta(rec, resposta, ip) {
+    await pushNotification(rec, 'respondido', { ip });
     if (window.VPLog) window.VPLog.registrar({
-      ator_nome: (cur.fornecedor && cur.fornecedor.nome) || 'Fornecedor', ator_setor: 'fornecedor',
+      ator_nome: (rec.fornecedor && rec.fornecedor.nome) || 'Fornecedor', ator_setor: 'fornecedor',
       modulo: 'Pedido a Fornecedor', acao: 'respondeu a cotação',
-      alvo: cur.numero_documento, alvo_id: cur.id,
+      alvo: rec.numero_documento, alvo_id: rec.id,
       detalhe: { moeda: resposta.moeda, ip },
     });
-    return updated;
   }
 
   /* ---------- Orquestra a geração completa de um pedido ----------

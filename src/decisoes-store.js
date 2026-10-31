@@ -26,10 +26,16 @@
      só o Gestor Comercial tem mais de um titular possível. */
   const EMAILS_FIXOS = {
     ceo: ['diego@verticalparts.com.br'],
+    /* 20/10/2026: aval de contratação de montador é SEMPRE do Diego (decisão dele por WhatsApp) — nunca de quem tem a alçada 'ceo'
+       por extensão (ex.: Gelson). Papel separado de 'ceo' justamente para extrasPorAlcada('ceo') não entrar aqui. */
+    ceo_diego: ['diego@verticalparts.com.br'],
+    /* 22/10/2026: quem libera o envio do contrato do montador passou a ser a Juliana (decisão do Jurídico/Diego). */
+    aval_instalador: ['juliana@verticalparts.com.br'],
     owner: ['gelson.simoes@verticalparts.com.br'],
     gestor_comercial: ['regiane.rocha@verticalparts.com.br', 'guilherme@verticalparts.com.br'],
-    rh: ['arilene.avila@verticalparts.com.br'],
-    engenharia_lider: ['arilene.avila@verticalparts.com.br'],
+    rh: ['karla.silva@verticalparts.com.br'],                    // 16/10/2026: Karla é a líder de RH (Gelson)
+    engenharia_lider: ['mauricio.araujo@verticalparts.com.br'],  // 16/10/2026: Maurício assume (Arilene inativa)
+    supervisor_obra: ['mauricio.araujo@verticalparts.com.br'],   // 16/10/2026: Supervisor de Obra (Gelson)
     logistica_lider: ['danilo@verticalparts.com.br'],
   };
 
@@ -39,9 +45,12 @@
      PAPEL_TIPO_DECISAO por tipo, que reinventava isso por fora). */
   const PAPEL_LABEL = {
     ceo: 'CEO',
+    ceo_diego: 'CEO',
+    aval_instalador: 'Aval de contratação',
     owner: 'Dono do Sistema',
     gestor_comercial: 'Gestor Comercial',
-    rh: 'Engenharia',
+    rh: 'RH',
+    supervisor_obra: 'Supervisor de Obra',
     engenharia_lider: 'Engenharia',
     logistica_lider: 'Logística',
   };
@@ -54,7 +63,7 @@
     envio_proposta_gestor: 'Envio de proposta — aprovação do Gestor Comercial',
     envio_proposta_ceo: 'Envio de proposta — aprovação do CEO',
     contratacao_mao_obra_ceo: 'Contratação de mão de obra — aprovação do CEO',
-    montador_entra_obra_rh: 'Montador entra na obra — aprovação da Engenharia',
+    montador_entra_obra_rh: 'Montador entra na obra — aprovação do Supervisor de Obra',
     compra_equipamento_ceo: 'Compra do equipamento — aprovação do CEO',
     compra_varejo_logistica: 'Compra de varejo — aprovação da Logística',
     desconto_proposta: 'Desconto em proposta',
@@ -69,20 +78,28 @@
      código. Ex.: dar poder de CEO ao Gelson só pra teste, revogável, sem
      deploy. Só afeta decisões CRIADAS depois da concessão — o snapshot em
      aprovadores_esperados já gravado numa decisão pendente não muda sozinho. */
+  /* #1215 C.5: devolve null quando a leitura falha (antes ignorava o erro e devolvia [] — quem tinha a alçada concedida
+     sumia da lista de aprovadores). */
   async function extrasPorAlcada(papel) {
     const c = sb(); if (!c) return [];
-    const { data: concedidas } = await c.from('alcadas_capacidade').select('perfil_id')
+    const { data: concedidas, error: e1 } = await c.from('alcadas_capacidade').select('perfil_id')
       .eq('modulo', 'decisoes').eq('capacidade', papel);
+    if (e1) { console.warn('[DecisoesStore] alçadas de decisão indisponíveis', e1); return null; }
     if (!concedidas || !concedidas.length) return [];
-    const { data: perfis } = await c.from('perfis').select('email').in('id', concedidas.map((r) => r.perfil_id));
+    const { data: perfis, error: e2 } = await c.from('perfis').select('email').in('id', concedidas.map((r) => r.perfil_id));
+    if (e2) { console.warn('[DecisoesStore] perfis das alçadas indisponíveis', e2); return null; }
     return (perfis || []).map((p) => (p.email || '').trim().toLowerCase()).filter(Boolean);
   }
 
-  async function resolverAprovadores(papel) {
+  /* { lista, falhou } — `falhou` = não deu para ler os aprovadores por alçada (a lista tem só os fixos). */
+  async function resolverAprovadoresDetalhado(papel) {
     const fixos = EMAILS_FIXOS[papel] || [];
     const extras = await extrasPorAlcada(papel);
-    if (!fixos.length && !extras.length) return [];
-    return [...new Set([...fixos, ...extras])];
+    return { lista: [...new Set([...fixos, ...(extras || [])])], falhou: extras === null };
+  }
+
+  async function resolverAprovadores(papel) {
+    return (await resolverAprovadoresDetalhado(papel)).lista;
   }
 
   function souAprovador(decisao) {
@@ -99,9 +116,10 @@
     const out = [];
     for (const d of lista || []) {
       if (!['pendente', 'bloqueada_por_dependencia'].includes(d.status) || !d.papel_requerido) { out.push(d); continue; }
-      if (!(d.papel_requerido in cache)) cache[d.papel_requerido] = await resolverAprovadores(d.papel_requerido);
-      const atuais = cache[d.papel_requerido];
-      out.push(atuais.length ? { ...d, aprovadores_esperados: atuais } : d);
+      if (!(d.papel_requerido in cache)) cache[d.papel_requerido] = await resolverAprovadoresDetalhado(d.papel_requerido);
+      const { lista: atuais, falhou } = cache[d.papel_requerido];
+      // Leitura das alçadas falhou: mantém o retrato gravado (não tira ninguém da decisão por erro de leitura).
+      out.push(atuais.length && !falhou ? { ...d, aprovadores_esperados: atuais } : d);
     }
     return out;
   }
@@ -139,11 +157,15 @@
   }
 
   /* Idempotente por (tipo, numero_cotacao) — chamada de novo não duplica. */
+  /* #1215 C.4: `.eq(coluna, null)` não casa com nulo (o certo é `.is`), e `.maybeSingle()` dava erro com 2+ linhas e
+     criava mais uma — agora pega a primeira existente. */
   async function criarDecisaoSeNaoExiste(args) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const { data: existente } = await c.from('decisoes_gerenciais').select('id')
-      .eq('tipo', args.tipo).eq('numero_cotacao', args.numeroCotacao ?? null).maybeSingle();
-    if (existente) return existente;
+    let q = c.from('decisoes_gerenciais').select('id').eq('tipo', args.tipo);
+    q = args.numeroCotacao == null ? q.is('numero_cotacao', null) : q.eq('numero_cotacao', args.numeroCotacao);
+    const { data: existentes, error } = await q.order('criado_em', { ascending: true }).limit(1);
+    if (error) console.warn('[DecisoesStore] não foi possível conferir decisão existente', error);
+    if (existentes && existentes[0]) return existentes[0];
     return criarDecisao(args);
   }
 
@@ -160,15 +182,20 @@
 
   /* Histórico (aprovadas, reprovadas e canceladas). `todas` = visão de Administrador; senão só o que eu decidi,
      era aprovador ou solicitei. */
+  /* #1215 C.1: o filtro "o que é meu" agora vai ao banco ANTES do limite — antes buscava as 200 mais recentes do sistema
+     inteiro e só depois filtrava no navegador, então o histórico de quem decide pouco sumia com o volume. */
   async function listarDecididas({ todas = false, limite = 200 } = {}) {
     const c = sb(); if (!c) return [];
-    const { data, error } = await c.from('decisoes_gerenciais')
-      .select('*').in('status', ['aprovada', 'reprovada', 'cancelada'])
-      .order('decidido_em', { ascending: false, nullsFirst: false }).limit(limite);
+    const email = meuEmail();
+    if (!todas && !email) return [];
+    let q = c.from('decisoes_gerenciais').select('*').in('status', ['aprovada', 'reprovada', 'cancelada']);
+    if (!todas) {
+      const e = String(email).replace(/"/g, '');
+      q = q.or(`decidido_por.eq."${e}",solicitado_por.eq."${e}",aprovadores_esperados.cs.{"${e}"}`);
+    }
+    const { data, error } = await q.order('decidido_em', { ascending: false, nullsFirst: false }).limit(limite);
     if (error) { console.warn('[DecisoesStore] listarDecididas falhou', error); return []; }
     if (todas) return data || [];
-    const email = meuEmail();
-    if (!email) return [];
     return (data || []).filter((d) => souAprovador(d) || (d.decidido_por || '').toLowerCase() === email || (d.solicitado_por || '').toLowerCase() === email);
   }
 
@@ -269,6 +296,39 @@
     });
     await desbloquearDependentes(c, id);
     await notificarResultado(c, { ...decisao, motivo: motivo || null }, 'aprovada');
+    // Compra do CEO aprovada aqui também vale para o gate "Decidir comprar" (avais_financeiros) — ver aval-financeiro-store.
+    if (decisao.tipo === 'compra_equipamento_ceo' && decisao.numero_cotacao != null && window.AvalFinanceiroStore && window.AvalFinanceiroStore.registrarAprovacaoCeo) {
+      try { await window.AvalFinanceiroStore.registrarAprovacaoCeo(decisao.numero_cotacao, meuEmail()); }
+      catch (e) { console.warn('[DecisoesStore] aprovação do CEO não registrada no Aval Financeiro', e); }
+    }
+  }
+
+  /* Usada pela tela Aval Financeiro: aprova o cartão `compra_equipamento_ceo` pendente da cotação, se houver e se quem
+     clica for aprovador dele. Não chama de volta o Aval Financeiro (quem chamou já gravou lá). */
+  async function aprovarCompraCeoSeAberta(numeroCotacao, motivo) {
+    const c = sb(); if (!c || numeroCotacao == null) return false;
+    const { data, error } = await c.from('decisoes_gerenciais').select('*')
+      .eq('tipo', 'compra_equipamento_ceo').eq('numero_cotacao', numeroCotacao).eq('status', 'pendente').limit(1);
+    if (error) throw error;
+    if (!data || !data.length) return false;
+    const [decisao] = await atualizarAprovadores([data[0]]);
+    if (!souAprovador(decisao)) return false;
+    const now = new Date().toISOString();
+    const { error: e2 } = await c.from('decisoes_gerenciais').update({
+      status: 'aprovada', decidido_por: meuEmail(), decidido_em: now, motivo: motivo || null, atualizado_em: now,
+    }).eq('id', decisao.id).eq('status', 'pendente');
+    if (e2) throw e2;
+    await desbloquearDependentes(c, decisao.id);
+    await notificarResultado(c, { ...decisao, motivo: motivo || null }, 'aprovada');
+    return true;
+  }
+
+  async function compraCeoAprovadaNaCentral(numeroCotacao) {
+    const c = sb(); if (!c || numeroCotacao == null) return false;
+    const { data, error } = await c.from('decisoes_gerenciais').select('id')
+      .eq('tipo', 'compra_equipamento_ceo').eq('numero_cotacao', numeroCotacao).eq('status', 'aprovada').limit(1);
+    if (error) throw error;
+    return !!(data && data.length);
   }
 
   async function reprovar(id, motivo) {
@@ -473,25 +533,39 @@
         .eq('tipo', 'contratacao_mao_obra_ceo').eq('referencia_tabela', 'contratos_instalador').eq('referencia_id', contratoId);
       let avulsa = (existentes || [])[0];
       if (!avulsa) {
-        avulsa = await criarDecisao({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'ceo', referenciaTabela: 'contratos_instalador', referenciaId: contratoId, contexto: { ...contexto, avulso: true } });
+        avulsa = await criarDecisao({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'aval_instalador', referenciaTabela: 'contratos_instalador', referenciaId: contratoId, contexto: { ...contexto, avulso: true } });
       }
-      if (avulsa.status === 'reprovada') return { ok: false, motivo: `Contratação reprovada pelo CEO (${avulsa.decidido_por || ''}): ${avulsa.motivo || 'sem motivo informado'}.` };
-      if (avulsa.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para contratar mão de obra deste parceiro instalador (contrato avulso, sem Proposta).' };
+      if (avulsa.status === 'reprovada') return { ok: false, decisaoId: avulsa.id, reenviavel: true, reprovada: true, motivo: `Contratação reprovada pelo CEO (${avulsa.decidido_por || ''}): ${avulsa.motivo || 'sem motivo informado'}.` };
+      if (avulsa.status !== 'aprovada') return { ok: false, decisaoId: avulsa.id, reenviavel: true, reenvioPendente: !!(avulsa.contexto && avulsa.contexto.reenvioPendente), motivo: 'Aguardando o aval da Juliana para contratar mão de obra deste parceiro instalador (contrato avulso, sem Proposta). O pedido de aval foi enviado à Juliana por WhatsApp (ela responde SIM ou NÃO).' };
       return { ok: true };
     }
     let decisoes = await listarPorCotacao(numeroCotacao);
     let decisao = decisoes.find((d) => d.tipo === 'contratacao_mao_obra_ceo');
     if (!decisao) {
-      decisao = await criarDecisaoSeNaoExiste({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'ceo', numeroCotacao, contexto: await contextoDaCotacao(numeroCotacao, contexto) });
+      decisao = await criarDecisaoSeNaoExiste({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'aval_instalador', numeroCotacao, contexto: await contextoDaCotacao(numeroCotacao, contexto) });
     }
     decisao = await garantirAtiva(decisao);
-    if (decisao.status === 'reprovada') return { ok: false, motivo: `Contratação reprovada pelo CEO (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
-    if (decisao.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para contratar mão de obra deste parceiro instalador.' };
+    if (decisao.status === 'reprovada') return { ok: false, decisaoId: decisao.id, reenviavel: true, reprovada: true, motivo: `Contratação reprovada pelo CEO (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
+    if (decisao.status !== 'aprovada') return { ok: false, decisaoId: decisao.id, reenviavel: true, reenvioPendente: !!(decisao.contexto && decisao.contexto.reenvioPendente), motivo: 'Aguardando o aval da Juliana para contratar mão de obra deste parceiro instalador. O pedido de aval foi enviado à Juliana por WhatsApp (ela responde SIM ou NÃO).' };
     return { ok: true };
   }
 
+  /* 20/10/2026 — reenvia o pedido de aval à Juliana por WhatsApp (e, se ela recusou antes, reabre a decisão para ela poder dar o SIM).
+     A função SQL decisao_aval_reenviar confere a sessão e enfileira o aviso (instalador.aval_pendente). */
+  async function reenviarAvalWhatsApp(decisaoId) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.rpc('decisao_aval_reenviar', { p_decisao_id: decisaoId });
+    if (error) throw error;
+    if (!data || !data.ok) {
+      const m = { sem_sessao: 'Entre no sistema para reenviar.', nao_encontrada: 'Decisão não encontrada.', ja_aprovada: 'Esse aval já foi aprovado — não precisa reenviar.' };
+      throw new Error(m[data && data.erro] || 'Não foi possível reenviar o aval.');
+    }
+    return data;
+  }
+
   /* Montador entra na obra (parceiro vinculado a um dossiê) exige aprovação
-     do RH — por obra, mesmo que o parceiro já esteja homologado em geral.
+     do Supervisor de Obra (16/10/2026, Gelson; antes era o papel 'rh' — o RH fica
+     para a homologação/documentação do montador, etapa futura) — por obra, mesmo que o parceiro já esteja homologado em geral.
      Chave é (dossierId, parceiroId): trocar o parceiro vinculado exige uma
      decisão nova, não reaproveita a aprovação de um montador diferente. */
   async function podeMontadorEntrarObra(dossierId, parceiroId, contexto) {
@@ -501,10 +575,10 @@
       .eq('dossier_id', dossierId).eq('tipo', 'montador_entra_obra_rh').eq('referencia_id', parceiroId);
     let decisao = (existentes || [])[0];
     if (!decisao) {
-      decisao = await criarDecisao({ tipo: 'montador_entra_obra_rh', papelRequerido: 'rh', dossierId, referenciaTabela: 'parceiros_instaladores', referenciaId: parceiroId, contexto });
+      decisao = await criarDecisao({ tipo: 'montador_entra_obra_rh', papelRequerido: 'supervisor_obra', dossierId, referenciaTabela: 'parceiros_instaladores', referenciaId: parceiroId, contexto });
     }
-    if (decisao.status === 'reprovada') return { ok: false, motivo: `Entrada na obra reprovada pela Engenharia (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
-    if (decisao.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação da Engenharia (Arilene) para este montador entrar na obra.' };
+    if (decisao.status === 'reprovada') return { ok: false, motivo: `Entrada na obra reprovada pelo Supervisor de Obra (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
+    if (decisao.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do Supervisor de Obra (Maurício) para este montador entrar na obra.' };
     return { ok: true };
   }
 
@@ -560,7 +634,13 @@
     }
     decisao = await garantirAtiva(decisao);
     if (decisao.status === 'reprovada') return { ok: false, motivo: `Compra do equipamento reprovada pelo CEO (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
-    if (decisao.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para comprar o equipamento deste pedido.' };
+    if (decisao.status !== 'aprovada') {
+      // Aprovado pela tela Aval Financeiro (avais_financeiros.aprovacao_ceo_em) também vale — mesma regra, outra porta.
+      const afs = window.AvalFinanceiroStore;
+      const avVig = afs && afs.getByNumeroCotacao ? await afs.getByNumeroCotacao(numeroCotacao) : null;   // aval da revisão VIGENTE (22/10)
+      if (avVig && avVig.aprovacao_ceo_em) return { ok: true };
+      return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para comprar o equipamento deste pedido.' };
+    }
     return { ok: true };
   }
 
@@ -579,7 +659,7 @@
     if (!aprovacaoCeo.ok) return aprovacaoCeo;
     const { data } = await c.from('gatilhos').select('status').eq('numero_cotacao', numeroCotacao).eq('evento_key', 'COMPRA_LIBERADA').maybeSingle();
     if (!data || data.status !== 'ok') {
-      return { ok: false, motivo: 'O início da compra ainda depende dos dois avais: Aval de Pagamento do Financeiro (depois do sinal) + Aval Jurídico (nó "Compra ao Fornecedor liberada").' };
+      return { ok: false, motivo: 'O início da compra ainda depende dos três avais: Aval de Pagamento do Financeiro (depois do sinal), Aval Jurídico e assinatura do Projeto de Instalação pelo cliente (nó "Compra ao Fornecedor liberada").' };
     }
     return { ok: true };
   }
@@ -619,8 +699,8 @@
     criarDecisao, criarDecisaoSeNaoExiste, contextoDaCotacao,
     cancelar, reabrir,
     listarPendentesParaMim, listarTodasEmAberto, listarDecididas, listarPorCotacao, listarPorDossier, statusMontadorObra,
-    aprovar, reprovar,
-    podeEnviarProposta, podeContratarInstalador, podeMontadorEntrarObra,
+    aprovar, reprovar, aprovarCompraCeoSeAberta, compraCeoAprovadaNaCentral,
+    podeEnviarProposta, podeContratarInstalador, reenviarAvalWhatsApp, podeMontadorEntrarObra,
     podeComprarEquipamento, verificarGateCompra, precisaAprovacaoCeo,
     criarDecisaoCompraVarejo, podePagarParcela, pedirDecisaoInbox,
   };

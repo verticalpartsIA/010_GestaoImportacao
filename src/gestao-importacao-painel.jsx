@@ -75,6 +75,12 @@ function GIPainelPage() {
 function GIAnalisePrecosPage() {
   const [rfqs, setRfqs] = React.useState(null);
   const [search, setSearch] = React.useState('');
+  /* 23/10 (pedido do usuário) — ordenação por coluna. Um único `ord` (não
+     um por cartão, que violaria a regra de hooks numa lista de tamanho
+     variável) aplicado igualmente a cada grupo — sem clicar em nenhuma
+     coluna, cada grupo continua saindo por menor preço (comportamento
+     de hoje, ord.aplicar não mexe quando `ord.chave` é null). */
+  const ord = window.useOrdenacao();
 
   React.useEffect(() => { window.RFQStore.listarTodas().then(setRfqs).catch(() => setRfqs([])); }, []);
 
@@ -120,16 +126,27 @@ function GIAnalisePrecosPage() {
       )}
 
       <div className="stack" style={{ gap: 14 }}>
-        {itens.map((g) => (
+        {itens.map((g) => {
+          /* 23/10 — "menor preço" tem que ser o valor mínimo de verdade, não
+             a 1ª linha: antes do sort por coluna a lista já vinha ordenada
+             por preço (i === 0 bastava); clicando noutra coluna a mais
+             barata pode não ser mais a 1ª. */
+          const menorValor = Math.min(...g.cotacoes.map((c) => c.valor));
+          return (
           <Card key={g.nome} title={g.nome} sub={`${g.cotacoes.length} cotação(ões) de preço registrada(s)`}>
             <div className="table-wrap">
               <table className="t">
-                <thead><tr><th>Fornecedor</th><th>Valor unitário</th><th>RFQ</th><th>Data</th></tr></thead>
+                <thead><tr>
+                  {ord.th('fornecedor', 'Fornecedor')}{ord.th('valor', 'Valor unitário')}{ord.th('rfq', 'RFQ')}{ord.th('data', 'Data')}
+                </tr></thead>
                 <tbody>
-                  {g.cotacoes.map((c, i) => (
+                  {ord.aplicar(g.cotacoes, {
+                    fornecedor: (c) => c.fornecedor, valor: (c) => c.valor, rfq: (c) => c.rfqNumero,
+                    data: (c) => (c.data ? new Date(c.data + 'T12:00:00').getTime() : null),
+                  }).map((c, i) => (
                     <tr key={i}>
                       <td>{c.fornecedor}</td>
-                      <td style={{ fontWeight: i === 0 ? 800 : 400, color: i === 0 ? 'var(--vp-success, #0a7)' : undefined }}>{window.RFQStore.fmtMoeda(c.valor, c.moeda)}{i === 0 ? ' · menor preço' : ''}</td>
+                      <td style={{ fontWeight: c.valor === menorValor ? 800 : 400, color: c.valor === menorValor ? 'var(--vp-success, #0a7)' : undefined }}>{window.RFQStore.fmtMoeda(c.valor, c.moeda)}{c.valor === menorValor ? ' · menor preço' : ''}</td>
                       <td className="mono">{c.rfqNumero}</td>
                       <td>{c.data ? new Date(c.data + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</td>
                     </tr>
@@ -138,7 +155,8 @@ function GIAnalisePrecosPage() {
               </table>
             </div>
           </Card>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

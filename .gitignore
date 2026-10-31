@@ -34,3 +34,31 @@ Andreia/
 
 # Worktrees locais de desenvolvimento (superpowers:using-git-worktrees) — nunca versionar
 .worktrees/
+
+# Playwright (testes de fumaça — npm run test:e2e)
+test-results/
+playwright-report/
+# Instruções/testes locais para sessões Claude — não versionar
+ClaudeNãoCommite/
+query_teste.sql
+
+# Estado local do Supabase CLI
+supabase/.temp/
+
+# Pasta local de material que não é do site (auditorias, relatórios, rascunhos, credenciais, dumps)
+NoCommit/
+
+# Logs e artefatos de ferramentas
+*.log
+repomix-output*.md
+.playwright-mcp/
+supateste/
+*.zip
+
+# Capturas coladas / anexos soltos
+uploads/pasted-*
+
+# Impeccable (hook de design) — config.json (ignores) é compartilhado e
+# commitado de propósito; o cache de dedup por sessão, não.
+.impeccable/hook.cache.json
+.impeccable/config.local.json
