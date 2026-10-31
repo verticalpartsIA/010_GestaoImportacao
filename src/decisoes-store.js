@@ -26,10 +26,11 @@
      só o Gestor Comercial tem mais de um titular possível. */
   const EMAILS_FIXOS = {
     ceo: ['diego@verticalparts.com.br'],
-    /* 20/10/2026: aval de contratação de montador é SEMPRE do Diego (decisão dele por WhatsApp) — nunca de quem tem a alçada 'ceo'
-       por extensão (ex.: Gelson). Papel separado de 'ceo' justamente para extrasPorAlcada('ceo') não entrar aqui. */
+    /* Papel legado (20/10/2026): o aval de contratação de montador foi do Diego só até 22/10/2026. Hoje é da Juliana (papel
+       'aval_instalador' abaixo; regra em docs/modulos/01_geral.md 1.3.8). Mantido só para decisões antigas com esse papel. */
     ceo_diego: ['diego@verticalparts.com.br'],
-    /* 22/10/2026: quem libera o envio do contrato do montador passou a ser a Juliana (decisão do Jurídico/Diego). */
+    /* 22/10/2026: o aval do envio do contrato do montador é da Juliana — ela recebe a pergunta no WhatsApp e responde SIM/NÃO
+       (ou decide pela Central). Papel separado de 'ceo' para extrasPorAlcada('ceo') não entrar aqui. */
     aval_instalador: ['juliana@verticalparts.com.br'],
     owner: ['gelson.simoes@verticalparts.com.br'],
     gestor_comercial: ['regiane.rocha@verticalparts.com.br', 'guilherme@verticalparts.com.br'],
@@ -62,7 +63,7 @@
   const TIPO_LABEL = {
     envio_proposta_gestor: 'Envio de proposta — aprovação do Gestor Comercial',
     envio_proposta_ceo: 'Envio de proposta — aprovação do CEO',
-    contratacao_mao_obra_ceo: 'Contratação de mão de obra — aprovação do CEO',
+    contratacao_mao_obra_ceo: 'Contratação de mão de obra — aval da Juliana',
     montador_entra_obra_rh: 'Montador entra na obra — aprovação do Supervisor de Obra',
     compra_equipamento_ceo: 'Compra do equipamento — aprovação do CEO',
     compra_varejo_logistica: 'Compra de varejo — aprovação da Logística',
@@ -520,7 +521,7 @@
   }
 
   /* Contratação de mão de obra (Engenharia envia Contrato Instalador) exige
-     aprovação do CEO antes do envio pro parceiro. */
+     o aval da Juliana (papel 'aval_instalador') antes do envio pro parceiro. */
   async function podeContratarInstalador(numeroCotacao, contexto) {
     /* Contrato avulso (sem Proposta/Nº de cotação): antes passava direto
        (`ok: true`), pulando a alçada do CEO. Agora a decisão é chaveada pelo
@@ -535,7 +536,7 @@
       if (!avulsa) {
         avulsa = await criarDecisao({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'aval_instalador', referenciaTabela: 'contratos_instalador', referenciaId: contratoId, contexto: { ...contexto, avulso: true } });
       }
-      if (avulsa.status === 'reprovada') return { ok: false, decisaoId: avulsa.id, reenviavel: true, reprovada: true, motivo: `Contratação reprovada pelo CEO (${avulsa.decidido_por || ''}): ${avulsa.motivo || 'sem motivo informado'}.` };
+      if (avulsa.status === 'reprovada') return { ok: false, decisaoId: avulsa.id, reenviavel: true, reprovada: true, motivo: `Aval da contratação recusado (${avulsa.decidido_por || ''}): ${avulsa.motivo || 'sem motivo informado'}.` };
       if (avulsa.status !== 'aprovada') return { ok: false, decisaoId: avulsa.id, reenviavel: true, reenvioPendente: !!(avulsa.contexto && avulsa.contexto.reenvioPendente), motivo: 'Aguardando o aval da Juliana para contratar mão de obra deste parceiro instalador (contrato avulso, sem Proposta). O pedido de aval foi enviado à Juliana por WhatsApp (ela responde SIM ou NÃO).' };
       return { ok: true };
     }
@@ -545,7 +546,7 @@
       decisao = await criarDecisaoSeNaoExiste({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'aval_instalador', numeroCotacao, contexto: await contextoDaCotacao(numeroCotacao, contexto) });
     }
     decisao = await garantirAtiva(decisao);
-    if (decisao.status === 'reprovada') return { ok: false, decisaoId: decisao.id, reenviavel: true, reprovada: true, motivo: `Contratação reprovada pelo CEO (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
+    if (decisao.status === 'reprovada') return { ok: false, decisaoId: decisao.id, reenviavel: true, reprovada: true, motivo: `Aval da contratação recusado (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
     if (decisao.status !== 'aprovada') return { ok: false, decisaoId: decisao.id, reenviavel: true, reenvioPendente: !!(decisao.contexto && decisao.contexto.reenvioPendente), motivo: 'Aguardando o aval da Juliana para contratar mão de obra deste parceiro instalador. O pedido de aval foi enviado à Juliana por WhatsApp (ela responde SIM ou NÃO).' };
     return { ok: true };
   }

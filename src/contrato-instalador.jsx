@@ -679,7 +679,7 @@ function CIStepObjeto({ s, set, errors }) {
       <CISeletorObras dossierIds={s.dossierIds} onToggle={toggleDossier} />
       <CISeletorProposta propostaId={s.propostaId} ativosIndices={s.ativosIndices} onSelecionarProposta={aplicarProposta} onLimparProposta={limparProposta} onToggleAtivo={toggleAtivo}/>
       {!s.propostaId && (
-        <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Contrato avulso (sem Proposta vinculada): o envio continua exigindo aprovação do CEO na Central de Decisões, e o vínculo automático de respostas por e-mail só funciona quando o instalador responde ao próprio e-mail enviado (sem Nº de Cotação não há vínculo por assunto). Se possível, selecione a Proposta de origem acima antes de continuar.</div>
+        <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Contrato avulso (sem Proposta vinculada): o envio continua exigindo o aval da Juliana (WhatsApp ou Central de Decisões), e o vínculo automático de respostas por e-mail só funciona quando o instalador responde ao próprio e-mail enviado (sem Nº de Cotação não há vínculo por assunto). Se possível, selecione a Proposta de origem acima antes de continuar.</div>
       )}
       <CIEquipamentosNumero s={s} set={set} errors={errors} />
       <CISeletorClienteObra s={s} set={set} />
@@ -1064,7 +1064,7 @@ function CISendModalLegacy({ record, onClose, onSent }) {
   const [sent, setSent] = _ciUS(false);
   const [copied, setCopied] = _ciUS(false);
   const [sending, setSending] = _ciUS(false);
-  /* 20/10 — aval do CEO por WhatsApp: quando o envio fica travado esperando o Diego, oferece reenviar o pedido (e reabrir se ele recusou). */
+  /* 20/10 — aval por WhatsApp (da Juliana desde 22/10): quando o envio fica travado esperando o aval, oferece reenviar o pedido (e reabrir se ela recusou). */
   const [aval, setAval] = _ciUS(null);
   const [reenviando, setReenviando] = _ciUS(false);
 
@@ -1244,7 +1244,7 @@ function CISendModalLegacy({ record, onClose, onSent }) {
   );
 }
 
-/* 21/10 — rascunho: "Enviar" = pedir o aval do Diego. O WhatsApp do montador fica gravado no contrato; quando o Diego responder SIM
+/* 21/10 — rascunho: "Enviar" = pedir o aval da Juliana. O WhatsApp do montador fica gravado no contrato; quando a Juliana responder SIM
    (WhatsApp ou Central de Decisões) o banco marca o contrato como enviado e dispara os avisos de assinatura. O link NÃO aparece aqui
    antes disso (e o servidor recusa a assinatura de rascunho sem aval). */
 function CIPedirAvalModal({ record, onClose, onSent }) {
