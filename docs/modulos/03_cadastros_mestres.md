@@ -443,3 +443,11 @@ Decisão do Gelson: **coluna nova** (não trocar o campo de texto).
 - **Decisão (Gelson pediu "faça"):** opção (a) — **deixar como está e documentar**. Não há duas bases de fornecedor ativas a ligar; criar coluna de vínculo numa tabela vazia e sem uso não muda nada. Nenhuma migration.
 - **Regra para quando o PCP passar a usar fornecedor por produto:** guardar o **id do cadastro** (`fornecedores.id`, `on delete restrict`) ao lado do nome, como P.I./Embarque (T6) e RFQ (T5), e incluir a tabela em `cadastro_vinculos`. Não criar outra lista de fornecedores.
 - Fora do escopo: o histórico de fornecedor/preço da Compras (`importacao_varejo_fornecedor`) usa o **código do Omie**, não o cadastro do hub — é cache de leitura do Omie, não cadastro.
+
+
+## 17. Benefícios recebidos de outros módulos (31/10/2026, Art. 49)
+
+- **Quem grava as colunas do Omie em `clientes`:** `omie_cadastrado_desde`, `omie_verificado_em` e `codigo_cliente_omie` (tabela 6.1, "não usadas nesta tela") são gravadas pela tela **Leads** do CRM, em `gravarOmieNoCliente` (`comercial.jsx`): encontrado grava data e código; não encontrado grava a data vazia e marca como verificado; **falha de consulta (`null`) não grava nada**. Quem mexer nessas colunas aqui deve respeitar essas três regras. Detalhe em `02_crm.md` PC-4.
+- **Quem mais cria cliente sozinho:** o lead Convertido (`criarOuVincularDeLead`, com o desempate de homônimos da T8) e o formulário público do Quadro de Comando quando o CNPJ já é cliente no Omie. Ver `02_crm.md` PC-2 e PC-3.
+- **Data pura `aaaa-mm-dd`:** nunca `new Date('aaaa-mm-dd')` (cai um dia no fuso do Brasil); use `isoParaDataBR`. Em `cadastros.jsx`, as datas conferidas hoje (`created_at`, `avaliado_em`) são timestamps completos e estão corretas; as demais **Não verificado**.
+- **Hooks antes de qualquer `return` antecipado** e **atualizar uma linha sem recarregar a tela**: padrões do CRM (ver `01_geral.md` PC-9); valem para os formulários e listas daqui.
