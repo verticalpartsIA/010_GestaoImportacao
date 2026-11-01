@@ -29,7 +29,7 @@
    &nbsp;&nbsp;&nbsp;5.5.1 O que é · 5.5.2 Rota e arquivos · 5.5.3 Perfil e acesso · 5.5.4 O que a tela mostra · 5.5.5 Botões e controles · 5.5.6 Comportamento · 5.5.7 Dados (lê/grava) · 5.5.8 Regras e armadilhas · 5.5.9 Testes · 5.5.10 Pendências e decisões · 5.5.11 Histórico
    Parte comum de Financeiro & Preços (sem número de tela)
    &nbsp;&nbsp;&nbsp;PC-1 Mapa de ligações · PC-2 Como o preço se forma (herança e cálculo) · PC-3 Os avais e a liberação da compra · PC-4 As três "comissões" · PC-5 Imposto e margem: ICMS, DIFAL e a regra dos 15% · PC-6 Identidade, alçadas e segurança · PC-7 Gatilhos e rotinas · PC-8 Tabelas · PC-9 Navegação, cache e testes · PC-10 Menu "?" e tutoriais · PC-11 Documentos soltos e destino do que foi concatenado · PC-12 Benefícios trocados com os outros módulos
-6. Contratos & Jurídico → `06_contratos_juridico.md` (a criar)
+6. Contratos & Jurídico → `06_contratos_juridico.md` (REAL)
 
 ## Glossário (módulo Financeiro & Preços)
 Termos gerais (soft-delete, alerta, alçada, Nº da cotação) estão no glossário de `01_geral.md`; **Código do equipamento**, **Cotação a fornecedor**, **Proposta**, **Líder** no de `04_comercial_pre_venda.md`; **Omie primeiro** no de `03_cadastros_mestres.md`. Não se repetem aqui.
@@ -598,6 +598,7 @@ Busca feita em `CLAUDE.md`, raiz, `docs/`, `docs/superpowers/specs/`, `docs/supe
 - **Recebido de CRM (`02_crm.md`):** a comissão manual do lead (PC-4).
 - **Recebido de Cadastros (`03_cadastros_mestres.md`):** a leitura paginada de 1.000 em 1.000 (aplicável a `pcp_pedidos` na Emissão de NF: 5.4.10 item 1); o aviso para registro inexistente por link.
 - **Recebido de Comercial | Pré-venda (`04_comercial_pre_venda.md`):** as regras de preço (PC-5 de lá), a trava e o destrave, a proposta que nasce da aprovação; o achado de listas cortadas.
+- **Recebido de Contratos & Jurídico (31/10/2026, texto em `06_contratos_juridico.md` PC-12):** o Aval Jurídico (tela 6.2) é o segundo dos três avais da compra; **não** trava nada quando reprovado, só mostra o selo (6.2.8), o que combina com o achado de 5.3.10 item 3 (reprovar só muda o selo). A restrição daquela tela usa um perfil que o seletor não oferece; as telas deste módulo usam `financeiro` e `admin`, que existem no `ROLE_MAP` (**Conferido**).
 - **Doado** (acrescentado na mesma sessão aos outros documentos, no tema certo, texto completo aqui):
   - **A Geral (PC-9) e a todos: o gatilho de mudança de status sem vocabulário único.** O KPI de comissões do Dashboard conta `'Aguardando'` e o motor grava `'Aguardando aprovação'`: o mesmo conceito com três grafias (5.5.10 item 1). Vale conferir outros KPIs que comparam status por texto.
   - **A Geral (1.1 e PC-6): botão de aprovação sem conferir quem aprova.** O padrão "Aprovar (diretoria)" e "Dar Aval" é do navegador: a alçada existe no catálogo e não é conferida (5.5.3, 5.3.3). É o mesmo achado de 4.2.3.
