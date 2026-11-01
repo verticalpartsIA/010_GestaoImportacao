@@ -759,6 +759,11 @@ Esta tabela lista os 6 jobs **das telas de Geral**. Em 31/10/2026 o banco tinha 
   - **Vocabulário único de status:** o mesmo conceito com três grafias ("Aguardando", "Aguardando aprovação", "Paga"/"Pago") quebra KPI que compara texto (1.1.10 item 7). Antes de comparar status por texto, conferir o que o gravador realmente escreve.
   - **Botão de aprovação sem conferir quem aprova:** "Aprovar (diretoria)", "Dar Aval" e "Aprovar" são regras do navegador; a alçada existe no catálogo e a tela não a confere. Vale para qualquer tela de Geral com decisão (1.3).
   - **Botão que parece ação e só muda status:** "Pagar" não paga e "Reprovar" não bloqueia; o rótulo deve dizer o que o botão realmente faz.
+- **Benefícios vindos de Contratos & Jurídico (doados em 31/10/2026, Art. 49; texto completo em `06_contratos_juridico.md` PC-12). Selo: Conferido em 31/10/2026 no código e no banco:**
+  - **Rota restrita a um perfil que o seletor não oferece:** `aval-juridico` está em `RESTRICTED` como `["juridico","admin"]`, mas o `ROLE_MAP` não tem "juridico"; só o Administrador abre. Conferir as demais rotas de `RESTRICTED` contra o `ROLE_MAP`.
+  - **Nome de alçada diferente entre o catálogo e a política do banco:** a política de exclusão de `contratos_venda_equipamentos` pergunta por `contratos_venda_equipamentos` e as concessões estão em `contrato-venda-equipamentos`; a concessão não vale. Conferir os nomes em `vp_tem_capacidade('…')` das demais políticas.
+  - **Função que regrava depois do fechamento:** `updateFormState` do contrato atualiza `doc` e `form_state` sem olhar o status e sem conferir o erro; vale procurar `update` sem filtro de estado em outras stores.
+  - **Data de documento remontado:** "Guarulhos, <hoje>" sai do relógio na montagem; reabrir um documento antigo mostra a data de hoje.
 
 ### PC-10 Menu "?" (Ajuda, Treinamento, Enviar feedback)
 *(Migrado do CLAUDE.md em 31/10/2026; arquivos conferidos agora, regras vindas do CLAUDE.md.)*
