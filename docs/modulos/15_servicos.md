@@ -346,6 +346,7 @@ No hub: `vp-auth.test.js` (modo de autenticação). Não há teste do `vpsistema
 - **Achado, sem correção (A4):** dois despachantes, um parado: a tela `/eventos` mostra 5 regras "ativas" que nunca enviaram (gatilhos em sombra). Quem administra pode achar que a Central envia.
 - **Achado, sem correção (A14):** as mensagens próprias do vpsistema (2FA, recuperação, comunicados) **não ficam registradas** na Central; o 2FA não deixa log de envio.
 - **Achado, sem correção (A15):** o publicado e o repositório do vpsistema divergem: 9 funções no ar sem pasta no repositório (5 do Gente & Gestão, 3 de sincronização com satélites e `mcp-server`); `sync-user-vprequisicoes` no repositório e não implantada; `send-recovery-email` no repositório é um stub, a publicada é de julho (se ainda envia: **Não verificado**).
+- **Achado, sem correção (A23) — os avisos `instalador.*` da Central nunca saíram:** o manual `docs/eventos/vphub-instalador.md` (15/10/2026) manda cadastrar na Central três tipos (`instalador.aval_pendente` → Diego; `instalador.contrato_assinado` → Maurício, Felipe, Gustavo e Cleiton; `instalador.recibo_assinado` → Felipe), começar em **sombra** e passar a **ativo** "depois de conferir". **Nunca passaram a ativo:** em 01/11/2026 os gatilhos seguem em sombra; `aval_pendente` teve 1 evento (16/10) e `contrato_assinado` 6 (até 23/10), com envios só `simulado`/`descartado`; `recibo_assinado` nunca teve evento. **O que chega de verdade** sai pelo gi-avisos como alertas do Contrato do Instalador: `ci-envio` (6), `ci-assinado` (9) e `ci-lembrete` (22, o último em 30/10), dirigidos a 3–4 pessoas internas. Consequências: (a) **Gustavo e Cleiton (externos, sem perfil no hub) não recebem** o aviso de contrato assinado — o gi-avisos só manda a externo quando é o "Contratado" com link de assinatura; (b) o aval já não é do Diego (é da Juliana, módulo 11) e o módulo 1 manda **não usar** `instalador.aval_pendente`; (c) há também ~24 alertas `ci-<código>` **sem destinatário** (avisos globais, de 15 a 23/10), que aparecem na tela mas não viram WhatsApp. **Conferido** (SELECT no hub e no vpsistema, 01/11/2026).
 - **Achado, sem correção:** o espelho `colaboradores_vpsistema` do hub tem 51 pessoas ativas; o vpsistema tem 48 perfis.
 - **Não verificado:** qual instância de WhatsApp o vpsistema usa nas mensagens próprias.
 
@@ -520,7 +521,7 @@ Nada foi apagado. Por decisão do Gelson (01/11/2026), **a troca das origens por
 | `14_administracao.md` PC-6/PC-7 (integrações) | inventário | fica; PC-6 daqui aponta |
 | `09_obras_instalacao.md` (ART, Evolução) | avisos via gi-avisos | regra do canal → S2/PC-2; negócio fica no 9 |
 | `02`, `04`, `06`, `07` (`wa.me`, e-mail por tela) | atalhos manuais, envios | ficam nos módulos (S1.1 e S6.1 apontam) |
-| `docs/eventos/vphub-instalador.md` | manual da fila e da Central para o instalador | mecânica → PC-2; **tem telefones** (A2) e diz Diego (obsoleto) |
+| `docs/eventos/vphub-instalador.md` | manual da fila e da Central para os avisos do instalador (15/10) | mecânica da fila → PC-2; **o plano dele nunca foi ligado** (A23); **tem quatro telefones** (A2) e diz Diego (obsoleto). Destino (reescrever como ponteiro, ou apagar do disco mantendo no Git) **depende do Gelson** |
 | `docs/superpowers/specs/2026-10-24-evolucao-qualidade-dados.md`, `2026-10-30-art-por-obra.md` | `bloqueia_envio`, agrupamento, ART | histórico; regras já em S2.5 |
 | `docs/superpowers/specs/2026-10-25-rfq-importacao-vencedor-pi/02-clarify.md` | contrato do Copiloto da VPS | S3 |
 | `docs/superpowers/specs/2026-10-31-mapa-de-destino-docs-soltos.md` | destinos antigos | **desatualizado** (não prevê este documento) |
@@ -559,6 +560,7 @@ Nenhum foi corrigido (Art. 45). Ordem por gravidade percebida.
 | A20 | RH: resposta de candidato pode cair no menu; `@lid` e mídia | S1.10 |
 | A21 | `evolution-webhook-admin` e `admissao-portal` (pública, dados pessoais) no ar sem código no repositório | S1.2 |
 | A22 | Resposta dupla se o Copiloto passar de 12 s | S1.10 |
+| A23 | Avisos `instalador.*` da Central nunca ligados; externos (Gustavo, Cleiton) não recebem o "contrato assinado" | S5.10 |
 | — | `alertas` aberta a escrita pela chave pública (já conhecido, #571) | PC-4 |
 
 ## Decisões do Gelson (01/11/2026)
@@ -574,6 +576,7 @@ Nenhum foi corrigido (Art. 45). Ordem por gravidade percebida.
 2. **Aval por WhatsApp (A19):** a decisão "avais ficam como estão" foi dada achando que o SIM/NÃO pelo WhatsApp funciona; **hoje não funciona** (só pela Central de Decisões). Ligar exige mudança no dispatcher do vpsistema. Quer que seja ligado?
 3. **Copiloto:** o Copiloto da VPS deve passar a ler `vp_copiloto_docs`, ou a regra "UPDATE sem redeploy" sai dos módulos (D1)?
 4. **Achados de segurança e do RH** (A1, A2, A11, A13, A16, A18, A20, A21): tratar à parte, com "Confirmo" para cada um.
+5. **`docs/eventos/vphub-instalador.md` (A23):** o plano dele não foi ligado e o arquivo expõe quatro telefones num repositório público. Reescrever como ponteiro para cá (sem telefones) ou apagar do disco (fica no Git)? E os externos do "contrato assinado" (Gustavo, Cleiton) devem passar a receber?
 
 ### Divergências registradas (Art. 12 — nenhuma corrigida)
 - **D1 — Copiloto e `vp_copiloto_docs`:** `CLAUDE.md` e módulos 4, 5, 6, 8 e 10 dizem que a tabela alimenta o Copiloto; o Copiloto em uso (VPS) não a lê.
