@@ -779,6 +779,11 @@ Esta tabela lista os 6 jobs **das telas de Geral**. Em 31/10/2026 o banco tinha 
   - **Identificador gravado e imutável por gatilho:** `dossier_obra.codigo_obra` nasce uma vez e outros módulos o citam; não depende de cálculo ao vivo.
   - **Cobrança automática precisa de pausa legítima com prazo e motivo** (até 60 dias, motivo escrito): sem isso a pessoa cobrada passa a ignorar o aviso. Aplicável aos alertas de prazo (1.4).
   - **Texto de estado que diz o contrário do estado** (Dossiê: "BLOQUEADO — pendência bloqueante resolvida", 9.1.8): ler o texto com o dado ao lado.
+- **Benefícios vindos de Entrega & Documentação (doados em 01/11/2026, Art. 49; texto completo em `10_entrega_documentacao.md` PC-12). Selo: Conferido em 01/11/2026 no código e no banco:**
+  - **Página pública que passa a falar por RPC precisa levar junto os efeitos que rodavam no navegador:** a Proposta e os Contratos usam a fila `fluxo_pendentes` (PC-3 deste documento); o Termo de Entrega foi migrado sem ela e o evento `TERMO_ASSINADO` não é mais emitido. Ao migrar uma página pública, listar os efeitos antigos (evento, aviso, PDF) e conferir cada um.
+  - **Lista de chaves de evento copiada no SQL deve ser conferida contra o motor:** `_evt_modulo_etapa` tem `DATA_BOOK_MONTADO`, que não existe (o nó é `DATABOOK_MONTADO`), e `POS_VENDA_ATIVADO` cai no ramo padrão "Comercial". Vale um teste que compare as duas listas, como o de paridade do 9.
+  - **Conferir o uso real antes de documentar "como funciona":** 0 handovers, 0 termos digitais e 0 documentos no repositório mostram um fluxo digital que ninguém usa.
+  - **Botão que cria não deve poder ser disparado de novo sobre um registro existente, e ação de topo sem seleção deve avisar;** campo com exemplo usa *placeholder*, não valor inicial gravado como dado.
 ### PC-10 Menu "?" (Ajuda, Treinamento, Enviar feedback)
 *(Migrado do CLAUDE.md em 31/10/2026; arquivos conferidos agora, regras vindas do CLAUDE.md.)*
 - Círculo "?" no canto superior direito de **todas as telas** (`AjudaSuporte` em `src/ajuda-suporte.jsx`, desenhado pelo `Header` de `shell.jsx`). Dica nativa "Suporte". Itens: **Ajuda** (texto da tela em `HELP_TOPICS[rota]`, mais perguntas frequentes), **Treinamento** (abre o tutorial da tela; sem tutorial na lista `TUTORIAIS`, fica apagado "Em breve") e **Enviar feedback**.
