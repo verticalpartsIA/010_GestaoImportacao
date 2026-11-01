@@ -122,7 +122,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 
 ### Índice deste arquivo
 - **A. Leis e travas permanentes:** a **Constituição** (Títulos I a IX, 50 artigos),  áreas blindadas (Cadastros Mestres, E-mail/Inbox, Ver documento, Containers, Mão de obra, Assinatura digital, PDF assinado), trava por "Confirmo" (Atualização de Custos).
-- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico, Suprimentos & Importação, Engenharia & Produto, Obras & Instalação e Entrega & Documentação).
+- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico, Suprimentos & Importação, Engenharia & Produto, Obras & Instalação, Entrega & Documentação e Parceiros & Instaladores).
 - **C. Procedimentos:** acessos, cache-busting, stack e testes, `pdf-bundle/`, fluxo de trabalho, método (SDD), pendências.
 - **D. Resíduo por módulo:** seções de entregas ainda não absorvidas pelo documento do seu módulo (ver marcas "→ módulo N").
 - **E. Research Base (hyperresearch).**
@@ -155,8 +155,8 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 | 7 | Suprimentos & Importação | `docs/modulos/07_suprimentos_importacao.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta; as seções mistas ficam aqui |
 | 8 | Engenharia & Produto (Projeto de Elevadores, Projeto de Equipamento, Solicitações de Produto, Ficha Técnica, Linha do Tempo da Cotação) | `docs/modulos/08_engenharia_produto.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; a área blindada de Assinatura digital e a regra do PDF assinado (módulo 6) continuam aqui |
 | 9 | Obras & Instalação (Dossiês de Obras, Vistorias de Obras, Resultado Vistorias de Obras, Instalação em Campo, Mapa de Obras, ART) | `docs/modulos/09_obras_instalacao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; o Cronograma de Pagamento da Instalação e o Contrato Instalador são do módulo 11 |
-| 10 | Entrega & Documentação (Central de Documentos, Data Book & Termo, Entrega Final, Repositório Documentos) | `docs/modulos/10_entrega_documentacao.md` | **Real** (fonte da verdade, aguardando aprovação) — o `CLAUDE.md` só aponta; o Cronograma de Pagamento da Instalação é do módulo 11 |
-| 11 | Parceiros & Instaladores | `11_parceiros_instaladores.md` | A criar (hoje: Contrato do Instalador, pagamentos) |
+| 10 | Entrega & Documentação (Central de Documentos, Data Book & Termo, Entrega Final, Repositório Documentos) | `docs/modulos/10_entrega_documentacao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; o Cronograma de Pagamento da Instalação é do módulo 11 |
+| 11 | Parceiros & Instaladores (Empresas Instaladoras, Homologação de Instaladores, Contrato Instalador, Pagamentos a Instaladores, Cronograma de Pagamento da Instalação) | `docs/modulos/11_parceiros_instaladores.md` | **Real** (fonte da verdade, aguardando aprovação) — o `CLAUDE.md` só aponta |
 | 12 | Logística Interna | `12_logistica_interna.md` | A criar (hoje: Almoxarifado, Separação, Etiquetas, Expedição) |
 | 13 | Fabricação | `13_fabricacao.md` | A criar (hoje: PCP, MES, Evolução, Corrimão/Corte) |
 | 14 | Administração | `14_administracao.md` | A criar (hoje: segurança #571, alçadas, funções, integrações) |
@@ -234,13 +234,21 @@ O **WhatsApp**, o **gi-avisos** (o serviço que envia os avisos) e o **Copiloto 
 - O Cronograma de Pagamento da Instalação, Pagamentos a Instaladores, Contrato Instalador e Homologação são do módulo 11; Central de Documentos, Data Book e Entrega Final, do 10.
 - Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (cada uma ganhou a nota "→ parte já migrada") até o Gelson decidir retirá-las; as seções **mistas** nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
 
-## Módulo 10 — Entrega & Documentação → `docs/modulos/10_entrega_documentacao.md` (fonte da verdade; 01/11/2026)
+## Módulo 10 — Entrega & Documentação → `docs/modulos/10_entrega_documentacao.md` (fonte da verdade; aprovado em 01/11/2026)
 
 **Aqui não se escreve mais nada sobre Entrega & Documentação.** Quem for trabalhar nele **lê, entende e atende** o documento do módulo:
 - **10.1 Central de Documentos** · **10.2 Data Book & Termo** (inclui o Termo de Entrega: painel no Dossiê e página pública de assinatura) · **10.3 Entrega Final (Handover)** · **10.4 Repositório Documentos** · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, a entrega de ponta a ponta, rotas, as quatro "casas" de documento, garantia e Escamax, segurança, eventos, tabelas, tutoriais, documentos concatenados e benefícios trocados).
 - Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
 - Central, Data Book & Termo e Entrega Final são telas **diferentes e independentes**: não consolide sem pedido explícito. O Cronograma de Pagamento da Instalação é do módulo 11.
 - Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (com nota "→ parte já migrada"); as seções **mistas** nunca se apagam.
+
+## Módulo 11 — Parceiros & Instaladores → `docs/modulos/11_parceiros_instaladores.md` (fonte da verdade; 01/11/2026, aguardando aprovação)
+
+**Aqui não se escreve mais nada sobre Parceiros & Instaladores.** Quem for trabalhar nele **lê, entende e atende** o documento do módulo:
+- **11.1 Empresas Instaladoras** · **11.2 Homologação de Instaladores** · **11.3 Contrato Instalador** (assistente, painel, aval, assinaturas, revisões, anulação, distrato) · **11.4 Pagamentos a Instaladores** (Parcelas, Preços combinados, Recibos e página pública do recibo) · **11.5 Cronograma de Pagamento da Instalação** · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, o montador de ponta a ponta, rotas e páginas públicas, os "valores" do montador, quem aprova o quê, segurança, gatilhos e crons, tabelas, tutoriais, documentos concatenados e benefícios trocados).
+- Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
+- Vincular a empresa à obra e o Diário de Obra são do módulo 9; a página de assinatura `/assinar` é do 6.
+- Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (com nota "→ parte já migrada"); as seções **mistas** nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
 
 ## 🔒 ÁREA BLINDADA — Cadastros Mestres: cliente/fornecedor com transação NUNCA é excluído (31/10/2026, regra do Gelson)
 
@@ -251,6 +259,8 @@ O **WhatsApp**, o **gi-avisos** (o serviço que envia os avisos) e o **Copiloto 
 - Se pedirem para "limpar", "unificar" ou "apagar" cadastros: **PARE**, informe esta regra e peça confirmação explícita antes de qualquer ação.
 
 ## Cronograma de Pagamento da Instalação — reposicionado no menu (29/10/2026, PR #1135, squash `0258872`)
+
+> **→ Parte já migrada para Parceiros & Instaladores.** O conteúdo desta seção está concatenado em `docs/modulos/11_parceiros_instaladores.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 > **→ Pertence ao módulo 11 (Parceiros & Instaladores).** O código mora em `entrega.jsx`, arquivo compartilhado com o módulo 10 (ver `10_entrega_documentacao.md` PC-3).
 
@@ -639,6 +649,8 @@ Pedido do usuário: investigar o Inbox único (recebe Cotação/Proposta/Contrat
 
 ## Contrato Instalador — auditoria + correções, inclusive contrato avulso (29/09/2026)
 
+> **→ Parte já migrada para Parceiros & Instaladores.** O conteúdo desta seção está concatenado em `docs/modulos/11_parceiros_instaladores.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário: verificar `/juridico/contrato-instalador` (inclusive criar contrato avulso, sem Proposta) e relatar erros; depois autorizou corrigir com decisões fechadas por pergunta. Tabela `contratos_instalador` estava vazia em produção (nenhum dado real de avulso pra conferir).
 
 - **Modal de envio sumia ao "Gerar e enviar"** — `handleCreateAndSend` chamava `onCreated` (troca a aba pro Painel e desmonta o wizard + o modal). Agora `onCreated` só roda ao **fechar** o modal.
@@ -658,6 +670,8 @@ Pedido do usuário: verificar `/juridico/contrato-instalador` (inclusive criar c
 
 ## Contrato Instalador — Nº do contrato nasce dos equipamentos (29/09/2026)
 
+> **→ Parte já migrada para Parceiros & Instaladores.** O conteúdo desta seção está concatenado em `docs/modulos/11_parceiros_instaladores.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário (decisões fechadas por pergunta): o contrato do instalador é um "guarda-chuva" dos equipamentos que aquele montador vai instalar, e o número nasce daí.
 
 - **Com Proposta**: `VPNI-<Nº da cotação, 4 dígitos>` (ex.: `VPNI-0955`) — antes era `VPCM-0955` (prefixo `contrato_montagem` continua em `MasterIdEngine.PREFIXO_ETAPA`, sem uso novo; `contrato_instalador: 'VPNI'` foi adicionado). **Sem Proposta (avulso)**: o usuário informa nº do projeto ou nº de série; o número é `VPNI-<1º informado>` (sanitizado: maiúsculas, sem acento/espaço).
@@ -671,6 +685,8 @@ Pedido do usuário (decisões fechadas por pergunta): o contrato do instalador �
 
 ## Contrato do Instalador — cláusulas do advogado e numeração da logística (27/10/2026, PR #1108, squash `8c7ccbf`)
 
+> **→ Parte já migrada para Parceiros & Instaladores.** O conteúdo desta seção está concatenado em `docs/modulos/11_parceiros_instaladores.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário a partir de um advogado (5 imagens, uma a uma). Motor `contrato-instalador-engine.js` v17 (index/recibo) / v15 (assinar), `contrato-instalador.jsx` v44.
 - **Cláusulas novas**: 1.x liberação da obra (prazo só começa após liberação; 1.x.1 verificar condições; 1.x.2 impedimento não imputável suspende o prazo da atividade afetada), 4.3/4.3.1/4.3.2 (responsabilidade e regresso da CONTRATADA), 9.2 multa moratória de 0,5% ao dia, teto de 20% (a cláusula de penalidades fica `10.x` quando há logística: a numeração acompanha a posição real), logística 6.1 a 6.6.
 - **A liberação é o último item de "DO OBJETO" e o nº varia**: `1.4` no caso simples, `1.5` com cronograma de etapas ou em remoção (`nLib`). Não fixe `1.5`.
@@ -681,6 +697,8 @@ Pedido do usuário a partir de um advogado (5 imagens, uma a uma). Motor `contra
 
 ## Contrato do Instalador — botão "Baixar contrato" (PDF) (30/10/2026, PR #1167, squash `3800430`)
 
+> **→ Parte já migrada para Parceiros & Instaladores.** O conteúdo desta seção está concatenado em `docs/modulos/11_parceiros_instaladores.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário via spec de 6 fases (01_SPECIFY→06_IMPLEMENT): botão de download em PDF no painel (drawer de auditoria e lista), funcionando em qualquer status — contrato assinado traz o bloco de assinaturas digitais (nome/rubrica, data/hora Brasília, dispositivo, IP, hash SHA-256).
 - **Sem motor react-pdf para este contrato** (diferente de Contrato de Venda/Proposta) — reaproveita o `CIContractPreview` já usado em "Visualizar documento", montado fora da tela (classe `.ci-print-doc`, posição absoluta — precisa de layout de verdade pro html2canvas capturar) e gera o PDF real com html2canvas+jsPDF, paginando por bloco atômico (cláusula, bloco de assinatura, bloco de assinaturas digitais, testemunhas — nunca corta um desses ao meio), mesmo algoritmo do "Salvar PDF" da Ficha Técnica.
 - **Achado real do Codex review, corrigido no mesmo PR**: capturar o documento inteiro num canvas só, sempre em `scale:2`, passaria do limite real de altura de canvas do Chromium (~32.767 px) num contrato de verdade longo (já existe um de 16 páginas, ver comentário em `assinar-app.jsx`) — exatamente o caso em que mais importa o PDF funcionar. Corrigido: a escala é reduzida (nunca abaixo do necessário) pra nunca estourar esse teto (`MAX_CANVAS_ALTURA_PX = 28000`); a paginação deriva tudo do canvas real (`pxPerMm`/`pageHeightPx`), então se adapta sozinha a qualquer escala usada.
@@ -688,6 +706,8 @@ Pedido do usuário via spec de 6 fases (01_SPECIFY→06_IMPLEMENT): botão de do
 - `index.html`: `contrato-instalador.jsx` v44→v45. Testes: `npm test` ok; **não testado com clique real no navegador** (sem Playwright configurado na sessão).
 
 ## Contrato do Instalador — Distrato bilateral: token próprio + fila Diego/Juliana/Maurício (30/10/2026, PR #1168, squash `22a7d6a`)
+
+> **→ Parte já migrada para Parceiros & Instaladores.** O conteúdo desta seção está concatenado em `docs/modulos/11_parceiros_instaladores.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do usuário via spec de 6 fases: rescisão motivada e bilateral de um contrato **já assinado** (inclusive com parcela já paga — diferente da Anulação acima, que bloqueia nesse caso).
 - **Botão "Gerar Distrato"** no painel (status `assinado`), modal com **Justificativa/Motivo obrigatório** (≥ 10 letras) e opção de **transferir o valor já recebido pelo montador para outro contrato** (ele trocou de obra) — busca o contrato de destino, prefill do valor com a soma das parcelas já pagas.
@@ -1199,6 +1219,8 @@ Pedido do usuário: cadastros, leads, clientes e formulário devem puxar o CNPJ 
 - Não testado com clique real em salvar cliente/fornecedor/formulário — só o helper (os dois caminhos, Omie e externo) e a renderização do botão.
 
 ## Contrato Instalador — anular assinatura / enviado ao montador errado (15/10/2026)
+
+> **→ Parte já migrada para Parceiros & Instaladores.** O conteúdo desta seção está concatenado em `docs/modulos/11_parceiros_instaladores.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Botão **"Anular assinatura / enviado ao montador errado"** no painel do contrato (`CIAuditDrawer`, só quem tem a alçada `contrato-instalador.editar` ou Administrador; contratos enviado/visualizado/assinado/recusado). **É o único caminho certo — nunca edite o contrato direto no banco** (o Advogado deve usar o botão). `CIStore.anularAssinatura(id, motivo)` (motivo ≥ 10 letras): o contrato vira `expirado` (o link público deixa de assinar), a assinatura e a auditoria antigas ficam em `audit.anulacao.assinaturaAnterior` (nada é apagado; timeline mostra "Anulado · Por X · Motivo"), o acordo de preço volta a `combinado`, as parcelas ainda pendentes saem e o aviso de WhatsApp pendente na `eventos_outbox` é descartado. **Bloqueia** se houver parcela paga ou recibo ativo. Depois: trocar o montador em Pagamentos a Instaladores › Preços combinados e gerar o contrato novo (nasce `VPNI-DOS-Mxxx-2`). Mantido `expirado` de propósito (sem migration/CHECK nem mudança na página pública `/assinar`).
 - `contrato-instalador-store.js` v19, `contrato-instalador.jsx` v28, `assinar.html` store v17. **"Reenviar" de contrato anulado gera LINK NOVO** (`CIStore.reabrirAnulado`: novo token, volta a rascunho, recria parcelas, religa o acordo; a anulação fica em `audit.anulacoes`) — antes reaproveitava o link antigo e o montador via "Expirado". **A anulação roda toda no banco** (função `anular_contrato_instalador`, SECURITY DEFINER, migration `20261015140000`): antes o navegador não conseguia apagar as parcelas nem descartar o aviso da `eventos_outbox` (sem política para usuário comum). A função confere sessão + alçada `contrato-instalador.editar`.

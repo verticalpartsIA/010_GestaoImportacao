@@ -1,6 +1,6 @@
 # 10 Entrega & Documentação — documento do módulo (REAL, fonte da verdade — 01/11/2026)
 
-> **Status: REAL (documento oficial do módulo 10), aguardando a aprovação do Gelson**, no molde de `01_geral.md` a `09_obras_instalacao.md`. Histórico de entrega (PR, hash, `?v=`) não se repete aqui: o Git guarda.
+> **Status: REAL (documento oficial do módulo 10), aprovado pelo Gelson em 01/11/2026**, no molde de `01_geral.md` a `09_obras_instalacao.md`. Histórico de entrega (PR, hash, `?v=`) não se repete aqui: o Git guarda.
 >
 > **Por que este módulo pede cuidado:** é o **fim da obra** — onde os papéis da entrega (ART, Data Book, Termo de Entrega) são reunidos, o cliente assina o aceite e começa a garantia. Duas coisas pedem atenção: (1) as telas de entrega quase **não são usadas** hoje (0 de 68 Dossiês têm Handover; 0 Termos digitais; 0 documentos no Repositório), a entrega real acontece fora do site; (2) o **Termo de Entrega** é uma página pública de assinatura cujo evento de fluxo (`TERMO_ASSINADO`) **não é emitido** pelo caminho que está ativo (10.2.8).
 >
@@ -21,7 +21,7 @@
    &nbsp;&nbsp;&nbsp;Cada tela tem os temas: x.1 O que é · x.2 Rota e arquivos · x.3 Perfil e acesso · x.4 O que a tela mostra · x.5 Botões e controles · x.6 Comportamento · x.7 Dados (lê/grava) · x.8 Regras e armadilhas · x.9 Testes · x.10 Pendências e decisões · x.11 Histórico
    Parte comum de Entrega & Documentação (sem número de tela)
    &nbsp;&nbsp;&nbsp;PC-1 Mapa de ligações · PC-2 A entrega de ponta a ponta · PC-3 Rotas, página pública e arquivos · PC-4 Onde guardar cada documento (as quatro "casas") · PC-5 Garantia e pós-venda (Escamax) · PC-6 Identidade, alçadas e segurança · PC-7 Gatilhos, eventos, crons e funções · PC-8 Tabelas · PC-9 Navegação, cache e testes · PC-10 Menu "?" e tutoriais · PC-11 Documentos soltos e destino do que foi concatenado · PC-12 Benefícios trocados com os outros módulos
-11. Parceiros & Instaladores → `11_parceiros_instaladores.md` (a criar)
+11. Parceiros & Instaladores → `11_parceiros_instaladores.md` (REAL)
 
 ## Glossário (módulo Entrega & Documentação)
 Termos gerais (alçada, soft-delete, evento de fluxo, Nº da cotação) estão em `01_geral.md`; **Dossiê da Obra**, **codigo_obra** e **ART** em `09_obras_instalacao.md`. Não se repetem aqui.
@@ -295,3 +295,4 @@ Nenhum arquivo foi apagado. Nada neste módulo parece obsoleto a ponto de pedir 
 ### PC-12 Benefícios trocados com os outros módulos
 - **Recebido:** o selo de verificação e "achado, sem correção" (de todos); a conferência de **política aberta** e de **alçada declarada e nunca lida** (de 8 e 9); "rótulo do menu ≠ nome do arquivo" (de 7, 8 e 9: aqui `DataBookPage` mora em `entrega.jsx`); a regra de **teste de paridade** (do 9) para a lista de chaves de evento (abaixo).
 - **Doado** (texto completo aqui; os outros apontam): (1) **página pública passada para RPC precisa levar junto os efeitos que rodavam no navegador** — o Termo foi migrado sem a fila `fluxo_pendentes` e perdeu o evento `TERMO_ASSINADO` (10.2.8); a Proposta e os Contratos fizeram certo (1.4); (2) **lista de chaves de evento copiada no SQL deve ser conferida contra o motor** — `DATA_BOOK_MONTADO` × `DATABOOK_MONTADO` manda aviso ao departamento errado (PC-7); vale um teste que compare as duas listas; (3) **conferir o uso real antes de documentar "como funciona"** — 0 handovers, 0 termos digitais e 0 documentos no repositório mostram um fluxo digital que ninguém usa; (4) **botão que "cria" não deve poder ser disparado de novo sobre um registro que já existe** — Registrar Handover regrava tudo (10.3.8); (5) **ação de topo de tela sem seleção deve avisar**, não calar (10.3.8); (6) **texto de exemplo gravado como dado** (contato `+55 11 xxxx-xxxx`) — campo com exemplo deve usar *placeholder*, não valor inicial. Registrado nos documentos 1 a 9.
+- **Recebido de Parceiros & Instaladores (01/11/2026, texto em `11_parceiros_instaladores.md` PC-12):** a Central de Documentos (10.1) lê `parceiros_documentos_colaborador.status` para dizer "Disponível/Pendente" do montador, e esse status é gravado no salvamento e **nunca recalculado** (8 documentos `VALIDO` com vencimento passado em 01/11/2026, 11.2.8); o que a Central mostra herda o atraso. O cronograma de pagamento (11.5) mora em `entrega.jsx` junto com o Data Book. **Conferido**, 01/11/2026.
