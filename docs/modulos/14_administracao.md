@@ -1,6 +1,6 @@
 # 14 Administração — documento do módulo (REAL, fonte da verdade — 01/11/2026)
 
-> **Status: REAL (documento oficial do módulo 14), aguardando a aprovação do Gelson**, no molde de `01_geral.md` a `13_fabricacao.md`. Histórico de entrega (PR, hash, `?v=`) não se repete aqui: o Git guarda.
+> **Status: REAL (documento oficial do módulo 14), aprovado pelo Gelson em 01/11/2026**, no molde de `01_geral.md` a `13_fabricacao.md`. Histórico de entrega (PR, hash, `?v=`) não se repete aqui: o Git guarda.
 >
 > **Por que este módulo pede cuidado:** é onde se vê **quem pode o quê**, **o que cada pessoa fez** e **como o sistema fala com o mundo** (Omie, e-mail, WhatsApp, Supabase). Quatro coisas pedem atenção: (1) a segurança real (issue #571) está **só começada**: o app já manda o token da pessoa ao banco, mas **198 de 278 tabelas** ainda têm política para a chave pública (PC-4); (2) a tela "Configurações do Sistema" mistura **dado real** (Administração, Usuários) com **texto fixo no código que parece dado** (Permissões, Parâmetros, Integrações, Buckets) — um leitor pode achar que está vendo configuração viva (14.2.8); (3) o **log de atividades** (`vp_logs`) é legível e **gravável pela chave pública**; (4) há **uma função em produção sem pasta no repositório** (PC-6).
 >

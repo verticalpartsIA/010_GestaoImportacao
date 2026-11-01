@@ -159,7 +159,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 | 11 | Parceiros & Instaladores (Empresas Instaladoras, Homologação de Instaladores, Contrato Instalador, Pagamentos a Instaladores, Cronograma de Pagamento da Instalação) | `docs/modulos/11_parceiros_instaladores.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta |
 | 12 | Logística Interna (Almoxarifado, Expedição, Separação, Etiquetas) | `docs/modulos/12_logistica_interna.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; PCP, MES e Fabricação Corrimão/Corte são do módulo 13 |
 | 13 | Fabricação (PCP, MES, MES · Cadastros, Carga Máquina, Matérias-Primas, Produtos, Montagem do Produto, Evolução da Fabricação, Fabricação Corrimão, Fabricação Corte, Simulação, Relatórios) | `docs/modulos/13_fabricacao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta |
-| 14 | Administração (Logs de Atividade, Configurações do Sistema) | `docs/modulos/14_administracao.md` | **Real** (fonte da verdade, aguardando aprovação) — o `CLAUDE.md` só aponta; a segurança real (#571), o inventário de Edge Functions, crons e buckets moram lá |
+| 14 | Administração (Logs de Atividade, Configurações do Sistema) | `docs/modulos/14_administracao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; a segurança real (#571), o inventário de Edge Functions, crons e buckets moram lá |
 Os nomes de arquivo dos módulos 4 a 14 são sugestão, a confirmar quando cada documento for criado; "hoje" lista o que está espalhado neste arquivo.
 
 ### Serviços transversais (planejado, ainda não iniciado)
@@ -266,7 +266,7 @@ O **WhatsApp**, o **gi-avisos** (o serviço que envia os avisos) e o **Copiloto 
 - Almoxarifado, Separação, Expedição e Etiquetas são do módulo 12; Emissão de NF, do 5; o Formulário do Quadro de Comando, do 4.
 - Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (cada uma ganhou a nota "→ parte já migrada"); as seções **mistas** nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
 
-## Módulo 14 — Administração → `docs/modulos/14_administracao.md` (fonte da verdade; 01/11/2026, aguardando aprovação)
+## Módulo 14 — Administração → `docs/modulos/14_administracao.md` (fonte da verdade; aprovado em 01/11/2026)
 
 **Aqui não se escreve mais nada sobre Administração.** Quem for trabalhar nela **lê, entende e atende** o documento do módulo:
 - **14.1 Logs de Atividade** · **14.2 Configurações do Sistema** (Administração, Usuários & Perfis, Permissões, Parâmetros, Integrações, Buckets) · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, pessoas/perfis/alçadas, rotas, segurança real #571, alçadas, inventário de Edge Functions, crons/buckets/integrações, tabelas, CI e testes, tutoriais, documentos concatenados e benefícios trocados).
