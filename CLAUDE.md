@@ -122,7 +122,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 
 ### Índice deste arquivo
 - **A. Leis e travas permanentes:** a **Constituição** (Títulos I a IX, 50 artigos),  áreas blindadas (Cadastros Mestres, E-mail/Inbox, Ver documento, Containers, Mão de obra, Assinatura digital, PDF assinado), trava por "Confirmo" (Atualização de Custos).
-- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico, Suprimentos & Importação, Engenharia & Produto, Obras & Instalação, Entrega & Documentação e Parceiros & Instaladores).
+- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico, Suprimentos & Importação, Engenharia & Produto, Obras & Instalação, Entrega & Documentação, Parceiros & Instaladores e Logística Interna).
 - **C. Procedimentos:** acessos, cache-busting, stack e testes, `pdf-bundle/`, fluxo de trabalho, método (SDD), pendências.
 - **D. Resíduo por módulo:** seções de entregas ainda não absorvidas pelo documento do seu módulo (ver marcas "→ módulo N").
 - **E. Research Base (hyperresearch).**
@@ -156,8 +156,8 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 | 8 | Engenharia & Produto (Projeto de Elevadores, Projeto de Equipamento, Solicitações de Produto, Ficha Técnica, Linha do Tempo da Cotação) | `docs/modulos/08_engenharia_produto.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; a área blindada de Assinatura digital e a regra do PDF assinado (módulo 6) continuam aqui |
 | 9 | Obras & Instalação (Dossiês de Obras, Vistorias de Obras, Resultado Vistorias de Obras, Instalação em Campo, Mapa de Obras, ART) | `docs/modulos/09_obras_instalacao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; o Cronograma de Pagamento da Instalação e o Contrato Instalador são do módulo 11 |
 | 10 | Entrega & Documentação (Central de Documentos, Data Book & Termo, Entrega Final, Repositório Documentos) | `docs/modulos/10_entrega_documentacao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; o Cronograma de Pagamento da Instalação é do módulo 11 |
-| 11 | Parceiros & Instaladores (Empresas Instaladoras, Homologação de Instaladores, Contrato Instalador, Pagamentos a Instaladores, Cronograma de Pagamento da Instalação) | `docs/modulos/11_parceiros_instaladores.md` | **Real** (fonte da verdade, aguardando aprovação) — o `CLAUDE.md` só aponta |
-| 12 | Logística Interna | `12_logistica_interna.md` | A criar (hoje: Almoxarifado, Separação, Etiquetas, Expedição) |
+| 11 | Parceiros & Instaladores (Empresas Instaladoras, Homologação de Instaladores, Contrato Instalador, Pagamentos a Instaladores, Cronograma de Pagamento da Instalação) | `docs/modulos/11_parceiros_instaladores.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta |
+| 12 | Logística Interna (Almoxarifado, Expedição, Separação, Etiquetas) | `docs/modulos/12_logistica_interna.md` | **Real** (fonte da verdade, aguardando aprovação) — o `CLAUDE.md` só aponta; PCP, MES e Fabricação Corrimão/Corte são do módulo 13 |
 | 13 | Fabricação | `13_fabricacao.md` | A criar (hoje: PCP, MES, Evolução, Corrimão/Corte) |
 | 14 | Administração | `14_administracao.md` | A criar (hoje: segurança #571, alçadas, funções, integrações) |
 Os nomes de arquivo dos módulos 4 a 14 são sugestão, a confirmar quando cada documento for criado; "hoje" lista o que está espalhado neste arquivo.
@@ -242,13 +242,21 @@ O **WhatsApp**, o **gi-avisos** (o serviço que envia os avisos) e o **Copiloto 
 - Central, Data Book & Termo e Entrega Final são telas **diferentes e independentes**: não consolide sem pedido explícito. O Cronograma de Pagamento da Instalação é do módulo 11.
 - Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (com nota "→ parte já migrada"); as seções **mistas** nunca se apagam.
 
-## Módulo 11 — Parceiros & Instaladores → `docs/modulos/11_parceiros_instaladores.md` (fonte da verdade; 01/11/2026, aguardando aprovação)
+## Módulo 11 — Parceiros & Instaladores → `docs/modulos/11_parceiros_instaladores.md` (fonte da verdade; aprovado em 01/11/2026)
 
 **Aqui não se escreve mais nada sobre Parceiros & Instaladores.** Quem for trabalhar nele **lê, entende e atende** o documento do módulo:
 - **11.1 Empresas Instaladoras** · **11.2 Homologação de Instaladores** · **11.3 Contrato Instalador** (assistente, painel, aval, assinaturas, revisões, anulação, distrato) · **11.4 Pagamentos a Instaladores** (Parcelas, Preços combinados, Recibos e página pública do recibo) · **11.5 Cronograma de Pagamento da Instalação** · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, o montador de ponta a ponta, rotas e páginas públicas, os "valores" do montador, quem aprova o quê, segurança, gatilhos e crons, tabelas, tutoriais, documentos concatenados e benefícios trocados).
 - Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
 - Vincular a empresa à obra e o Diário de Obra são do módulo 9; a página de assinatura `/assinar` é do 6.
 - Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (com nota "→ parte já migrada"); as seções **mistas** nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
+
+## Módulo 12 — Logística Interna → `docs/modulos/12_logistica_interna.md` (fonte da verdade; 01/11/2026, aguardando aprovação)
+
+**Aqui não se escreve mais nada sobre Logística Interna.** Quem for trabalhar nela **lê, entende e atende** o documento do módulo:
+- **12.1 Almoxarifado** (Estoque, Estrutura, Custos, Reposição, Necessidade, Ajustes, Pedidos de compra) · **12.2 Expedição** · **12.3 Separação** (Pedidos a separar, Painel TV e a página pública da TV) · **12.4 Etiquetas** (Gerar, Modelos, Histórico) · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, o estoque de ponta a ponta, rotas e páginas públicas, a regra de ouro do Omie, alçadas, segurança, gatilhos e crons, tabelas, tutoriais, documentos concatenados e benefícios trocados).
+- Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
+- PCP, MES, Fabricação Corrimão/Corte, Evolução da Fabricação, Simulação e Relatórios (grupo "Fabricação" do menu) são do módulo 13; a Emissão de NF é do 5; a Compras do varejo, do 7.
+- Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (cada uma ganhou a nota "→ parte já migrada"); as seções **mistas** nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
 
 ## 🔒 ÁREA BLINDADA — Cadastros Mestres: cliente/fornecedor com transação NUNCA é excluído (31/10/2026, regra do Gelson)
 
@@ -1067,6 +1075,8 @@ Pedido do usuário: o vendedor que cria um formulário (mesmo rascunho) é dono 
 
 ## PCP — Planejamento e Controle da Produção (Logística Interna) — módulo completo (02–03/10/2026)
 
+> **→ Parte já migrada para Logística Interna.** O conteúdo desta seção (ou o trecho de estoque/separação/etiquetas dela) está concatenado em `docs/modulos/12_logistica_interna.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 > **→ Parte já migrada para Financeiro & Preços.** O trecho do módulo 5 desta seção está em `docs/modulos/05_financeiro_precos.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 Construído em ~uma semana de sessões, só local até 03/10/2026, quando o usuário pediu "commit e merge tudo". Modelo: frePPLe (pastas `25_PCPfrepple*`, só leitura) + **"Planilha de PCP 7.0"** (Vizual; transcrição do vídeo em `Downloads/manual_da_planilha_de_pcp_7_0.md`). **A planilha é de uma gráfica de etiquetas — nada nela é nosso negócio**; usamos só a estrutura. O PCP serve a: **Quadros de Comando, Corrimãos, cabos de aço e cabos de manobra** (itens cortados sob medida). Almoxarifado = estoque do PCP, inclusive todos os componentes do quadro.
@@ -1241,6 +1251,8 @@ Regra do usuário: **o que aguarda preço não vai ao Omie**. Na Importação Va
 
 ## Etiquetas (Logística Interna) — fase 1 (17/10/2026, PR #932, squash `9bc8289`, no ar; spec em `docs/superpowers/specs/2026-10-17-modulo-etiquetas-design.md`)
 
+> **→ Parte já migrada para Logística Interna.** O conteúdo desta seção (ou o trecho de estoque/separação/etiquetas dela) está concatenado em `docs/modulos/12_logistica_interna.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Módulo novo `/logistica/etiquetas[/gerar|modelos|historico]`, item "Etiquetas" **depois de Expedição** no grupo Logística Interna (decisão do Gelson). Pesquisa de base: WMS Senior 8.12 (Gerenciador de Etiquetas, Modelos de Etiquetas, LPN, SKU). Impressora da casa: **Zebra ZD220 térmica direta, rolo 100 × 50 mm, Windows + Chrome**; rolo 100 × 100 também existe.
 - **Contrato com o app de estoque NÃO muda:** item = QR e Code 128 com o `codigo` exato; endereço = QR `END:R2A4` (formato `R<rua><vão><nível>`, 236 posições + `EXP`, regras iguais às da constraint de `estoque_enderecos`). **Formato novo de QR exige comentário na issue #862 antes de mudar.** O DV nunca entra no QR.
 - **DV do endereço = opção B, fórmula PROPOSTA e ainda não aprovada** (`rua×3 + vão×5 + nível×7`, resto por 10, vão A=1…J=10; `R2A4` = 9): nasce **desligado** na tela. **Aprovar a fórmula antes de imprimir as 236 etiquetas** (etiqueta antiga ficaria com o DV da regra velha). Pesos em `DV_PESOS` (`src/etiquetas-calc.js`).
@@ -1272,6 +1284,8 @@ Módulo novo `/logistica/etiquetas[/gerar|modelos|historico]`, item "Etiquetas" 
 - **Expedição imprime DIRETO na Zebra, como imagem (20/10/2026, `etiquetas-calc.js` v15, `etiquetas.jsx` v13):** o modelo `EXPEDICAO_100x150` é desenhado deitado e girado 90° (`girar`), e o gerador de ZPL de texto/QR não gira. Antes, modelo girado caía sempre no diálogo do navegador mesmo com a Zebra selecionada. Agora `executar` gera as MESMAS páginas SVG do navegador (`renderSVGLinha`, com o sentido 90/270 e o ajuste de posição), rasteriza cada uma no tamanho em pontos da impressora (`etqRasterizar`, canvas, limiar de luminância 170) e envia `^GFA` (`C.renderZPLImagem`/`C.zplImagem`, compressão ASCII da Zebra: `G–Y`/`g–z` = repetições, `,` `!` `:`). Páginas iguais e seguidas viram um formato com `^PQ`. Envios em lotes de até 100 formatos ou ~1,5 MB (`etqLotes`, vale para todos os tipos). Histórico grava `adaptador = zebra-browser-print/imagem`. Tela e imagem batem com a prévia (conferido decodificando o ZPL de volta em PNG); 800 × 1200 pontos ≈ 7 KB por etiqueta quase branca. **Não testado na Zebra real**: conferir posição, nitidez do texto pequeno (o endereço do remetente tem ~3,8 mm) e QR legível; se o texto pequeno sair fraco, baixar o limiar em `etqRasterizar`. Testes: `etiquetas-calc.test.js` (+2, ida e volta da compactação), `e2e/etiquetas.spec.js` (+1).
 
 ## Estoque — organização, menu "Fabricação", carga única da Compras e sincronizador único (18/10/2026)
+
+> **→ Parte já migrada para Logística Interna.** O conteúdo desta seção (ou o trecho de estoque/separação/etiquetas dela) está concatenado em `docs/modulos/12_logistica_interna.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 > **→ Parte já migrada para Suprimentos & Importação.** O trecho do módulo 7 desta seção está em `docs/modulos/07_suprimentos_importacao.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
@@ -1341,6 +1355,8 @@ Pedido do usuário em `/logistica/evolucao-fabricacao` (`src/evolucao-fabricacao
 - **Não testado com clique real no navegador** (validado por Babel, `npm test` 722/722, cache-bust e leitura manual real da função).
 
 ## Separação no hub — pedidos a separar + pendências por item + Painel TV (20/10/2026, PRs #1008 e #1009)
+
+> **→ Parte já migrada para Logística Interna.** O conteúdo desta seção (ou o trecho de estoque/separação/etiquetas dela) está concatenado em `docs/modulos/12_logistica_interna.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Investigação do usuário em `/logistica/separacao`: a tela só tinha links do painel de TV e o SLA; a separação de verdade só existia no **celular** (app `013_Estoque`, função `estoque_separacao_chamar`), e a TV mostrava a fila sem ninguém poder agir. Em 20/10 havia 24 pedidos na etapa 20 e `estoque_separacoes` vazia (ninguém tinha pegado nenhum). Resultado: a tela virou **duas abas** (`useRouteTab('separacao', 'pedidos', ['pedidos','tv'], false, true)`): **Pedidos a separar** (abre primeiro) e **Painel TV** (a tela antiga, intacta: links, SLA, revogar). Item aberto: `/logistica/separacao/pedidos/<codigo_pedido>` (`useRotaItem`). Arquivos: `src/separacao.jsx` (v3), `src/separacao-tv.jsx` (v6, página pública), migrations `20261020120000_separacao_hub.sql` e `20261020130000_separacao_pendencias.sql`, ambas **já aplicadas em produção**.
 

@@ -790,6 +790,13 @@ Esta tabela lista os 6 jobs **das telas de Geral**. Em 31/10/2026 o banco tinha 
   - **Dado pessoal em migration e em documento versionado (Art. 28):** telefones de pessoas estão em uma migration e em `docs/eventos/vphub-instalador.md`; seeds de destinatários de aviso (`decisao_whatsapp_numeros`) devem vir de fora do repositório.
   - **Dois caminhos de pagamento para a mesma coisa:** parcelas do Contrato (com aprovação do Gestor Comercial) e Cronograma de Pagamento (manual, sem aprovação, tabela aberta e vazia). Quem aprova o quê está em `11_parceiros_instaladores.md` PC-5.
   - **Comentário de código que contradiz a produção:** o comentário de `omie_sync_pagamentos_instaladores` diz `verify_jwt:false`; a função em produção (v30) tem `verify_jwt: true`. Conferir com `list_edge_functions` antes de confiar em comentário.
+- **Benefícios vindos de Logística Interna (doados em 01/11/2026, Art. 49; texto completo em `12_logistica_interna.md` PC-12). Selo: Conferido em 01/11/2026 no código e no banco:**
+  - **Escrita no Omie em dois passos:** o ajuste de estoque só é gravado no Omie depois de **Confirmar** (decisão) e de **Enviar** (resumo + `confirm()`), com chave determinística que impede lançar duas vezes. Padrão para qualquer escrita real no ERP.
+  - **Estado calculado em vez de novo valor de coluna:** a separação "parcial" é derivada (pendências abertas), sem mexer no CHECK de `status` que o celular também usa. Vale quando outro sistema compartilha a coluna.
+  - **Parâmetro que decide compra não pode ficar aberto:** `pcp_reposicao_config` aceita UPDATE de `anon`/`authenticated`. Tabela de parâmetro, custo ou preço deve nascer fechada (Art. 26).
+  - **Afirmação de documento antigo envelhece:** o `CLAUDE.md` dizia que nenhum ajuste fora enviado ao Omie; o banco tem 2 enviados. Conferir no banco antes de repetir "ainda não foi feito".
+  - **Link como senha:** a página pública da TV da Separação é entregue por token revogável; o mesmo vale para os demais links públicos.
+
 ### PC-10 Menu "?" (Ajuda, Treinamento, Enviar feedback)
 *(Migrado do CLAUDE.md em 31/10/2026; arquivos conferidos agora, regras vindas do CLAUDE.md.)*
 - Círculo "?" no canto superior direito de **todas as telas** (`AjudaSuporte` em `src/ajuda-suporte.jsx`, desenhado pelo `Header` de `shell.jsx`). Dica nativa "Suporte". Itens: **Ajuda** (texto da tela em `HELP_TOPICS[rota]`, mais perguntas frequentes), **Treinamento** (abre o tutorial da tela; sem tutorial na lista `TUTORIAIS`, fica apagado "Em breve") e **Enviar feedback**.
