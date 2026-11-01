@@ -1,6 +1,6 @@
 # 13 Fabricação — documento do módulo (REAL, fonte da verdade — 01/11/2026)
 
-> **Status: REAL (documento oficial do módulo 13), aguardando a aprovação do Gelson**, no molde de `01_geral.md` a `12_logistica_interna.md`. Histórico de entrega (PR, hash, `?v=`) não se repete aqui: o Git guarda.
+> **Status: REAL (documento oficial do módulo 13), aprovado pelo Gelson em 01/11/2026**, no molde de `01_geral.md` a `12_logistica_interna.md`. Histórico de entrega (PR, hash, `?v=`) não se repete aqui: o Git guarda.
 >
 > **Por que este módulo pede cuidado:** é onde o pedido vendido vira **ordem de produção (OP)** e onde o chão de fábrica registra o que foi feito. Quatro coisas pedem atenção: (1) **quase todas as tabelas do PCP e do MES estão abertas à chave pública** do banco, e as do "Evolução da Fabricação do Quadro" também, **inclusive os tokens dos links do chão de fábrica** (PC-6); (2) existem **três jeitos** de acompanhar a execução — o MES (kanban por etapa), a Evolução do Quadro (6 etapas por link) e Corrimão/Corte (RPC por token) — com desenhos de segurança diferentes (PC-2); (3) o **custo** de material e a **hora-homem** têm regra própria de quem pode ver (PC-5); (4) a OP-mãe de um pedido é a ligação com Emissão de NF e Expedição (12); errar o vínculo com o pedido do Omie esconde o pedido dessas telas.
 >
@@ -21,7 +21,7 @@
    &nbsp;&nbsp;&nbsp;Cada tela tem os temas: x.1 O que é · x.2 Rota e arquivos · x.3 Perfil e acesso · x.4 O que a tela mostra · x.5 Botões e controles · x.6 Comportamento · x.7 Dados (lê/grava) · x.8 Regras e armadilhas · x.9 Testes · x.10 Pendências e decisões · x.11 Histórico
    Parte comum de Fabricação (sem número de tela)
    &nbsp;&nbsp;&nbsp;PC-1 Mapa de ligações · PC-2 Do pedido à fábrica: os três acompanhamentos · PC-3 Rotas, páginas públicas e arquivos · PC-4 Regras de negócio que atravessam as telas · PC-5 Quem faz o quê (alçadas, custo, hora-homem) · PC-6 Identidade, alçadas e segurança · PC-7 Gatilhos, eventos, crons e funções · PC-8 Tabelas · PC-9 Navegação, cache e testes · PC-10 Menu "?" e tutoriais · PC-11 Documentos soltos e destino do que foi concatenado · PC-12 Benefícios trocados com os outros módulos
-14. Administração → `14_administracao.md` (a criar)
+14. Administração → `14_administracao.md` (REAL)
 
 ## Glossário (módulo Fabricação)
 Termos gerais (alçada, soft-delete, evento de fluxo) estão em `01_geral.md`; **Almoxarifado, Separação, Expedição** em `12_logistica_interna.md`. Não se repetem aqui.
@@ -591,3 +591,4 @@ Seções do `CLAUDE.md` que tratam do módulo e têm destino aqui (a troca por p
 
 ## PC-12 Benefícios trocados com os outros módulos
 **Recebidos:** de Logística Interna — escrita no Omie em dois passos; estado calculado em vez de novo valor de coluna; parâmetro de decisão não fica aberto; afirmação de documento envelhece; link como senha. **Doados** (texto nos documentos de 1 a 12, linha "Recebido de Fabricação"): ver cada módulo.
+- **Recebido de Administração (01/11/2026, texto em `14_administracao.md` PC-12):** o contraste de segurança Corrimão/Corte (RPC por token, tabelas fechadas) × Evolução do Quadro (tabelas abertas) é o melhor exemplo da Ordem de fechamento do #571 (14, PC-4). **Herdado.**

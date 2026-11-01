@@ -292,3 +292,4 @@ Seções do `CLAUDE.md` que tratam do módulo e agora têm destino aqui (substit
 ## PC-12 Benefícios trocados com os outros módulos
 **Recebidos:** de Parceiros & Instaladores — status gravado precisa de recálculo; portão de aprovação falha fechado; dado pessoal fora do repositório. **Doados** (texto nos documentos de 1 a 11, linha "Recebido de Logística Interna"): ver cada módulo.
 - **Recebido de Fabricação (01/11/2026, texto em `13_fabricacao.md` PC-12):** a OP-mãe concluída (13.1) libera a Emissão de NF e a Expedição; o PCP gera OP a partir da Necessidade (12.1) e o item "Na operação" da Separação vira OP de Corrimão/Corte (13.9/13.10). **Conferido** no código.
+- **Recebido de Administração (01/11/2026, texto em `14_administracao.md` PC-12):** o log de auditoria (`vp_logs`) usado por todas as telas é legível e gravável pela chave pública (14.1.8); logs de ajuste de estoque e de despacho não são prova sem essa ressalva. **Conferido.**
