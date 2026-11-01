@@ -122,7 +122,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 
 ### Índice deste arquivo
 - **A. Leis e travas permanentes:** a **Constituição** (Títulos I a IX, 50 artigos),  áreas blindadas (Cadastros Mestres, E-mail/Inbox, Ver documento, Containers, Mão de obra, Assinatura digital, PDF assinado), trava por "Confirmo" (Atualização de Custos).
-- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico e Suprimentos & Importação).
+- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico, Suprimentos & Importação e Engenharia & Produto).
 - **C. Procedimentos:** acessos, cache-busting, stack e testes, `pdf-bundle/`, fluxo de trabalho, método (SDD), pendências.
 - **D. Resíduo por módulo:** seções de entregas ainda não absorvidas pelo documento do seu módulo (ver marcas "→ módulo N").
 - **E. Research Base (hyperresearch).**
@@ -153,7 +153,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 | 5 | Financeiro & Preços (Atualização de Custos, Precificação, Aval Financeiro, Emissão de NF, Comissões) | `docs/modulos/05_financeiro_precos.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta; as áreas blindadas e a trava por "Confirmo" ficam aqui |
 | 6 | Contratos & Jurídico | `docs/modulos/06_contratos_juridico.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta; a área blindada de Assinatura digital e a regra do PDF assinado ficam aqui; o Contrato Instalador é do módulo 11 |
 | 7 | Suprimentos & Importação | `docs/modulos/07_suprimentos_importacao.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta; as seções mistas ficam aqui |
-| 8 | Engenharia & Produto | `08_engenharia_produto.md` | A criar (hoje: Ficha Técnica, Solicitações de Produto, Quadro de Comando) |
+| 8 | Engenharia & Produto (Projeto de Elevadores, Projeto de Equipamento, Solicitações de Produto, Ficha Técnica, Linha do Tempo da Cotação) | `docs/modulos/08_engenharia_produto.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; a área blindada de Assinatura digital e a regra do PDF assinado (módulo 6) continuam aqui |
 | 9 | Obras & Instalação | `09_obras_instalacao.md` | A criar (hoje: Dossiê, Mapa de Obras, Instalação, ART) |
 | 10 | Entrega & Documentação | `10_entrega_documentacao.md` | A criar |
 | 11 | Parceiros & Instaladores | `11_parceiros_instaladores.md` | A criar (hoje: Contrato do Instalador, pagamentos) |
@@ -217,6 +217,14 @@ O **WhatsApp**, o **gi-avisos** (o serviço que envia os avisos) e o **Copiloto 
 - **7.1 Painel** · **7.2 P.I.** · **7.3 RFQ** · **7.4 IMS** · **7.5 Embarques** · **7.6 Rastreio Marítimo** (Detalhe e Mapa de navios) · **7.7 Análise de Preços** · **7.8 Catálogo Siscomex** · **7.9 Importação Varejo** · **7.10 Cotações de Varejo** · **7.11 Pedidos** · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, fluxo da cotação ao embarque, Nº da cotação equipamento × varejo, estoque e sugestão de compra, moeda e câmbio, segurança, rotinas, tabelas, tutoriais, documentos concatenados e benefícios trocados).
 - Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
 - Ficam **neste arquivo**, por enquanto, as seções antigas só do módulo (cada uma ganhou a nota "→ parte já migrada") até o Gelson aprovar o documento e decidir retirá-las; as seções **mistas** (Edge Functions, Estoque, Auditoria de amarrações, Realtime) nunca se apagam. O Inbox e o envio de e-mail continuam área blindada. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
+
+## Módulo 8 — Engenharia & Produto → `docs/modulos/08_engenharia_produto.md` (fonte da verdade; aprovado em 01/11/2026)
+
+**Aqui não se escreve mais nada sobre Engenharia & Produto.** Quem for trabalhar nele **lê, entende e atende** o documento do módulo:
+- **8.1 Projeto de Elevadores** (abas Desenhos e Especificação técnica, assinatura do Projeto de Instalação, painel dos avais) · **8.2 Projeto de Equipamento** · **8.3 Solicitações de Produto** · **8.4 Ficha Técnica** · **8.5 Linha do Tempo da Cotação** · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, os dois fluxos de ponta a ponta, rotas sem item de menu, código do produto e SKU, da Ficha ao Omie, segurança, gatilhos, tabelas, tutoriais, documentos concatenados e benefícios trocados).
+- Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
+- O Catálogo Siscomex é do módulo 7 (7.8); ART, Dossiê e Mapa de Obras são do 9.
+- Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (cada uma ganhou a nota "→ parte já migrada") até o Gelson aprovar o documento e decidir retirá-las; as seções **mistas** (Aval Engenharia, Assinatura digital, Edge Functions) nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
 
 ## 🔒 ÁREA BLINDADA — Cadastros Mestres: cliente/fornecedor com transação NUNCA é excluído (31/10/2026, regra do Gelson)
 
@@ -291,6 +299,8 @@ Sistema construído, testado ao vivo e **em produção**. Quem for "mexer, melho
 - Não voltar a mandar encoded-word pronta nem corpo em quoted-printable.
 
 ## Edge Functions: órfãs apagadas, funções do Omie/webhook endurecidas e como redeployar (01–02/10/2026) → módulos 7 e 14 (NÃO é do Geral)
+
+> **→ Parte já migrada para Engenharia & Produto.** O trecho do módulo 8 desta seção está em `docs/modulos/08_engenharia_produto.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 > **→ Parte já migrada para Suprimentos & Importação.** O trecho do módulo 7 desta seção está em `docs/modulos/07_suprimentos_importacao.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
@@ -443,6 +453,8 @@ Migração de geração de PDF pra `@react-pdf/renderer` (plano aprovado pelo us
 
 ## Módulo Ficha Técnica (`src/ficha-tecnica.jsx` + `-engine.js` + `-store.js` + `styles/ficha-tecnica.css`)
 
+> **→ Parte já migrada para Engenharia & Produto.** O conteúdo desta seção está concatenado em `docs/modulos/08_engenharia_produto.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Gerador de ficha técnica de produto (preview em tela + PDF via `html2canvas`+`jsPDF` + impressão nativa). Trabalho feito (todo mergeado em `main`):
 - Adicionado campo **Descrição DUIMP** ao documento gerado (issue #24, PR #23), rótulo "Descrição" → "Descrição Comercial" (PR #25).
 - **Suporte a múltiplas páginas** (PR #26, corrigido no #27): a ficha era travada em exatamente 1 página A4 com `overflow:hidden` — cortava conteúdo em silêncio, inclusive o rodapé (bug real: rodapé não era bloco protegido no algoritmo de corte, causando perda de conteúdo por arredondamento). Agora cresce naturalmente; paginação trata cada grupo/descrição/rodapé como bloco indivisível. Rodapé mostra "· Criado por {email}" pequeno (`window.__VP_USER.email`).
@@ -455,6 +467,8 @@ Gerador de ficha técnica de produto (preview em tela + PDF via `html2canvas`+`j
   - Bug histórico já corrigido: o `id`/`k` gerado por `window.FT.slug()` tinha sufixo aleatório, então a checagem antiga (por id, não por nome) nunca via duplicata — foi assim que "Cor" e "Observações" viraram várias entradas. Se algo parecido reaparecer, suspeitar de novo desse padrão.
 
 ## Solicitações de Produto + mapeamento Ficha Técnica → Omie (28/09/2026)
+
+> **→ Parte já migrada para Engenharia & Produto.** O conteúdo desta seção está concatenado em `docs/modulos/08_engenharia_produto.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Sequência de 4 entregas na mesma sessão, todas mergeadas em `main`: alçadas de permissão (PR #407 / issue #408) → formulário leigo de Solicitação de Produto (PR #411 / issue #412) → mapeamento célula-a-célula Ficha Técnica → Omie (PR #415 / issue #416) → Características dinâmicas, gap fechado (PR #421 / issue #422). Mesmo dia, validação em produção com ficha real achou e corrigiu mais 2 bugs (ver seção própria abaixo). `solicitacoes-produto.jsx` está em `?v=9`, `solicitacoes-produto-store.js` em `?v=6`, `ficha-tecnica-engine.js` em `?v=10`, `ficha-tecnica.jsx` em `?v=22`, `colaboradores-admin-store.js` em `?v=10`, `publicar_ficha_omie` na v35 (ACTIVE).
 
@@ -524,6 +538,8 @@ Primeiro uso de Supabase Realtime no projeto (PR #417, merge squash `caf9a7a`, i
 - **`vistorias-obras.jsx`** (progresso por obra, lê a mesma tabela `vistorias_atividades` via `InstalacaoObraStore`) **ficou de fora** — só a lista de despachos em `vistorias-envio.jsx` ganhou Realtime. Se pedirem pra tela de progresso por obra também atualizar sozinha, é o mesmo padrão, só falta aplicar lá.
 
 ## Copiloto VP — contexto da tela "Solicitação de Produto" (28/09/2026)
+
+> **→ Parte já migrada para Engenharia & Produto.** O conteúdo desta seção está concatenado em `docs/modulos/08_engenharia_produto.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do usuário: o Copiloto (`vp-copiloto`, ver `ROUTE_DOCS` em `supabase/functions/vp-copiloto/index.ts`) precisava saber "100%" sobre a tela `/engenharia/solicitacoes-produto`, inclusive os campos que só aparecem depois de um clique — e nunca se referir a um campo pelo nome interno da variável (`categoria_sku`, `foiPedidoCliente`), só pelo rótulo exatamente como aparece na tela.
 
@@ -1055,6 +1071,8 @@ Construído em ~uma semana de sessões, só local até 03/10/2026, quando o usu�
 
 ## Engenharia › Projeto de Elevadores — aba "Desenhos" (repositório para enviar ao cliente) (05/10/2026, PR #690)
 
+> **→ Parte já migrada para Engenharia & Produto.** O trecho do módulo 8 desta seção está em `docs/modulos/08_engenharia_produto.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
+
 Pedido do usuário: fazer de `/engenharia/eng-projeto-elevadores` o mesmo que `/comercial/contratos-sociais` — **guardar os projetos/desenhos dos elevadores para serem enviados aos clientes**. Decisões fechadas por pergunta: **manter** o formulário técnico antigo (não substituir) e envio só por **"Copiar link"** (sem `send-email`, que é área blindada do Inbox).
 
 - **Duas abas** (`ProjetoElevadorPage` em `src/engenharia-elevador.jsx`, `window.useRouteTab('eng-projeto-elevadores', 'desenhos', ['desenhos','especificacao'], false, true)` — URLs `/engenharia/eng-projeto-elevadores/desenhos` e `/especificacao`): **Desenhos** (padrão, nova) e **Especificação técnica** (`ProjetoElevadorEspecificacao`, o formulário de antes **intacto**: unidades, medidas de poço/cabine/porta, rascunho/finalizar, tabela `projetos_elevador`). **Os eventos `PROJETO_ELEVADOR_CRIADO`/`FINALIZADO` e os gatilhos que dependem deles (`gatilhos-engine.js`) continuam saindo só da aba Especificação** — a aba Desenhos não emite evento nenhum. Não troque uma pela outra sem checar isso.
@@ -1480,6 +1498,8 @@ Pedido do Gelson (spec em `docs/superpowers/specs/2026-10-30-art-por-obra.md`, f
 
 ## Hub Engenharia fora do menu (30/10/2026, PR #1181 e seguinte)
 
+> **→ Parte já migrada para Engenharia & Produto.** O conteúdo desta seção está concatenado em `docs/modulos/08_engenharia_produto.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 O item "Engenharia" (rota `engenharia`, `EngenhariaPage` em `operacoes.jsx`, com a aba morta "Gatilhos Importação") saiu do menu; a rota e o código ficam (link antigo abre). `MODULE_HOME["Engenharia"]` aponta para `eng-projeto-elevadores`. Apagar de vez a tela e `project-gates.js` só com pedido.
 
 ## Fluxo de trabalho estabelecido nesta sessão
@@ -1811,6 +1831,8 @@ Investigação "Decidir comprar desabilitado" na cotação 955: **não havia fio
 Em `/comercial/controle-cotacoes` cada cotação do Formulário digital (origem "Formulário"; planilha legada não tem) ganhou o botão **Tratativas** ao lado de "Abrir no Formulário". Lê `CotacaoElevadorFornecedorStore.listarPorFormulario(r.id)`: **sem fornecedor** → aviso "ainda não foi enviada a nenhum fornecedor"; **1** → vai direto a `/comercial/cotacao-fornecedor-detail/<id>/tratativas`; **2+** → modal para escolher o fornecedor. Navegação por `pushState`+`popstate` (a aba vem da URL). O clique na linha continua abrindo a cadeia de gatilhos (modal "Tratativas — Cotação Nº") — são coisas diferentes; o botão novo é a conversa com o fornecedor. Não era um filtro (os botões de status seguem iguais). `controle-cotacoes.jsx` v7→v8. Validado só por Babel; sem clique real.
 
 ## Aval Engenharia — terceiro aval da compra: assinatura do Projeto de Instalação, por cotação (08/10/2026) [nó já em 01_geral.md · regra → módulos 5 e 9]
+
+> **→ Parte já migrada para Engenharia & Produto.** O trecho do módulo 8 desta seção está em `docs/modulos/08_engenharia_produto.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 > **→ Parte já migrada para Financeiro & Preços.** O trecho do módulo 5 desta seção está em `docs/modulos/05_financeiro_precos.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
