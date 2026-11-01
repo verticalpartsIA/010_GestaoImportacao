@@ -25,7 +25,7 @@
    &nbsp;&nbsp;&nbsp;6.3.1 O que é · 6.3.2 Rota e arquivos · 6.3.3 Perfil e acesso · 6.3.4 O que a tela mostra · 6.3.5 Botões e controles · 6.3.6 Comportamento · 6.3.7 Dados (lê/grava) · 6.3.8 Regras e armadilhas · 6.3.9 Testes · 6.3.10 Pendências e decisões · 6.3.11 Histórico
    Parte comum de Contratos & Jurídico (sem número de tela)
    &nbsp;&nbsp;&nbsp;PC-1 Mapa de ligações · PC-2 O ciclo do contrato de venda · PC-3 A assinatura digital pública 🔒 · PC-4 O texto da minuta e a numeração · PC-5 Os avais, o Jurídico e as revisões comerciais · PC-6 Identidade, alçadas e segurança · PC-7 Gatilhos e rotinas · PC-8 Tabelas · PC-9 Navegação, cache e testes · PC-10 Menu "?" e tutoriais · PC-11 Documentos soltos e destino do que foi concatenado · PC-12 Benefícios trocados com os outros módulos
-7. Suprimentos & Importação → `07_suprimentos_importacao.md` (a criar)
+7. Suprimentos & Importação → `07_suprimentos_importacao.md` (REAL)
 
 ## Glossário (módulo Contratos & Jurídico)
 Termos gerais (alçada, soft-delete, alerta, Nº da cotação, evento de fluxo) estão no glossário de `01_geral.md`; **Proposta**, **Código do equipamento** e **Líder** no de `04_comercial_pre_venda.md`; **Aval de Pagamento** e **Aval Engenharia** no de `05_financeiro_precos.md`. Não se repetem aqui.
@@ -432,4 +432,5 @@ Busca feita em `CLAUDE.md`, raiz, `docs/`, `docs/superpowers/specs/`, `docs/supe
   - **A todos: nome de alçada diferente entre o catálogo, a tela e a política do banco.** A política de exclusão de contratos pergunta por um módulo com outro nome; as concessões não valem (6.1.10 item 2). Vale conferir `vp_tem_capacidade('…')` das demais políticas.
   - **A Comercial | Pré-venda (4.5) e a todos: a data de um documento remontado.** "Guarulhos, <hoje>" e o ano do número saem do relógio na hora de montar; reabrir um documento antigo mostra a data de hoje (6.1.10 item 4).
   - **A Geral (PC-9): a função que regrava depois do fechamento.** `updateFormState` atualiza `doc` e `form_state` sem olhar o status; vale conferir outras `update` sem filtro de estado.
+- **Recebido de Suprimentos & Importação (31/10/2026, texto em `07_suprimentos_importacao.md` PC-12):** o Aval Jurídico é um dos três avais que liberam a compra, e a P.I. em rascunho nasce quando a compra é liberada (7.2); a política de exclusão de `pi_importacao`, `rfq_importacao`, `ims_importacao` e `embarques_importacao` está **aberta ao público** (padrão contrário ao fechamento de `contratos_venda_equipamentos`). **Conferido** em 31/10/2026.
 - **Pedidos de mudança de código** que estes benefícios sugerem ficam como pendência; nenhuma linha de código foi alterada.

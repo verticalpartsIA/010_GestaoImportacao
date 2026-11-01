@@ -122,7 +122,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 
 ### Índice deste arquivo
 - **A. Leis e travas permanentes:** a **Constituição** (Títulos I a IX, 50 artigos),  áreas blindadas (Cadastros Mestres, E-mail/Inbox, Ver documento, Containers, Mão de obra, Assinatura digital, PDF assinado), trava por "Confirmo" (Atualização de Custos).
-- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços e Contratos & Jurídico).
+- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico e Suprimentos & Importação).
 - **C. Procedimentos:** acessos, cache-busting, stack e testes, `pdf-bundle/`, fluxo de trabalho, método (SDD), pendências.
 - **D. Resíduo por módulo:** seções de entregas ainda não absorvidas pelo documento do seu módulo (ver marcas "→ módulo N").
 - **E. Research Base (hyperresearch).**
@@ -152,7 +152,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 | 4 | Comercial \| Pré-venda (Formulários, Controle de Cotações, Cotações a Fornecedor, Cotação Quadro de Comando, Propostas, Contratos Social) | `docs/modulos/04_comercial_pre_venda.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta |
 | 5 | Financeiro & Preços (Atualização de Custos, Precificação, Aval Financeiro, Emissão de NF, Comissões) | `docs/modulos/05_financeiro_precos.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta; as áreas blindadas e a trava por "Confirmo" ficam aqui |
 | 6 | Contratos & Jurídico | `docs/modulos/06_contratos_juridico.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta; a área blindada de Assinatura digital e a regra do PDF assinado ficam aqui; o Contrato Instalador é do módulo 11 |
-| 7 | Suprimentos & Importação | `07_suprimentos_importacao.md` | A criar (hoje: P.I., Embarques, Cotações de Varejo, Importação Varejo) |
+| 7 | Suprimentos & Importação | `docs/modulos/07_suprimentos_importacao.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta; as seções mistas ficam aqui |
 | 8 | Engenharia & Produto | `08_engenharia_produto.md` | A criar (hoje: Ficha Técnica, Solicitações de Produto, Quadro de Comando) |
 | 9 | Obras & Instalação | `09_obras_instalacao.md` | A criar (hoje: Dossiê, Mapa de Obras, Instalação, ART) |
 | 10 | Entrega & Documentação | `10_entrega_documentacao.md` | A criar |
@@ -211,6 +211,13 @@ O **WhatsApp**, o **gi-avisos** (o serviço que envia os avisos) e o **Copiloto 
 - O **Contrato Instalador** não é deste módulo (é do 11) e a **Proposta** é do 4.
 - Ficam **neste arquivo**: a **área blindada de Assinatura digital** e a **regra travada do PDF assinado** (são lei; ganharam uma nota de detalhe) e as seções **mistas**, que nunca se apagam. As sete seções que eram só do módulo (investigação do nascimento a partir da Proposta, contrato sem Proposta, layout idêntico à minuta, "Criar contrato" da Proposta 955, "Salvar rascunho", texto alinhado à minuta de 30/09 e minuta de 01/10 com a numeração) foram **retiradas em 31/10/2026, a pedido do Gelson**; continuam no histórico do Git (ver PC-11). Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
 
+## Módulo 7 — Suprimentos & Importação → `docs/modulos/07_suprimentos_importacao.md` (fonte da verdade; aprovado em 31/10/2026)
+
+**Aqui não se escreve mais nada sobre Suprimentos & Importação.** Quem for trabalhar nele **lê, entende e atende** o documento do módulo:
+- **7.1 Painel** · **7.2 P.I.** · **7.3 RFQ** · **7.4 IMS** · **7.5 Embarques** · **7.6 Rastreio Marítimo** (Detalhe e Mapa de navios) · **7.7 Análise de Preços** · **7.8 Catálogo Siscomex** · **7.9 Importação Varejo** · **7.10 Cotações de Varejo** · **7.11 Pedidos** · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, fluxo da cotação ao embarque, Nº da cotação equipamento × varejo, estoque e sugestão de compra, moeda e câmbio, segurança, rotinas, tabelas, tutoriais, documentos concatenados e benefícios trocados).
+- Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
+- Ficam **neste arquivo**, por enquanto, as seções antigas só do módulo (cada uma ganhou a nota "→ parte já migrada") até o Gelson aprovar o documento e decidir retirá-las; as seções **mistas** (Edge Functions, Estoque, Auditoria de amarrações, Realtime) nunca se apagam. O Inbox e o envio de e-mail continuam área blindada. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
+
 ## 🔒 ÁREA BLINDADA — Cadastros Mestres: cliente/fornecedor com transação NUNCA é excluído (31/10/2026, regra do Gelson)
 
 - **Cliente ou fornecedor que tem qualquer transação** (lead, formulário/cotação, proposta, contrato, dossiê de obra, contrato social, pedido de quadro, P.I., embarque, RFQ, cotação, avaliação etc.) **pode ser editado, mas nunca excluído** — nem pela tela, nem por store, nem por SQL/MCP.
@@ -230,6 +237,8 @@ Pedido do usuário: mover o item "Cronograma" do grupo "Obras & Instalação" pa
 
 ## Embarques de Importação — aba do formulário na URL (29/10/2026, PR #1156, squash `d4ee98d`)
 
+> **→ Parte já migrada para Suprimentos & Importação.** O conteúdo desta seção está concatenado em `docs/modulos/07_suprimentos_importacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário: o botão/aba ativo em `/gestao-importacao/embarques-importacao` (Identificação, Pagamentos, Embarque, Frete, Aduaneiro, Faturamento, Entrega) deve refletir a URL (deep-link, F5, Voltar/Avançar).
 - `EmbarqueImportacaoForm` (`src/embarques-importacao.jsx`) trocou `useState('identificacao')` por `window.useRouteTab('embarques-importacao', 'identificacao', [abas válidas])`. URL: `/gestao-importacao/embarques-importacao/<aba>`; Identificação é a padrão e deixa a URL limpa. `router.js` não mudou.
 - A chave interna da aba Aduaneiro era `desembaraco` e virou **`aduaneiro`** (só 2 usos no arquivo, rótulo e render). **Ao criar aba nova, incluir na lista de válidas**, senão o link cai na padrão.
@@ -239,6 +248,8 @@ Pedido do usuário: o botão/aba ativo em `/gestao-importacao/embarques-importac
 - Validado só por `check-cache-bust` e o gerador do mapa; **não testado com clique real no navegador**.
 
 ## Embarques de Importação — aba Frete: cotações de frete marítimo (29/10/2026, PRs #1160 squash `52794e2` e #1162 squash `2b8fbbf`)
+
+> **→ Parte já migrada para Suprimentos & Importação.** O conteúdo desta seção está concatenado em `docs/modulos/07_suprimentos_importacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do Gelson (prompt `CotacaoFreteMaritimo.md` + complemento): na aba **Frete** do embarque, até **4 cotações** de agentes, com fornecedor escolhido no Cadastro, taxas, prazos, anexos, **envio do pedido por e-mail pelo Inbox** e uma **vencedora**. Ordem das abas agora: Identificação · Pagamentos · **Frete** · Embarque · Aduaneiro · Faturamento · Entrega (PR #1158).
 - **Banco:** coluna `embarques_importacao.cotacoes_frete jsonb default '[]'` (migration `20261029200000`, **aplicada com CONFIRMO**; conferida). Cada item: `{id 'FRT-xxxxxxxx', fornecedor_id, agente, email, contato, taxas[{descricao,moeda USD|BRL,valor}], transit_time, free_time, observacao, anexos[], envios[], vencedor}`. Embarque antigo (null/lixo) carrega como lista vazia (`EmbFreteCalc.normalizar`).
@@ -280,6 +291,8 @@ Sistema construído, testado ao vivo e **em produção**. Quem for "mexer, melho
 - Não voltar a mandar encoded-word pronta nem corpo em quoted-printable.
 
 ## Edge Functions: órfãs apagadas, funções do Omie/webhook endurecidas e como redeployar (01–02/10/2026) → módulos 7 e 14 (NÃO é do Geral)
+
+> **→ Parte já migrada para Suprimentos & Importação.** O trecho do módulo 7 desta seção está em `docs/modulos/07_suprimentos_importacao.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 - **(01/10, ClaudeNotebook — issues #572/#573)** 6 Edge Functions órfãs foram apagadas do Supabase (`cleanup-inbox-tests`, `diag-imap`, `omie_listar_clientes`, `sync-pi-omie-pagamentos`, `zz-teste-claude-boot/hello`; backup do que foi recuperável em `supabase/functions-removidas/`, **não redeployar**) e as `fn_avais_*` perderam EXECUTE de anon/authenticated (migration `20261001220000`). Regra: **nenhuma função em produção sem pasta em `supabase/functions/`**.
 - **(02/10, ClaudeNotebook — issue #572, parte 2) Funções do Omie / webhook de lead endurecidas**. **Achado que define tudo isto:** o `sso_token` do vpsistema.com é usado uma vez e removido da URL (`src/supabase.js`); o navegador guarda só o e-mail, forjável — **não existe credencial do usuário verificável por Edge Function**, e segredo embutido no front é público. Autenticação real depende da issue #571. Por isso: segredo só onde o chamador não é o navegador; limite de taxa onde é. Infra: migration `20261001240000` (`api_rate_log`/`api_rate_check()` e `app_secrets`/`segredo_valido()`, só `service_role` executa; **o valor do `cron_secret` é gerado no banco e nunca entra no git** — o comando do cron o monta com `format(... %L, (select valor from app_secrets ...))`).
@@ -497,6 +510,8 @@ O gap acima ("sem mecanismo de API confirmado") **foi resolvido no mesmo dia**, 
 
 ## Realtime (Postgres Changes) — Embarques, Proposta, Vistoria e Inbox (28/09/2026) [parte do Geral já em 01_geral.md · resto → módulos 4, 7 e 9]
 
+> **→ Parte já migrada para Suprimentos & Importação.** O trecho do módulo 7 desta seção está em `docs/modulos/07_suprimentos_importacao.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
+
 > **→ Parte já migrada.** O trecho do Inbox está em `docs/modulos/01_geral.md` §1.5.6. Embarques, Proposta e Vistoria seguem aqui até seus módulos (4, 7 e 9) terem documento.
 
 Primeiro uso de Supabase Realtime no projeto (PR #417, merge squash `caf9a7a`, issue fechada #418). Pedido do usuário depois de explorar as abas Pipelines/Observability/Realtime Inspector do Dashboard.
@@ -655,6 +670,8 @@ Pedido do usuário via spec de 6 fases: rescisão motivada e bilateral de um con
 
 ## Compras Nacional — tela limpa para reserva de novo processo (29/09/2026, PR #496 / issue #497)
 
+> **→ Parte já migrada para Suprimentos & Importação.** O conteúdo desta seção está concatenado em `docs/modulos/07_suprimentos_importacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Usuário pediu pra investigar `/logistica/compras` ("Compras Nacional", rota `compras`). Achado: a tela (`ComprasPage` em `src/logistica.jsx`) nunca teve tabela/fluxo próprios — reaproveitava a tabela `embarques` (a mesma do módulo de **Importação**) e só relabelava os status ("Liberação aduaneira" → "Aguardando coleta", "Em trânsito" → "Saiu CD" etc.), com vários elementos stub: botão "Abrir" sem `onClick`, filtro "Transportadora" `disabled` ("em desenvolvimento"), colunas Motorista/Valor sempre `—`/`null`, KPI "Custo médio frete" fixo em "—", "Ocorrências" só um booleano derivado do status.
 
 Comparado a pedido do usuário com `IMS` (`/gestao-importacao/ims-importacao`, `src/ims.jsx`+`ims-store.js`) — que já tem um `tipo_recurso` "Transporte" com fornecedor cotado/aprovado/valor real e execução (check-in/check-out/avaliação), tabela própria `ims_importacao`. Ou seja, o que Compras Nacional tentava ser (com stubs) o IMS já faz de verdade, só que como fluxo de contratação/execução, não de rastreamento ao vivo (ETA/trajeto). Não implementada nenhuma consolidação entre os dois nesta rodada — só a comparação foi discutida.
@@ -666,6 +683,8 @@ Comparado a pedido do usuário com `IMS` (`/gestao-importacao/ims-importacao`, `
 - **Superado em 30/09/2026** — o "processo novo" chegou: virou o módulo **Importação Varejo** (estoque ao vivo + sugestão de compra real). Ver seção própria logo abaixo.
 
 ## Importação Varejo — Curva ABC-D e sugestão de compra real (30/09/2026, PR #515, squash `32f449d`, issue fechada #516)
+
+> **→ Parte já migrada para Suprimentos & Importação.** O conteúdo desta seção está concatenado em `docs/modulos/07_suprimentos_importacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 **Atualização (mesmo dia, PR #524)**: o estoque **deixou de ser "ao vivo"** — ver seção própria logo abaixo ("Importação Varejo — estoque cacheado no Supabase"). O texto original desta seção é mantido como registro histórico da decisão original (e por que ela existia), mas **não reflete mais o comportamento atual de `list-importacao-varejo`** no bullet "AO VIVO" abaixo.
 
@@ -689,6 +708,8 @@ Pedido do usuário: investigou-se `https://vprequisicoes.vpsistema.com/estoque-o
 
 ## Importação Varejo — estoque cacheado no Supabase, 4x/dia (30/09/2026, PR #524, squash `8513780`, issue fechada #525)
 
+> **→ Parte já migrada para Suprimentos & Importação.** O conteúdo desta seção está concatenado em `docs/modulos/07_suprimentos_importacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 **Supera parte da seção acima**: o usuário reportou a tela lenta e propôs a solução ele mesmo: *"não seria legal se isso morasse no Supabase e lá dentro atualizasse tipo 4 vezes por dia? assim o site apareceria quase instantâneo?"* — reverte conscientemente a decisão anterior ("estoque deve ser ao vivo... se saiu, aparece") em troca de velocidade.
 
 - **Causa raiz**: `list-importacao-varejo` consultava o estoque ao vivo no Omie (`estoque/consulta` `ListarPosEstoque`, até ~60 páginas) a cada carregamento da tela — mesmo sendo um endpoint em lote, a latência de rede real (7-27s medidos) tornava a tela lenta pro usuário.
@@ -704,6 +725,8 @@ Pedido do usuário: investigou-se `https://vprequisicoes.vpsistema.com/estoque-o
 
 ## Importação Varejo — cards KPI "Precisa comprar"/"Alerta" viram filtros clicáveis (30/09/2026, PR #528, squash `c96498b`, issue fechada #530)
 
+> **→ Parte já migrada para Suprimentos & Importação.** O conteúdo desta seção está concatenado em `docs/modulos/07_suprimentos_importacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário via screenshot da tela com setas desenhadas à mão saindo dos 2 primeiros cards (vermelho/amarelo) apontando pros botões de filtro de cor logo abaixo (`TODAS | PRECISA COMPRAR | ALERTA | OK`).
 
 - **`src/importacao-varejo.jsx`**: cards "Precisa comprar" e "Alerta (no mínimo)" ganharam `onClick`, chamando o mesmo `setCorFiltro('vermelha'|'amarela')` que os botões de segmento já controlavam — clicar no card tem efeito idêntico a clicar no botão. Clique de novo no mesmo card desfaz (volta pra `'todas'`). Destaque visual: `box-shadow` vermelho/amarelo no card ativo (`var(--vp-danger)`/`var(--vp-yellow)`) + rodapé do card muda pra "filtrando — clique pra limpar".
@@ -715,6 +738,8 @@ Pedido do usuário via screenshot da tela com setas desenhadas à mão saindo do
 
 ## Importação Varejo — selecionar todos os produtos filtrados para compra em massa (30/09/2026, PR #533, squash `1517bea`, issue fechada #534)
 
+> **→ Parte já migrada para Suprimentos & Importação.** O conteúdo desta seção está concatenado em `docs/modulos/07_suprimentos_importacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário olhando a tabela de produtos: *"Quero que você crie campo selecionar todas para compras em massa!"*
 
 - **`src/importacao-varejo.jsx`**: checkbox novo no cabeçalho da coluna de seleção (mesma coluna dos checkboxes por linha, condicionada a `podeGerenciar`) — marca/desmarca de uma vez todos os produtos da lista **atualmente filtrada** (`filtrados`, respeita busca/cor/curva), não necessariamente os 1751 produtos inteiros. Estado `indeterminate` (via `ref`, não dá pra fazer só com atributo HTML) quando só parte das linhas filtradas está marcada.
@@ -724,6 +749,8 @@ Pedido do usuário olhando a tabela de produtos: *"Quero que você crie campo se
 - Testado com Playwright local, dados reais (1751 produtos): clicar no checkbox do cabeçalho marcou as 1751 linhas, botão passou a mostrar "Enviar 1751 ao Omie"; clicar de novo desmarcou todas; marcar 1 linha manualmente deixou o cabeçalho em estado `indeterminate` — confirmado em screenshot.
 
 ## Importação Varejo — último fornecedor + último preço unitário + "Valores a pagar" (01/10/2026, PR #548, squash `9292129`, issue fechada #550)
+
+> **→ Parte já migrada para Suprimentos & Importação.** O conteúdo desta seção está concatenado em `docs/modulos/07_suprimentos_importacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do usuário: *"consegue trazer a informação de fornecedores? isso facilitaria muito por que o comprador selecionaria o fornecedor e já ajuda a fazer o pedido em massa, além disso, último preço unitário e isso sim seria tudo de bom, inclusive um card que deveria mostrar os valores a serem pagos, não é muito dificcil pensar na cotação do dólar"*. Decisão fechada por pergunta ao usuário: manter o mecanismo existente de Requisição de Compra (supplier-blind no Omie), em vez de migrar pra Pedidos de Compra reais agrupados por fornecedor (mais pesado, maior raio de impacto de escrita no Omie) — **"Continuar como Requisição (recomendado)"**.
 
@@ -822,6 +849,8 @@ Depois de um teste de ponta a ponta do Aval Financeiro, o usuário respondeu ite
 
 ## P.I. — botão "Adicionar Taxas" (Frete Local, Seguro etc.) (29/09/2026, PR #501, squash `289f27c`, issue fechada #502)
 
+> **→ Parte já migrada para Suprimentos & Importação.** O conteúdo desta seção está concatenado em `docs/modulos/07_suprimentos_importacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário a partir de um Commercial Invoice real de fornecedor (ELESpares) — "Local Freight" somado ao "Parts Cost" pra chegar no "Total Amount". A P.I. (`/gestao-importacao/pi-importacao`) não tinha como registrar esse tipo de custo adicional.
 
 - Botão **"Adicionar Taxas"** na aba Produtos do formulário de P.I. (`PITaxasSection`/`PIModalTaxa`, `src/pi.jsx`) abre um modal perguntando: (1) **Tipo de taxa** — `%` (percentual sobre o valor dos itens), Moeda Brasileira (R$) ou Dólar (US$); (2) **Qual taxa?** (descrição livre, ex. "Frete Local", "Seguro"); (3) Valor. Taxas ficam listadas com valor calculado, editáveis/removíveis.
@@ -898,6 +927,8 @@ Pedido do usuário depois do VPCV-0955 (AKAI): o PDF baixado saía com "X ______
 - **Assinatura em LETRA DE MÃO nos PDFs (05/10/2026, decisão do usuário: "é melhor digitado com uma letra parecendo letra de mão"):** o nome do assinante sai na fonte **Caveat** (700, `@fontsource/caveat@5.0.8` via jsDelivr) nos 4 documentos — Contrato de Venda e Proposta (`Font.register` 'Caveat' nos `.entry.js`), Contrato do Instalador (`@font-face` no `contrato-instalador.css`, também usada no preview "Digitar nome" da página `/assinar`) e Projeto de Instalação (`projeto-assinado-pdf.js` com `@pdf-lib/fontkit@1.1.1` do unpkg com SRI; sem fontkit/rede cai pro itálico). **Descoberta que motivou isso:** quem assina **desenhando** tem a imagem gravada em `audit.signatureData` (data URL PNG), mas **nenhum PDF a mostrava** (saía só o nome em texto) — agora, se `signatureData` for `data:image/…`, o PDF/preview mostra **a imagem** no lugar do nome (`imagem` em cada item de `assinaturas[]`); quem digitou (`signatureType 'type'`) sai em Caveat. **O modo padrão da página `/assinar` agora é "Digitar nome"** (`sigMode` inicial `'type'`); "Desenhar" continua disponível. Contratos já assinados digitando (os 5 do VPCV-0955) mostram o nome em Caveat retroativamente; a proposta 955 (assinada desenhando) passa a mostrar a rubrica real. Testado gerando os 4 documentos com dados reais (proposta 955 com a rubrica desenhada, contrato 955, Projeto real da Engenharia com 8 páginas + a de assinaturas, preview do instalador). Versões: bundle contrato v5, proposta v10 (assinar) / v11 (index), `projeto-assinado-pdf.js` v2, `assinar-app.jsx` v22, `contrato-instalador.css` v8.
 
 ## P.I. — transferência de pagamento entre P.I.s (30/09/2026)
+
+> **→ Parte já migrada para Suprimentos & Importação.** O conteúdo desta seção está concatenado em `docs/modulos/07_suprimentos_importacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Caso real: a SCVP260522 (Ningbo Senchen) não coube num container; o restante virou a fatura SCVP260522-2 (USD 35.435,84, 3 itens Thyssen, embarque **146º**). O sinal de 30% da -2 (USD 10.630,75) já tinha sido pago em 01/06 **dentro** da SCVP260522, que aparecia em 157,491% paga.
 
@@ -1097,6 +1128,8 @@ Pedido do usuário: mostrar o AFRMM (Adicional ao Frete para Renovação da Mari
 
 ## Importação Varejo — contagem física, estoque mín./máx. sugerido, tendência e revisão do comprador (12/10/2026)
 
+> **→ Parte já migrada para Suprimentos & Importação.** O conteúdo desta seção está concatenado em `docs/modulos/07_suprimentos_importacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário: a tela `/logistica/compras` é "o motivo de existência da VerticalParts" — o comprador precisa de certeza para comprar. 4 entregas na mesma sessão (tudo já aplicado em produção pelo MCP; o código sobe com este PR).
 - **Contagem física + acuracidade + endereço** (`importacao_varejo_contagem`, `_contagem_hist` sem update/delete): colunas **Endereço** e **Contado** editáveis na linha, **Acuracidade** OK/N‑OK (contado × saldo do sistema *no dia da contagem*, não o de hoje) e filtros "Divergentes"/"Saldo não conferido". Contagem vale **30 dias** (`CONTAGEM_VALIDADE_DIAS`): dentro do prazo o disponível da sugestão = contado − reservado do Omie; vencida/ausente = Omie + aviso "não conferido". A planilha `PLANILHA DE CONTAGEM.xlsx` (aba CONTAGEM) foi importada (927 códigos; 748 casam com o catálogo; duplicados: mesma localização = recontagem pela data mais recente, localização diferente = soma; THIAGO→TIAGO). **O app de contagem do usuário (estoque.vpsistema.com) vai gravar nessas duas tabelas pelo Supabase — são o contrato com ele: não renomear colunas, código em MAIÚSCULAS.** Tela e store: `importacao-varejo.jsx` v15, `importacao-varejo-store.js` v8 (`aplicarContagem`, `salvarContagem`; a Edge Function `list-importacao-varejo` **não foi alterada** — o front mescla as tabelas novas).
 - **Estoque mínimo/máximo sugerido "vivo"**: Edge Function `sync-importacao-varejo-vendas` (só leitura do Omie, `estoque/consulta ListarMovimentoEstoque`, fetch cru) grava `importacao_varejo_mov`; função SQL `iv_calcular_sugestao_estoque()` calcula `importacao_varejo_sugestao_estoque`. Crons diários: vendas 03:10 UTC, cálculo 03:30 UTC (**primeira execução automática ainda não conferida**). Método: venda líquida = −Σ VEN+CVP+DVP+CDV; janela de 6 meses completos; pico de mês limitado a 3× a mediana; demanda = média ponderada (últimos 3 meses peso 2); prazo 90 d importado / 15 d nacional (código terminado em N/n; o lead time do Omie é ignorado); segurança z×σ×√(prazo/30) por curva (A 1,65 · B 1,28 · C 1,04 · D 0); **mínimo = demanda diária × prazo + segurança; máximo = mínimo + demanda diária × 60 d (ciclo)**; parâmetros em `importacao_varejo_sugestao_config`. Fatos de 12/10: o Omie só tem mínimo manual; unidades vendidas Jan–Set caíram de 66,7 mil (2025) para 51,6 mil (2026) mas os SKUs com venda subiram de 549 para 744.
@@ -1131,6 +1164,8 @@ Botão **"Anular assinatura / enviado ao montador errado"** no painel do contrat
 - `contrato-instalador-store.js` v19, `contrato-instalador.jsx` v28, `assinar.html` store v17. **"Reenviar" de contrato anulado gera LINK NOVO** (`CIStore.reabrirAnulado`: novo token, volta a rascunho, recria parcelas, religa o acordo; a anulação fica em `audit.anulacoes`) — antes reaproveitava o link antigo e o montador via "Expirado". **A anulação roda toda no banco** (função `anular_contrato_instalador`, SECURITY DEFINER, migration `20261015140000`): antes o navegador não conseguia apagar as parcelas nem descartar o aviso da `eventos_outbox` (sem política para usuário comum). A função confere sessão + alçada `contrato-instalador.editar`.
 
 ## Cotações de Varejo — cotação antes da compra, mapa comparativo por fornecedor (16/10/2026, local, não commitado; banco JÁ em produção)
+
+> **→ Parte já migrada para Suprimentos & Importação.** O conteúdo desta seção está concatenado em `docs/modulos/07_suprimentos_importacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Regra do usuário: **o que aguarda preço não vai ao Omie**. Na Importação Varejo o comprador marca produtos e clica **"Pedir cotação"** (cria um LOTE, nada vai ao Omie); a página **Suprimentos & Importação › Cotações de Varejo** (`/logistica/cotacoes-varejo[/<lote>]`, logo abaixo de "Importação Varejo" no menu) reúne vários fornecedores no mesmo **mapa comparativo** (linha = produto, coluna = fornecedor). O botão antigo virou **"Comprar direto no Omie"** (compra já precificada, sem cotação).
 - **Fluxo:** rascunho → em_cotacao (1º envio) → aprovado (ou cancelado). Cada fornecedor convidado (**só os já cadastrados em Cadastros › Fornecedores**) recebe link próprio `/cotacao-varejo/<token>` (portal público trilíngue EN·PT·中文, `cotacao-varejo.html` + `src/cotacao-varejo-portal.jsx`) e nunca vê os outros. Resposta por item: **preço por faixa de quantidade** (até 3 faixas na tela, 6 no banco), prazo, MOQ, observação, link de foto/desenho. **Nova rodada** (2ª negociação) reabre o convite; o valor anterior vai para `historico` e vale o atualizado.
@@ -1175,6 +1210,8 @@ Módulo novo `/logistica/etiquetas[/gerar|modelos|historico]`, item "Etiquetas" 
 - **Expedição imprime DIRETO na Zebra, como imagem (20/10/2026, `etiquetas-calc.js` v15, `etiquetas.jsx` v13):** o modelo `EXPEDICAO_100x150` é desenhado deitado e girado 90° (`girar`), e o gerador de ZPL de texto/QR não gira. Antes, modelo girado caía sempre no diálogo do navegador mesmo com a Zebra selecionada. Agora `executar` gera as MESMAS páginas SVG do navegador (`renderSVGLinha`, com o sentido 90/270 e o ajuste de posição), rasteriza cada uma no tamanho em pontos da impressora (`etqRasterizar`, canvas, limiar de luminância 170) e envia `^GFA` (`C.renderZPLImagem`/`C.zplImagem`, compressão ASCII da Zebra: `G–Y`/`g–z` = repetições, `,` `!` `:`). Páginas iguais e seguidas viram um formato com `^PQ`. Envios em lotes de até 100 formatos ou ~1,5 MB (`etqLotes`, vale para todos os tipos). Histórico grava `adaptador = zebra-browser-print/imagem`. Tela e imagem batem com a prévia (conferido decodificando o ZPL de volta em PNG); 800 × 1200 pontos ≈ 7 KB por etiqueta quase branca. **Não testado na Zebra real**: conferir posição, nitidez do texto pequeno (o endereço do remetente tem ~3,8 mm) e QR legível; se o texto pequeno sair fraco, baixar o limiar em `etqRasterizar`. Testes: `etiquetas-calc.test.js` (+2, ida e volta da compactação), `e2e/etiquetas.spec.js` (+1).
 
 ## Estoque — organização, menu "Fabricação", carga única da Compras e sincronizador único (18/10/2026)
+
+> **→ Parte já migrada para Suprimentos & Importação.** O trecho do módulo 7 desta seção está em `docs/modulos/07_suprimentos_importacao.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 Conversa de arquitetura com o usuário (Gelson) sobre "onde mora o estoque". Resumo para não reabrir sem contexto:
 - **Mapa de hoje:** o saldo vem do Omie e mora em DOIS lugares — `importacao_varejo_*` (tela **Compras**, `/logistica/compras`, ~1.777 itens de revenda importada; é a tela do time de importação, "de onde sai a compra") e `pcp_*` (**Almoxarifado**, 156 itens ativos do PCP). 33 itens têm saldo nos dois. A contagem física real mora em `importacao_varejo_contagem` (o app `013_Estoque` grava ali), `pcp_estoque_fisico` está vazia. **Decisão do usuário (futuro, não feito):** o Almoxarifado vira a casa do estoque físico/comprado; a baixa de produção (quadro vendido e liberado para fabricar) cai no Almoxarifado e aparece na Compras; venda no Omie → reserva → aviso ao PCP; Expedição baixa e reflete nos dois e no Omie. **Regra de ouro combinada: saída por VENDA não é enviada ao Omie (a NF já baixa lá); só consumo de produção/perda/ajuste de contagem é enviado** — senão baixa em dobro. Plano em 7 fases (0 decisões · 1 saldo único em leitura · 2 sincronizador único · 3 contagem/endereço unificados · 4 movimentos (ledger em `estoque_eventos`) · 5 venda→reserva→PCP · 6 desligar fontes antigas). **Feitas: 1 (só a carga da Compras) e 2.** As fases 3–6 não começaram; a 4 é a de maior risco (baixa em dobro) e deve ter reconciliação diária + modo simular antes de qualquer envio ao Omie.
@@ -1321,6 +1358,8 @@ Pedido do usuário via `formularioEscadas.md` (planilha técnica de Escaladores/
 
 ## Embarques de Importação — conectividade entre as 7 abas, Onda 1 (30/10/2026, local, não commitado)
 
+> **→ Parte já migrada para Suprimentos & Importação.** O conteúdo desta seção está concatenado em `docs/modulos/07_suprimentos_importacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Diagnóstico read-only (12 fios rompidos, 7 em curto) e plano em `docs/superpowers/specs/2026-10-30-embarques-conectividade-abas.md` (3 ondas). **Onda 1 feita**, só front, sem banco:
 - Aba Frete: com cotação **vencedora**, Agente de carga e Moeda frete ficam travados (antes aceitavam digitação que o salvar descartava).
 - `resumoPIs` (`embarques-importacao-store.js` v14): o total gravado soma só as P.I. na **moeda da primeira**; `totaisPorMoeda`, `moedasMistas` e `cotacoesDistintas` alimentam um aviso amarelo (Identificação e Pagamentos). O embarque continua guardando UM Nº de cotação (o da primeira P.I. que tem).
@@ -1332,9 +1371,13 @@ Diagnóstico read-only (12 fios rompidos, 7 em curto) e plano em `docs/superpowe
 
 ## Embarques — Onda 2: sugestões com botão "Aplicar" (30/10/2026, local, não commitado)
 
+> **→ Parte já migrada para Suprimentos & Importação.** O conteúdo desta seção está concatenado em `docs/modulos/07_suprimentos_importacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 `src/embarques-sugestoes-calc.js` (`window.EmbSugestoesCalc`, funções puras, 5 testes) + componente `EISugestao` em `embarques-importacao.jsx` (v16). Mostra "💡 Sugerido: X (motivo) — Aplicar"; **nunca grava sozinho**. Feitas: T6 modalidade pelo incoterm da P.I. (só se todas apontam a mesma) e tipo "Marítimo" quando há cotação de frete; T7 última data de free time = presença de carga + dias de free time; T8 status da etapa pelos campos preenchidos (só avança); T9 só o **TT total** (ETD atual → presença de carga). **Fechadas em 30/10/2026 (resto da Onda 2, `embarques-sugestoes-calc.js` v2, `embarques-importacao.jsx` v17):** (T9) ao registrar rolagem de ETD, `confirm` "Ajustar também o ETA em +N dias?" — só muda com o OK e grava a mudança em `historico_eta` (motivo "Acompanha a rolagem de ETD"); (T10) `EIContainersMudou` compara os containers do embarque com a Precificação (`containersDaCotacao`) e mostra "mudou: 2x40'HC → 1x40'HC — Atualizar" (preserva número/lacre/peso dos que continuam; confirma antes de retirar container preenchido); (T11) aba Faturamento mostra o frete vencedor (só leitura: agente, totais USD/R$, taxas, nº de anexos) e sugere numerário = custos/estimativa e faturamento = frete vencedor em R$ (só quando a moeda é BRL). Tudo com botão, nada grava sozinho; sem banco. Testes: +3 em `embarques-sugestoes-calc.test.js`. **Não testado com clique no navegador** (Playwright não instalado localmente; o e2e do CI abre a tela). Resta só a Onda 3.
 
 ## Embarques — Onda 3: chegada real e ETA do AIS (30/10/2026, local, não commitado)
+
+> **→ Parte já migrada para Suprimentos & Importação.** O conteúdo desta seção está concatenado em `docs/modulos/07_suprimentos_importacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 - **T12:** a etapa "Chegou ao Brasil" da Evolução (`evolucao-equipamentos-calc.js` v5) usa `presenca_carga` (chegada **real**); sem ela vale o ETA (`eta_santos`), marcado `fonte: 'eta'` (estimado). A ocorrência "dias desde Santos sem entrega" também parte da presença. A Linha do Tempo (`linha-do-tempo-store.js` v8) mostra "Carga chegou ao porto (presença de carga)" ou "(estimativa)". `evolucao-equipamentos.jsx` v8 passou a buscar `presenca_carga`. `eta_santos` continua gravado = `eta_atual` por compatibilidade.
 - **T13 passo 1:** `_sincronizarRastreio` (`embarques-importacao-store.js` v16) **não sobrescreve `embarques.eta`** se o AIS atualizou (`last_ais_sync`) depois do último ETA registrado em `historico_eta`; mudar o ETA na tela (que grava no histórico) volta a valer. **Passo 2 (ais-sync gravar no embarque de origem) descartado** por decisão do Gelson (C2); Edge Function intocada.
@@ -1364,6 +1407,8 @@ Spec/Clarify/Plan/Analyze em `docs/superpowers/specs/2026-10-24-evolucao-qualida
 - **Erros humanos achados na varredura (24/10, para o Felipe/montadores corrigirem; nada foi alterado):** 500.0373 (término real 01/09 e fase ainda Instalação; a suspeita de "digitado antes da edição" caiu em 24/10 depois da correção do Codex — o equipamento foi editado depois do dossiê), 500.0374 (término real e fase parada), 500.0378 (chegada 17/10 destoa das irmãs 17/07 — provável mês errado), 500.0311 (material chegou 14/10 e início previsto segue 17/08), 500.0372/0380/0347/0346/0365 (previsões vencidas há semanas, parados), 16 de 20 obras em Instalação sem nenhum lançamento no Diário, M047/M063/M064 sem série (M063/M064 são remoção).
 
 ## Cotações de Varejo → RFQ Importação → P.I. (25/10/2026, PRs #1096, #1097, #1098 e #1099 — todos em `main`; spec em `docs/superpowers/specs/2026-10-25-rfq-importacao-vencedor-pi/`)
+
+> **→ Parte já migrada para Suprimentos & Importação.** O conteúdo desta seção está concatenado em `docs/modulos/07_suprimentos_importacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Primeiro assunto feito no método novo (Constituição = este arquivo → Specify → Clarify → Plan → Tasks → Analyze → Implement). Decisões do Gelson: **só P.I. (sem Requisição Omie)**, **NPS 0–5 em 6 critérios**, **IA = Copiloto da VPS (não API)**.
 - **Casa única:** `/gestao-importacao/rfq-importacao/<lote>/<aba>` — o 3º segmento é a aba: `comparar` (mapa + escolher vencedor + aprovar = o `CVDetalhe` de `cotacoes-varejo.jsx`, exposto em `window`), `pi` (P.I. nascidas do lote, `RFQVarejoPIs`) ou o id do fornecedor (tratativas). `/logistica/cotacoes-varejo/<lote>` redireciona para `…/comparar`; a lista de lotes e a criação do lote continuam em Cotações de Varejo.
@@ -1428,6 +1473,8 @@ Pedido do Gelson (spec em `docs/superpowers/specs/2026-10-30-art-por-obra.md`, f
 - `index.html`: `entrega.jsx` v10, `app.jsx` v114, `colaboradores-admin-store.js` v53, novos `obra-art-store.js`/`obra-art.jsx` `?v=1`.
 
 ## Catálogo Siscomex — renomeado e movido para Gestão Importação (30/10/2026, PR #1184, squash `227b1a1`)
+
+> **→ Parte já migrada para Suprimentos & Importação.** O conteúdo desta seção está concatenado em `docs/modulos/07_suprimentos_importacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 `ncm-catalogo` saiu de "Engenharia & Produto" e foi para "Gestão Importação" (abaixo de Análise de Preços). Nome único em menu, caminho do topo (Importação › Catálogo Siscomex), título e alçadas. **A rota não mudou** (o roteador usa só o 2º segmento; `/cadastros/ncm-catalogo` continua abrindo, o menu gera `/gestao-importacao/ncm-catalogo`). Alçadas: o módulo ficou nos dois grupos (`Engenharia & Produto` e `Suprimentos & Importação`) para ninguém perder acesso. Removidos o `ModalProdutoCatalogo` (nenhum botão o abria) e `nextCodigo`. O catálogo vem sincronizado da Ficha Técnica (395 de 400 produtos); **não há mais caminho de digitar produto direto** — se pedirem, religar um botão "Novo produto".
 
@@ -1816,6 +1863,8 @@ Pedido do usuário (cotação 955): depois de "Decidir comprar", enviar ao forne
 
 ## P.I. — código do item puxa descrição, unidade e NCM (08/10/2026)
 
+> **→ Parte já migrada para Suprimentos & Importação.** O conteúdo desta seção está concatenado em `docs/modulos/07_suprimentos_importacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Na aba Produtos da P.I. (`/gestao-importacao/pi-importacao`), digitar o **Código** do item (espera 0,5 s sem digitar) preenche Descrição, Unidade e NCM **só nos campos livres** (vazios, ou ainda iguais ao que o cadastro preencheu antes; unidade 'un' padrão conta como livre) — nunca sobrescreve o que a pessoa digitou — e mostra "✓ Dados preenchidos pelo cadastro" (ou "Código não encontrado"). `PIStore.buscarProdutoPorCodigo` só lê, na ordem: `importacao_varejo_produtos` (catálogo Omie de importação, 1.779 itens, todos com NCM) → `pcp_produtos` → `fichas_tecnicas` (`ncm_recomendado`, `arquivado=false`); cada fonte só completa o que faltou. Unidade do Omie ("PC", "KIT"…) é traduzida para as da P.I. (`UNIDADE_PI`); sem equivalente, mantém a atual. **Não preenche** quantidade nem valor unitário (o preço do Omie é em R$, a P.I. é em moeda estrangeira). Código fora desses cadastros (produto novo) segue manual. `pi-store.js` v7, `pi.jsx` v16. Não testado com clique real no navegador (só sintaxe e conferência dos dados de VPEL-031/070 no banco).
 
 ## Varredura de URLs — deep-linking, Voltar/Avançar e F5 em todo o sistema (09/10/2026, PR #797, squash `f76bd71`, issue fechada #796) [mecanismo já em 01_geral.md · detalhe → cada módulo]
@@ -1836,6 +1885,8 @@ Validado por `npm test` (411/411 em cada um dos 7 commits) e `node scripts/check
 - `index.html`: `gatilhos-engine.js` v16→18, `decisoes.jsx` v6→8, `dashboard.jsx` v22→23, `cadastros.jsx` v9→10, `colaboradores-admin.jsx` v5→6, `vistorias-obras.jsx` v15→17, `logistica.jsx` v68→70, `vistorias-envio.jsx` v16→18, `vistorias-questionarios-store.js` v15→16, `almoxarifado.jsx` v28→29, `engenharia-elevador.jsx` v9→10, `emissao-nf.jsx` v4→5, `expedicao.jsx` v3→4, `importacao-varejo.jsx` v8→9, `financeiro.jsx` v43→44, `controle-cotacoes.jsx` v9→10, `quadro-comando.jsx` v22→24. `assinar.html`: `gatilhos-engine.js` v16→17. `cotacao-elevador-fornecedor.html`/`formulario-cliente.html`: `gatilhos-engine.js` v11→18. `vistoria-execucao.html`: `vistorias-questionarios-store.js` v14→16.
 
 ## Auditoria de amarrações entre telas — correções 1 a 3 (11/10/2026) [roteador já em 01_geral.md · resto → módulos 4, 7, 9 e 12]
+
+> **→ Parte já migrada para Suprimentos & Importação.** O trecho do módulo 7 desta seção está em `docs/modulos/07_suprimentos_importacao.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 > **→ Parte já migrada para Financeiro & Preços.** O trecho do módulo 5 desta seção está em `docs/modulos/05_financeiro_precos.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
