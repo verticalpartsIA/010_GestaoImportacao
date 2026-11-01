@@ -122,7 +122,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 
 ### Índice deste arquivo
 - **A. Leis e travas permanentes:** a **Constituição** (Títulos I a IX, 50 artigos),  áreas blindadas (Cadastros Mestres, E-mail/Inbox, Ver documento, Containers, Mão de obra, Assinatura digital, PDF assinado), trava por "Confirmo" (Atualização de Custos).
-- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico, Suprimentos & Importação e Engenharia & Produto).
+- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico, Suprimentos & Importação, Engenharia & Produto e Obras & Instalação).
 - **C. Procedimentos:** acessos, cache-busting, stack e testes, `pdf-bundle/`, fluxo de trabalho, método (SDD), pendências.
 - **D. Resíduo por módulo:** seções de entregas ainda não absorvidas pelo documento do seu módulo (ver marcas "→ módulo N").
 - **E. Research Base (hyperresearch).**
@@ -154,7 +154,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 | 6 | Contratos & Jurídico | `docs/modulos/06_contratos_juridico.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta; a área blindada de Assinatura digital e a regra do PDF assinado ficam aqui; o Contrato Instalador é do módulo 11 |
 | 7 | Suprimentos & Importação | `docs/modulos/07_suprimentos_importacao.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta; as seções mistas ficam aqui |
 | 8 | Engenharia & Produto (Projeto de Elevadores, Projeto de Equipamento, Solicitações de Produto, Ficha Técnica, Linha do Tempo da Cotação) | `docs/modulos/08_engenharia_produto.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; a área blindada de Assinatura digital e a regra do PDF assinado (módulo 6) continuam aqui |
-| 9 | Obras & Instalação | `09_obras_instalacao.md` | A criar (hoje: Dossiê, Mapa de Obras, Instalação, ART) |
+| 9 | Obras & Instalação (Dossiês de Obras, Vistorias de Obras, Resultado Vistorias de Obras, Instalação em Campo, Mapa de Obras, ART) | `docs/modulos/09_obras_instalacao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; o Cronograma de Pagamento da Instalação e o Contrato Instalador são do módulo 11 |
 | 10 | Entrega & Documentação | `10_entrega_documentacao.md` | A criar |
 | 11 | Parceiros & Instaladores | `11_parceiros_instaladores.md` | A criar (hoje: Contrato do Instalador, pagamentos) |
 | 12 | Logística Interna | `12_logistica_interna.md` | A criar (hoje: Almoxarifado, Separação, Etiquetas, Expedição) |
@@ -225,6 +225,14 @@ O **WhatsApp**, o **gi-avisos** (o serviço que envia os avisos) e o **Copiloto 
 - Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
 - O Catálogo Siscomex é do módulo 7 (7.8); ART, Dossiê e Mapa de Obras são do 9.
 - Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (cada uma ganhou a nota "→ parte já migrada") até o Gelson aprovar o documento e decidir retirá-las; as seções **mistas** (Aval Engenharia, Assinatura digital, Edge Functions) nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
+
+## Módulo 9 — Obras & Instalação → `docs/modulos/09_obras_instalacao.md` (fonte da verdade; aprovado em 01/11/2026)
+
+**Aqui não se escreve mais nada sobre Obras & Instalação.** Quem for trabalhar nele **lê, entende e atende** o documento do módulo:
+- **9.1 Dossiês de Obras** (lista e Dossiê da Obra com nove abas; Diário de Obra e Status da Obra públicos) · **9.2 Vistorias de Obras** (Questionários, Despacho, Calendário e a execução no celular) · **9.3 Resultado Vistorias de Obras** · **9.4 Instalação em Campo** · **9.5 Mapa de Obras** (Mapa e Evolução dos Equipamentos) · **9.6 ART** · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, o fluxo da obra, rotas e páginas públicas, código da obra, cobrança e pausa, segurança, gatilhos e crons, tabelas, tutoriais, documentos concatenados e benefícios trocados).
+- Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
+- O Cronograma de Pagamento da Instalação, Pagamentos a Instaladores, Contrato Instalador e Homologação são do módulo 11; Central de Documentos, Data Book e Entrega Final, do 10.
+- Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (cada uma ganhou a nota "→ parte já migrada") até o Gelson decidir retirá-las; as seções **mistas** nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
 
 ## 🔒 ÁREA BLINDADA — Cadastros Mestres: cliente/fornecedor com transação NUNCA é excluído (31/10/2026, regra do Gelson)
 
@@ -523,6 +531,8 @@ O gap acima ("sem mecanismo de API confirmado") **foi resolvido no mesmo dia**, 
 **⚠️ Sobre testar escrita real no Omie**: uma tentativa de chamar a Edge Function via `curl` direto (não pelo MCP) foi **bloqueada pelo classificador de "Real-World Transactions" do próprio Claude Code** — pediu confirmação explícita do usuário antes de prosseguir. Isso é esperado e correto pra qualquer teste que crie/altere dado real no Omie; não tente contornar, só peça autorização.
 
 ## Realtime (Postgres Changes) — Embarques, Proposta, Vistoria e Inbox (28/09/2026) [parte do Geral já em 01_geral.md · resto → módulos 4, 7 e 9]
+
+> **→ Parte já migrada para Obras & Instalação.** O trecho do módulo 9 desta seção está em `docs/modulos/09_obras_instalacao.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 > **→ Parte já migrada para Suprimentos & Importação.** O trecho do módulo 7 desta seção está em `docs/modulos/07_suprimentos_importacao.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
@@ -1415,6 +1425,8 @@ Para trabalho novo de produto/telas/banco: **SPECIFY → CLARIFY → PLAN → TA
 
 ## Evolução dos Equipamentos — "dado a conferir" e cobrança diária ao Felipe (24/10/2026, PR #1089 mergeado em `main`, squash `b1963917`; banco e cron JÁ em produção)
 
+> **→ Parte já migrada para Obras & Instalação.** O conteúdo desta seção está concatenado em `docs/modulos/09_obras_instalacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Spec/Clarify/Plan/Analyze em `docs/superpowers/specs/2026-10-24-evolucao-qualidade-dados.md`. **Quem alimenta a Evolução hoje:** os **montadores** (Diário de Obra) e o gestor **Felipe Barros** (`equipamentos_obra`, fase do dossiê, nº de série). A tela só mostra o que eles registram — dado parado ou incoerente aparece como atraso/0%, não como "erro do sistema".
 - **Regras** (`src/evolucao-conferir-calc.js`, `window.EvolucaoConferirCalc`, 18 testes): data real no futuro / depois da última edição (a mais recente entre o dossiê e o equipamento — `equipamentos_obra.atualizado_em`, achado do Codex no PR #1089), ordem inválida, fase que não avançou (término real e ainda "Instalação"), previsão vencida de **qualquer** etapa (≥ 1 dia útil; registro "parado" > 14 dias), previsão desatualizada (> 14 dias) ou anterior à chegada, obra em Instalação sem Diário (≥ 3 dias úteis; **só detecta quem nunca lançou**), sem nº de série, remoção "saindo da fábrica", irmão (mesma obra) já iniciou, chegada destoa dos irmãos (> 60 dias — pega mês digitado errado). **Só aponta, nunca corrige.** Cada achado tem `quem`: `felipe` (cadastro) ou `montador` (Diário).
 - **Tela:** quadro "Dado a conferir" no cartão + filtro "Só dado a conferir" (`evolucao-equipamentos.jsx` v6, script `evolucao-conferir-calc.js?v=2`). Em 24/10: 23 de 58 equipamentos.
@@ -1456,6 +1468,8 @@ Pedido do Gelson (spec em 6 fases): `/logistica/fabricacao-corte` mostra **só**
 
 ## Instalação em Campo — populada com clientes reais (29/10/2026, PR #1138, squash `9070abc`)
 
+> **→ Parte já migrada para Obras & Instalação.** O conteúdo desta seção está concatenado em `docs/modulos/09_obras_instalacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário: `/engenharia/instalacao` ("Instalação em Campo") precisava mostrar os clientes com obra ativa (Montando/Prestes a iniciar). Achado real: a tela sempre apareceu vazia porque `InstalacaoPage` (`src/operacoes.jsx`) lia de `equipes`/`projetos` — **tabelas com zero registros em produção**, resquício do período mock, anterior ao pipeline real de `dossier_obra`.
 
 - **Trocada a fonte**: agora lê `dossier_obra`/`equipamentos_obra` (a mesma do Mapa de Obras), agrupada **por cliente** — card retrátil (▸/▾) por cliente; expandir mostra cada equipamento (descrição + 🔧 nº de série de `equipamentos_obra.numero_serie`). Classificação Montando/Prestes a iniciar **reaproveitada** de `window.MapaObrasCalc.classificar` (não duplicada).
@@ -1469,6 +1483,8 @@ Pedido do usuário: `/engenharia/instalacao` ("Instalação em Campo") precisava
 
 ## `dossier_obra.codigo_obra` — identificador da obra PERSISTIDO, base pra ART (29/10/2026, PR #1149, squash `8034dd5`)
 
+> **→ Parte já migrada para Obras & Instalação.** O conteúdo desta seção está concatenado em `docs/modulos/09_obras_instalacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário, depois da entrega acima: `VPNI-OB####` precisa virar um identificador **estável e gravado no banco**, pra poder ser citado numa ART futura (ex. "ART-VPNI-OB0017" — uma ART é emitida por OBRA, cita os equipamentos dela, mas é o ID-TAG/código da obra quem manda). Decisões fechadas por pergunta ao usuário antes de implementar: (a) granularidade de agrupamento de obra legada = **cliente + endereço** (cai pra cliente + cidade/UF quando os dois não têm endereço preenchido); (b) escopo desta entrega = **só persistir o código**, sem UI de registro/emissão de ART ainda; (c) obra nativa = **o mesmo `VPNI-<cotação>`** que o Contrato do Instalador já usa, sem código separado pra ART. Caso real confirmado pelo usuário: **AZEKA** (`DOS-M046` = equipamento novo, `DOS-M047` = modernização/troca de portas) é **uma única obra física** — tratada como tal.
 
 - **Coluna nova `dossier_obra.codigo_obra`** (migration `20261029150000_dossier_obra_codigo_obra.sql`, aplicada): gerada por `dossier_obra_calcular_codigo()` e fixada por trigger `trg_dossier_obra_fixa_codigo` (`BEFORE INSERT OR UPDATE`) — nasce uma vez, nunca muda depois (mesma trava de outras colunas do projeto, ex. `formularios_elevador.numero_cotacao`). Obra nativa (`numero_cotacao` preenchido) → `VPNI-<cotação, 4 dígitos>`. Obra legada (sem cotação) → `VPNI-OB<NNNN>`, sequência própria `obra_legada_numero_seq` (nunca reaproveitada), **reutilizando o código de outra obra já existente** do mesmo cliente+cidade/UF(+endereço, quando os dois têm) em vez de gerar um novo.
@@ -1481,6 +1497,8 @@ Pedido do usuário, depois da entrega acima: `VPNI-OB####` precisa virar um iden
 - `index.html`: `instalacao-campo-calc.js`/`instalacao-campo-store.js` v2→v3.
 
 ## ART por obra — fluxo Gustavo (Escamax) → Juliana → Felipe (30/10/2026, PR #1188, squash `e51a2af`; migration JÁ aplicada em produção)
+
+> **→ Parte já migrada para Obras & Instalação.** O conteúdo desta seção está concatenado em `docs/modulos/09_obras_instalacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do Gelson (spec em `docs/superpowers/specs/2026-10-30-art-por-obra.md`, feito no método Specify→Clarify→Plan): a ART é **uma por obra/cliente** (`dossier_obra.codigo_obra`, ex. `VPNI-OB0017`), mãe de todos os equipamentos — não uma por equipamento. Tela `/engenharia/art` (`src/obra-art.jsx` + `src/obra-art-store.js`, `window.ObraArtPage`/`ObraArtStore`), que substituiu a antiga `ArtPage` (só redirecionava ao Dossiê; removida de `entrega.jsx`).
 - **Fluxo:** (1) a **primeira assinatura** de um Contrato do Instalador da obra (status → `assinado`) cria a linha em `obra_art` e manda WhatsApp ao Gustavo (`gustavo@escamax.com.br`) com o link do Contrato de Venda (`/juridico/contrato-venda-equipamentos`) e da tela; (2) ele anexa o **modelo da ART** e o **boleto** → aviso à Juliana (`juliana@`); (3) ela clica **"Marcar como paga"** na linha → aviso ao Gustavo; (4) ele anexa a **ART definitiva** (só depois de paga) → aviso ao Felipe (`felipe.barros@`); (5) o Felipe envia à obra e clica "Marcar enviada à obra". Etapas: `aguardando_modelo → modelo_anexado → paga → definitiva_anexada → enviada`.
@@ -1891,6 +1909,8 @@ Na aba Produtos da P.I. (`/gestao-importacao/pi-importacao`), digitar o **Códig
 
 ## Varredura de URLs — deep-linking, Voltar/Avançar e F5 em todo o sistema (09/10/2026, PR #797, squash `f76bd71`, issue fechada #796) [mecanismo já em 01_geral.md · detalhe → cada módulo]
 
+> **→ Parte já migrada para Obras & Instalação.** O trecho do módulo 9 desta seção está em `docs/modulos/09_obras_instalacao.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
+
 > **→ Parte já migrada.** O mecanismo está em `docs/modulos/01_geral.md` Parte comum PC-9. O detalhe por tela será absorvido em cada módulo.
 
 Pedido do usuário: 100% de varredura verificando se cada ação clicável do sistema resulta numa URL que reflete de verdade o que está na tela — deep-link, Voltar/Avançar do navegador, F5 sem perder o estado, link compartilhável. Autorizado a corrigir tudo, priorizando alavancagem arquitetural primeiro (`gatilhos-engine.js` + as 5 telas "zero-props"), e depois "pode seguir suas sugestões... aproveite essa varredura e se encontrar bugs avise-me e crie issues" — o restante do trabalho seguiu minha própria priorização, com 2 agentes de fundo (Explore) levantando o resto do backlog por módulo (Cadastros/Admin/Dashboard; PCP/Logística).
@@ -1907,6 +1927,8 @@ Validado por `npm test` (411/411 em cada um dos 7 commits) e `node scripts/check
 - `index.html`: `gatilhos-engine.js` v16→18, `decisoes.jsx` v6→8, `dashboard.jsx` v22→23, `cadastros.jsx` v9→10, `colaboradores-admin.jsx` v5→6, `vistorias-obras.jsx` v15→17, `logistica.jsx` v68→70, `vistorias-envio.jsx` v16→18, `vistorias-questionarios-store.js` v15→16, `almoxarifado.jsx` v28→29, `engenharia-elevador.jsx` v9→10, `emissao-nf.jsx` v4→5, `expedicao.jsx` v3→4, `importacao-varejo.jsx` v8→9, `financeiro.jsx` v43→44, `controle-cotacoes.jsx` v9→10, `quadro-comando.jsx` v22→24. `assinar.html`: `gatilhos-engine.js` v16→17. `cotacao-elevador-fornecedor.html`/`formulario-cliente.html`: `gatilhos-engine.js` v11→18. `vistoria-execucao.html`: `vistorias-questionarios-store.js` v14→16.
 
 ## Auditoria de amarrações entre telas — correções 1 a 3 (11/10/2026) [roteador já em 01_geral.md · resto → módulos 4, 7, 9 e 12]
+
+> **→ Parte já migrada para Obras & Instalação.** O trecho do módulo 9 desta seção está em `docs/modulos/09_obras_instalacao.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 > **→ Parte já migrada para Suprimentos & Importação.** O trecho do módulo 7 desta seção está em `docs/modulos/07_suprimentos_importacao.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
@@ -2063,6 +2085,8 @@ Pedido do usuário: os pedaços de fio do quadro (com terminais e conectores) en
 - **Pendências:** a Engenharia informar a bitola grossa das outras 5 variantes e as vias/código dos 18 conectores; cadastrar no Omie os itens que faltam; não testado com clique real no navegador nem gerando uma OP real. `?v=`: `fiacao-quadro-engine.js` v1, `lista-fios.jsx` v1, `montagem-produto.jsx` v7, `pcp.jsx` v29, `colaboradores-admin-store.js` v44.
 
 ## Mapa de Obras (Obras & Instalação, 19/10/2026)
+
+> **→ Parte já migrada para Obras & Instalação.** O conteúdo desta seção está concatenado em `docs/modulos/09_obras_instalacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Tela nova `/engenharia/mapa-obras` (item "Mapa de Obras", logo abaixo de "Instalação em Campo"; módulo de alçada `mapa-obras`, no grupo "Obras & Instalação"). Leaflet com o mesmo trocador de estilo do Rastreio Marítimo (Claro/Escuro/Ruas/Satélite). **Só leitura.**
 - **Um ponto por dossiê** (`dossier_obra`), cor pela regra de `src/mapa-obras-calc.js` (`MapaObrasCalc.classificar`, testes em `mapa-obras-calc.test.js`): **em andamento** (amarelo) = `Instalação`, ou Contrato assinado/Importação/Homologação com `equipamento_entregue`; **concluída** (verde) = DataBook/Entregue/Manutenção preventiva; **aguardando equipamentos** (azul) = Contrato assinado/Importação/Homologação instalador sem equipamento entregue. Antes do contrato (análise técnica etc.) não entra.
