@@ -122,7 +122,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 
 ### Índice deste arquivo
 - **A. Leis e travas permanentes:** a **Constituição** (Títulos I a IX, 50 artigos),  áreas blindadas (Cadastros Mestres, E-mail/Inbox, Ver documento, Containers, Mão de obra, Assinatura digital, PDF assinado), trava por "Confirmo" (Atualização de Custos).
-- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico, Suprimentos & Importação, Engenharia & Produto, Obras & Instalação, Entrega & Documentação, Parceiros & Instaladores e Logística Interna).
+- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico, Suprimentos & Importação, Engenharia & Produto, Obras & Instalação, Entrega & Documentação, Parceiros & Instaladores, Logística Interna e Fabricação).
 - **C. Procedimentos:** acessos, cache-busting, stack e testes, `pdf-bundle/`, fluxo de trabalho, método (SDD), pendências.
 - **D. Resíduo por módulo:** seções de entregas ainda não absorvidas pelo documento do seu módulo (ver marcas "→ módulo N").
 - **E. Research Base (hyperresearch).**
@@ -157,8 +157,8 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 | 9 | Obras & Instalação (Dossiês de Obras, Vistorias de Obras, Resultado Vistorias de Obras, Instalação em Campo, Mapa de Obras, ART) | `docs/modulos/09_obras_instalacao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; o Cronograma de Pagamento da Instalação e o Contrato Instalador são do módulo 11 |
 | 10 | Entrega & Documentação (Central de Documentos, Data Book & Termo, Entrega Final, Repositório Documentos) | `docs/modulos/10_entrega_documentacao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; o Cronograma de Pagamento da Instalação é do módulo 11 |
 | 11 | Parceiros & Instaladores (Empresas Instaladoras, Homologação de Instaladores, Contrato Instalador, Pagamentos a Instaladores, Cronograma de Pagamento da Instalação) | `docs/modulos/11_parceiros_instaladores.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta |
-| 12 | Logística Interna (Almoxarifado, Expedição, Separação, Etiquetas) | `docs/modulos/12_logistica_interna.md` | **Real** (fonte da verdade, aguardando aprovação) — o `CLAUDE.md` só aponta; PCP, MES e Fabricação Corrimão/Corte são do módulo 13 |
-| 13 | Fabricação | `13_fabricacao.md` | A criar (hoje: PCP, MES, Evolução, Corrimão/Corte) |
+| 12 | Logística Interna (Almoxarifado, Expedição, Separação, Etiquetas) | `docs/modulos/12_logistica_interna.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; PCP, MES e Fabricação Corrimão/Corte são do módulo 13 |
+| 13 | Fabricação (PCP, MES, MES · Cadastros, Carga Máquina, Matérias-Primas, Produtos, Montagem do Produto, Evolução da Fabricação, Fabricação Corrimão, Fabricação Corte, Simulação, Relatórios) | `docs/modulos/13_fabricacao.md` | **Real** (fonte da verdade, aguardando aprovação) — o `CLAUDE.md` só aponta |
 | 14 | Administração | `14_administracao.md` | A criar (hoje: segurança #571, alçadas, funções, integrações) |
 Os nomes de arquivo dos módulos 4 a 14 são sugestão, a confirmar quando cada documento for criado; "hoje" lista o que está espalhado neste arquivo.
 
@@ -250,12 +250,20 @@ O **WhatsApp**, o **gi-avisos** (o serviço que envia os avisos) e o **Copiloto 
 - Vincular a empresa à obra e o Diário de Obra são do módulo 9; a página de assinatura `/assinar` é do 6.
 - Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (com nota "→ parte já migrada"); as seções **mistas** nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
 
-## Módulo 12 — Logística Interna → `docs/modulos/12_logistica_interna.md` (fonte da verdade; 01/11/2026, aguardando aprovação)
+## Módulo 12 — Logística Interna → `docs/modulos/12_logistica_interna.md` (fonte da verdade; aprovado em 01/11/2026)
 
 **Aqui não se escreve mais nada sobre Logística Interna.** Quem for trabalhar nela **lê, entende e atende** o documento do módulo:
 - **12.1 Almoxarifado** (Estoque, Estrutura, Custos, Reposição, Necessidade, Ajustes, Pedidos de compra) · **12.2 Expedição** · **12.3 Separação** (Pedidos a separar, Painel TV e a página pública da TV) · **12.4 Etiquetas** (Gerar, Modelos, Histórico) · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, o estoque de ponta a ponta, rotas e páginas públicas, a regra de ouro do Omie, alçadas, segurança, gatilhos e crons, tabelas, tutoriais, documentos concatenados e benefícios trocados).
 - Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
 - PCP, MES, Fabricação Corrimão/Corte, Evolução da Fabricação, Simulação e Relatórios (grupo "Fabricação" do menu) são do módulo 13; a Emissão de NF é do 5; a Compras do varejo, do 7.
+- Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (cada uma ganhou a nota "→ parte já migrada"); as seções **mistas** nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
+
+## Módulo 13 — Fabricação → `docs/modulos/13_fabricacao.md` (fonte da verdade; 01/11/2026, aguardando aprovação)
+
+**Aqui não se escreve mais nada sobre Fabricação.** Quem for trabalhar nela **lê, entende e atende** o documento do módulo:
+- **13.1 PCP** · **13.2 MES** · **13.3 MES · Cadastros** · **13.4 Carga Máquina** · **13.5 Matérias-Primas** · **13.6 Produtos** · **13.7 Montagem do Produto** (e Lista de fios) · **13.8 Evolução da Fabricação** · **13.9 Fabricação Corrimão** · **13.10 Fabricação Corte** · **13.11 Simulação** · **13.12 Relatórios** · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, do pedido à fábrica e os três acompanhamentos, rotas e páginas públicas, regras que atravessam as telas, alçadas/custo/hora-homem, segurança, gatilhos e crons, tabelas, tutoriais, documentos concatenados e benefícios trocados).
+- Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
+- Almoxarifado, Separação, Expedição e Etiquetas são do módulo 12; Emissão de NF, do 5; o Formulário do Quadro de Comando, do 4.
 - Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (cada uma ganhou a nota "→ parte já migrada"); as seções **mistas** nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
 
 ## 🔒 ÁREA BLINDADA — Cadastros Mestres: cliente/fornecedor com transação NUNCA é excluído (31/10/2026, regra do Gelson)
@@ -1075,6 +1083,8 @@ Pedido do usuário: o vendedor que cria um formulário (mesmo rascunho) é dono 
 
 ## PCP — Planejamento e Controle da Produção (Logística Interna) — módulo completo (02–03/10/2026)
 
+> **→ Parte já migrada para Fabricação.** O conteúdo desta seção (ou o trecho de fabricação dela) está concatenado em `docs/modulos/13_fabricacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 > **→ Parte já migrada para Logística Interna.** O conteúdo desta seção (ou o trecho de estoque/separação/etiquetas dela) está concatenado em `docs/modulos/12_logistica_interna.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 > **→ Parte já migrada para Financeiro & Preços.** O trecho do módulo 5 desta seção está em `docs/modulos/05_financeiro_precos.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
@@ -1138,6 +1148,8 @@ Pedido do usuário: fazer de `/engenharia/eng-projeto-elevadores` o mesmo que `/
 - Versões: `engenharia-elevador.jsx` v3→v4, `projeto-elevador-store.js` v4→v5. Validado só por Babel/`node --check` e merge sem conflito; **não testado com clique/upload real no navegador** — após o deploy, salvar um PDF pequeno, copiar o link e abrir em aba anônima. Se a tela não mudar pra alguém, é cache do navegador (Ctrl+F5).
 
 ## MES — Sistema de Execução da Manufatura (07/10/2026, PRs #734, #735, #736, #737, #738)
+
+> **→ Parte já migrada para Fabricação.** O conteúdo desta seção (ou o trecho de fabricação dela) está concatenado em `docs/modulos/13_fabricacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do usuário: submódulo **MES** abaixo de PCP (Logística Interna, rota `/logistica/mes`) para a produção de **quadros de comando**, a partir do fluxograma (imagem) e da instrução `instruction_pcp_mes_verticalparts.md` (14 etapas, Kanban, checklist, apontamento, NC, qualidade, expedição). Entregue em 4 fases, todas em `main`. **Nenhuma fase foi testada com clique real no navegador** (só sintaxe via Babel); as travas de fluxo são **da tela** (RLS aberta, issue #571).
 
@@ -1311,12 +1323,16 @@ Conversa de arquitetura com o usuário (Gelson) sobre "onde mora o estoque". Res
 
 ## PCP › Pedidos para Produzir — expandir o pedido mostra todos os itens (20/10/2026, PR #1006, squash `7d117e5`)
 
+> **→ Parte já migrada para Fabricação.** O conteúdo desta seção (ou o trecho de fabricação dela) está concatenado em `docs/modulos/13_fabricacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário em `/logistica/pcp/fila` (aba `fila`, `PCPFilaProducao` em `src/pcp.jsx`): ver o que há dentro da coluna "Outros itens" (ex.: "14") sem criar coluna nova.
 - Clicar no número do pedido (▸/▾) ou no número de "Outros itens" abre uma linha em largura total com **todos** os itens do pedido: #, Código, Descrição, Qtd., Un. e Tipo ("Item do PCP" / "Outro item"). Cada pedido abre/fecha de forma independente (estado `abertos`).
 - **Sem consulta nova:** usa os itens que `carregar()` já lia de `pcp_pedido_itens` (`item_pcp` separa PCP de outros). Não investiguei no banco quais são os "outros" de um pedido real; a tabela mostra o que estiver gravado.
 - Só front: `index.html` `pcp.jsx` v32→v33. Validado por transform Babel e `check-cache-bust`; **não testado com clique real no navegador**.
 
 ## PCP › Pedidos para Produzir — enviar item do pedido do Omie para "Pedidos de Quadro" (22/10/2026, PR #1049, squash `52d35d0`)
+
+> **→ Parte já migrada para Fabricação.** O conteúdo desta seção (ou o trecho de fabricação dela) está concatenado em `docs/modulos/13_fabricacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do usuário: em `/logistica/pcp/fila`, um item do pedido (ex.: `VPEL-702b`, "Sistema de Comando para Elevador – MA – 4,0 kW/220 V") que é quadro de comando precisava ser **escolhido e enviado** à aba Pedidos de Quadro. Antes não havia caminho: "Pedidos de Quadro" só lista `quadros_comando` (formulário do quadro) e os itens do Omie ficavam só na fila.
 - **Botão por item** (`PCPFilaProducao`, `pcp.jsx`): na lista expandida do pedido, coluna nova "Pedidos de Quadro", só para `item_pcp` de pedido de venda (**não** para Ordem de Serviço) e só com `podeCriar`. `enviarParaQuadro(p, x)` confirma e **insere 1 `quadros_comando` por unidade** (quantidade arredondada, mínimo 1; cada quadro é uma peça física), com `escopo_fornecimento = { quadro_comando: { decisao: 'fornecer' } }` (por isso o "Gerar OPs" já fica habilitado) e **`configuracao.origem_omie = { codigo_pedido, numero_pedido, item_codigo, item_descricao, cliente_nome, unidade, total, prazo }`**. `numero_pedido` do quadro vem da sequência do banco (não é o nº do Omie). Sem migration: `configuracao` jsonb já existia.
@@ -1327,6 +1343,8 @@ Pedido do usuário: em `/logistica/pcp/fila`, um item do pedido (ex.: `VPEL-702b
 - **Trava só para quadro (22/10/2026, `pcp.jsx` v35):** a 1ª versão mostrava o botão em todo `item_pcp` (corrimão, cabo…). Agora só aparece para código que está em `pcp_quadro_variante.codigo_produto` (hoje VPEL-702b/704b/709b/710a) — **não use `ctx.pais`/ter estrutura como critério** (corrimão também tem). Os 7 pedidos de quadro criados antes da trava (nº 1080–1086, 0 OPs) sofreram soft-delete. **Caminho até `/logistica/evolucao-fabricacao`:** o botão só cria o `quadros_comando`; a OP (`frente='quadro'`, que é o que a Evolução lista via `FabricacaoQuadroStore.listarOPsAbertas`) só nasce em Pedidos de Quadro › "Gerar OPs".
 
 ## Fabricação Corrimão + Fabricação Corte + envio direto da Separação (22/10/2026, branch `claude/pensive-euler-5zwvdo`, ainda sem PR)
+
+> **→ Parte já migrada para Fabricação.** O conteúdo desta seção (ou o trecho de fabricação dela) está concatenado em `docs/modulos/13_fabricacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do usuário: o item que a Separação põe "Na operação" (corrimão ou corte) precisa virar OP na hora e ter tela de acompanhamento própria, igual à Evolução da Fabricação do quadro. Spec/Plan/Tasks/Analyze em `docs/superpowers/specs/2026-10-22-fabricacao-corrimao-corte-design.md`. **Migration `20261022120000_fabricacao_corrimao_corte.sql` JÁ aplicada em produção** (com "CONFIRMO" do usuário; conferido: 9 etapas, 5 funções, anon sem acesso às tabelas).
 - **Decisões do usuário:** o pedido de venda é o PAI; cada corrimão = 1 OP-unidade (`pcp_ordens.frente = 'corrimao'|'corte'`, `pedido_codigo`, **`item_codigo` + `unidade_seq` novos**, índice único por pedido+item+unidade ativa). OP-filha nasce **sem OP-mãe**; o "Gerar OPs" do PCP **adota** as filhas (`ordem_mae_id`) e não cria outra para o mesmo item. Quadro **não** é destino da Separação. Quem envia: alçada nova **`separacao.enviar_fabricacao`** (conceder à Magda em Administração › Alçadas; Administrador passa).
@@ -1341,6 +1359,8 @@ Pedido do usuário: o item que a Separação põe "Na operação" (corrimão ou 
 - **Evolução da Fabricação do Quadro — operador cria/resolve ocorrência e busca ampliada (22/10/2026, `evolucao-fabricacao-quadro.jsx` v4):** em `/logistica/evolucao-fabricacao` o card ganhou **"+ Criar ocorrência"** (código do produto com sugestão do BOM do quadro, "tem frente de trabalho?") e **"Chegou — resolver"** por ocorrência aberta, pelo próprio sistema (antes só pelo link público). Reusa `FabricacaoQuadroStore.abrirOcorrencia/resolverOcorrencia` (mesma regra de pausa: sem frente = pausa a fabricação; log em `vp_logs`). A busca ("Buscar por código, cliente ou nº do pedido…") passou a achar também o **nº do pedido de venda do Omie** (`pcp_pedidos.numero_pedido`, via `pedido_codigo`) e o **código dos materiais em falta**, além de obra/OP/cliente/código interno do pedido. Sem migration. Não testado com clique real (gravaria ocorrência); validado por Babel, `npm test` (722) e e2e de fumaça da rota.
 
 ## Evolução da Fabricação do Quadro — cards recolhíveis, pedido, vendedor, prazo, SLA e ordenação (22–23/10/2026, PRs #1064 squash `7e81825` e #1066 squash `7cacd30`)
+
+> **→ Parte já migrada para Fabricação.** O conteúdo desta seção (ou o trecho de fabricação dela) está concatenado em `docs/modulos/13_fabricacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do usuário em `/logistica/evolucao-fabricacao` (`src/evolucao-fabricacao-quadro.jsx` v6): 4 pontos.
 - **Cards recolhíveis:** cada OP abre **recolhida**; o botão ▸/▾ do card abre/fecha etapas, fiação, ocorrências e link (estado `abertos` por OP, só em `useState`, não vai para a URL). Recolhida, o card mostra cabeçalho, "Etapa atual" e selos "Pausada"/"Ocorrência aberta". A barra de busca tem "Expandir todas / Recolher todas" (age só nas OPs filtradas). O usuário confirmou que **abrir uma a uma é o uso principal** e quer o "todas" mantido — não remover nenhum dos dois.
@@ -1506,6 +1526,8 @@ Primeiro assunto feito no método novo (Constituição = este arquivo → Specif
 - **Em aberto (decisão do Gelson):** unificar o NPS novo com `fornecedores_avaliacoes` do cadastro; pedir à sessão da VPS um modo sem memória para a IA (hoje `novaConversa` reinicia a bolinha — trocar `COPILOTO_MODE`); guardar a ficha técnica colada por produto (precisa migration); Excel de verdade (hoje é CSV); salvar item a item no servidor no portal (precisa mexer na RPC). Tutoriais de P.I./RFQ/Cotações de Varejo/Cadastro de Fornecedores ficaram desatualizados — a sessão de tutoriais regenera.
 
 ## Fabricação Corte — escopo restrito + código com descrição comercial (30/10/2026, PR #1171, squash `6a67666`)
+
+> **→ Parte já migrada para Fabricação.** O conteúdo desta seção (ou o trecho de fabricação dela) está concatenado em `docs/modulos/13_fabricacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do Gelson (spec em 6 fases): `/logistica/fabricacao-corte` mostra **só** Cabos de Aço, Cintas de Tração e Cabos de Manobra, sempre como `código — descrição comercial`.
 - **Dicionário** `CORTE_DESCRICOES` em `fabricacao-oficina-calc.js` (20 códigos → categoria + descrição; códigos em MAIÚSCULAS, ex. `VPEL-234N`). Funções `categoriaCorte(codigo, texto)`, `descricaoCorte`, `rotuloItemCorte`. **Código novo desse grupo = acrescentar no dicionário** (e subir o teste de contagem).
@@ -1774,12 +1796,16 @@ Summaries must be specific — "Mamba achieves linear-time sequence modeling via
 
 ## PCP — Etapa 10 do Omie entra só como PREVISÃO na Necessidade (03/10/2026)
 
+> **→ Parte já migrada para Fabricação.** O conteúdo desta seção (ou o trecho de fabricação dela) está concatenado em `docs/modulos/13_fabricacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário: pedidos em etapa 10 ("Pedido", antes de "Separar estoque/produção") aparecem só como previsão — não alertam, não contam como venda firme, não afetam Emissão de NF, Expedição, SLA nem relatórios.
 - **Tabelas próprias** `pcp_previsao_pedidos`/`pcp_previsao_itens` (migration `20261003180000`), lidas SÓ por `necessidade-pcp.jsx`. **Nunca gravar etapa 10 em `pcp_pedidos`** (aparece na Emissão de NF/Expedição/SLA). `sync-pcp-pedidos` v5 com `{"etapa":"10"}` grava lá; cron `sync-pcp-pedidos-previsao-etapa10` (:20, 7h–19h seg–sex). Quando o pedido chega à etapa 20, a limpeza da própria função o tira da previsão.
 - **Necessidade**: interruptor "incluir previsão (etapa 10)" (padrão ligado); roda o cálculo duas vezes (firme × firme+previsão); cartões e `alerta-pcp-compras` continuam só da carteira firme; item que só falta por causa da previsão ganha selo "Previsão". Pedidos com `data_pedido` > `PREV_DIAS_MAX` (120) dias são ignorados — a etapa 10 tem cadastros esquecidos desde 2020 (73 lidos, 8 com item do PCP, 1 válido em 03/10).
 - `necessidade-pcp.jsx` v3. Testado no app local com dados reais. Não commitado.
 
 ## PCP — Gerar OP a partir da Necessidade (03/10/2026)
+
+> **→ Parte já migrada para Fabricação.** O conteúdo desta seção (ou o trecho de fabricação dela) está concatenado em `docs/modulos/13_fabricacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Na aba Necessidade, tabela "A produzir": caixas de seleção + botão **Gerar OP (N)** (alçada `pcp.criar`). Cria uma OP aberta por item fabricado (produto, quantidade, prazo = entrega mais cedo, materiais pela estrutura folha, etapas do modelo — mesmo molde da "+ Nova OP"). **Nada vai ao Omie.**
 - **Quantidade = o que falta abrir** = produzir − saldo de OPs abertas do mesmo produto (qualquer origem). Coluna "OP aberta" mostra quais; item coberto ganha selo "com OP" e perde a caixa → clicar de novo não duplica.
@@ -2119,6 +2145,8 @@ Precificação VPPC-0983: o "ICMS na venda" era o `icms_venda_pct` global de 4% 
 
 ## Matérias-Primas × Produtos — regra VPMP e novo endereço no menu (18/10/2026, branch `claude/gallant-davinci-at3mbk`, sem PR ainda)
 
+> **→ Parte já migrada para Fabricação.** O conteúdo desta seção (ou o trecho de fabricação dela) está concatenado em `docs/modulos/13_fabricacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 Pedido do usuário depois de investigação: a tela Matérias-Primas mostrava 124 itens (tipo SPED 01 do Omie), mas só os 99 **VPMP** são matéria-prima. O tipo SPED é classificação fiscal, não o papel no chão de fábrica.
 - **Regra única:** matéria-prima = código `VPMP%` (`window.pcpEhMateriaPrima`, definida em `cadastro-itens.jsx`; usada por Montagem, Simulação, PCP, Relatórios do PCP e Painel de fotos). **Não volte a decidir por `tipo_sped`.** Produtos = todo o resto, com coluna **Papel**: *Fabricado* (tem estrutura em `pcp_estrutura`) ou *Mercadoria de estoque* (vendida e/ou componente: VPB, cabos, corrimões, portas).
 - **Três papéis combinados com o usuário:** matéria-prima (só consumida: VPMP, terminais, conectores, peças de emenda), mercadoria de estoque (cabo de aço fracionado, VPB, portas — pode ser vendida e também componente) e fabricado (tem estrutura: quadro, corrimão emendado, cabo de manobra trabalhado).
@@ -2128,6 +2156,8 @@ Pedido do usuário depois de investigação: a tela Matérias-Primas mostrava 12
 - `index.html`: `shell.jsx` v116, `cadastro-itens.jsx` v3, `colaboradores-admin-store.js` v43, `pcp.jsx` v28, `montagem-produto.jsx` v6, `simulacao-producao.jsx` v2, `relatorios-pcp-extras.jsx` v4, `painel-fotos-pcp.jsx` v5. Suíte 608/608. Não testado com clique real no navegador.
 
 ## Lista de fios do quadro de comando (19/10/2026, branch `claude/gallant-davinci-at3mbk`, sem PR ainda)
+
+> **→ Parte já migrada para Fabricação.** O conteúdo desta seção (ou o trecho de fabricação dela) está concatenado em `docs/modulos/13_fabricacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do usuário: os pedaços de fio do quadro (com terminais e conectores) entram na lista BOM/separação da OP. Decisões: **uma lista única** para todas as variantes; só a **bitola grossa (>= 6 mm²)** muda com potência/tensão (10 mm² em 30 kW/380 V, confirmado pela BOM; as demais variantes a Engenharia preenche); fios 0,75/2,5 não mudam; **Engenharia edita, Produção só usa**; terminal duplo = 1 peça para 2 pontas; 1 conector Mini-Fit por conector distinto (`KY9/4` e `KY9/2` = `KY9`; vias/código informados pela Engenharia); separação pede **metros exatos** (sem arredondar para rolos de 100 m; a sobra fica no estoque). **Fora de escopo:** MES, cadastro no Omie (itens faltantes — forquilha 0,75, faston, fio azul 0,75 — o usuário cadastra à mão), comparativo com o Omie.
 - **Motor** `src/fiacao-quadro-engine.js` (`window.FiacaoQuadro`, puro, testes em `fiacao-quadro-engine.test.js`; conferido com a planilha real: 125 fios, 70,04 m de 0,75, 65 pontas Mini-Fit, 18 conectores). **Regra "a lista manda":** `aplicarAosMateriais` tira dos materiais da OP (estrutura do Omie/formulário) os códigos que a lista cobre e soma os calculados — evita contar fio/terminal/conector em dobro. **Variante sem bitola grossa cadastrada → a lista NÃO é aplicada** (a OP segue como antes e o toast avisa); nunca "escolher a mais próxima". Item sem código no de-para vira aviso e não entra na separação.
@@ -2174,6 +2204,8 @@ Investigação do formulário FE-MV86EUBZ (cotação 990): a letra (`VPEL-EL0990
 - **Não alterado de propósito:** a letra continua contada por (formulário, categoria), não por fornecedor — `numero_documento` é UNIQUE, então contar por fornecedor colidiria com 2 fornecedores na mesma cotação (o aviso de "nova versão" só aparece quando há documento anterior do MESMO fornecedor). `assetMasterId` ainda gera `VPEL-EL0990-A-1` (com a letra) em Cotações a Fornecedor/herança da Proposta, enquanto Unidade/Precificação usam `VPEL-EL0990-1` — divergência a decidir. Testes: `cotacao-elevador-fornecedor-i18n.test.js` (+1). Sem clique/envio real.
 
 ## Rastreabilidade — o nº do pedido do Omie é a raiz de toda OP (22/10/2026)
+
+> **→ Parte já migrada para Fabricação.** O conteúdo desta seção (ou o trecho de fabricação dela) está concatenado em `docs/modulos/13_fabricacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do usuário (ex. pedido 29775): o número do Omie e os códigos do pedido (quadro `VPEL-709b`, cabos `VPB-086…106`) não podem se perder; id novo do site sempre cita o pai.
 - **Banco** (migration `20261022200000`, aplicada com CONFIRMO): `pcp_ordens.numero_pedido_omie` e `itens_pedido` (jsonb de códigos). O gatilho `trg_pcp_ordens_raiz_pedido` preenche sozinho a partir de `pedido_codigo` em QUALQUER caminho que crie OP (Gerar OPs, Pedidos de Quadro, envio da Separação): OP-mãe = todos os códigos do pedido; quadro = só os de `pcp_quadro_variante`; fiação/cabos/botoeiras = itens do PCP que não são quadro; corrimão/corte = o `item_codigo`. As 36 OPs existentes foram preenchidas. `public_fab_obter` devolve os dois campos.
