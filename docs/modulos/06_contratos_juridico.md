@@ -180,7 +180,7 @@ A **fila do Jurídico**: toda proposta **aprovada pelo cliente** (vigente ou pen
 ### 6.2.3 Perfil e acesso
 - A rota está em `RESTRICTED` de `app.jsx` como `["juridico","admin"]`, mas o **seletor de perfil não tem a opção "juridico"**: `ROLE_MAP` (`shell.jsx`) só tem comercial, engenharia, financeiro e admin. Na prática **só quem está na visão Administrador abre a tela** (e o menu mostra o item a todos, porque ele não tem `restrict`). O perfil é uma escolha do navegador (`vpprd.role`, padrão `admin`), não identidade (`01_geral.md` PC-6). **Conferido** (`app.jsx`, `shell.jsx`; é o achado 3 de `docs/superpowers/specs/2026-10-31-revisao-B-…`, Herdado).
 - **A tela não chama `temCapacidade`** e `darAval` não confere alçada nem papel; a alçada `aval-juridico` tem concessões no banco (ver 5, criar 3, editar 4, excluir 2) e **não é conferida**. **Conferido.**
-- **Banco (Conferido):** `avais_juridicos` tem RLS ligada e **quatro políticas abertas ao público** (`aj_leitura`, `aj_insert`, `aj_update`, `aj_delete`, todas `true`); **não** está no Realtime. Faz parte do plano da #571 (PC-6).
+- **Banco (Conferido):** `avais_juridicos` tem RLS ligada e **três políticas abertas ao público** (`aj_leitura`, `aj_insert` e `aj_update`, todas `true`); a `aj_delete` foi removida em 01/11/2026 (corte de DELETE do `anon`, `01_geral.md` PC-6); **não** está no Realtime. Faz parte do plano da #571 (PC-6).
 
 ### 6.2.4 O que a tela mostra
 Cabeçalho "Jurídico · Aval de Contratos" / **Aval Jurídico** / subtítulo "Toda proposta aprovada pelo cliente entra aqui, junto com o Aval Financeiro. O Aval Jurídico + o Aval de Pagamento do Financeiro liberam a compra na China — e, com sinal pago e contrato assinado, o envio do Desenho de Instalação."; três KPIs (**Aguardando aval**, **Aprovados**, **Reprovados**); cartão **Fila do Jurídico** ("N vendas aprovadas pelo cliente"): cada linha mostra "Cotação Nº X · <número do documento>", o cliente, o valor, o contrato ("Contrato VPCV-… · assinado" ou "Contrato de Venda ainda não gerado"), o painel dos três avais da cotação, o selo (Aguardando aval, Aprovado, Reprovado) e, se pendente, os botões. Fila vazia: "Nenhuma proposta aprovada aguardando o Jurídico ainda." **Conferido.**
@@ -223,7 +223,7 @@ Cabeçalho "Jurídico · Aval de Contratos" / **Aval Jurídico** / subtítulo "T
 1. **Ninguém com perfil Jurídico consegue abrir a tela** (6.2.3): a restrição usa um perfil que o seletor não oferece. **Decisão do Gelson** (criar a visão, trocar para alçada ou abrir a mais perfis). **Achado, sem correção.**
 2. **Nem a tela nem `darAval` conferem alçada** (6.2.3). **Decisão do Gelson.**
 3. **Reprovação sem consequência** (6.2.8): confirmar com o Jurídico se "reprovar" deveria travar a compra e o contrato. **Achado.**
-4. **O aval pode ser reescrito** pelo store (6.2.8) e `avais_juridicos` aceita `UPDATE` e `DELETE` do público (política aberta). **Achado**, parte da #571.
+4. **O aval pode ser reescrito** pelo store (6.2.8) e `avais_juridicos` aceita `UPDATE` do público (política aberta; o `DELETE` foi fechado em 01/11/2026, `01_geral.md` PC-6). **Achado**, parte da #571.
 5. **`herdado_de_proposta_id` e `motivo_reabertura` existem e nada os grava** (0 linhas, nenhuma referência no código); a herança do aval entre revisões (desenho em `docs/revisoes/02-…`) está só no papel. **Achado.**
 6. **Sem Copiloto e sem ajuda "?"** para esta rota (PC-10); o tutorial existe, de 09/10/2026.
 7. **O texto do subtítulo** diz que "com sinal pago e contrato assinado" libera o desenho; está certo, mas omite o terceiro requisito do gate da compra (o projeto assinado). **Achado de texto.**
@@ -362,10 +362,11 @@ Regra geral em `01_geral.md` PC-6 e na Constituição (Art. 25). **Trava na tela
 - **Perfil e alçada não são conferidos** nas três telas (6.1.3, 6.2.3, 6.3.3). A restrição do Aval Jurídico usa um perfil que o seletor não oferece.
 - **Estado das tabelas:**
   - `contratos_venda_equipamentos`: **fechada ao público** (RLS ligada; `vp_int_sel/ins/upd` para usuário ativo; exclusão por administrador ou alçada com nome divergente; rascunhos apagáveis por qualquer ativo). Está no Realtime sem ouvinte.
-  - `avais_juridicos`, `contrato_venda_signatarios`, `documento_signatarios`: RLS ligada e **quatro políticas `true` para o público** em cada (ler, inserir, atualizar, apagar). Em `documento_signatarios` (24 linhas) e `contrato_venda_signatarios` isso expõe os **tokens** de assinatura a quem tem a chave pública; o risco está descrito em `AUDITORIA_FORENSE_E2E_SCORE.md` (Herdado). Fechar depende da #571 (`docs/seguranca/matriz-acesso-rls.md`, Herdado).
+  - `avais_juridicos`: RLS ligada e **três políticas `true` para o público** (ler, inserir e atualizar; o DELETE foi fechado em 01/11/2026). `contrato_venda_signatarios` e `documento_signatarios`: RLS ligada e **quatro políticas `true` para o público** em cada (ler, inserir, atualizar, apagar), porque a tela apaga e por isso ficaram fora do corte. Em `documento_signatarios` (24 linhas) e `contrato_venda_signatarios` isso expõe os **tokens** de assinatura a quem tem a chave pública; o risco está descrito em `AUDITORIA_FORENSE_E2E_SCORE.md` (Herdado). Fechar depende da #571 (`docs/seguranca/matriz-acesso-rls.md`, Herdado).
 - **Funções do banco:** as públicas `public_cv*` e `public_cvs*` são intencionais; os auxiliares `_cv_*` e os gatilhos `fn_avais_*` só o servidor executa.
 - **Bucket `engenharia`:** o desenho de instalação fica em URL pública (qualquer pessoa com o link abre). Não há assinatura de URL.
 - **Segredo:** nada de chave, telefone ou e-mail pessoal neste documento (Art. 28). Os contatos fixos da minuta ficam só no código.
+- **Corte de DELETE do `anon` (aplicado em produção em 01/11/2026; texto completo em `01_geral.md` PC-6).** **Entra no corte** `avais_juridicos` (perde o DELETE; **Conferido** no banco em 01/11/2026: ficam as políticas de leitura, inserção e atualização); `avais_financeiros` (lido pelo gate) e `eventos_fluxo` (módulo 1) também entram. **Fora do corte, porque a tela apaga:** `contrato_venda_signatarios`, `documento_signatarios` e `propostas`; `contratos_venda_equipamentos` já era fechada ao público. `emails_projeto` ficou de fora por ser área blindada (1.5 de `01_geral.md`). Nenhuma mudança de código. **O risco dos tokens de assinatura descrito acima não foi tratado por este corte.**
 
 ## PC-7 Gatilhos e rotinas
 **Conferido.**
@@ -379,7 +380,7 @@ Regra geral em `01_geral.md` PC-6 e na Constituição (Art. 25). **Trava na tela
 | Tabela | Uso | Estado em 31/10/2026 (Conferido) |
 |---|---|---|
 | `contratos_venda_equipamentos` | os contratos (e os do editor antigo); tem `doc`, `form_state`, `audit`, `log`, `recipient`, `desenho_instalacao` | 1 linha; RLS fechada ao público; no Realtime |
-| `avais_juridicos` | o aval por proposta ou contrato | 4 linhas; 4 políticas abertas |
+| `avais_juridicos` | o aval por proposta ou contrato | 4 linhas; 3 políticas abertas (DELETE fechado em 01/11/2026) |
 | `contrato_venda_signatarios` | sócios/jurídico do comprador | 0 linhas; abertas |
 | `documento_signatarios` | signatários genéricos (contrato de venda, instalador, projeto de instalação) | 24 linhas; abertas |
 | `propostas` | a proposta de origem | módulo 4 |
@@ -427,6 +428,7 @@ Busca feita em `CLAUDE.md`, raiz, `docs/`, `docs/superpowers/specs/`, `docs/supe
 - **Recebido de Geral (`01_geral.md`):** a regra de numeração e o molde; a cadeia de etapas, a fila `fluxo_pendentes` e as Notificações (PC-3, PC-7).
 - **Recebido de CRM, Cadastros e Comercial | Pré-venda:** a proposta aprovada e seus dados (4.5), o Nº da cotação como chave de tudo (4.1), a leitura paginada de 1.000 em 1.000 (Cadastros): aplica-se ao Painel de 6.1.
 - **Recebido de Financeiro & Preços (`05_financeiro_precos.md`):** a regra dos três avais e do CEO (PC-3 de lá), o padrão "botão que parece ação e só muda status" e a ideia de dizer o que o botão realmente faz.
+- **Recebido de Geral (31/10/2026, corte de DELETE do `anon`, texto completo em `01_geral.md` PC-6; aplicado em produção em 01/11/2026):** fechar só o que o front nunca apaga, com backup em `vp_policy_backup`, trava de pré-condição na migration e reversão testada. Aplicação a este módulo: `avais_juridicos` entrou; `contrato_venda_signatarios` e `documento_signatarios` ficaram de fora porque a tela apaga (PC-6 daqui). Nenhuma mudança de código.
 - **Doado** (acrescentado na mesma sessão aos outros documentos, no tema certo, texto completo aqui):
   - **A todos: perfil que o seletor não oferece.** Uma rota em `RESTRICTED` com um perfil que não existe no `ROLE_MAP` só abre para o administrador (6.2.3). Vale conferir outras rotas restritas.
   - **A todos: nome de alçada diferente entre o catálogo, a tela e a política do banco.** A política de exclusão de contratos pergunta por um módulo com outro nome; as concessões não valem (6.1.10 item 2). Vale conferir `vp_tem_capacidade('…')` das demais políticas.
