@@ -769,6 +769,11 @@ Esta tabela lista os 6 jobs **das telas de Geral**. Em 31/10/2026 o banco tinha 
   - **Duas fontes da mesma coisa:** `embarques` × `embarques_importacao`, RFQ antiga × lote de varejo, duas avaliações de fornecedor. Registrar qual manda e qual é espelho.
   - **Comentário de código que contradiz o comportamento:** o cabeçalho de `cotacoes-varejo.jsx` ainda descreve a aprovação como "Requisição ao Omie" quando hoje gera P.I. em rascunho. Conferir comentários de cabeçalho ao revisar uma tela.
 
+- **Benefícios vindos de Engenharia & Produto (doados em 01/11/2026, Art. 49; texto completo em `08_engenharia_produto.md` PC-12). Selo: Conferido em 01/11/2026 no código e no banco:**
+  - **O código grava colunas que o banco não tem:** `engenharia-config.jsx` manda `projeto_pdf_recebido`/`projeto_pdf` para `equipamentos_spec`, que não as tem; teste de unidade e compilação não pegam. Conferir payload × `information_schema.columns`.
+  - **Alçada declarada e nunca lida:** conferir se a **ação** do catálogo (criar/editar/excluir) é checada no código, não só o nome do módulo.
+  - **Filtro que recarrega com o valor antigo:** `setFiltro(v); recarregar()` lê o estado da renderização anterior.
+  - **Dois marcadores do mesmo fato** (etapa da ficha × data de publicação no Omie, 1 × 93) e **vista decidida por `useState`** (o Voltar do navegador não volta à lista): procurar nas telas do Geral.
 ### PC-10 Menu "?" (Ajuda, Treinamento, Enviar feedback)
 *(Migrado do CLAUDE.md em 31/10/2026; arquivos conferidos agora, regras vindas do CLAUDE.md.)*
 - Círculo "?" no canto superior direito de **todas as telas** (`AjudaSuporte` em `src/ajuda-suporte.jsx`, desenhado pelo `Header` de `shell.jsx`). Dica nativa "Suporte". Itens: **Ajuda** (texto da tela em `HELP_TOPICS[rota]`, mais perguntas frequentes), **Treinamento** (abre o tutorial da tela; sem tutorial na lista `TUTORIAIS`, fica apagado "Em breve") e **Enviar feedback**.
