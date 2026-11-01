@@ -1,6 +1,6 @@
 # 12 Logística Interna — documento do módulo (REAL, fonte da verdade — 01/11/2026)
 
-> **Status: REAL (documento oficial do módulo 12), aguardando a aprovação do Gelson**, no molde de `01_geral.md` a `11_parceiros_instaladores.md`. Histórico de entrega (PR, hash, `?v=`) não se repete aqui: o Git guarda.
+> **Status: REAL (documento oficial do módulo 12), aprovado pelo Gelson em 01/11/2026**, no molde de `01_geral.md` a `11_parceiros_instaladores.md`. Histórico de entrega (PR, hash, `?v=`) não se repete aqui: o Git guarda.
 >
 > **Por que este módulo pede cuidado:** é onde o **estoque físico** vira **pedido separado, etiquetado e despachado**, e onde o site **escreve no Omie** (ajuste de estoque, requisição de compra). Três coisas pedem atenção: (1) a **regra de ouro** — saída por **venda** não vai ao Omie (a NF já baixa lá); só consumo de produção, perda e ajuste de contagem vão, e só com confirmação (PC-4); (2) várias tabelas do módulo estão **abertas à chave pública** do banco, inclusive `pcp_produtos`/`pcp_estoque` (com custo) e `pcp_expedicoes` (PC-6); (3) a **Separação** tem a mesma fila usada pelo **celular** (app `013_Estoque`, fora deste repositório), então mexer na fila no hub pode mudar o que o celular faz (12.3.8).
 >
@@ -21,7 +21,7 @@
    &nbsp;&nbsp;&nbsp;Cada tela tem os temas: x.1 O que é · x.2 Rota e arquivos · x.3 Perfil e acesso · x.4 O que a tela mostra · x.5 Botões e controles · x.6 Comportamento · x.7 Dados (lê/grava) · x.8 Regras e armadilhas · x.9 Testes · x.10 Pendências e decisões · x.11 Histórico
    Parte comum de Logística Interna (sem número de tela)
    &nbsp;&nbsp;&nbsp;PC-1 Mapa de ligações · PC-2 O estoque de ponta a ponta · PC-3 Rotas, páginas públicas e arquivos · PC-4 A regra de ouro do Omie e os "estoques" que existem · PC-5 Quem faz o quê (alçadas) · PC-6 Identidade, alçadas e segurança · PC-7 Gatilhos, eventos, crons e funções · PC-8 Tabelas · PC-9 Navegação, cache e testes · PC-10 Menu "?" e tutoriais · PC-11 Documentos soltos e destino do que foi concatenado · PC-12 Benefícios trocados com os outros módulos
-13. Fabricação → `13_fabricacao.md` (a criar)
+13. Fabricação → `13_fabricacao.md` (REAL)
 
 ## Glossário (módulo Logística Interna)
 Termos gerais (alçada, soft-delete, evento de fluxo, Nº da cotação) estão em `01_geral.md`. Não se repetem aqui.
@@ -291,3 +291,4 @@ Seções do `CLAUDE.md` que tratam do módulo e agora têm destino aqui (substit
 
 ## PC-12 Benefícios trocados com os outros módulos
 **Recebidos:** de Parceiros & Instaladores — status gravado precisa de recálculo; portão de aprovação falha fechado; dado pessoal fora do repositório. **Doados** (texto nos documentos de 1 a 11, linha "Recebido de Logística Interna"): ver cada módulo.
+- **Recebido de Fabricação (01/11/2026, texto em `13_fabricacao.md` PC-12):** a OP-mãe concluída (13.1) libera a Emissão de NF e a Expedição; o PCP gera OP a partir da Necessidade (12.1) e o item "Na operação" da Separação vira OP de Corrimão/Corte (13.9/13.10). **Conferido** no código.

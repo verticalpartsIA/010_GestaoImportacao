@@ -797,6 +797,13 @@ Esta tabela lista os 6 jobs **das telas de Geral**. Em 31/10/2026 o banco tinha 
   - **Afirmação de documento antigo envelhece:** o `CLAUDE.md` dizia que nenhum ajuste fora enviado ao Omie; o banco tem 2 enviados. Conferir no banco antes de repetir "ainda não foi feito".
   - **Link como senha:** a página pública da TV da Separação é entregue por token revogável; o mesmo vale para os demais links públicos.
 
+- **Benefícios vindos de Fabricação (doados em 01/11/2026, Art. 49; texto completo em `13_fabricacao.md` PC-12). Selo: Conferido em 01/11/2026 no código e no banco:**
+  - **Tabela que guarda token de link público não pode ter leitura pública:** `fabricacao_quadro_links` tem SELECT/INSERT/UPDATE para `public`, então qualquer um lista os tokens; o padrão certo é o de `fab_*` (tabelas fechadas + RPC `public_*` por token). Vale para todo link público (Diário, Status da Obra, recibo, assinatura).
+  - **Duas telas para o mesmo trabalho criam duas verdades:** o quadro pode ser acompanhado no MES (12 etapas) e na Evolução do Quadro (6 etapas); 24 OPs de quadro, 1 no MES. Antes de criar tela nova, decidir se substitui a antiga.
+  - **Contar linhas antes de chamar de "pronto":** `pcp_roteiro` 0, `fiacao_fios` 0, `mes_nc` 0, `mes_testes` 0, `fab_ocorrencias` 0; tela existe, dado não. O documento diz o que foi exercitado.
+  - **Comentário de cabeçalho envelhece com o menu:** vários arquivos de Fabricação ainda dizem "Logística Interna". Ao reagrupar menu, grep nos cabeçalhos.
+  - **Regra de filtro que protege relatórios:** OP sem `produto` é ignorada em Planejamento, Controle, Carga Máquina e relatórios de Produção/Perdas; consulta nova de produção mantém esse filtro.
+
 ### PC-10 Menu "?" (Ajuda, Treinamento, Enviar feedback)
 *(Migrado do CLAUDE.md em 31/10/2026; arquivos conferidos agora, regras vindas do CLAUDE.md.)*
 - Círculo "?" no canto superior direito de **todas as telas** (`AjudaSuporte` em `src/ajuda-suporte.jsx`, desenhado pelo `Header` de `shell.jsx`). Dica nativa "Suporte". Itens: **Ajuda** (texto da tela em `HELP_TOPICS[rota]`, mais perguntas frequentes), **Treinamento** (abre o tutorial da tela; sem tutorial na lista `TUTORIAIS`, fica apagado "Em breve") e **Enviar feedback**.
