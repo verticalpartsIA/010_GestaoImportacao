@@ -122,7 +122,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 
 ### Índice deste arquivo
 - **A. Leis e travas permanentes:** a **Constituição** (Títulos I a IX, 50 artigos),  áreas blindadas (Cadastros Mestres, E-mail/Inbox, Ver documento, Containers, Mão de obra, Assinatura digital, PDF assinado), trava por "Confirmo" (Atualização de Custos).
-- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico, Suprimentos & Importação, Engenharia & Produto, Obras & Instalação, Entrega & Documentação, Parceiros & Instaladores, Logística Interna e Fabricação).
+- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico, Suprimentos & Importação, Engenharia & Produto, Obras & Instalação, Entrega & Documentação, Parceiros & Instaladores, Logística Interna, Fabricação e Administração).
 - **C. Procedimentos:** acessos, cache-busting, stack e testes, `pdf-bundle/`, fluxo de trabalho, método (SDD), pendências.
 - **D. Resíduo por módulo:** seções de entregas ainda não absorvidas pelo documento do seu módulo (ver marcas "→ módulo N").
 - **E. Research Base (hyperresearch).**
@@ -158,8 +158,8 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 | 10 | Entrega & Documentação (Central de Documentos, Data Book & Termo, Entrega Final, Repositório Documentos) | `docs/modulos/10_entrega_documentacao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; o Cronograma de Pagamento da Instalação é do módulo 11 |
 | 11 | Parceiros & Instaladores (Empresas Instaladoras, Homologação de Instaladores, Contrato Instalador, Pagamentos a Instaladores, Cronograma de Pagamento da Instalação) | `docs/modulos/11_parceiros_instaladores.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta |
 | 12 | Logística Interna (Almoxarifado, Expedição, Separação, Etiquetas) | `docs/modulos/12_logistica_interna.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; PCP, MES e Fabricação Corrimão/Corte são do módulo 13 |
-| 13 | Fabricação (PCP, MES, MES · Cadastros, Carga Máquina, Matérias-Primas, Produtos, Montagem do Produto, Evolução da Fabricação, Fabricação Corrimão, Fabricação Corte, Simulação, Relatórios) | `docs/modulos/13_fabricacao.md` | **Real** (fonte da verdade, aguardando aprovação) — o `CLAUDE.md` só aponta |
-| 14 | Administração | `14_administracao.md` | A criar (hoje: segurança #571, alçadas, funções, integrações) |
+| 13 | Fabricação (PCP, MES, MES · Cadastros, Carga Máquina, Matérias-Primas, Produtos, Montagem do Produto, Evolução da Fabricação, Fabricação Corrimão, Fabricação Corte, Simulação, Relatórios) | `docs/modulos/13_fabricacao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta |
+| 14 | Administração (Logs de Atividade, Configurações do Sistema) | `docs/modulos/14_administracao.md` | **Real** (fonte da verdade, aguardando aprovação) — o `CLAUDE.md` só aponta; a segurança real (#571), o inventário de Edge Functions, crons e buckets moram lá |
 Os nomes de arquivo dos módulos 4 a 14 são sugestão, a confirmar quando cada documento for criado; "hoje" lista o que está espalhado neste arquivo.
 
 ### Serviços transversais (planejado, ainda não iniciado)
@@ -258,12 +258,20 @@ O **WhatsApp**, o **gi-avisos** (o serviço que envia os avisos) e o **Copiloto 
 - PCP, MES, Fabricação Corrimão/Corte, Evolução da Fabricação, Simulação e Relatórios (grupo "Fabricação" do menu) são do módulo 13; a Emissão de NF é do 5; a Compras do varejo, do 7.
 - Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (cada uma ganhou a nota "→ parte já migrada"); as seções **mistas** nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
 
-## Módulo 13 — Fabricação → `docs/modulos/13_fabricacao.md` (fonte da verdade; 01/11/2026, aguardando aprovação)
+## Módulo 13 — Fabricação → `docs/modulos/13_fabricacao.md` (fonte da verdade; aprovado em 01/11/2026)
 
 **Aqui não se escreve mais nada sobre Fabricação.** Quem for trabalhar nela **lê, entende e atende** o documento do módulo:
 - **13.1 PCP** · **13.2 MES** · **13.3 MES · Cadastros** · **13.4 Carga Máquina** · **13.5 Matérias-Primas** · **13.6 Produtos** · **13.7 Montagem do Produto** (e Lista de fios) · **13.8 Evolução da Fabricação** · **13.9 Fabricação Corrimão** · **13.10 Fabricação Corte** · **13.11 Simulação** · **13.12 Relatórios** · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, do pedido à fábrica e os três acompanhamentos, rotas e páginas públicas, regras que atravessam as telas, alçadas/custo/hora-homem, segurança, gatilhos e crons, tabelas, tutoriais, documentos concatenados e benefícios trocados).
 - Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
 - Almoxarifado, Separação, Expedição e Etiquetas são do módulo 12; Emissão de NF, do 5; o Formulário do Quadro de Comando, do 4.
+- Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (cada uma ganhou a nota "→ parte já migrada"); as seções **mistas** nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
+
+## Módulo 14 — Administração → `docs/modulos/14_administracao.md` (fonte da verdade; 01/11/2026, aguardando aprovação)
+
+**Aqui não se escreve mais nada sobre Administração.** Quem for trabalhar nela **lê, entende e atende** o documento do módulo:
+- **14.1 Logs de Atividade** · **14.2 Configurações do Sistema** (Administração, Usuários & Perfis, Permissões, Parâmetros, Integrações, Buckets) · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, pessoas/perfis/alçadas, rotas, segurança real #571, alçadas, inventário de Edge Functions, crons/buckets/integrações, tabelas, CI e testes, tutoriais, documentos concatenados e benefícios trocados).
+- Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
+- Identidade, modo do `vp-auth.js` e `vp_logs` como API ficam em `docs/modulos/01_geral.md` (PC-3, PC-5, PC-6). Os serviços transversais (WhatsApp, gi-avisos, Copiloto VP) terão documento em `docs/servicos/` depois que os 14 módulos estiverem aprovados.
 - Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (cada uma ganhou a nota "→ parte já migrada"); as seções **mistas** nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
 
 ## 🔒 ÁREA BLINDADA — Cadastros Mestres: cliente/fornecedor com transação NUNCA é excluído (31/10/2026, regra do Gelson)
@@ -345,6 +353,8 @@ Sistema construído, testado ao vivo e **em produção**. Quem for "mexer, melho
 - Não voltar a mandar encoded-word pronta nem corpo em quoted-printable.
 
 ## Edge Functions: órfãs apagadas, funções do Omie/webhook endurecidas e como redeployar (01–02/10/2026) → módulos 7 e 14 (NÃO é do Geral)
+
+> **→ Parte já migrada para Administração.** O conteúdo desta seção (ou o trecho de administração dela) está concatenado em `docs/modulos/14_administracao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 > **→ Parte já migrada para Engenharia & Produto.** O trecho do módulo 8 desta seção está em `docs/modulos/08_engenharia_produto.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
@@ -445,6 +455,8 @@ Pedido do usuário: comparar o envio de Proposta a clientes com o RFQ a forneced
 - `index.html`/`assinar.html`: `proposta-store.js` v16→17, `proposta-editor.jsx` v44→45, `assinar-app.jsx` v12→13.
 
 ## Acessos confirmados (sessão de 2026-07-16)
+
+> **→ Parte já migrada para Administração.** O conteúdo desta seção (ou o trecho de administração dela) está concatenado em `docs/modulos/14_administracao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 - **GitHub**: `verticalpartsIA/010_GestaoImportacao` — leitura/escrita completas (commits, PRs, issues, Actions) via MCP `github`.
 - **Supabase** projeto `jxtqwzmpgofwctqajewt` (nome interno "vpprd") — leitura/escrita completas via MCP `Supabase`/`SupabaseEscamax`.
@@ -1823,6 +1835,8 @@ Na aba Necessidade, tabela "A produzir": caixas de seleção + botão **Gerar OP
 
 ## Segurança real (#571) — andamento (04/10/2026, local, não commitado) [resumo já em 01_geral.md · detalhe → módulo 14]
 
+> **→ Parte já migrada para Administração.** O conteúdo desta seção (ou o trecho de administração dela) está concatenado em `docs/modulos/14_administracao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+
 > **→ Parte já migrada para Financeiro & Preços.** O trecho do módulo 5 desta seção está em `docs/modulos/05_financeiro_precos.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 > **→ Parte já migrada para Comercial | Pré-venda.** O trecho do Formulário/Proposta/Cotação desta seção está em `docs/modulos/04_comercial_pre_venda.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
@@ -2064,6 +2078,8 @@ Regra do usuário: o vendedor só edita o Formulário **antes da 1ª Precificaç
 - **#843 B4 (12/10/2026)**: a policy de DELETE de rascunho do Contrato de Venda foi recriada **só para `authenticated` + `vp_usuario_ativo()`** (migration `20261012130000`, aplicada); a versão anterior (`delete_rascunho_anon`) deixava a chave pública apagar rascunhos. **#843 D1 NÃO aplicado**: `contratos_venda_equipamentos` ainda tem `leitura_publica`/`update_anon`/`escrita_anon` abertas a `public`. Fechar com `vp_fechar_tabela('contratos_venda_equipamentos','interno','D1')` derruba quem ainda usa a chave pública: em 12/10 só 14 dos 26 perfis ativos tinham sessão em `auth.users` (modo `on` para todos desde 09/10, mas sem evidência de que todos já entraram). Fechar depois que todos os perfis ativos tiverem sessão (conferir `auth.users` × `perfis`) — a página `/assinar` usa RPC `SECURITY DEFINER` e não é afetada.
 
 ## Auditoria #843 — o que foi resolvido em 12/10/2026 (não refazer) [→ módulo 14]
+
+> **→ Parte já migrada para Administração.** O conteúdo desta seção (ou o trecho de administração dela) está concatenado em `docs/modulos/14_administracao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 > **→ Parte já migrada para Comercial | Pré-venda.** O trecho do Formulário/Proposta/Cotação desta seção está em `docs/modulos/04_comercial_pre_venda.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 

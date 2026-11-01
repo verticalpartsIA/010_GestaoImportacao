@@ -804,6 +804,13 @@ Esta tabela lista os 6 jobs **das telas de Geral**. Em 31/10/2026 o banco tinha 
   - **Comentário de cabeçalho envelhece com o menu:** vários arquivos de Fabricação ainda dizem "Logística Interna". Ao reagrupar menu, grep nos cabeçalhos.
   - **Regra de filtro que protege relatórios:** OP sem `produto` é ignorada em Planejamento, Controle, Carga Máquina e relatórios de Produção/Perdas; consulta nova de produção mantém esse filtro.
 
+- **Benefícios vindos de Administração (doados em 01/11/2026, Art. 49; texto completo em `14_administracao.md` PC-12). Selo: Conferido em 01/11/2026 no código e no banco:**
+  - **Log de auditoria aberto não é prova:** `vp_logs` aceita INSERT e SELECT da chave pública; qualquer tela que use o log como evidência deve dizer isso até a tabela ser fechada.
+  - **Tela que parece configuração e é texto no código:** Parâmetros, Permissões, Integrações e Buckets (Configurações) são fixos; antes de confiar num número de tela de admin, conferir se ele é lido do banco.
+  - **Lista de recursos no código envelhece:** a tela de Buckets mostra 6 dos 11 buckets reais. Listar do banco (`storage.buckets`), não do código.
+  - **Decisão de segurança precisa de conferência periódica:** D4 (só um bucket público) não se cumpriu; 4 buckets são públicos. Registrar decisão não é cumpri-la.
+  - **Função em produção sem pasta no repositório** (`conferir-clientes-omie`) viola o Art. 23; conferir `list_edge_functions` × `supabase/functions` antes de tratar o repositório como a fonte.
+
 ### PC-10 Menu "?" (Ajuda, Treinamento, Enviar feedback)
 *(Migrado do CLAUDE.md em 31/10/2026; arquivos conferidos agora, regras vindas do CLAUDE.md.)*
 - Círculo "?" no canto superior direito de **todas as telas** (`AjudaSuporte` em `src/ajuda-suporte.jsx`, desenhado pelo `Header` de `shell.jsx`). Dica nativa "Suporte". Itens: **Ajuda** (texto da tela em `HELP_TOPICS[rota]`, mais perguntas frequentes), **Treinamento** (abre o tutorial da tela; sem tutorial na lista `TUTORIAIS`, fica apagado "Em breve") e **Enviar feedback**.
