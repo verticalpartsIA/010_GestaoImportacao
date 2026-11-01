@@ -122,7 +122,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 
 ### Índice deste arquivo
 - **A. Leis e travas permanentes:** a **Constituição** (Títulos I a IX, 50 artigos),  áreas blindadas (Cadastros Mestres, E-mail/Inbox, Ver documento, Containers, Mão de obra, Assinatura digital, PDF assinado), trava por "Confirmo" (Atualização de Custos).
-- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico, Suprimentos & Importação, Engenharia & Produto e Obras & Instalação).
+- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico, Suprimentos & Importação, Engenharia & Produto, Obras & Instalação e Entrega & Documentação).
 - **C. Procedimentos:** acessos, cache-busting, stack e testes, `pdf-bundle/`, fluxo de trabalho, método (SDD), pendências.
 - **D. Resíduo por módulo:** seções de entregas ainda não absorvidas pelo documento do seu módulo (ver marcas "→ módulo N").
 - **E. Research Base (hyperresearch).**
@@ -155,7 +155,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 | 7 | Suprimentos & Importação | `docs/modulos/07_suprimentos_importacao.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta; as seções mistas ficam aqui |
 | 8 | Engenharia & Produto (Projeto de Elevadores, Projeto de Equipamento, Solicitações de Produto, Ficha Técnica, Linha do Tempo da Cotação) | `docs/modulos/08_engenharia_produto.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; a área blindada de Assinatura digital e a regra do PDF assinado (módulo 6) continuam aqui |
 | 9 | Obras & Instalação (Dossiês de Obras, Vistorias de Obras, Resultado Vistorias de Obras, Instalação em Campo, Mapa de Obras, ART) | `docs/modulos/09_obras_instalacao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; o Cronograma de Pagamento da Instalação e o Contrato Instalador são do módulo 11 |
-| 10 | Entrega & Documentação | `10_entrega_documentacao.md` | A criar |
+| 10 | Entrega & Documentação (Central de Documentos, Data Book & Termo, Entrega Final, Repositório Documentos) | `docs/modulos/10_entrega_documentacao.md` | **Real** (fonte da verdade, aguardando aprovação) — o `CLAUDE.md` só aponta; o Cronograma de Pagamento da Instalação é do módulo 11 |
 | 11 | Parceiros & Instaladores | `11_parceiros_instaladores.md` | A criar (hoje: Contrato do Instalador, pagamentos) |
 | 12 | Logística Interna | `12_logistica_interna.md` | A criar (hoje: Almoxarifado, Separação, Etiquetas, Expedição) |
 | 13 | Fabricação | `13_fabricacao.md` | A criar (hoje: PCP, MES, Evolução, Corrimão/Corte) |
@@ -234,6 +234,14 @@ O **WhatsApp**, o **gi-avisos** (o serviço que envia os avisos) e o **Copiloto 
 - O Cronograma de Pagamento da Instalação, Pagamentos a Instaladores, Contrato Instalador e Homologação são do módulo 11; Central de Documentos, Data Book e Entrega Final, do 10.
 - Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (cada uma ganhou a nota "→ parte já migrada") até o Gelson decidir retirá-las; as seções **mistas** nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
 
+## Módulo 10 — Entrega & Documentação → `docs/modulos/10_entrega_documentacao.md` (fonte da verdade; 01/11/2026)
+
+**Aqui não se escreve mais nada sobre Entrega & Documentação.** Quem for trabalhar nele **lê, entende e atende** o documento do módulo:
+- **10.1 Central de Documentos** · **10.2 Data Book & Termo** (inclui o Termo de Entrega: painel no Dossiê e página pública de assinatura) · **10.3 Entrega Final (Handover)** · **10.4 Repositório Documentos** · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, a entrega de ponta a ponta, rotas, as quatro "casas" de documento, garantia e Escamax, segurança, eventos, tabelas, tutoriais, documentos concatenados e benefícios trocados).
+- Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
+- Central, Data Book & Termo e Entrega Final são telas **diferentes e independentes**: não consolide sem pedido explícito. O Cronograma de Pagamento da Instalação é do módulo 11.
+- Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (com nota "→ parte já migrada"); as seções **mistas** nunca se apagam.
+
 ## 🔒 ÁREA BLINDADA — Cadastros Mestres: cliente/fornecedor com transação NUNCA é excluído (31/10/2026, regra do Gelson)
 
 - **Cliente ou fornecedor que tem qualquer transação** (lead, formulário/cotação, proposta, contrato, dossiê de obra, contrato social, pedido de quadro, P.I., embarque, RFQ, cotação, avaliação etc.) **pode ser editado, mas nunca excluído** — nem pela tela, nem por store, nem por SQL/MCP.
@@ -243,6 +251,8 @@ O **WhatsApp**, o **gi-avisos** (o serviço que envia os avisos) e o **Copiloto 
 - Se pedirem para "limpar", "unificar" ou "apagar" cadastros: **PARE**, informe esta regra e peça confirmação explícita antes de qualquer ação.
 
 ## Cronograma de Pagamento da Instalação — reposicionado no menu (29/10/2026, PR #1135, squash `0258872`)
+
+> **→ Pertence ao módulo 11 (Parceiros & Instaladores).** O código mora em `entrega.jsx`, arquivo compartilhado com o módulo 10 (ver `10_entrega_documentacao.md` PC-3).
 
 Pedido do usuário: mover o item "Cronograma" do grupo "Obras & Instalação" para o fim de "Parceiros & Instaladores" (logo abaixo de "Pagamentos a Instaladores"). Investigação prévia mostrou que o item já existia (`id: "cronograma"`, componente `CronogramaPage` em `src/entrega.jsx`) — não era preciso criar rota nova.
 - **Só reagrupa no menu**, mesmo padrão já usado em PCP/MES→Fabricação (17/10) e Matérias-Primas/Produtos (18/10): `src/shell.jsx` (`NAV_GROUPS`) moveu o item de grupo; `BREADCRUMB_MAP`, `router.js` (`KNOWN_ROUTES`) e `app.jsx` **não mudaram** — a URL continua `/engenharia/cronograma` (`docs/MAPA_DE_ROTAS.md` regenerado confirma: 0 inconsistências, só a posição no mapa mudou). Mudar a URL seria decisão à parte, com mais risco (quebraria link salvo) e sem ganho funcional.
@@ -281,6 +291,8 @@ Pedido do Gelson (prompt `CotacaoFreteMaritimo.md` + complemento): na aba **Fret
 - **Status:** mergeado em `main` (migration já no banco). **Pendente:** 1º uso real (salvar embarque → anexar PDF pequeno → enviar a um e-mail do Gelson → conferir Enviados/resposta no Inbox); o Gelson ainda não respondeu às 4 decisões acima (as adotadas são padrões meus).
 
 ## Entrega & Documentação — "Repositório Documentos" é tela NOVA, independente das outras 3 (28/10/2026)
+
+> **→ Parte já migrada para Entrega & Documentação.** O conteúdo desta seção está concatenado em `docs/modulos/10_entrega_documentacao.md` (10.4 e PC-4). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 **⚠️ Histórico do erro, pra não repetir**: o PR #1124 (squash `47d92e3`) tinha **consolidado por engano** os 3 itens de menu de Entrega & Documentação (Central de Documentos / Data Book & Termo / Entrega Final) num único ponto de entrada "Repositório Documentos" com as 3 telas como abas internas — **sem perguntar o propósito** e removendo, na prática, 3 telas que já existiam e funcionavam. O usuário corrigiu: as 3 telas são **diferentes entre si** e deviam continuar exatamente como estavam; o pedido original era só **acrescentar** uma 4ª tela nova de upload genérico. **Revertido no PR #1130 (squash `2ac81c2`, issue fechada #1131)** — o texto abaixo descreve o estado correto e definitivo.
 
@@ -1908,6 +1920,8 @@ Pedido do usuário (cotação 955): depois de "Decidir comprar", enviar ao forne
 Na aba Produtos da P.I. (`/gestao-importacao/pi-importacao`), digitar o **Código** do item (espera 0,5 s sem digitar) preenche Descrição, Unidade e NCM **só nos campos livres** (vazios, ou ainda iguais ao que o cadastro preencheu antes; unidade 'un' padrão conta como livre) — nunca sobrescreve o que a pessoa digitou — e mostra "✓ Dados preenchidos pelo cadastro" (ou "Código não encontrado"). `PIStore.buscarProdutoPorCodigo` só lê, na ordem: `importacao_varejo_produtos` (catálogo Omie de importação, 1.779 itens, todos com NCM) → `pcp_produtos` → `fichas_tecnicas` (`ncm_recomendado`, `arquivado=false`); cada fonte só completa o que faltou. Unidade do Omie ("PC", "KIT"…) é traduzida para as da P.I. (`UNIDADE_PI`); sem equivalente, mantém a atual. **Não preenche** quantidade nem valor unitário (o preço do Omie é em R$, a P.I. é em moeda estrangeira). Código fora desses cadastros (produto novo) segue manual. `pi-store.js` v7, `pi.jsx` v16. Não testado com clique real no navegador (só sintaxe e conferência dos dados de VPEL-031/070 no banco).
 
 ## Varredura de URLs — deep-linking, Voltar/Avançar e F5 em todo o sistema (09/10/2026, PR #797, squash `f76bd71`, issue fechada #796) [mecanismo já em 01_geral.md · detalhe → cada módulo]
+
+> **→ Parte já migrada para Entrega & Documentação.** O trecho da Central de Documentos e da Entrega Final está em `docs/modulos/10_entrega_documentacao.md` (10.1.2 e 10.3.2); o resto segue como estava.
 
 > **→ Parte já migrada para Obras & Instalação.** O trecho do módulo 9 desta seção está em `docs/modulos/09_obras_instalacao.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
