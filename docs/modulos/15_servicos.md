@@ -1,11 +1,12 @@
-# 15 Serviços — Central de Avisos (WhatsApp, gi-avisos, Copiloto, Telegram, vpsistema, E-mail) — EM APROVAÇÃO (01/11/2026)
+# 15 Serviços — Central de Avisos (WhatsApp, gi-avisos, Copiloto, Telegram, vpsistema, E-mail) — REAL, fonte da verdade (01/11/2026)
 
 > **Nota de histórico (pedido do rascunho, item 9)**
 > - **01/11/2026 — Claude do repositório:** criou o rascunho `serviços.md` na raiz (S1 a S5, fatos de partida, modelo a manter).
 > - **01/11/2026 — Claude da VPS (esta versão):** por ordem do Gelson, o rascunho **mudou-se para `docs/modulos/15_servicos.md`** e virou o compilado de **todos os serviços de aviso e mensagem do hub, inclusive o que existe no vpsistema.com** (a "central de avisos"). Conferi o código e a configuração da VPS (gi-avisos, Copiloto, ponte do Telegram, Evolution), o banco do hub e do vpsistema (só SELECT) e os ~40 documentos do repositório que falam de gi-avisos, WhatsApp, Telegram e Inbox. Acrescentei o **S6 E-mail (canal do Inbox)**, por decisão do Gelson (canal aqui, tela e lei no 1.5). Corrigi seis fatos do rascunho que o código desmente (ver "Fatos do rascunho corrigidos", no fim).
-> - **Ficou pendente:** aprovação do Gelson; a troca das seções de origem por ponteiros (segundo PR, decisão do Gelson de 01/11/2026); a emenda do `CLAUDE.md` (Arts. 38 e 41 e a seção "Serviços transversais" ainda dizem `docs/servicos/`); as perguntas da seção "Pendências para o Gelson".
+> - **01/11/2026 — aprovado pelo Gelson.** Respostas dele registradas em "Decisões do Gelson" (abaixo). No mesmo dia: lido o repositório privado `17_gente-gestao` (autorizado), o que corrigiu S1.2, S1.4 e S1.5 e revelou que **ninguém chama a função do aval por WhatsApp** (achado A19); restaurados na lista "quem recebe" (S2.5) os nomes que o texto antigo do Geral trazia. A troca das origens por ponteiros, as doações aos módulos e a emenda do apontamento no `CLAUDE.md` vão no PR seguinte.
+> - **Ficou pendente:** as perguntas abertas em "Pendências para o Gelson" (remoção das duas funções obsoletas, `vp_copiloto_docs`, aval por WhatsApp, achados de segurança).
 
-> **Status: EM APROVAÇÃO.** Mora em `docs/modulos/` **por ordem explícita do Gelson (01/11/2026)**, que prevalece (Art. 11). Até a emenda, isto **diverge** dos Arts. 38 ("rascunho nunca fica dentro de `docs/modulos/`") e 41 (serviços em `docs/servicos/`); a divergência está registrada em "Pendências para o Gelson". Histórico de entrega (PR, hash, `?v=`) não se repete aqui: o Git guarda.
+> **Status: REAL (documento oficial dos serviços), aprovado pelo Gelson em 01/11/2026.** Mora em `docs/modulos/` **por ordem explícita do Gelson**; o Art. 41 do `CLAUDE.md` passa a apontar para cá (emenda pedida por ele no mesmo dia). Histórico de entrega (PR, hash, `?v=`) não se repete aqui: o Git guarda.
 >
 > **Por que estes serviços pedem cuidado:** (1) **uma linha na tabela `alertas` com destinatário vira WhatsApp** para uma pessoa real, e essa tabela **aceita escrita pela chave pública** (PC-4); (2) **tudo o que a VPS manda por WhatsApp sai por uma só instância e um só número** (`pv360`): se ela cair, param juntos os avisos do hub, o Copiloto no WhatsApp, as cobranças do VP Click e a ferramenta de WhatsApp do Claude (S1); (3) **existem dois "despachantes" de WhatsApp e só um envia**: a Central de Eventos do vpsistema mostra regras "ativas" que nunca enviaram nada; quem envia de verdade é o gi-avisos na VPS (S2, S5).
 >
@@ -63,7 +64,7 @@ O **canal** por onde saem e chegam as mensagens de WhatsApp dos sistemas da Vert
 ### S1.2 Onde está
 - **Evolution:** container `evolution-api` na VPS, com `evolution-postgres` e `evolution-redis`. Instâncias: **`pv360`** (conectada) e `posvenda360` (desconectada desde 01/06/2026). **Conferido** (01/11/2026).
 - **No hub (Edge Functions):** `decisao-resposta-whatsapp` (v1, `verify_jwt: false`) recebe a resposta SIM/NÃO; `whatsapp-notify` (v10, `verify_jwt: true`) **existe mas não tem chamador**. **Conferido** (listagem e código, 30/10 e 01/11/2026).
-- **No vpsistema:** `_shared/whatsapp.ts` (envio direto pela Evolution) e as funções do Gente & Gestão implantadas no projeto do vpsistema (`whatsapp-dispatcher`, `whatsapp-send`, `whatsapp-start`, `evolution-webhook-admin`), cujo código está no repositório privado `17_gente-gestao`, **não lido**. **Conferido** (listagem) / **Não verificado** (conteúdo).
+- **No vpsistema:** `_shared/whatsapp.ts` (envio direto pela Evolution) e as funções do Gente & Gestão implantadas no projeto do vpsistema: `whatsapp-dispatcher` (v17, `verify_jwt: false`), `whatsapp-send` (v13) e `whatsapp-start` (v13), com código no repositório privado `17_gente-gestao`; `evolution-webhook-admin` (v14) e `admissao-portal` (v11, pública) estão implantadas **sem pasta** naquele repositório (achado A21). **Conferido** (listagem e leitura do `17_gente-gestao`, commit `d1aa134`, 01/11/2026); a comparação byte a byte do implantado com o repositório **não foi possível**.
 
 ### S1.3 Quem usa
 Todos pela instância `pv360` (**Conferido**, 01/11/2026):
@@ -79,12 +80,18 @@ O vpsistema manda as **suas** mensagens (código de login, recuperação de senh
 
 ### S1.4 Como entra e sai
 - **Saída:** `POST /message/sendText/<instância>` na Evolution. **Conferido** (gi-avisos `envio.js`; vpsistema `_shared/whatsapp.ts`).
-- **Entrada:** a instância `pv360` entrega cada mensagem recebida (`MESSAGES_UPSERT`) ao `whatsapp-dispatcher` do vpsistema. **Conferido** (consulta do webhook, 01/11/2026). O que o dispatcher faz com ela: o Copiloto (S3) recebe dele `{telefone, msg_id}`, e o hub recebe dele (pela Central) a resposta do aval — **Herdado** (comentário em `decisao-resposta-whatsapp/index.ts`); o código do dispatcher **não foi lido**.
+- **Entrada:** a instância `pv360` entrega cada mensagem recebida (`MESSAGES_UPSERT`) ao `whatsapp-dispatcher` do vpsistema, que confere o cabeçalho `apikey` (secret `EVOLUTION_APIKEY`). **Conferido** (consulta do webhook e código, 01/11/2026). Ordem de decisão do dispatcher (**Conferido** no `17_gente-gestao`):
+  1. evento que não é mensagem, sem remetente ou de grupo → repassa ao Pós-Venda 360 (Verti);
+  2. **toda mensagem recebida vai primeiro ao Copiloto** (`/whatsapp`, com `{telefone, msg_id}`, espera de 12 s); se o Copiloto reconhece um colaborador ativo e responde, para aqui;
+  3. senão consulta `contratacao_whatsapp_routing`: setor `rh` → só grava a mensagem para o RH; setor `posvenda` → repassa ao Pós-Venda; "menu"/"0" com setor já escolhido reinicia o menu; 24 h sem mensagem ou ticket do Pós-Venda concluído também reiniciam;
+  4. número desconhecido recebe o menu "*1* Vagas (RH) / *2* Suporte"; 3 respostas não entendidas → Pós-Venda; qualquer erro → Pós-Venda.
+  **O dispatcher não chama a `decisao-resposta-whatsapp`** (ver S1.5 e achado A19).
 - **Volta do aval (hub):** `decisao-resposta-whatsapp` recebe `{telefone, texto, mensagem_ref?}` assinado por HMAC (`X-Timestamp`, `X-Assinatura`, segredo `EVENTOS_SEGREDO`) e chama `decisao_whatsapp_responder`. **Conferido** (código).
 
 ### S1.5 Regras e janelas
 - O hub **não** chama a Evolution diretamente: o envio dos avisos do hub é do gi-avisos (S2). **Conferido** (código e migrations da fila, 01/11/2026).
 - **Aval por WhatsApp** (`decisao-resposta-whatsapp`): comparação de assinatura em tempo constante; janela de 5 minutos; sem segredo responde 503; telefone até 30 e texto até 200 caracteres; só aceita número com papel `aprovador` ativo em `decisao_whatsapp_numeros` (compara os últimos 11 dígitos); com vários avais abertos exige o código do contrato; decisão já tomada não muda; número desconhecido não recebe resposta. **Conferido** (código). **Quem aprova** é regra do módulo 11 (hoje a Juliana; o Maurício recebe como ciente — `01_geral.md` 1.3, **Herdado** de consulta de 31/10/2026).
+- **Hoje o aval por WhatsApp não chega à decisão (achado A19):** nenhum sistema chama a `decisao-resposta-whatsapp` (procurado no `17_gente-gestao`, no Copiloto e no gi-avisos; a função é de 20/10/2026 e o dispatcher foi publicado em 17/10). Um "SIM"/"NÃO" mandado por WhatsApp por um colaborador cai no Copiloto como pergunta comum. **A aprovação real acontece pela Central de Decisões (1.3).** **Conferido** (código, 01/11/2026).
 - As janelas de horário e o agrupamento são do gi-avisos (S2.5), não do canal.
 
 ### S1.6 Dados
@@ -106,7 +113,9 @@ Não há teste automatizado do canal (**Conferido**, busca no repositório). O t
 - **Achado, sem correção (A1):** `whatsapp-notify` está no ar sem trava de quem chama e sem limite de taxa, embora ninguém a chame; já registrada como risco na auditoria (`AUDITORIA_FORENSE_E2E_SCORE.md`, E2E-006). Decidir: remover (com pasta em `supabase/functions-removidas/`, Art. 23) ou manter. **Conferido** (código).
 - **Achado, sem correção (A2):** o repositório público tem telefones de pessoas em `supabase/migrations/20261020120000_aval_ceo_whatsapp.sql`, `20261022190000_aval_instalador_juliana.sql`, no comentário de `supabase/functions/decisao-resposta-whatsapp/index.ts` e em `docs/eventos/vphub-instalador.md` (valores não copiados; Art. 28). O comentário da função ainda diz que quem responde é o Diego; a regra atual é a Juliana (módulo 11).
 - **Achado, sem correção (A3):** um só número e uma só instância para todos os serviços; a instância de reserva `posvenda360` está desconectada.
-- **Não verificado:** quem chama `decisao-resposta-whatsapp` hoje (provavelmente o `whatsapp-dispatcher` do Gente & Gestão).
+- **Achado, sem correção (A19):** ninguém chama `decisao-resposta-whatsapp`; o aval por WhatsApp não decide nada (S1.5). Ligar exige mudar o dispatcher do vpsistema (repositório `17_gente-gestao`) — decisão do Gelson.
+- **Achado, sem correção (A20):** no RH, conversa aberta pelo `whatsapp-start` não grava a hora da última mensagem; quando o candidato responde, o dispatcher acha a conversa "fria" (24 h) e devolve o menu em vez de gravar para o RH. Contatos no formato `@lid` não seriam reconhecidos. Mídia vira "[mídia]". 31 das 37 conversas pararam no menu; nenhuma mensagem de RH desde 07/08/2026. **Conferido** (código e SELECT no vpsistema).
+- **Achado, sem correção (A22):** se o Copiloto demorar mais de 12 s para aceitar uma mensagem, o dispatcher segue para o menu/Pós-Venda e a pessoa pode receber duas respostas.
 
 ### S1.11 Histórico
 Desenho de 17/09/2026 com `whatsapp-notify` não foi adotado; desde 16/10/2026 o hub publica tudo na Central e o gi-avisos envia; aval por WhatsApp desde 20/10/2026, passado à Juliana em 22/10/2026. **Herdado** (`01_geral.md`, migrations).
@@ -137,7 +146,7 @@ Todos os módulos que geram aviso com destinatário: Comercial (4), Financeiro (
 ### S2.5 Regras e janelas
 Tudo **Conferido** no código em 01/11/2026, salvo marca.
 - **Destinatário e telefone:** o telefone vem primeiro do vpsistema (`profiles.celular`) e, se faltar, de `perfis.whatsapp_number` do hub; cache de 10 minutos; divergência entre os dois vai ao log com o número mascarado. Montador externo: telefone que vem no próprio aviso.
-- **Quem recebe (como está no código, tabela `ETAPAS` e líderes fixos em `pessoas.js`):** Formulário preenchido → Comercial (+ ADM do Comercial acompanha); fornecedor respondeu → quem enviou a cotação ao fornecedor (senão o dono da cotação) + Financeiro; Precificação nasceu → Financeiro + ADM; Precificação vencida/escalonada → Financeiro e CEO; Precificação concluída → vendedor + ADM; Proposta enviada/reenviada, lead e cliente cadastrado → ADM do Comercial; "cotação enviada ao fornecedor" → ninguém. A ADM do Comercial (Victoria, desde 23/10/2026) **só acompanha**: sem cobrança e nada depois da proposta. Os líderes por área (financeiro, jurídico/importação, engenharia, ADM) estão **fixos no código**. A regra de negócio de cada linha é do módulo dono (4 e 5).
+- **Quem recebe (como está no código, tabela `ETAPAS` e líderes fixos em `pessoas.js`):** Formulário preenchido → Comercial (a Regiane segue com a precificação; o Guilherme e a ADM do Comercial acompanham); fornecedor respondeu → quem enviou a cotação ao fornecedor (senão o dono da cotação) + Financeiro; Precificação nasceu → Financeiro + ADM; Precificação vencida/escalonada → Financeiro e CEO; Precificação concluída → vendedor, Regiane (libera o envio) e ADM; Proposta enviada/reenviada, lead e cliente cadastrado → ADM do Comercial; "cotação enviada ao fornecedor" → ninguém. A ADM do Comercial (Victoria, desde 23/10/2026) **só acompanha**: sem cobrança e nada depois da proposta. Os líderes por área (financeiro, jurídico/importação, engenharia, ADM) estão **fixos no código**. A regra de negócio de cada linha é do módulo dono (4 e 5).
 - **Autor não recebe o próprio aviso** — só quando o aviso traz o autor (eventos de fluxo e precificação).
 - **Valores (R$):** só CEO, Financeiro e Gelson veem valores (`VEEM_VALORES`); no texto dos alertas o R$ do `detalhe` vira `[valor]`. Ver achado A9 (título não é mascarado).
 - **Palavras bloqueadas:** aviso cujo título ou texto tenha "teste", "playwright", "claude" ou "excluir" **não sai** (na leitura da Central; a leitura antiga não bloqueava "excluir").
@@ -212,7 +221,7 @@ Todo usuário logado do hub (bolinha, com alçadas), Engenharia/Importação/Com
 
 ### S3.4 Como entra e sai
 - **Hub:** `Authorization: Bearer <token do login do hub>`; a VPS confere o token no Auth do **hub** (não do vpsistema), com cache de 5 minutos; origens aceitas `hub.vpsistema.com` e `vpprd.vpsistema.com`. **Conferido.**
-- **WhatsApp:** o `whatsapp-dispatcher` do vpsistema manda `{telefone, msg_id}` para `/whatsapp`; a VPS identifica a pessoa (`eventos.colaborador_por_telefone`), confere na Evolution que a mensagem existe, foi recebida desse número e tem até 10 minutos, e responde pela instância `pv360`. **Conferido.**
+- **WhatsApp:** o `whatsapp-dispatcher` do vpsistema manda **toda** mensagem recebida primeiro para cá, como `{telefone, msg_id}` em `/whatsapp` (S1.4); a VPS identifica a pessoa (`eventos.colaborador_por_telefone`), confere na Evolution que a mensagem existe, foi recebida desse número e tem até 10 minutos, e responde pela instância `pv360`. **Conferido.**
 - **Modelos:** chat `claude-opus-4-8`; pesquisador e tarefas internas `claude-sonnet-5-5`; NCM e Preencher `claude-opus-5-5`; todos por `claude -p` com a ferramenta de dados do Copiloto, só leitura. **Conferido.**
 
 ### S3.5 Regras e janelas
@@ -300,6 +309,7 @@ O portal central (`vpsistema.com`, repositório público `verticalpartsIA/vpsist
 
 ### S5.2 Onde está
 - **No hub:** Edge Functions `sso-exchange` (v5, `verify_jwt: false`) e `vpsistema-sync` (v8, `verify_jwt: false`); `src/vp-auth.js`. **Conferido.**
+- **Gente & Gestão (funções no projeto do vpsistema):** `whatsapp-dispatcher` (porta de entrada de todo WhatsApp recebido, S1.4), `whatsapp-send` e `whatsapp-start` (o RH conversa com candidato; só Administrador; só em conversa marcada como RH), tabelas `contratacao_whatsapp_routing` (37 linhas) e `contratacao_whatsapp_mensagens` (12). **Conferido** (01/11/2026).
 - **No vpsistema:** 31 Edge Functions, entre elas `login-start` e `reset-start` (mandam WhatsApp e e-mail), `invite-user` (e-mail), `send-broadcast` (WhatsApp), `eventos-ingest` e `eventos-worker` (Central), `sso-proxy`; tela `/eventos` com abas para gatilhos, regras, destinatários, canais, fila, mensagens, falhas e auditoria. Documentação da Central no repositório do vpsistema: `docs/eventos/01` a `04`. **Conferido** (listagem e código).
 
 ### S5.3 Quem usa
@@ -406,11 +416,12 @@ módulos do hub ──grava──▶ alertas / gatilhos / eventos_fluxo / assina
                                    │                                   │
                                    └──▶ eventos.entregas_externas       └── falha 5x ──▶ Telegram (Gelson)
 
-WhatsApp recebido ──pv360──▶ whatsapp-dispatcher (vpsistema) ──▶ Copiloto /whatsapp (VPS) ou decisao-resposta-whatsapp (hub)
+WhatsApp recebido ──pv360──▶ whatsapp-dispatcher (vpsistema) ──▶ 1º Copiloto /whatsapp (VPS) · senão menu RH/Suporte · Pós-Venda 360
+                              (decisao-resposta-whatsapp do hub: ninguém chama hoje — A19)
 vpsistema ──vpsistema-sync──▶ hub (pessoas, alçadas, celular)      vpsistema ──sso──▶ hub (login)
 e-mail: telas ──send-email──▶ SMTP · IMAP ──read-inbox (10 min)──▶ emails_projeto ──▶ alertas ──▶ (mesmo caminho do WhatsApp)
 ```
-**Conferido** (código, migrations e configuração, 01/11/2026); a ligação dispatcher → `decisao-resposta-whatsapp` é **Herdada**.
+**Conferido** (código, migrations e configuração, 01/11/2026, inclusive o `17_gente-gestao`).
 
 ## PC-2 Um aviso de ponta a ponta
 1. Um módulo grava uma linha em `alertas` com `destinatario_email` (pela tela, por gatilho ou por cron). Ver regras de criação em `01_geral.md` PC-4 (id fixo por fato, `rota` relativa, nunca apagar).
@@ -487,7 +498,7 @@ Os tutoriais do Inbox e das Notificações (`.claude/skills/tutorial-vp-gestao/`
 | `vpclick-cobranca` (VPS, cron) | VP Click | Evolution `pv360`; texto pela API da Anthropic (Haiku 4.5); telefone pelo nome nos contatos do pv360 | **Achado A17:** se a IA falha, o aviso é perdido sem alerta (houve "saldo insuficiente" em 30/10/2026); o log guarda telefones sem máscara |
 | Pós-Venda 360 / Verti | pv360 | roda na Hostinger; a VPS só chama um endpoint dele a cada 15 min | a instância `pv360` nasceu dele |
 | `whatsapp-mcp` (VPS, systemd) | ferramenta do Claude | envio sob comando | escrita ligada |
-| Gente & Gestão | vpsistema (funções implantadas lá) | `whatsapp-dispatcher` recebe todo WhatsApp da `pv360` | código privado, não lido |
+| Gente & Gestão | vpsistema (funções implantadas lá) | `whatsapp-dispatcher` recebe todo WhatsApp da `pv360` e distribui (S1.4) | achados A20–A22 |
 | Escamax, VPRequisições | outros | sem serviço na VPS | **Herdado** |
 **Conferido** (VPS, 01/11/2026), salvo marca.
 
@@ -498,7 +509,7 @@ Nada foi apagado. Por decisão do Gelson (01/11/2026), **a troca das origens por
 |---|---|---|
 | `serviços.md` (raiz) | rascunho S1–S5 | **virou este documento** (movido) |
 | `.claude/gi-avisos-regras-whatsapp.md` | todas as regras do gi-avisos | concatenado em S2.5 e comparado em S2.10; decidir se vira ponteiro (o `CLAUDE.md` o chama de "única cópia") |
-| `CLAUDE.md` "Serviços transversais", Arts. 38 e 41 | plano em `docs/servicos/` | **emenda proposta** ao Gelson (Art. 13) |
+| `CLAUDE.md` "Serviços transversais", Arts. 38 e 41 | plano em `docs/servicos/` | **emenda pedida pelo Gelson (01/11/2026)**: vira ponteiro para cá no PR seguinte |
 | `CLAUDE.md` "Evolução dos Equipamentos" | fatos do gi-avisos (palavras, 400 caracteres, log, telefone) | S2.5/S2.6; parte de negócio → módulo 9 |
 | `CLAUDE.md` "Copiloto VP", "RFQ Importação" (Copiloto da VPS) | `vp_copiloto_docs`, `novaConversa` | S3.5; negócio → módulos 7 e 8 |
 | `CLAUDE.md` "ÁREA BLINDADA — E-mail/Inbox" | lei do e-mail | **fica** (lei); S6 aponta |
@@ -544,18 +555,25 @@ Nenhum foi corrigido (Art. 45). Ordem por gravidade percebida.
 | A16 | Evolution escutando em todas as interfaces (acesso externo não verificado) | PC-4 |
 | A17 | VP Click perde aviso em silêncio quando a IA falha | PC-10 |
 | A18 | Documento antigo com segredo (`docs/CONTEXTO_workflow_setores_vpclick.md`) | PC-11 |
+| A19 | **Aval por WhatsApp não decide nada:** ninguém chama `decisao-resposta-whatsapp` | S1.5 |
+| A20 | RH: resposta de candidato pode cair no menu; `@lid` e mídia | S1.10 |
+| A21 | `evolution-webhook-admin` e `admissao-portal` (pública, dados pessoais) no ar sem código no repositório | S1.2 |
+| A22 | Resposta dupla se o Copiloto passar de 12 s | S1.10 |
 | — | `alertas` aberta a escrita pela chave pública (já conhecido, #571) | PC-4 |
 
+## Decisões do Gelson (01/11/2026)
+1. **Documento aprovado** (status REAL).
+2. **Segundo PR autorizado:** ponteiros nas origens e doações aos módulos (Art. 49/50).
+3. **Apontamento no `CLAUDE.md`:** o Art. 41, o mapa e a seção "Serviços transversais" passam a apontar para este documento.
+4. **Fica como está:** o Telegram (conversa, Borderô, alerta de falha); o vpsistema continua recebendo os gatilhos como hoje; avais e avisos seguem como estão.
+5. **`whatsapp-notify` e `vp-copiloto`:** remover **se forem obsoletas**; se a estrutura funciona, manter. Conferido em 01/11/2026: as duas estão sem chamador no código e sem chamada nas últimas 24 h; `whatsapp-notify` não registra uso desde 15/10/2026 e o próprio serviço da VPS se declara substituto da `vp-copiloto`. A remoção é deploy em produção: só com "Confirmo" para essa mudança (Art. 14), guardando as pastas em `supabase/functions-removidas/` (Art. 23).
+6. **Leitura do `17_gente-gestao`:** autorizada e feita (S1.4, S5.2).
+
 ## Pendências para o Gelson (o Claude da VPS não decide)
-1. **Aprovar este documento** e autorizar o **segundo PR** (ponteiros nas origens + doações do PC-12).
-2. **Emenda do `CLAUDE.md`** (Art. 13): trocar `docs/servicos/` por `docs/modulos/15_servicos.md` no Art. 41 e na seção "Serviços transversais", e abrir exceção no Art. 38 enquanto este documento estiver "em aprovação". Só com o seu pedido explícito.
-3. **Divergências (Art. 12):** atualizar no `CLAUDE.md` e no `01_geral.md` o texto "gi-avisos entrega a tabela `alertas`" e "janela por departamento (Engenharia)"? (D2, D3 abaixo.)
-4. **Telegram:** vira canal de avisos do hub ou fica como está?
-5. **Central de Eventos:** os avisos do hub ficam definitivamente com o gi-avisos? Se sim, as regras "ativas" da Central devem ser desligadas ou ficar como estão?
-6. **`whatsapp-notify` e `vp-copiloto`:** remover ou manter?
-7. **Copiloto:** o Copiloto da VPS deve passar a ler `vp_copiloto_docs`, ou a regra "UPDATE sem redeploy" sai dos módulos?
-8. Posso ler o repositório privado `17_gente-gestao` para documentar o `whatsapp-dispatcher` (quem recebe todo WhatsApp e chama o aval)?
-9. **Achados de segurança** (A1, A2, A11, A13, A16, A18): tratar à parte, com seu "Confirmo" para cada um.
+1. **Remover `whatsapp-notify` e `vp-copiloto`** (obsoletas, item 5 acima): aguarda o "Confirmo".
+2. **Aval por WhatsApp (A19):** a decisão "avais ficam como estão" foi dada achando que o SIM/NÃO pelo WhatsApp funciona; **hoje não funciona** (só pela Central de Decisões). Ligar exige mudança no dispatcher do vpsistema. Quer que seja ligado?
+3. **Copiloto:** o Copiloto da VPS deve passar a ler `vp_copiloto_docs`, ou a regra "UPDATE sem redeploy" sai dos módulos (D1)?
+4. **Achados de segurança e do RH** (A1, A2, A11, A13, A16, A18, A20, A21): tratar à parte, com "Confirmo" para cada um.
 
 ### Divergências registradas (Art. 12 — nenhuma corrigida)
 - **D1 — Copiloto e `vp_copiloto_docs`:** `CLAUDE.md` e módulos 4, 5, 6, 8 e 10 dizem que a tabela alimenta o Copiloto; o Copiloto em uso (VPS) não a lê.
