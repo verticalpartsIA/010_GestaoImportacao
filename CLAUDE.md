@@ -89,7 +89,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 40. **Art. 40 — Depois de mesclar,** a branch de trabalho é recriada a partir de `origin/main` antes do próximo commit; push forçado só com `--force-with-lease`.
 
 ### Título VII — Documentos
-41. **Art. 41 — Quem é quem.** Este arquivo (`CLAUDE.md`) é a **Constituição**: leis e procedimentos permanentes, nunca especificação nem diagnóstico de tela. A **fonte da verdade de cada módulo** é `docs/modulos/<nn>_<modulo>.md`, um por módulo, cobrindo o módulo e todas as suas telas filhas. Serviços usados por vários módulos (WhatsApp, gi-avisos, Copiloto) terão documento próprio em `docs/servicos/`, depois dos 14 módulos.
+41. **Art. 41 — Quem é quem.** Este arquivo (`CLAUDE.md`) é a **Constituição**: leis e procedimentos permanentes, nunca especificação nem diagnóstico de tela. A **fonte da verdade de cada módulo** é `docs/modulos/<nn>_<modulo>.md`, um por módulo, cobrindo o módulo e todas as suas telas filhas. Serviços usados por vários módulos (WhatsApp, gi-avisos, Copiloto, Telegram, vpsistema e o canal de e-mail) têm documento próprio em `docs/modulos/15_servicos.md` (Central de Avisos). *(Emenda de 01/11/2026, pedido do Gelson: o documento dos serviços mora em `docs/modulos/`, não em `docs/servicos/` como estava previsto.)*
 42. **Art. 42 — Antes de mexer num módulo,** a sessão lê o documento dele e respeita o que está escrito. Mudança, regra ou decisão nova entra **no documento do módulo**, no tema certo, nunca aqui.
 43. **Art. 43 — Numeração móvel.** Módulo = N; telas filhas = N.1, N.2…; temas = N.k.1 a N.k.11 (O que é · Rota e arquivos · Perfil e acesso · O que a tela mostra · Botões e controles · Comportamento · Dados · Regras e armadilhas · Testes · Pendências e decisões · Histórico). É como cláusula de contrato: item novo ganha a posição certa e tudo o que vem depois se desloca; a mesma sessão reescreve Índice, Glossário e referências cruzadas. O conteúdo comum do módulo fica na **Parte comum**, sem número de tela.
 44. **Art. 44 — Uma regra em um lugar só.** Se aparece em dois, um deles aponta para o outro. Histórico de entrega (PR, hash, versões `?v=`) não se repete nos documentos: o Git guarda.
@@ -102,7 +102,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 - **Front:** React 18 UMD + Babel Standalone + `@supabase/supabase-js` + jsPDF + html2canvas, por CDN; servidor `node server.js` (Express, porta 3000) serve estático e a rota `/api/feedback`. PDFs vetoriais vêm de bundles Vite versionados em `src/*.bundle.js`.
 - **Banco e funções:** Supabase, projeto `jxtqwzmpgofwctqajewt`; Edge Functions em Deno; `pg_cron` agenda os jobs; migrations em `supabase/migrations/`.
 - **Login:** SSO do vpsistema (projeto Supabase `ubdkoqxfwcraftesgmbw`); o app guarda o e-mail do usuário no navegador (Art. 25).
-- **Integrações:** Omie (ERP), caixa de e-mail `suporte@vpsistema.com` (IMAP/SMTP), serviço de avisos por WhatsApp (gi-avisos, na VPS), Copiloto VP.
+- **Integrações:** Omie (ERP), caixa de e-mail `suporte@vpsistema.com` (IMAP/SMTP), serviço de avisos por WhatsApp (gi-avisos, na VPS), Copiloto VP — todos descritos em `docs/modulos/15_servicos.md`.
 - **Comandos:** `npm install` · `node server.js` · `npm test` · `npm run test:e2e` · `node scripts/check-cache-bust.js origin/main`.
 - **Detalhe por módulo:** `docs/modulos/` (índice e mapa dos 14 módulos no `CLAUDE.md`).
 
@@ -122,7 +122,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 
 ### Índice deste arquivo
 - **A. Leis e travas permanentes:** a **Constituição** (Títulos I a IX, 50 artigos),  áreas blindadas (Cadastros Mestres, E-mail/Inbox, Ver documento, Containers, Mão de obra, Assinatura digital, PDF assinado), trava por "Confirmo" (Atualização de Custos).
-- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico, Suprimentos & Importação, Engenharia & Produto, Obras & Instalação, Entrega & Documentação, Parceiros & Instaladores, Logística Interna, Fabricação e Administração).
+- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico, Suprimentos & Importação, Engenharia & Produto, Obras & Instalação, Entrega & Documentação, Parceiros & Instaladores, Logística Interna, Fabricação e Administração), mais o documento dos serviços (15, Central de Avisos).
 - **C. Procedimentos:** acessos, cache-busting, stack e testes, `pdf-bundle/`, fluxo de trabalho, método (SDD), pendências.
 - **D. Resíduo por módulo:** seções de entregas ainda não absorvidas pelo documento do seu módulo (ver marcas "→ módulo N").
 - **E. Research Base (hyperresearch).**
@@ -160,13 +160,14 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 | 12 | Logística Interna (Almoxarifado, Expedição, Separação, Etiquetas) | `docs/modulos/12_logistica_interna.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; PCP, MES e Fabricação Corrimão/Corte são do módulo 13 |
 | 13 | Fabricação (PCP, MES, MES · Cadastros, Carga Máquina, Matérias-Primas, Produtos, Montagem do Produto, Evolução da Fabricação, Fabricação Corrimão, Fabricação Corte, Simulação, Relatórios) | `docs/modulos/13_fabricacao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta |
 | 14 | Administração (Logs de Atividade, Configurações do Sistema) | `docs/modulos/14_administracao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; a segurança real (#571), o inventário de Edge Functions, crons e buckets moram lá |
+| 15 | Serviços — Central de Avisos (WhatsApp, gi-avisos, Copiloto VP, Telegram, vpsistema, E-mail) | `docs/modulos/15_servicos.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; não é um item do menu: reúne os serviços usados por vários módulos; a lei blindada do e-mail continua neste arquivo e no `01_geral.md` 1.5 |
 Os nomes de arquivo dos módulos 4 a 14 são sugestão, a confirmar quando cada documento for criado; "hoje" lista o que está espalhado neste arquivo.
 
-### Serviços transversais (planejado, ainda não iniciado)
-O **WhatsApp**, o **gi-avisos** (o serviço que envia os avisos) e o **Copiloto VP** não são telas de um módulo: são serviços usados por vários. Cada um terá o seu documento em `docs/servicos/` (`whatsapp.md`, `gi-avisos.md` e `copiloto.md`), com índice e glossário próprios e numeração própria (S1, S2, S3…), no mesmo molde dos módulos, adaptado. O recorte exato do WhatsApp (canal, funções, aval por WhatsApp) será definido com o Gelson na hora.
-- **Quando:** só depois que os 14 módulos tiverem o seu documento.
-- **Como:** primeiro um rascunho, sem mexer nos originais; o rascunho mantém esse status até o trabalho terminar e só então vira o documento oficial.
-- **Até lá:** o conteúdo do gi-avisos mora em `docs/modulos/01_geral.md` (Parte comum PC-4) e as regras do serviço em `.claude/gi-avisos-regras-whatsapp.md` (única cópia das regras; não excluir); o Copiloto segue em `vp_copiloto_docs` e na Edge Function `vp-copiloto`.
+### Serviços transversais → `docs/modulos/15_servicos.md` (fonte da verdade; aprovado em 01/11/2026)
+**Aqui não se escreve mais nada sobre os serviços transversais.** WhatsApp (S1), gi-avisos (S2), Copiloto VP (S3), Telegram (S4), vpsistema (S5) e o canal de e-mail (S6) têm um documento só, a **Central de Avisos**, no molde dos módulos (temas x.1 a x.11 e Parte comum PC-1 a PC-12). Quem for mexer num deles **lê, entende e atende** esse documento; mudança nova entra lá, no tema certo.
+- A tela Inbox e a **lei blindada do e-mail** continuam em `docs/modulos/01_geral.md` 1.5 e na seção "ÁREA BLINDADA — Sistema de E-mail / Inbox" deste arquivo.
+- As regras do gi-avisos continuam também em `.claude/gi-avisos-regras-whatsapp.md` (não excluir); a comparação delas com o código está em `15_servicos.md` S2.10.
+- *(Plano anterior, de 31/10/2026: três documentos em `docs/servicos/` — `whatsapp.md`, `gi-avisos.md` e `copiloto.md` — depois dos 14 módulos. Trocado em 01/11/2026 por decisão do Gelson.)*
 
 ## Módulo 1 — Geral → `docs/modulos/01_geral.md` (fonte da verdade)
 
@@ -271,7 +272,7 @@ O **WhatsApp**, o **gi-avisos** (o serviço que envia os avisos) e o **Copiloto 
 **Aqui não se escreve mais nada sobre Administração.** Quem for trabalhar nela **lê, entende e atende** o documento do módulo:
 - **14.1 Logs de Atividade** · **14.2 Configurações do Sistema** (Administração, Usuários & Perfis, Permissões, Parâmetros, Integrações, Buckets) · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, pessoas/perfis/alçadas, rotas, segurança real #571, alçadas, inventário de Edge Functions, crons/buckets/integrações, tabelas, CI e testes, tutoriais, documentos concatenados e benefícios trocados).
 - Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
-- Identidade, modo do `vp-auth.js` e `vp_logs` como API ficam em `docs/modulos/01_geral.md` (PC-3, PC-5, PC-6). Os serviços transversais (WhatsApp, gi-avisos, Copiloto VP) terão documento em `docs/servicos/` depois que os 14 módulos estiverem aprovados.
+- Identidade, modo do `vp-auth.js` e `vp_logs` como API ficam em `docs/modulos/01_geral.md` (PC-3, PC-5, PC-6). Os serviços transversais (WhatsApp, gi-avisos, Copiloto VP, Telegram, vpsistema, e-mail) estão em `docs/modulos/15_servicos.md`.
 - Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (cada uma ganhou a nota "→ parte já migrada"); as seções **mistas** nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
 
 ## 🔒 ÁREA BLINDADA — Cadastros Mestres: cliente/fornecedor com transação NUNCA é excluído (31/10/2026, regra do Gelson)
@@ -599,6 +600,8 @@ Primeiro uso de Supabase Realtime no projeto (PR #417, merge squash `caf9a7a`, i
 
 ## Copiloto VP — contexto da tela "Solicitação de Produto" (28/09/2026)
 
+> **→ Copiloto (serviço):** `docs/modulos/15_servicos.md` S3 (01/11/2026). Conferido: o Copiloto em uso é o da VPS, que **não** lê `vp_copiloto_docs`; a Edge Function `vp-copiloto` não tem chamador.
+>
 > **→ Parte já migrada para Engenharia & Produto.** O conteúdo desta seção está concatenado em `docs/modulos/08_engenharia_produto.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 Pedido do usuário: o Copiloto (`vp-copiloto`, ver `ROUTE_DOCS` em `supabase/functions/vp-copiloto/index.ts`) precisava saber "100%" sobre a tela `/engenharia/solicitacoes-produto`, inclusive os campos que só aparecem depois de um clique — e nunca se referir a um campo pelo nome interno da variável (`categoria_sku`, `foiPedidoCliente`), só pelo rótulo exatamente como aparece na tela.
@@ -1508,6 +1511,8 @@ Para trabalho novo de produto/telas/banco: **SPECIFY → CLARIFY → PLAN → TA
 ## Evolução dos Equipamentos — "dado a conferir" e cobrança diária ao Felipe (24/10/2026, PR #1089 mergeado em `main`, squash `b1963917`; banco e cron JÁ em produção)
 
 > **→ Parte já migrada para Obras & Instalação.** O conteúdo desta seção está concatenado em `docs/modulos/09_obras_instalacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+>
+> **→ Avisos por WhatsApp (gi-avisos):** a mecânica (fila, Central de Eventos, janela, agrupamento, regras de título) está em `docs/modulos/15_servicos.md` S2 e PC-2 (01/11/2026). Conferido no código: o serviço lê a Central de Eventos, não a tabela `alertas` direto, e não há janela por departamento.
 
 Spec/Clarify/Plan/Analyze em `docs/superpowers/specs/2026-10-24-evolucao-qualidade-dados.md`. **Quem alimenta a Evolução hoje:** os **montadores** (Diário de Obra) e o gestor **Felipe Barros** (`equipamentos_obra`, fase do dossiê, nº de série). A tela só mostra o que eles registram — dado parado ou incoerente aparece como atraso/0%, não como "erro do sistema".
 - **Regras** (`src/evolucao-conferir-calc.js`, `window.EvolucaoConferirCalc`, 18 testes): data real no futuro / depois da última edição (a mais recente entre o dossiê e o equipamento — `equipamentos_obra.atualizado_em`, achado do Codex no PR #1089), ordem inválida, fase que não avançou (término real e ainda "Instalação"), previsão vencida de **qualquer** etapa (≥ 1 dia útil; registro "parado" > 14 dias), previsão desatualizada (> 14 dias) ou anterior à chegada, obra em Instalação sem Diário (≥ 3 dias úteis; **só detecta quem nunca lançou**), sem nº de série, remoção "saindo da fábrica", irmão (mesma obra) já iniciou, chegada destoa dos irmãos (> 60 dias — pega mês digitado errado). **Só aponta, nunca corrige.** Cada achado tem `quem`: `felipe` (cadastro) ou `montador` (Diário).
