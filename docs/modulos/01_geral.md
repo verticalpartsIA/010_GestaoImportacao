@@ -764,6 +764,10 @@ Esta tabela lista os 6 jobs **das telas de Geral**. Em 31/10/2026 o banco tinha 
   - **Nome de alçada diferente entre o catálogo e a política do banco:** a política de exclusão de `contratos_venda_equipamentos` pergunta por `contratos_venda_equipamentos` e as concessões estão em `contrato-venda-equipamentos`; a concessão não vale. Conferir os nomes em `vp_tem_capacidade('…')` das demais políticas.
   - **Função que regrava depois do fechamento:** `updateFormState` do contrato atualiza `doc` e `form_state` sem olhar o status e sem conferir o erro; vale procurar `update` sem filtro de estado em outras stores.
   - **Data de documento remontado:** "Guarulhos, <hoje>" sai do relógio na montagem; reabrir um documento antigo mostra a data de hoje.
+- **Benefícios vindos de Suprimentos & Importação (doados em 31/10/2026, Art. 49; texto completo em `07_suprimentos_importacao.md` PC-12). Selo: Conferido em 31/10/2026 no código e no banco:**
+  - **Leitura que falha vira "zero" em silêncio:** o Painel de Importação faz `catch → listas vazias` e mostra "0" como se não houvesse nada (Art. 9). Vale procurar `catch(() => set…([]))` nas telas de leitura e nos painéis.
+  - **Duas fontes da mesma coisa:** `embarques` × `embarques_importacao`, RFQ antiga × lote de varejo, duas avaliações de fornecedor. Registrar qual manda e qual é espelho.
+  - **Comentário de código que contradiz o comportamento:** o cabeçalho de `cotacoes-varejo.jsx` ainda descreve a aprovação como "Requisição ao Omie" quando hoje gera P.I. em rascunho. Conferir comentários de cabeçalho ao revisar uma tela.
 
 ### PC-10 Menu "?" (Ajuda, Treinamento, Enviar feedback)
 *(Migrado do CLAUDE.md em 31/10/2026; arquivos conferidos agora, regras vindas do CLAUDE.md.)*
