@@ -19,7 +19,7 @@
     "build:pdf:contrato": "cross-env PDF_ENTRY=contrato vite build --config pdf-bundle/vite.config.js"
   },
   "dependencies": {
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.9",
     "express": "^4.19.2"
   },
   "engines": {
