@@ -600,7 +600,7 @@ Primeiro uso de Supabase Realtime no projeto (PR #417, merge squash `caf9a7a`, i
 
 ## Copiloto VP — contexto da tela "Solicitação de Produto" (28/09/2026)
 
-> **→ Copiloto (serviço):** `docs/modulos/15_servicos.md` S3 (01/11/2026). Conferido: o Copiloto em uso é o da VPS, que **não** lê `vp_copiloto_docs`; a Edge Function `vp-copiloto` não tem chamador.
+> **→ Copiloto (serviço):** `docs/modulos/15_servicos.md` S3 (01/11/2026). Conferido: o Copiloto em uso é o da VPS, que **não** lê `vp_copiloto_docs`; a Edge Function `vp-copiloto` foi removida em 01/11/2026 (não tinha chamador).
 >
 > **→ Parte já migrada para Engenharia & Produto.** O conteúdo desta seção está concatenado em `docs/modulos/08_engenharia_produto.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 

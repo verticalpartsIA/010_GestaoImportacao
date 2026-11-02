@@ -1,3 +1,5 @@
+// BACKUP — função removida do Supabase em 01/11/2026 (pedido do Gelson, "Confirmo remoção"). Substituída desde 11/10/2026 pelo Copiloto da VPS (copiloto.vpsistema.com); sem chamador no front. NÃO redeployar. Ver docs/modulos/15_servicos.md S3.
+// A versão que estava em produção (v36) tinha textos mais antigos; cópia guardada só na VPS.
 // ============================================================
 // vp-copiloto — Edge Function (vpprd)
 // Assistente global do VP Gestão. Acompanha o usuário em TODAS as telas.

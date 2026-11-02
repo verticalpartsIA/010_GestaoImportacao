@@ -47,7 +47,7 @@ Termos gerais (alerta, alerta global/dirigido, alçada, evento de fluxo, caixa c
 - **Montador externo:** pessoa fora da empresa (instalador contratado) que recebe por telefone, sem e-mail, com texto fixo e link de assinatura.
 - **Aval por WhatsApp:** resposta SIM/NÃO a uma decisão, mandada pelo WhatsApp e gravada na decisão pelo hub (regra de negócio no módulo 11; mecânica no S1).
 - **Copiloto da VPS:** sessão Claude em `copiloto.vpsistema.com` que responde no hub (bolinha), na Ficha Técnica (NCM e "Preencher a ficha") e no WhatsApp.
-- **`vp-copiloto` (Edge Function):** versão antiga do Copiloto, que chama a API da Anthropic; **não tem chamador no front**.
+- **`vp-copiloto` (Edge Function):** versão antiga do Copiloto, que chamava a API da Anthropic; **removida em 01/11/2026** (não tinha chamador no front).
 - **Ponte do Telegram:** serviço da VPS que liga o bot do Telegram a uma sessão Claude, para Gelson e Diego.
 - **HMAC:** assinatura de uma mensagem entre sistemas, feita com um segredo combinado, que prova quem mandou e que nada foi alterado.
 - **SSO:** login único: a pessoa entra no vpsistema.com e o hub aceita esse login.
@@ -63,7 +63,7 @@ O **canal** por onde saem e chegam as mensagens de WhatsApp dos sistemas da Vert
 
 ### S1.2 Onde está
 - **Evolution:** container `evolution-api` na VPS, com `evolution-postgres` e `evolution-redis`. Instâncias: **`pv360`** (conectada) e `posvenda360` (desconectada desde 01/06/2026). **Conferido** (01/11/2026).
-- **No hub (Edge Functions):** `decisao-resposta-whatsapp` (v1, `verify_jwt: false`) recebe a resposta SIM/NÃO; `whatsapp-notify` (v10, `verify_jwt: true`) **existe mas não tem chamador**. **Conferido** (listagem e código, 30/10 e 01/11/2026).
+- **No hub (Edge Functions):** `decisao-resposta-whatsapp` (v1, `verify_jwt: false`) recebe a resposta SIM/NÃO; `whatsapp-notify` (v10) **foi removida em 01/11/2026** (não tinha chamador). **Conferido** (listagem e código, 30/10 e 01/11/2026).
 - **No vpsistema:** `_shared/whatsapp.ts` (envio direto pela Evolution) e as funções do Gente & Gestão implantadas no projeto do vpsistema: `whatsapp-dispatcher` (v17, `verify_jwt: false`), `whatsapp-send` (v13) e `whatsapp-start` (v13), com código no repositório privado `17_gente-gestao`; `evolution-webhook-admin` (v14) e `admissao-portal` (v11, pública) estão implantadas **sem pasta** naquele repositório (achado A21). **Conferido** (listagem e leitura do `17_gente-gestao`, commit `d1aa134`, 01/11/2026); a comparação byte a byte do implantado com o repositório **não foi possível**.
 
 ### S1.3 Quem usa
@@ -207,7 +207,7 @@ Versão inicial em 22/10/2026 (decisões deixam de agrupar); 23/10 montador por 
 ### S3.1 O que é
 O assistente de texto e consulta do hub. São **duas peças diferentes** — e só uma está em uso:
 - **Copiloto da VPS** (em uso): sessão Claude em `copiloto.vpsistema.com`, só leitura dos dados, respeitando alçadas. Responde na bolinha do hub, gera descrição com pesquisa na internet, classifica NCM/DUIMP e preenche a Ficha Técnica, e responde colaboradores no WhatsApp. **Conferido** (`servico.py`, 01/11/2026).
-- **Edge Function `vp-copiloto`** (v36, `verify_jwt: true`): versão antiga que chama a API da Anthropic (`claude-sonnet-5`, `ANTHROPIC_API_KEY`). **Nenhuma chamada a ela no front.** **Conferido** (código e busca em `src/`).
+- **Edge Function `vp-copiloto`** (v36) — **removida em 01/11/2026**: era a versão antiga que chama a API da Anthropic (`claude-sonnet-5`, `ANTHROPIC_API_KEY`). **Nenhuma chamada a ela no front.** **Conferido** (código e busca em `src/`).
 
 **Fora do escopo:** o conteúdo do que o Copiloto responde em cada tela (regra de cada módulo); `suggest-email-reply` (IA do Inbox, S6).
 
@@ -229,7 +229,7 @@ Todo usuário logado do hub (bolinha, com alçadas), Engenharia/Importação/Com
 - Alçadas: lidas de `valores_acesso`, `alcadas_capacidade` e `colaboradores_vpsistema` no hub. **Conferido.**
 - **"Preencher a ficha" só propõe;** a pessoa marca e aplica na tela. Nunca preenche Código Omie, SKU nem FCI; todo valor traz origem; sem origem vai para "faltando". **Conferido** (`ncm/preenchedor.md`).
 - **Efeito colateral conhecido:** a descrição técnica com IA chama `/perguntar` com `mode: 'chat'` e `novaConversa: true`, o que **reinicia a conversa da bolinha** de quem pediu. **Herdado** (`CLAUDE.md`, 25/10/2026; `07_suprimentos_importacao.md`).
-- **`vp_copiloto_docs` não é lida pelo Copiloto da VPS:** a regra "ajustar o texto de uma tela = UPDATE em `vp_copiloto_docs`, sem redeploy" (`CLAUDE.md` e módulos 4, 5, 6, 8, 10) vale **só para a Edge Function antiga**, que não tem chamador. **Conferido** (busca no código da VPS, 01/11/2026). Ver divergência D1.
+- **`vp_copiloto_docs` não é lida pelo Copiloto da VPS:** a regra "ajustar o texto de uma tela = UPDATE em `vp_copiloto_docs`, sem redeploy" (`CLAUDE.md` e módulos 4, 5, 6, 8, 10) valia **só para a Edge Function antiga**, removida em 01/11/2026. **Conferido** (busca no código da VPS, 01/11/2026). Ver divergência D1.
 
 ### S3.6 Dados
 Lê (só leitura) o banco do hub pelo papel `copiloto_leitura` e o Omie pela ferramenta de leitura; registra perguntas em `perguntas.log` na VPS. A Edge Function antiga lê `vp_copiloto_docs`. **Conferido.**
@@ -346,7 +346,7 @@ No hub: `vp-auth.test.js` (modo de autenticação). Não há teste do `vpsistema
 - **Achado, sem correção (A4):** dois despachantes, um parado: a tela `/eventos` mostra 5 regras "ativas" que nunca enviaram (gatilhos em sombra). Quem administra pode achar que a Central envia.
 - **Achado, sem correção (A14):** as mensagens próprias do vpsistema (2FA, recuperação, comunicados) **não ficam registradas** na Central; o 2FA não deixa log de envio.
 - **Achado, sem correção (A15):** o publicado e o repositório do vpsistema divergem: 9 funções no ar sem pasta no repositório (5 do Gente & Gestão, 3 de sincronização com satélites e `mcp-server`); `sync-user-vprequisicoes` no repositório e não implantada; `send-recovery-email` no repositório é um stub, a publicada é de julho (se ainda envia: **Não verificado**).
-- **Achado, sem correção (A23) — os avisos `instalador.*` da Central nunca saíram:** o manual `docs/eventos/vphub-instalador.md` (15/10/2026) manda cadastrar na Central três tipos (`instalador.aval_pendente` → Diego; `instalador.contrato_assinado` → Maurício, Felipe, Gustavo e Cleiton; `instalador.recibo_assinado` → Felipe), começar em **sombra** e passar a **ativo** "depois de conferir". **Nunca passaram a ativo:** em 01/11/2026 os gatilhos seguem em sombra; `aval_pendente` teve 1 evento (16/10) e `contrato_assinado` 6 (até 23/10), com envios só `simulado`/`descartado`; `recibo_assinado` nunca teve evento. **O que chega de verdade** sai pelo gi-avisos como alertas do Contrato do Instalador: `ci-envio` (6), `ci-assinado` (9) e `ci-lembrete` (22, o último em 30/10), dirigidos a 3–4 pessoas internas. Consequências: (a) **Gustavo e Cleiton (externos, sem perfil no hub) não recebem** o aviso de contrato assinado — o gi-avisos só manda a externo quando é o "Contratado" com link de assinatura; (b) o aval já não é do Diego (é da Juliana, módulo 11) e o módulo 1 manda **não usar** `instalador.aval_pendente`; (c) há também ~24 alertas `ci-<código>` **sem destinatário** (avisos globais, de 15 a 23/10), que aparecem na tela mas não viram WhatsApp. **Conferido** (SELECT no hub e no vpsistema, 01/11/2026).
+- **Achado, sem correção (A23) — os avisos `instalador.*` da Central nunca saíram:** o manual `docs/eventos/vphub-instalador.md` (15/10/2026) manda cadastrar na Central três tipos (`instalador.aval_pendente` → Diego; `instalador.contrato_assinado` → Maurício, Felipe, Gustavo e Cleiton; `instalador.recibo_assinado` → Felipe), começar em **sombra** e passar a **ativo** "depois de conferir". **Nunca passaram a ativo:** em 01/11/2026 os gatilhos seguem em sombra; `aval_pendente` teve 1 evento (16/10) e `contrato_assinado` 6 (até 23/10), com envios só `simulado`/`descartado`; `recibo_assinado` nunca teve evento. **O que chega de verdade** sai pelo gi-avisos como alertas do Contrato do Instalador: `ci-envio` (6), `ci-assinado` (9) e `ci-lembrete` (22, o último em 30/10), dirigidos a 3–4 pessoas internas. Consequências: (a) o aviso de contrato assinado chega ao **Cleiton, ao Maurício e ao Felipe** (função `_ci_efeitos`; 3 entregas `enviado` para cada um até 23/10) e **não** ao Gustavo — o que o Gelson confirmou como certo em 01/11/2026 *(correção: a primeira versão deste achado dizia, por engano, que o Cleiton não recebia; ele tem perfil ativo e recebe)*; (b) o aval já não é do Diego (é da Juliana, módulo 11) e o módulo 1 manda **não usar** `instalador.aval_pendente`; (c) há também ~24 alertas `ci-<código>` **sem destinatário** (avisos globais, de 15 a 23/10), que aparecem na tela mas não viram WhatsApp. **Conferido** (SELECT no hub e no vpsistema, 01/11/2026).
 - **Achado, sem correção:** o espelho `colaboradores_vpsistema` do hub tem 51 pessoas ativas; o vpsistema tem 48 perfis.
 - **Não verificado:** qual instância de WhatsApp o vpsistema usa nas mensagens próprias.
 
@@ -455,7 +455,7 @@ e-mail: telas ──send-email──▶ SMTP · IMAP ──read-inbox (10 min)�
 - **Claude do repositório / Claude da VPS:** o primeiro mexe no hub; o segundo, nos serviços da VPS; **não mexer no gi-avisos** sem pedido (S2.5).
 
 ## PC-6 Edge Functions e crons
-**Hub, Edge Functions ligadas a mensagens** (versão e `verify_jwt` conferidos de 30/10 a 01/11/2026): `send-email` v24 (true) · `read-inbox` v17 (true) · `sign-email-anexos` v7 (true) · `suggest-email-reply` v7 (true) · `eventos-publicar` v3 (true) · `decisao-resposta-whatsapp` v1 (false) · `whatsapp-notify` v10 (true, sem chamador) · `vp-copiloto` v36 (true, sem chamador) · `sso-exchange` v5 (false) · `vpsistema-sync` v8 (false) · `alerta-pcp-compras` e `alerta-pcp-prazos` (gravam `alertas`). Inventário completo e regras de deploy: `14_administracao.md` PC-6.
+**Hub, Edge Functions ligadas a mensagens** (versão e `verify_jwt` conferidos de 30/10 a 01/11/2026): `send-email` v24 (true) · `read-inbox` v17 (true) · `sign-email-anexos` v7 (true) · `suggest-email-reply` v7 (true) · `eventos-publicar` v3 (true) · `decisao-resposta-whatsapp` v1 (false) · ~~`whatsapp-notify` v10~~ e ~~`vp-copiloto` v36~~ (removidas em 01/11/2026) · `sso-exchange` v5 (false) · `vpsistema-sync` v8 (false) · `alerta-pcp-compras` e `alerta-pcp-prazos` (gravam `alertas`). Inventário completo e regras de deploy: `14_administracao.md` PC-6.
 
 **Hub, crons que geram mensagem** (UTC; **Conferido** em `cron.job`, 01/11/2026, todos ativos):
 
@@ -521,7 +521,7 @@ Nada foi apagado. Por decisão do Gelson (01/11/2026), **a troca das origens por
 | `14_administracao.md` PC-6/PC-7 (integrações) | inventário | fica; PC-6 daqui aponta |
 | `09_obras_instalacao.md` (ART, Evolução) | avisos via gi-avisos | regra do canal → S2/PC-2; negócio fica no 9 |
 | `02`, `04`, `06`, `07` (`wa.me`, e-mail por tela) | atalhos manuais, envios | ficam nos módulos (S1.1 e S6.1 apontam) |
-| `docs/eventos/vphub-instalador.md` | manual da fila e da Central para os avisos do instalador (15/10) | mecânica da fila → PC-2; **o plano dele nunca foi ligado** (A23); **tem quatro telefones** (A2) e diz Diego (obsoleto). Destino (reescrever como ponteiro, ou apagar do disco mantendo no Git) **depende do Gelson** |
+| `docs/eventos/vphub-instalador.md` | manual da fila e da Central para os avisos do instalador (15/10) | **virou ponteiro** (01/11/2026, decisão do Gelson), sem os telefones; o plano dele nunca foi ligado (A23) |
 | `docs/superpowers/specs/2026-10-24-evolucao-qualidade-dados.md`, `2026-10-30-art-por-obra.md` | `bloqueia_envio`, agrupamento, ART | histórico; regras já em S2.5 |
 | `docs/superpowers/specs/2026-10-25-rfq-importacao-vencedor-pi/02-clarify.md` | contrato do Copiloto da VPS | S3 |
 | `docs/superpowers/specs/2026-10-31-mapa-de-destino-docs-soltos.md` | destinos antigos | **desatualizado** (não prevê este documento) |
@@ -538,7 +538,7 @@ Nenhum foi corrigido (Art. 45). Ordem por gravidade percebida.
 
 | Nº | Achado | Onde |
 |---|---|---|
-| A1 | `whatsapp-notify` no ar sem trava e sem chamador | S1.10 |
+| A1 | ~~`whatsapp-notify` no ar sem trava e sem chamador~~ — **removida em 01/11/2026** | S1.10 |
 | A2 | Telefones de pessoas no repositório público (migrations, comentário de função, `docs/eventos/`) | S1.10 |
 | A3 | Um só número/instância para todos os serviços; reserva desconectada | S1.10 |
 | A4 | Central de Eventos com regras "ativas" que nunca enviam | S5.10 |
@@ -560,7 +560,7 @@ Nenhum foi corrigido (Art. 45). Ordem por gravidade percebida.
 | A20 | RH: resposta de candidato pode cair no menu; `@lid` e mídia | S1.10 |
 | A21 | `evolution-webhook-admin` e `admissao-portal` (pública, dados pessoais) no ar sem código no repositório | S1.2 |
 | A22 | Resposta dupla se o Copiloto passar de 12 s | S1.10 |
-| A23 | Avisos `instalador.*` da Central nunca ligados; externos (Gustavo, Cleiton) não recebem o "contrato assinado" | S5.10 |
+| A23 | Avisos `instalador.*` da Central nunca ligados (o "contrato assinado" real sai pelo gi-avisos a Cleiton, Maurício e Felipe) | S5.10 |
 | — | `alertas` aberta a escrita pela chave pública (já conhecido, #571) | PC-4 |
 
 ## Decisões do Gelson (01/11/2026)
@@ -568,15 +568,15 @@ Nenhum foi corrigido (Art. 45). Ordem por gravidade percebida.
 2. **Segundo PR autorizado:** ponteiros nas origens e doações aos módulos (Art. 49/50).
 3. **Apontamento no `CLAUDE.md`:** o Art. 41, o mapa e a seção "Serviços transversais" passam a apontar para este documento.
 4. **Fica como está:** o Telegram (conversa, Borderô, alerta de falha); o vpsistema continua recebendo os gatilhos como hoje; avais e avisos seguem como estão.
-5. **`whatsapp-notify` e `vp-copiloto`:** remover **se forem obsoletas**; se a estrutura funciona, manter. Conferido em 01/11/2026: as duas estão sem chamador no código e sem chamada nas últimas 24 h; `whatsapp-notify` não registra uso desde 15/10/2026 e o próprio serviço da VPS se declara substituto da `vp-copiloto`. A remoção é deploy em produção: só com "Confirmo" para essa mudança (Art. 14), guardando as pastas em `supabase/functions-removidas/` (Art. 23).
+5. **`whatsapp-notify` e `vp-copiloto`:** remover **se forem obsoletas**; se a estrutura funciona, manter. Conferido em 01/11/2026: as duas estão sem chamador no código e sem chamada nas últimas 24 h; `whatsapp-notify` não registra uso desde 15/10/2026 e o próprio serviço da VPS se declara substituto da `vp-copiloto`. **Removidas em 01/11/2026** com o "Confirmo remoção" do Gelson (Art. 14); pastas em `supabase/functions-removidas/` (Art. 23).
 6. **Leitura do `17_gente-gestao`:** autorizada e feita (S1.4, S5.2).
 
 ## Pendências para o Gelson (o Claude da VPS não decide)
-1. **Remover `whatsapp-notify` e `vp-copiloto`** (obsoletas, item 5 acima): aguarda o "Confirmo".
+1. ~~Remover `whatsapp-notify` e `vp-copiloto`~~ **Feito em 01/11/2026** com o "Confirmo remoção" do Gelson: apagadas da produção (respondem 404), pastas movidas para `supabase/functions-removidas/`; as versões de produção (diferentes do repositório; a do `whatsapp-notify` tinha telefone fixo) estão guardadas só na VPS.
 2. **Aval por WhatsApp (A19):** a decisão "avais ficam como estão" foi dada achando que o SIM/NÃO pelo WhatsApp funciona; **hoje não funciona** (só pela Central de Decisões). Ligar exige mudança no dispatcher do vpsistema. Quer que seja ligado?
 3. **Copiloto:** o Copiloto da VPS deve passar a ler `vp_copiloto_docs`, ou a regra "UPDATE sem redeploy" sai dos módulos (D1)?
 4. **Achados de segurança e do RH** (A1, A2, A11, A13, A16, A18, A20, A21): tratar à parte, com "Confirmo" para cada um.
-5. **`docs/eventos/vphub-instalador.md` (A23):** o plano dele não foi ligado e o arquivo expõe quatro telefones num repositório público. Reescrever como ponteiro para cá (sem telefones) ou apagar do disco (fica no Git)? E os externos do "contrato assinado" (Gustavo, Cleiton) devem passar a receber?
+5. ~~`docs/eventos/vphub-instalador.md`~~ **Resolvido (01/11/2026):** virou ponteiro, sem telefones (os números antigos continuam no histórico do Git). Cleiton recebe o "contrato assinado" e o Gustavo não, como o Gelson quer (nada mudou no serviço).
 
 ### Divergências registradas (Art. 12 — nenhuma corrigida)
 - **D1 — Copiloto e `vp_copiloto_docs`:** `CLAUDE.md` e módulos 4, 5, 6, 8 e 10 dizem que a tabela alimenta o Copiloto; o Copiloto em uso (VPS) não a lê.
@@ -585,7 +585,7 @@ Nenhum foi corrigido (Art. 45). Ordem por gravidade percebida.
 - **D4 — feriados:** as regras do gi-avisos dizem "leitura do hub desligada"; está ligada desde 24/10/2026.
 - **D5 — montador:** as regras exigem `externo:true`; o código usa "sem e-mail + com telefone" e só o papel "Contratado".
 - **D6 — quem aprova o aval:** `docs/eventos/vphub-instalador.md` e o comentário de `decisao-resposta-whatsapp` dizem Diego; módulo 11 e banco dizem Juliana.
-- **D7 — `whatsapp-notify`:** `14_administracao.md` PC-7 a lista como integração em produção; ela não tem chamador.
+- **D7 — `whatsapp-notify`:** `14_administracao.md` PC-7 a lista como integração em produção; ela não tinha chamador e foi **removida em 01/11/2026**.
 
 ## Fatos do rascunho corrigidos
 | Rascunho dizia | O código e o banco mostram (01/11/2026) |
