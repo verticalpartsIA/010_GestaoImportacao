@@ -1,16 +1,26 @@
 name: Deploy — Hostinger
 
+# O deploy só roda depois que o workflow "CI — VP Gestão" termina com SUCESSO
+# na branch main. Também pode ser disparado manualmente (workflow_dispatch).
 on:
-  push:
+  workflow_run:
+    workflows: ["CI — VP Gestão"]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Evita dois deploys ao mesmo tempo; um mais novo espera o anterior terminar.
+concurrency:
+  group: deploy-hostinger
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Preparar chave SSH
         env:
