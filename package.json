@@ -10,6 +10,8 @@
     "test": "node scripts/run-tests.js",
     "test:e2e": "playwright test",
     "tutoriais:conferir": "node scripts/conferir-tutoriais.mjs",
+    "rag": "node scripts/gerar-rag.js",
+    "rag:conferir": "node scripts/gerar-rag.js --conferir",
     "build": "npm run build:pdf && npm run build:pdf:proposta && npm run build:pdf:vistoria && npm run build:pdf:contrato",
     "build:pdf": "cross-env PDF_ENTRY=pedido vite build --config pdf-bundle/vite.config.js",
     "build:pdf:proposta": "cross-env PDF_ENTRY=proposta vite build --config pdf-bundle/vite.config.js",
