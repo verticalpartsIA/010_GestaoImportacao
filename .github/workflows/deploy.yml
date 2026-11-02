@@ -14,7 +14,7 @@ jobs:
         with:
           host: ${{ secrets.HOSTINGER_SSH_HOST }}
           username: ${{ secrets.HOSTINGER_SSH_USER }}
-          password: ${{ secrets.HOSTINGER_SSH_PASS }}
+          key: ${{ secrets.HOSTINGER_SSH_KEY }}
           port: 65002
           script: |
             cd /home/u969661049/domains/hub.vpsistema.com/nodejs
