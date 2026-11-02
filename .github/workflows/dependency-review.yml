@@ -1,0 +1,26 @@
+name: Dependency Review
+
+# Analisa mudanças de dependências em PRs e bloqueia a introdução de
+# pacotes com vulnerabilidades conhecidas (severidade alta ou crítica).
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  # necessário para comentar o resumo no PR em caso de falha
+  pull-requests: write
+
+jobs:
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
