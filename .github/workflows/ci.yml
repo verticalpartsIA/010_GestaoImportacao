@@ -6,10 +6,20 @@ on:
   pull_request:
     branches: [main]
 
+# Permissões mínimas: o CI só lê o código.
+permissions:
+  contents: read
+
+# Um novo push cancela o CI antigo da mesma branch/PR (economiza minutos).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     name: Validar estrutura do projeto
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -26,10 +36,13 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
-      - name: Lint (stub)
+      # PLACEHOLDER: o script "lint" ainda é só um echo. Será trocado por um
+      # lint de verdade (ver plano do item 4).
+      - name: Lint (placeholder)
         run: npm run lint
 
-      - name: Test (stub)
+      # Testes reais: node --test em src/*.test.js (ver scripts/run-tests.js).
+      - name: Testes unitários (node --test)
         run: npm run test
 
       - name: Cache-busting (?v=) incrementado nos arquivos alterados
