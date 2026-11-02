@@ -5,7 +5,7 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/02_crm.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `5d62c56`)
-- **Palavras:** 9464 · **blocos:** 247 · **seções com selo próprio:** 23 de 73
+- **Palavras:** 10412 · **blocos:** 247 · **seções com selo próprio:** 23 de 80
 - **Origem do selo dos blocos:** próprio 37 · da seção 100 · da seção-pai 0 · do cabeçalho 85 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
 - **Selo efetivo dos blocos:** Conferido 138 · Herdado 13 · Não verificado 71
 
@@ -89,3 +89,10 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-10 Menu "?" e tutoriais do CRM | `docs/modulos/02_crm.md#pc-10-menu--e-tutoriais-do-crm` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | PC-11 Documentos soltos e destino do que foi concatenado | `docs/modulos/02_crm.md#pc-11-documentos-soltos-e-destino-do-que-foi-concatenado` | 3 | — | 7 | c7 |
 | PC-12 Benefícios trocados com os outros módulos | `docs/modulos/02_crm.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 3 | Não verificado (misto (vale o mais fraco)) | 19 | b6 s13 |
+| Mapa do site | `docs/modulos/02_crm.md#mapa-do-site` | 4 | — | 0 | — |
+| Wireframe | `docs/modulos/02_crm.md#wireframe` | 4 | — | 0 | — |
+| Storyboard | `docs/modulos/02_crm.md#storyboard` | 4 | — | 0 | — |
+| Fluxograma de tarefa crítica | `docs/modulos/02_crm.md#fluxograma-de-tarefa-crítica` | 4 | — | 0 | — |
+| Organograma | `docs/modulos/02_crm.md#organograma` | 4 | — | 0 | — |
+| Diagrama de teia | `docs/modulos/02_crm.md#diagrama-de-teia` | 4 | — | 0 | — |
+| Diagrama de estrela | `docs/modulos/02_crm.md#diagrama-de-estrela` | 4 | — | 0 | — |

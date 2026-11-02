@@ -5,7 +5,7 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/04_comercial_pre_venda.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `746db79`)
-- **Palavras:** 16200 · **blocos:** 313 · **seções com selo próprio:** 46 de 84
+- **Palavras:** 16418 · **blocos:** 313 · **seções com selo próprio:** 46 de 85
 - **Origem do selo dos blocos:** próprio 85 · da seção 137 · da seção-pai 0 · do cabeçalho 66 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
 - **Selo efetivo dos blocos:** Conferido 184 · Herdado 88 · Não verificado 16
 
@@ -100,3 +100,4 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-10 Menu "?" e tutoriais | `docs/modulos/04_comercial_pre_venda.md#pc-10-menu--e-tutoriais` | 2 | Herdado (misto (vale o mais fraco)) | 5 | b2 s3 |
 | PC-11 Documentos soltos e destino do que foi concatenado | `docs/modulos/04_comercial_pre_venda.md#pc-11-documentos-soltos-e-destino-do-que-foi-concatenado` | 2 | — | 2 | c2 |
 | PC-12 Benefícios trocados com os outros módulos | `docs/modulos/04_comercial_pre_venda.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 2 | Não verificado (misto (vale o mais fraco)) | 15 | b9 s6 |
+| Fluxograma das ligações do módulo | `docs/modulos/04_comercial_pre_venda.md#fluxograma-das-ligações-do-módulo` | 4 | — | 0 | — |

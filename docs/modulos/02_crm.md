@@ -455,3 +455,184 @@ Chaves estrangeiras que **apontam para** `leads`: só `cotacoes` e `formularios_
 - **Recebido do Geral em 31/10/2026 (padrões de URL) e ainda não aplicado:** o seletor **Lista/Kanban** de `/crm/leads` é só `useState` (`comercial.jsx`, `view`), então F5, link e Voltar/Avançar não guardam a visão. O padrão é o do Dashboard (`window.useRouteTab`, `01_geral.md` PC-9 e 1.1.2). **Achado, sem correção** (Não verificado em navegador; conferido só pela leitura do código em 31/10/2026).
 - **Duas implementações da mesma regra (a corrigir quando o Gelson decidir):** a consulta "Omie primeiro" existe em `comercial.jsx` (`buscarClienteOmie`) e em `enderecos-api.js` (`consultarCnpjOmieFirst`); a leitura de leads existe como `reloadLeads` (sem paginar) e `useLeadsBase` (paginada). A doação natural é a de `useLeadsBase` e `consultarCnpjOmieFirst` para a tela de Leads. **Não feito:** mudança de código não pedida.
 - **Recebido de Serviços (01/11/2026, texto em `15_servicos.md` PC-2):** todo alerta com destinatário também vira WhatsApp pelo gi-avisos; para chegar certo, título curto com o essencial na frente, sem "teste", sem R$ no título e com o dia da semana por extenso, a obra ou o código do contrato quando houver vários no mesmo dia (o agrupamento de 24 h apaga números). **Conferido** no código do gi-avisos.
+
+#### Mapa do site
+
+```mermaid
+flowchart TD
+    Root[Menu Principal: CRM] --> R1["/crm/leads (Pipeline de Leads)"]
+    Root --> R2["/crm/crm-canais (Canais)"]
+    Root --> R3["/crm/crm-conversao (Conversão)"]
+    Root --> R4["/crm/crm-automacao (Automação)"]
+    Root --> R5["/crm/crm-analise (Análise)"]
+
+    R1 --> V1[Visão Lista]
+    R1 --> V2[Visão Kanban]
+
+    R1 --> M1["Janela: Novo / Editar Lead"]
+    R1 --> M2["Janela: Lead Criado (Auto-fechamento 4s)"]
+    R1 --> M3["Janela: Excluir Lead?"]
+
+    R1 --> D1["/crm/lead-detail/:id (Detalhe do Lead)"]
+    
+    D1 --> DM1["Janela: Editar Lead"]
+    D1 --> Ext1["Formulário de Elevador (/formulario-elevador)"]
+    D1 --> Ext2["Dossiê da Obra (/dossier-obra)"]
+
+    R2 --> D1
+    R4 --> Ext3["Cadastros > Clientes"]
+```
+
+#### Wireframe
+
+```text
++-----------------------------------------------------------------------------------------+
+| CRM / Leads                                                                             |
+| Pipeline de Leads — 13 leads em aberto · pipeline R$ X · 0 convertido(s) (0%)           |
++-----------------------------------------------------------------------------------------+
+| [ KPI 1: Leads Ativos ] [ KPI 2: Em Qualificação ] [ KPI 3: Propostas ] [ KPI 4: Valor ]|
++-----------------------------------------------------------------------------------------+
+| Visão: [ (X) Lista | ( ) Kanban ]   [ Exportar CSV ]   [ + Novo Lead ]                  |
+| Filtros: [ Todos ] [ Em aberto ] [ Em qualificação ] ... | Resp: [Todos v] [Buscar...]   |
++-----------------------------------------------------------------------------------------+
+| ID      | Lead / Prédio   | Contato      | Origem | Status     | Valor | Ações          |
++---------+-----------------+--------------+--------+------------+-------+----------------+
+| LD-1234 | Condomínio X    | João (Sínd.) | Site   | Qualific.  | 10k   | [Abrir] [Lix]  |
+| LD-5678 | Edifício Y      | Maria (Adm)  | Indic. | Ag. Cotação| 25k   | [Abrir] [Lix]  |
++---------+-----------------+--------------+--------+------------+-------+----------------+
+| Exibindo 1-15 de 13 leads                              Paginação: [ < Anterior ] [Próxima >]|
++-----------------------------------------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------+
+| [< Voltar para Leads]  LD-1234 · Origem: Site                              Última at. X |
+| Condomínio X — Razão Social Exemplo (CNPJ: 00.000.000/0001-00)                          |
+| Status: [ Em qualificação ]  Prioridade: [ Alta ]                                       |
+| Ações rápidas: [ WhatsApp ] [ E-mail ] [ Editar Lead ] [ Formulário ] [ Qualificar Dossier ]|
++------------------------------------+----------------------------------------------------+
+| COLUNA ESQUERDA                    | COLUNA DIREITA                                     |
+| +--------------------------------+ | +------------------------------------------------+ |
+| | CARTÃO: CLIENTE                | | | CARTÃO: CONTATO                              | |
+| | Razão Social: ...              | | | Nome: João Silva                             | |
+| | CNPJ: 00.000.000/0001-00       | | | Cargo: Síndico                               | |
+| | Valor Estimado: R$ 10.000,00    | | | Tel: (11) 99999-9999  [ WhatsApp ]            | |
+| +--------------------------------+ | | Email: joao@email.com   [ Email ]              | |
+| | CARTÃO: HISTÓRICO ATIVIDADES   | | +------------------------------------------------+ |
+| | • Lead criado via Site         | | | CARTÃO: ESPECIFICAÇÃO TÉCNICA                | |
+| | • Status alterado              | | | (Campos do formulário público, se houver)     | |
+| +--------------------------------+ | +------------------------------------------------+ |
+| | CARTÃO: PRÓXIMO PASSO          | | | CARTÃO: ATRIBUIÇÃO                           | |
+| | Abrir Formulário e alocar equip| | | Resp: Comercial | Origem: Site                 | |
+| +--------------------------------+ | | Comissão prevista: R$ 200,00 (2% — padrão)     | |
+|                                    | +------------------------------------------------+ |
++------------------------------------+----------------------------------------------------+
+```
+
+#### Storyboard
+
+```text
+[ Tela 1: Lista de Leads ] --------> [ Tela 2: Janela Novo Lead ] ------> [ Tela 3: Lead Criado (Modal) ]
+  Ação: Clica em "+ Novo Lead"          Ação: Preenche dados e CNPJ         Ação: Clica em "Fechar" ou aguarda
+         |                                                                           |
+         v                                                                           v
+[ Tela 6: Dossiê da Obra ] <------- [ Tela 5: Detalhe do Lead ] <------- [ Tela 4: Visão Kanban ]
+  Ação: Dossiê aberto criado            Ação: Clica em "Qualificar Dossier" Ação: Arrasta para "Aguardando..."
+```
+
+#### Fluxograma de tarefa crítica
+
+```mermaid
+flowchart TD
+    A[Início: Ação de Converter Lead] --> B{Origem da Ação?}
+    
+    B -->|Proposta Assinada| C[Rastreia cotacao -> formulario -> lead]
+    B -->|Edição Manual / Kanban| D[Chama criarOuVincularDeLead]
+    B -->|Botão Automação| D
+
+    C --> E{Lead já tem cliente_id?}
+    E -->|Sim| F[Usa cliente do Formulário no Lead]
+    E -->|Não| D
+
+    D --> G{Lead já possui cliente_id?}
+    G -->|Sim| H[Completa ICMS e vincula Quadros]
+    G -->|Não| I[Busca Cliente por Razão Social/Nome]
+
+    I --> J{Encontrou Clientes?}
+    J -->|2 ou mais| K[Desempata por E-mail -> Telefone -> Ativo]
+    J -->|1 encontrado| L[Vincular Cliente Existo]
+    J -->|Nenhum| M[Criar Novo Cliente em Cadastros]
+
+    K --> L
+    F --> H
+    L --> H
+    M --> H
+
+    H --> N[Executa trigger trg_leads_vincular_quadros]
+    N --> O[Atualiza quadros_comando.cliente_id]
+    O --> P[Atualiza status leads.status = Convertido]
+    P --> Q[Fim: Cliente Vinculado e Lead Convertido]
+```
+
+#### Organograma
+
+```mermaid
+flowchart TD
+    Root[Módulo CRM] --> Sec1[1. Gestão de Leads]
+    Root --> Sec2[2. Canais de Comunicação]
+    Root --> Sec3[3. Origem & Conversão]
+    Root --> Sec4[4. Automação de Processos]
+    Root --> Sec5[5. Análise & Performance]
+
+    Sec1 --> Sub1_1[Pipeline / Lista de Leads]
+    Sec1 --> Sub1_2[Quadro Kanban]
+    Sec1 --> Sub1_3[Detalhe do Lead]
+    Sec1 --> Sub1_4[Modais de Operação]
+
+    Sec2 --> Sub2_1[Disparo Rápido WhatsApp]
+    Sec2 --> Sub2_2[Integração Email / Inbox]
+
+    Sec3 --> Sub3_1[Relatório de Fontes de Captura]
+    Sec3 --> Sub3_2[Captura Automática Site / Elementor]
+
+    Sec4 --> Sub4_1[Regra Lead Convertido -> Cliente]
+    Sec4 --> Sub4_2[Consolidador de Vínculos Pendentes]
+
+    Sec5 --> Sub5_1[Indicadores KPIs de Pipeline]
+    Sec5 --> Sub5_2[Funil por Status]
+    Sec5 --> Sub5_3[Desempenho por Responsável]
+```
+
+#### Diagrama de teia
+
+```mermaid
+graph TD
+    LEAD((Nó Central: LEAD))
+
+    LEAD <-->|Lê/Grava Dados| DB_LEADS[(Tabela: leads)]
+    LEAD -->|Cria/Vincula| CLI[(Cadastros: Clientes)]
+    LEAD -->|Preenche Dados| FORM[(Formulário de Elevador)]
+    LEAD -->|Gera Obra| DOSSIER[(Dossiê da Obra)]
+    LEAD <-->|Mapeia Pedidos| QUADROS[(Quadro de Comando)]
+    LEAD -->|Consome Dados| OMIE[(API Omie ERP)]
+    LEAD -->|Valida CNPJ/CPF| BRASILAPI[(BrasilAPI)]
+    LEAD -->|Registra Auditoria| VPLOGS[(Tabela: vp_logs)]
+    LEAD -->|Dispara Atendimento| WA[WhatsApp wa.me]
+    LEAD -->|Alimenta KPIs| DASH[(Dashboard Comercial)]
+```
+
+#### Diagrama de estrela
+
+```mermaid
+graph TD
+    CENTER((Detalhe do Lead<br>/crm/lead-detail/:id))
+
+    CENTER <-- Navegação / Rota Direct --> P1["Visão Lista (/crm/leads)"]
+    CENTER <-- Navegação Direct --> P2["Visão Kanban (/crm/leads)"]
+    CENTER <-- Redirecionamento --> P3["Tela de Canais (/crm/crm-canais)"]
+    CENTER <-- Deep Link / Busca --> P4["Busca Global do Cabeçalho"]
+    
+    CENTER --> A1["Ação: WhatsApp (wa.me)"]
+    CENTER --> A2["Ação: Email (mailto:)"]
+    CENTER --> A3["Ação: Modal Editar Lead"]
+    CENTER --> A4["Ação: Abrir Formulário Elevador"]
+    CENTER --> A5["Ação: Qualificar -> Dossier"]
+```

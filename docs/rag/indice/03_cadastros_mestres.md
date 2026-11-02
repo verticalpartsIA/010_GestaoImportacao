@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/03_cadastros_mestres.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `980586c`)
-- **Palavras:** 9209 · **blocos:** 221 · **seções com selo próprio:** 24 de 37
-- **Origem do selo dos blocos:** próprio 48 · da seção 108 · da seção-pai 0 · do cabeçalho 41 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 24
-- **Selo efetivo dos blocos:** Conferido 160 · Herdado 20 · Não verificado 17
+- **Palavras:** 9946 · **blocos:** 228 · **seções com selo próprio:** 24 de 45
+- **Origem do selo dos blocos:** próprio 48 · da seção 108 · da seção-pai 0 · do cabeçalho 48 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 24
+- **Selo efetivo dos blocos:** Conferido 167 · Herdado 20 · Não verificado 17
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -53,3 +53,11 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-10 Menu "?" e tutoriais | `docs/modulos/03_cadastros_mestres.md#pc-10-menu--e-tutoriais` | 3 | Conferido (uniforme) | 3 | b1 s2 |
 | PC-11 Documentos soltos e destino do que foi concatenado | `docs/modulos/03_cadastros_mestres.md#pc-11-documentos-soltos-e-destino-do-que-foi-concatenado` | 3 | — | 9 | c9 |
 | PC-12 Benefícios trocados com os outros módulos | `docs/modulos/03_cadastros_mestres.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 3 | Não verificado (misto (vale o mais fraco)) | 19 | b9 s10 |
+| 1) Mapa do site em Mermaid flowchart TD | `docs/modulos/03_cadastros_mestres.md#1-mapa-do-site-em-mermaid-flowchart-td` | 3 | — | 0 | — |
+| 2) Wireframe da home e de uma página interna em texto/ASCII | `docs/modulos/03_cadastros_mestres.md#2-wireframe-da-home-e-de-uma-página-interna-em-textoascii` | 3 | — | 0 | — |
+| 3) Storyboard de 5–8 telas da jornada principal | `docs/modulos/03_cadastros_mestres.md#3-storyboard-de-58-telas-da-jornada-principal` | 3 | — | 7 | c7 |
+| 4) Fluxograma de tarefa crítica em Mermaid | `docs/modulos/03_cadastros_mestres.md#4-fluxograma-de-tarefa-crítica-em-mermaid` | 3 | — | 0 | — |
+| 5) Organograma das seções em Mermaid | `docs/modulos/03_cadastros_mestres.md#5-organograma-das-seções-em-mermaid` | 3 | — | 0 | — |
+| 6) Diagrama de teia para relações não hierárquicas em Mermaid | `docs/modulos/03_cadastros_mestres.md#6-diagrama-de-teia-para-relações-não-hierárquicas-em-mermaid` | 3 | — | 0 | — |
+| 7) Diagrama de estrela com nó central em Mermaid | `docs/modulos/03_cadastros_mestres.md#7-diagrama-de-estrela-com-nó-central-em-mermaid` | 3 | — | 0 | — |
+| 8) Diagrama de arquitetura front-end/back-end em Mermaid flowchart LR | `docs/modulos/03_cadastros_mestres.md#8-diagrama-de-arquitetura-front-endback-end-em-mermaid-flowchart-lr` | 3 | — | 0 | — |
