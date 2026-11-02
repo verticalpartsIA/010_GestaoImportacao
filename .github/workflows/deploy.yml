@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -50,20 +53,28 @@ jobs:
         env:
           SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
           SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          # Token temporário do próprio workflow (somente leitura, expira ao fim do job).
+          # O repositório é privado: o servidor precisa dele para o git pull.
+          GH_TOKEN: ${{ github.token }}
         run: |
           SSH_HOST="$(printf '%s' "$SSH_HOST" | tr -d ' \r\n')"
           SSH_USER="$(printf '%s' "$SSH_USER" | tr -d ' \r\n')"
-          ssh -i ~/.ssh/deploy_key -p 65002 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=30 "$SSH_USER@$SSH_HOST" 'bash -s' <<'REMOTE'
+          {
+            printf 'export GH_TOKEN=%q\n' "$GH_TOKEN"
+            cat <<'REMOTE'
           cd /home/u969661049/domains/hub.vpsistema.com/nodejs
           export PATH=/opt/alt/alt-nodejs22/root/usr/bin:$PATH
           set -e
           git checkout -- package-lock.json 2>/dev/null || true
-          git pull origin main
+          AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          GIT_TERMINAL_PROMPT=0 git -c "http.extraheader=AUTHORIZATION: basic $AUTH" pull origin main
+          unset GH_TOKEN AUTH
           npm install --omit=dev
           echo "{\"buildTime\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"commit\":\"$(git rev-parse HEAD)\"}" > version.json
           touch tmp/restart.txt
           echo "Deploy concluído: $(git log --oneline -1)"
           REMOTE
+          } | ssh -i ~/.ssh/deploy_key -p 65002 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=30 "$SSH_USER@$SSH_HOST" 'bash -s'
 
       - name: Remover chave do runner
         if: always()
