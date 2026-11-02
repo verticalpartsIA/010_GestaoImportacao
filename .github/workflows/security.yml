@@ -49,7 +49,7 @@ jobs:
   gitleaks:
     name: Gitleaks (secrets no código e no histórico)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       GITLEAKS_VERSION: "8.21.2"
     steps:
@@ -65,39 +65,69 @@ jobs:
           tar -xzf gitleaks.tar.gz gitleaks
           ./gitleaks version
 
-      # --redact oculta os valores; o relatório JSON fica só no runner.
+      # O relatório JSON (com os valores) fica somente no runner, em RUNNER_TEMP.
+      # Nada com valor é impresso no log; o stdout do gitleaks mostra só a contagem.
       - name: Procurar secrets
         run: |
           rc=0
-          ./gitleaks detect --source . --redact --no-banner \
+          ./gitleaks detect --source . --no-banner \
             --report-format json --report-path "$RUNNER_TEMP/gitleaks.json" \
             --exit-code 1 || rc=$?
           echo "GITLEAKS_RC=$rc" >> "$GITHUB_ENV"
           exit 0
 
-      # Resumo SEGURO: só tipo da regra, arquivo, quantidade, commits e se o
-      # arquivo ainda existe hoje. Nunca imprime Secret/Match.
+      # Resumo SEGURO: classifica cada achado sem imprimir o valor.
+      # JWT -> imprime só o papel (role) e o ref do projeto.
+      # Outros -> imprime só o nome da variável e o tipo/tamanho.
       - name: Resumo dos achados (sem valores)
         run: |
           python3 - <<'PY'
-          import json, os, collections
+          import json, os, re, base64, collections
+
           p = os.path.join(os.environ["RUNNER_TEMP"], "gitleaks.json")
           data = json.load(open(p)) if os.path.exists(p) else []
-          print(f"Total de achados: {len(data)}\n")
-          by_rule = collections.Counter(d["RuleID"] for d in data)
-          print("== Por tipo de regra ==")
-          for r, n in by_rule.most_common():
-              print(f"{n:4d}  {r}")
-          groups = collections.defaultdict(lambda: {"n": 0, "lines": set(), "commits": set()})
+
+          def jwt_info(tok):
+              try:
+                  part = tok.split(".")[1]
+                  part += "=" * (-len(part) % 4)
+                  pl = json.loads(base64.urlsafe_b64decode(part))
+                  return f"JWT role={pl.get('role', '?')} ref={pl.get('ref', '?')} exp={'sim' if 'exp' in pl else 'nao'}"
+              except Exception:
+                  return "JWT (não decodificável)"
+
+          def classify(secret):
+              s = secret or ""
+              if s.startswith("eyJ") and s.count(".") == 2:
+                  return jwt_info(s)
+              if s.startswith("sb_secret_"):
+                  return "Supabase SECRET key (sb_secret_) !!!"
+              if s.startswith("sb_publishable_"):
+                  return "Supabase publishable key (pública)"
+              return f"outro (len={len(s)})"
+
+          def varname(match, secret):
+              m = match or ""
+              if secret and secret in m:
+                  m = m.split(secret)[0]
+              ids = re.findall(r"([A-Za-z_][\w.\-]*)\s*[\"']?\s*[:=]", m)
+              return ids[-1] if ids else "-"
+
+          rows = collections.OrderedDict()
           for d in data:
-              g = groups[(d["RuleID"], d["File"])]
-              g["n"] += 1
-              g["lines"].add(d.get("StartLine"))
-              g["commits"].add(d["Commit"][:7])
-          print("\n== Por regra + arquivo ==")
-          for (r, f), g in sorted(groups.items()):
-              exists = "AINDA NO CÓDIGO" if os.path.exists(f) else "só no histórico"
-              print(f"{r} | {f} | {g['n']}x | linhas {sorted(x for x in g['lines'] if x)[:5]} | commits {sorted(g['commits'])[:4]} | {exists}")
+              rec = (d["RuleID"], d["File"], d.get("StartLine"), varname(d.get("Match"), d.get("Secret")), classify(d.get("Secret")))
+              rows.setdefault(rec, set()).add(d["Commit"][:7])
+
+          print(f"Total de achados: {len(data)}\n")
+          print("== Classificação (regra | arquivo:linha | variável | tipo | no código hoje?) ==")
+          for (rule, f, line, var, kind), commits in sorted(rows.items(), key=lambda x: (x[0][4], x[0][1], x[0][2] or 0)):
+              hoje = "NO CÓDIGO" if os.path.exists(f) else "só histórico"
+              print(f"{kind} | {rule} | {f}:{line} | var={var} | {hoje} | commits={sorted(commits)[:3]}")
+
+          print("\n== Contagem por tipo ==")
+          c = collections.Counter(k[4] for k in rows)
+          for k, n in c.most_common():
+              print(f"{n:4d}  {k}")
           PY
 
       - name: Falhar se houver achados
