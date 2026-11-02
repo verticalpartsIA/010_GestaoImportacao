@@ -13,22 +13,47 @@ jobs:
         env:
           SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
           SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           install -m 700 -d ~/.ssh
+
+          # Remove espaços e quebras de linha acidentais nos secrets de host/usuário
+          SSH_HOST="$(printf '%s' "$SSH_HOST" | tr -d ' \r\n')"
+          SSH_USER="$(printf '%s' "$SSH_USER" | tr -d ' \r\n')"
+          [ -n "$SSH_HOST" ] || { echo "ERRO: secret HOSTINGER_SSH_HOST vazio"; exit 1; }
+          [ -n "$SSH_USER" ] || { echo "ERRO: secret HOSTINGER_SSH_USER vazio"; exit 1; }
+          [ -n "$SSH_KEY" ]  || { echo "ERRO: secret HOSTINGER_SSH_KEY vazio"; exit 1; }
+
           # Remove CR (chaves geradas no Windows) e garante a quebra de linha final
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+
           # Valida o formato da chave sem imprimir nada sensível
-          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null || { echo "ERRO: HOSTINGER_SSH_KEY não é uma chave privada SSH válida"; exit 1; }
-          ssh-keyscan -p 65002 -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          if ! ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null 2> ~/keygen.err; then
+            echo "ERRO: HOSTINGER_SSH_KEY não é uma chave privada SSH válida:"
+            sed 's/^/  /' ~/keygen.err
+            exit 1
+          fi
+          echo "Chave privada válida."
+
+          # Obtém a identidade do servidor (até 20 s)
+          ssh-keyscan -T 20 -p 65002 -H "$SSH_HOST" >> ~/.ssh/known_hosts 2> ~/keyscan.err
+          if [ ! -s ~/.ssh/known_hosts ]; then
+            echo "ERRO: não foi possível obter a chave do servidor em ${SSH_HOST}:65002 (rede/firewall ou host incorreto):"
+            sed 's/^/  /' ~/keyscan.err
+            exit 1
+          fi
+          echo "Identidade do servidor obtida."
 
       - name: Deploy via SSH
         env:
           SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
           SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
         run: |
-          ssh -i ~/.ssh/deploy_key -p 65002 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" 'bash -s' <<'REMOTE'
+          SSH_HOST="$(printf '%s' "$SSH_HOST" | tr -d ' \r\n')"
+          SSH_USER="$(printf '%s' "$SSH_USER" | tr -d ' \r\n')"
+          ssh -i ~/.ssh/deploy_key -p 65002 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=30 "$SSH_USER@$SSH_HOST" 'bash -s' <<'REMOTE'
           cd /home/u969661049/domains/hub.vpsistema.com/nodejs
           export PATH=/opt/alt/alt-nodejs22/root/usr/bin:$PATH
           set -e
