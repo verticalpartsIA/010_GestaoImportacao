@@ -1,0 +1,46 @@
+name: Claude Code Review
+
+# Revisão automática de PRs pelo Claude (comentários inline no PR).
+# Não é um check obrigatório da proteção da main (Art. 36): só comenta.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Claude Code Review
+    # Repositório público: PR de fork não recebe secrets e não é revisado aqui.
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          track_progress: true
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Revise este pull request seguindo o CLAUDE.md (Constituição do VP Gestão).
+            Foque em: bugs reais, erro engolido (Arts. 9), ?v= esquecido no index.html (Art. 19),
+            segredo/dado pessoal no repositório (Art. 28), regra de negócio sem teste (Art. 33),
+            mudança em área blindada sem confirmação (Art. 15), Edge Function com supabase-js remoto (Art. 23)
+            e documento de módulo/RAG não atualizado (Arts. 51 e 52).
+            Seja direto, cite arquivo e linha, não elogie sem base. Comente com mcp__github_inline_comment__create_inline_comment
+            e finalize com um resumo curto via `gh pr comment`.
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
