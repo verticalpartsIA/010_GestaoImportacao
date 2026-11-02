@@ -399,6 +399,7 @@ A **lei** está no `CLAUDE.md` (Art. 16 e a seção "🔒 ÁREA BLINDADA — Cad
   - **Código humano pela sequência do banco, sem reserva fixa:** nunca "maior código + 1" no navegador nem um código constante quando o banco falha; falha vira erro claro. Para o CRM: o `id` do lead (`LD-` + 6 dígitos do relógio, gerado no navegador) é do tipo que a regra desencoraja; ver `02_crm.md` 2.1.10.
   - **Link para registro que não existe:** mostrar aviso com "Voltar à lista" em vez de abrir a tela como se fosse "Novo".
 - **Doado a Cadastros por outros módulos e ainda sem aplicação (pendência de código, não feita aqui):** atualizar só a linha depois de salvar; olhar o erro nas consultas do Histórico (3.1.10 itens 3 e 6).
+- **Recebido de Serviços (01/11/2026, texto em `15_servicos.md` PC-2):** todo alerta com destinatário também vira WhatsApp pelo gi-avisos; para chegar certo, título curto com o essencial na frente, sem "teste", sem R$ no título e com o dia da semana por extenso, a obra ou o código do contrato quando houver vários no mesmo dia (o agrupamento de 24 h apaga números). **Conferido** no código do gi-avisos.
 
 ---
 *Documento reescrito em 31/10/2026 no molde de `01_geral.md` e `02_crm.md`. Aprovado como REAL pelo Gelson em 31/10/2026.*

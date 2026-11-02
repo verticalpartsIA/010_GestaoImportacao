@@ -1,3 +1,5 @@
+// BACKUP — função removida do Supabase em 01/11/2026 (pedido do Gelson, "Confirmo remoção"). Sem chamador desde o desenho de 17/09/2026; os avisos saem pelo gi-avisos. NÃO redeployar. Ver docs/modulos/15_servicos.md S1.
+// A versão que estava em produção (v10) diferia desta e tinha um telefone fixo no código: guardada só na VPS, fora deste repositório público.
 // ============================================================
 // whatsapp-notify — Edge Function (vpprd)
 // Notifica por WhatsApp os envolvidos numa decisão da Central de Decisões
