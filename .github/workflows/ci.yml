@@ -60,6 +60,14 @@ jobs:
       - name: Índice RAG (docs/rag) em dia com os documentos
         run: node scripts/gerar-rag.js --conferir
 
+      # Mudou arquivo de um módulo (src/ ou supabase/functions/)? O documento do módulo tem que mudar junto (Arts. 42 e 46).
+      # Por ora só AVISA; trocar --modo aviso por --modo falha quando a fase de aviso terminar (ver a spec 2026-11-02-documentos-em-dia).
+      # Escape, numa mensagem de commit do PR: "Docs: não se aplica — <motivo>".
+      - name: Documentos de módulo em dia com o código (aviso)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/check-docs-em-dia.js "$BASE_SHA" --modo aviso
+
       # Testes reais: node --test em src/*.test.js (ver scripts/run-tests.js).
       - name: Testes unitários (node --test)
         run: npm run test

@@ -9,7 +9,7 @@
 <p align="center">
   <a href="#-visão-executiva">Visão Executiva</a> •
   <a href="#-jornada-ponta-a-ponta">Jornada</a> •
-  <a href="#-mapa-funcional">Módulos</a> •
+  <a href="#-onde-está-cada-coisa">Onde está cada coisa</a> •
   <a href="#-arquitetura-de-negócio">Arquitetura</a> •
   <a href="#-regras-de-governança-e-gates">Gates</a> •
   <a href="#-guia-para-humanos-e-agentes-de-ia">Guia para IA</a> •
@@ -54,7 +54,7 @@ ENTREGUE / HANDOVER / PÓS-VENDA
 
 ---
 
-## 🗺️ Jornada ponta a ponta
+## 🚀 Jornada ponta a ponta
 
 <p align="center">
   <img src="assets/vp-gestao-jornada.svg" alt="Infográfico da jornada completa do VP Gestão" width="100%">
@@ -98,153 +98,38 @@ Por isso, uma IA ou pessoa que analise apenas os itens do menu terá uma visão 
 
 ---
 
-## 🧩 Mapa funcional
-
-> **Legenda:** `Operacional` = fluxo existente/documentado no produto atual. `Planejado` = item deliberadamente apresentado como futuro e que não deve ser descrito como funcionalidade concluída.
-
-### GERAL — Torre de Controle
-
-**Dashboard** — consolida KPIs e muda a leitura conforme o perfil de usuário. Comercial observa pipeline e conversão; Engenharia observa projetos e pendências técnicas; Financeiro observa compromissos, gatilhos e contratos; Admin observa a operação consolidada.
-
-**Notificações** — inbox operacional. Informa que algo ocorreu ou requer atenção. **Notificação não é decisão e não é gate.**
-
-**Central de Decisões** — concentra situações nas quais a decisão deve permanecer humana, como autorizações executivas e decisões de contratação/vinculação.
-
-**Gatilhos & Prazo** — sistema nervoso temporal do workflow. Trabalha com eventos automáticos e gatilhos manuais, vencimentos, status, prazo reverso, cadeias por cotação, alertas e confirmações financeiras.
-
-### COMERCIAL — Onde a receita começa
-
-**Leads** — pipeline de oportunidades. Registra empreendimento, contato, equipamentos, quantidades, características preliminares, origem, prioridade, responsável, valor estimado e próxima ação.
-
-**Formulários** — transforma interesse em especificação. O mesmo núcleo atende canal interno e canal público e adapta perguntas para **Elevador, Escada Rolante e Esteira Rolante**. Múltiplas unidades devem ser tratadas como ativos individualizáveis.
-
-**Cotações a Fornecedor** — substitui conceitualmente a antiga visão limitada de “Cotações China”. A arquitetura é orientada a fornecedor/categoria e pode evoluir para elevadores, escadas, esteiras, quadros, portas, cabines e outras categorias. Inclui histórico de **Tratativas** com mensagens e anexos.
-
-**Precificação** — ponte Comercial/Financeiro. Transforma resposta de fornecedor em preço comercial por meio de custos de importação, câmbio, tributos, DIFAL, serviços, instalação, markup, comissões e margem. Calcular e aprovar são estados distintos.
-
-**Propostas** — editor comercial estruturado com herança de dados, ativos, valores, condições, especificações, imagens/desenhos e preview. O objetivo é evitar redigitação e impedir especificações fictícias ou divergentes da venda.
-
-### ADM / FINANCEIRO — Proteção econômica da operação
-
-**Precificação** — protege margem e coerência fiscal antes da promessa comercial.
-
-**Aval Financeiro** — participa do gate de compra e responde se a operação está financeiramente apta a comprometer caixa.
-
-### CADASTROS — Fontes de verdade transversais
-
-**Clientes** — cadastro central utilizado por Comercial, Importação, Engenharia e demais áreas.
-
-**Fornecedores** — cadastro central utilizado por P.I., RFQ, IMS, embarques e compras; inclui avaliação e base para evolução de Supplier Scorecard.
-
-**Produtos** — catálogo associado a NCM, solicitações NCM, DUIMP, ficha técnica e dados técnicos/fiscais.
-
-### JURÍDICO — Formalização do compromisso
-
-**Contratos & Minutas** — gestão de minutas, preenchimento, redação, status e assinatura digital.
-
-**Contrato de Venda de Equipamentos** — wizard especializado que pode herdar Proposta/Master ID e conduz cadastro do comprador, objeto, logística, preço e condições contratuais.
-
-**Contrato Instalador** — módulo especializado com modalidade, partes, objeto, seleção granular de ativos, engine, preview e assinatura. Um instalador pode ser contratado para apenas parte dos equipamentos de uma proposta.
-
-### IMPORTAÇÃO / SUPRIMENTOS — Compra e movimento internacional
-
-Existem duas camadas que não devem ser confundidas:
-
-1. **Importação tradicional** — visão histórica, detalhe de embarque, rastreamento marítimo/AIS e inbox.
-2. **Gestão Importação** — fluxo operacional estruturado em Painel, P.I., RFQ, IMS, Embarques e Análise de Preços.
-
-**Painel Gestão Importação** — cockpit que consolida P.I., RFQ, IMS e embarques.
-
-**P.I. — Proforma Invoice** — fonte financeira e operacional da compra: fornecedor, Incoterm, itens, NCM, valores, pagamentos, câmbio, produção, Cargo Ready, anexos e vínculo com embarque. A criação pode ser bloqueada quando o gate de compra não estiver satisfeito.
-
-**RFQ** — matriz de sourcing com múltiplos fornecedores, moedas, itens, preços e escolha de vencedor por item ou global.
-
-**IMS** — planejamento e contratação de recursos físicos/serviços, incluindo transporte, Munck, empilhadeira, andaime, mão de obra e outros recursos, com planejamento, fornecedores e execução.
-
-**Embarques** — consolidador logístico. Herda informações das P.I.s, controla containers, NF-e, ETD original/atual, rolagens, eventos aduaneiros e etapas de entrega.
-
-**Análise de Preços** — reaproveita histórico das RFQs para transformar memória de sourcing em inteligência de compra.
-
-**Importação Varejo** (antes "Compras Nacional") — reservado para o processo de Compras de Varejo Importação, ainda em definição (29/09/2026).
-
-**Pedidos** — abrange pedido ao fornecedor e acompanhamento do cumprimento do pedido.
-
-### ENGENHARIA — A especificação toma posse
-
-**Projetos de Engenharia** — visita, levantamento, laudo, BOM, documentos, vínculo com NCM/Ficha e gates para Importação.
-
-**Projeto de Elevadores** — engenharia especializada do equipamento elevador.
-
-**Projeto de Equipamento** — configurador técnico que transforma requisitos em especificação concreta e alimenta BOM, ficha, proposta, contrato e projeto.
-
-**Projetos ER/ES** — desenho técnico especializado para Escadas Rolantes e Esteiras Rolantes.
-
-**Ficha Técnica** — wizard universal, dashboard e impressão técnica. Permite categorias/campos extensíveis, templates, imagens, desenho técnico e sincronização com catálogo. Possui contexto de copiloto especialista próprio.
-
-### OBRA — O prontuário operacional
-
-**Status de Obras** — visão consolidada das obras e de seu Status Mestre.
-
-**Dossiê da Obra** — prontuário central da obra: visão geral, documentos, instalação, cronograma, pendências, responsáveis e histórico. É uma entidade central do domínio, mesmo não sendo apenas um item simples da sidebar.
-
-Status Mestre modela a progressão de negócio e execução, por exemplo:
-
-```text
-Lead qualificado → Dossiê criado → Análise técnica → Precificação →
-Proposta enviada → Contrato assinado → Importação → Homologação instalador →
-Instalação → Data Book → Entregue → Manutenção preventiva
-```
-
-**Vistorias de Obras** — fonte única de verdade para vistorias. Controla agendamento, vistoriador, tipo/fase, custo, observações, documentos, imagens e estados. As três fases contratuais concluídas podem liberar a obra.
-
-**ART** — responsabilidade técnica e documentação que pode ser antecipada antes da chegada física do equipamento.
-
-### RECURSOS HUMANOS — Gate operacional
-
-**Homologação de Parceiros Instaladores** — controla habilitação documental/técnica de parceiros e distingue **homologação geral** de **vínculo específico à obra**. Documentos podem incluir NR-10, NR-35, ASO, PCMSO e PGR.
-
-### INSTALAÇÃO — Encontro entre produto e obra
-
-A instalação deve respeitar gates. O fluxo mapeado considera, entre outros requisitos, contrato, liberação financeira, projeto recebido e instalador corretamente vinculado.
-
-O domínio também contempla recebimento do equipamento, responsáveis, equipe de recepção, cronograma, status, pendências, testes e linha do tempo.
-
-### ENTREGA — Encerramento técnico e contratual
-
-**Data Book & Termo** — reúne memória documental e evidências de conclusão.
-
-Uma entrega completa pode envolver:
-
-1. ART registrada/entregue;
-2. Data Book;
-3. equipamento testado e funcionando;
-4. manuais e documentação;
-5. aceite/assinatura documental;
-6. certificados;
-7. treinamento;
-8. suporte;
-9. garantia explicada;
-10. Termo de Entrega;
-11. transição para manutenção/pós-venda.
-
-> **Equipamento funcionando não é sinônimo de projeto contratualmente encerrado.**
-
-### LOGÍSTICA
-
-**Almoxarifado** — controle operacional de materiais/estoques.
-
-**Expedição** — **Planejado**. Não documentar como módulo funcional concluído enquanto permanecer marcado como planejado.
-
-**Logística** — **Planejado**. Mesma regra acima.
-
-### PORTAL ADMIN — Governança
-
-**Logs de Atividade** — trilha de auditoria: quem fez o quê, quando, onde e sobre qual objeto.
-
-**Configurações do Sistema** — parâmetros administrativos e governança de acesso/alocação de módulos por colaborador.
-
 ---
 
+## 🧩 Onde está cada coisa
+
+> **Este README é a porta de entrada, não o manual.** O detalhe de cada módulo (telas, rotas, regras, tabelas, testes, pendências) mora no documento do módulo, que é a **fonte da verdade** e é atualizado junto com cada mudança. Aqui ficam só a visão do produto, a jornada, os princípios e o glossário, que mudam raramente.
+
+**Leia nesta ordem antes de mexer em qualquer coisa:** [`CLAUDE.md`](CLAUDE.md) (a Constituição: as leis e as áreas blindadas) → o documento do módulo que você vai tocar.
+
+| Nº | Módulo | O que cobre | Documento (fonte da verdade) |
+|---|---|---|---|
+| 1 | Geral | Painel de controle: dashboard, notificações, decisões, prazos e pendências, inbox | [`01_geral.md`](docs/modulos/01_geral.md) |
+| 2 | CRM | Leads e funil comercial | [`02_crm.md`](docs/modulos/02_crm.md) |
+| 3 | Cadastros Mestres | Clientes e fornecedores | [`03_cadastros_mestres.md`](docs/modulos/03_cadastros_mestres.md) |
+| 4 | Comercial \| Pré-venda | Formulários, cotações a fornecedor, propostas (é aqui que nasce o Nº da cotação) | [`04_comercial_pre_venda.md`](docs/modulos/04_comercial_pre_venda.md) |
+| 5 | Financeiro & Preços | Custos, precificação, avais, emissão de NF, comissões | [`05_financeiro_precos.md`](docs/modulos/05_financeiro_precos.md) |
+| 6 | Contratos & Jurídico | Contrato de venda, aval jurídico, minutas e assinatura digital | [`06_contratos_juridico.md`](docs/modulos/06_contratos_juridico.md) |
+| 7 | Suprimentos & Importação | P.I., RFQ, IMS, embarques, rastreio marítimo, importação de varejo | [`07_suprimentos_importacao.md`](docs/modulos/07_suprimentos_importacao.md) |
+| 8 | Engenharia & Produto | Projeto, ficha técnica, solicitações de produto | [`08_engenharia_produto.md`](docs/modulos/08_engenharia_produto.md) |
+| 9 | Obras & Instalação | Dossiê da obra, vistorias, instalação em campo, mapa de obras, ART | [`09_obras_instalacao.md`](docs/modulos/09_obras_instalacao.md) |
+| 10 | Entrega & Documentação | Central de documentos, data book, termo e entrega final | [`10_entrega_documentacao.md`](docs/modulos/10_entrega_documentacao.md) |
+| 11 | Parceiros & Instaladores | Empresas instaladoras, homologação, contrato e pagamentos do instalador | [`11_parceiros_instaladores.md`](docs/modulos/11_parceiros_instaladores.md) |
+| 12 | Logística Interna | Almoxarifado, expedição, separação, etiquetas | [`12_logistica_interna.md`](docs/modulos/12_logistica_interna.md) |
+| 13 | Fabricação | PCP, MES, carga de máquina, corrimão e corte, relatórios | [`13_fabricacao.md`](docs/modulos/13_fabricacao.md) |
+| 14 | Administração | Logs de atividade e configurações do sistema | [`14_administracao.md`](docs/modulos/14_administracao.md) |
+| 15 | Serviços | WhatsApp, gi-avisos, Copiloto VP, Telegram, vpsistema e o canal de e-mail (usados por vários módulos; não é item do menu) | [`15_servicos.md`](docs/modulos/15_servicos.md) |
+
+**Mapas gerados do código e dos documentos** (não se editam à mão; sempre em dia):
+- [`docs/rag/mapa-de-telas.md`](docs/rag/mapa-de-telas.md) — módulo → tela → rota → onde está no documento;
+- [`docs/MAPA_DE_ROTAS.md`](docs/MAPA_DE_ROTAS.md) — rotas, menu, abas e botões de navegação, lidos do código;
+- [`docs/rag/`](docs/rag/LEIAME.md) — índice de seções de cada documento, com o selo de verificação de cada trecho.
+
+---
 ## 🔑 Arquitetura de negócio
 
 ### Master ID
@@ -261,7 +146,7 @@ O sistema deve evitar bases paralelas para o mesmo fato. Exemplos de intenção 
 
 - P.I. como fonte financeira da compra;
 - Embarque como consolidador logístico;
-- `vistorias_obras` como fonte única das vistorias;
+- as vistorias como dado estruturado (detalhe em [`09_obras_instalacao.md`](docs/modulos/09_obras_instalacao.md)), não como nota solta;
 - Cadastro Central como origem para clientes/fornecedores/produtos;
 - Dossiê como prontuário da obra;
 - Logs como trilha de auditoria.
@@ -284,46 +169,19 @@ Dossiê da Obra ← Engenharia / Vistorias / ART / Instalador / Instalação
 
 ---
 
+---
+
 ## 🚦 Regras de governança e Gates
 
-O VP Gestão não deve tratar “próxima etapa” como um botão livre. Gates existem para impedir avanço indevido.
+O VP Gestão não deve tratar “próxima etapa” como um botão livre. Gates existem para impedir avanço indevido. **Aqui está o conceito; a regra exata e o código estão nos documentos de módulo.**
 
-### Gate de compra
-
-```text
-Decisão executiva / CEO
-        AND
-Contrato assinado
-        AND
-Sinal confirmado
-        AND
-Aval financeiro
-        ↓
-COMPRA LIBERADA
-```
-
-### Gate técnico / importação
-
-Pré-requisitos técnicos, documentais e contratuais devem estar satisfeitos antes da liberação correspondente.
-
-### Gate de instalação
-
-```text
-Contrato / condição contratual
-        AND
-Liberação financeira aplicável
-        AND
-Projeto / documentação técnica
-        AND
-Instalador habilitado e vinculado
-        ↓
-INSTALAÇÃO LIBERADA
-```
+- **Gate de compra** — a compra ao fornecedor só é liberada quando os avais exigidos estão dados (Financeiro, Jurídico e Engenharia; o CEO entra conforme a margem). Regra e código: [`01_geral.md`](docs/modulos/01_geral.md) §1.3.8 e §1.4.8, e [`05_financeiro_precos.md`](docs/modulos/05_financeiro_precos.md).
+- **Gate técnico / importação** — pré-requisitos técnicos, documentais e contratuais satisfeitos antes da liberação correspondente. Ver [`07_suprimentos_importacao.md`](docs/modulos/07_suprimentos_importacao.md).
+- **Gate de instalação** — contrato, liberação financeira aplicável, projeto/documentação técnica e instalador habilitado e vinculado. Ver [`09_obras_instalacao.md`](docs/modulos/09_obras_instalacao.md) e [`11_parceiros_instaladores.md`](docs/modulos/11_parceiros_instaladores.md).
 
 **Princípio:** automação verifica fatos; decisões empresariais relevantes permanecem explícitas e auditáveis.
 
 ---
-
 ## ⚡ Paralelismo operacional
 
 Uma das maiores oportunidades de redução de lead time está no período em que equipamento está em produção ou em trânsito.
@@ -343,6 +201,8 @@ O ERP deve, portanto, **orquestrar trabalho futuro**, e não apenas registrar fa
 
 ---
 
+---
+
 ## 🧠 Inteligência e automação
 
 **Dashboard** observa o processo.
@@ -351,7 +211,7 @@ O ERP deve, portanto, **orquestrar trabalho futuro**, e não apenas registrar fa
 
 **Central de Decisões** solicita decisão humana.
 
-**Gatilhos & Prazo** encadeiam obrigações e datas.
+**Prazos & Pendências** (antes "Gatilhos & Prazo") encadeiam obrigações e datas.
 
 **Logs** preservam evidência.
 
@@ -396,27 +256,37 @@ docs/screenshots/10-ficha-tecnica.png
 
 ---
 
+---
+
 ## 🛠️ Stack e execução
 
-O repositório utiliza uma arquitetura web orientada ao portal interno, com React no frontend, CSS próprio, Supabase/PostgreSQL como camada de dados e serviços/Edge Functions para integrações e automações. O servidor do projeto também contempla entrega de arquivos estáticos e integração com o ambiente corporativo.
+React 18 (UMD, por CDN) com Babel no navegador, CSS próprio, Supabase/PostgreSQL como camada de dados e Edge Functions (Deno) para integrações e automações. O servidor (`node server.js`, Express) entrega os arquivos estáticos. **Não há etapa de build do app**; a única exceção são os PDFs vetoriais (`pdf-bundle/`, Vite), cujo resultado é versionado. A `main` implanta sozinha no Hostinger: **merge é produção**. O detalhe técnico e as leis de arquitetura estão em [`CLAUDE.md`](CLAUDE.md) (Títulos III e VIII).
 
-> **Importante para agentes:** antes de alterar stack, deploy, autenticação, IDs de projeto ou infraestrutura, valide o código/configuração corrente. Esta documentação privilegia o **domínio de negócio** e evita transformar detalhes voláteis de infraestrutura em premissas permanentes.
+```bash
+npm install                         # dependências
+node server.js                      # sobe em http://localhost:3000
+npm test                            # testes de unidade (Node)
+npm run lint                        # ESLint
+npm run test:e2e                    # telas abrem sem erro (Playwright, Supabase simulado)
+npm run rag                         # regenera docs/rag/ (rode depois de editar documentos)
+npm run docs:conferir -- origin/main  # documento do módulo mudou junto com o código?
+```
+
+> **Importante para agentes:** antes de alterar stack, deploy, autenticação, IDs de projeto ou infraestrutura, valide o código/configuração corrente.
 
 ### Segurança
 
 - sistema corporativo, não destinado a exposição pública irrestrita;
-- respeitar autenticação e autorização existentes;
 - nunca commitar secrets, tokens ou credenciais;
-- aplicar princípio de menor privilégio;
-- preservar RLS/políticas do Supabase quando aplicável;
-- decisões, aprovações e mudanças críticas devem ser auditáveis.
+- **estado real:** o app fala com o banco pela chave pública e boa parte das tabelas ainda tem leitura/escrita abertas a ela; trava na tela é organização, não segurança. O isolamento de verdade é a issue #571 — ver o Art. 25 do [`CLAUDE.md`](CLAUDE.md) e [`14_administracao.md`](docs/modulos/14_administracao.md);
+- tabela nova nasce com RLS fechada; decisões, aprovações e mudanças críticas devem ser auditáveis.
 
 ---
-
 ## 🤖 Guia para humanos e agentes de IA
 
 Se Você é uma pessoa, Claude Code, Codex, ChatGPT ou outro agente trabalhando neste repositório, siga estas regras antes de modificar o produto:
 
+0. **Comece por [`CLAUDE.md`](CLAUDE.md)** (as leis) e pelo **documento do módulo** que você vai tocar (tabela acima). Em conflito, vale a Constituição.
 1. **Entenda a jornada antes da tela.** Descubra de onde o dado vem e quem o consome depois.
 2. **Não crie uma segunda fonte de verdade** sem necessidade arquitetural comprovada.
 3. **Preserve Master ID, vínculos e rastreabilidade** entre ativos/documentos.
@@ -429,7 +299,7 @@ Se Você é uma pessoa, Claude Code, Codex, ChatGPT ou outro agente trabalhando 
 10. **Trate o Dossiê como prontuário da obra** e vistorias oficiais como dados estruturados, não notas soltas.
 11. **Pense em paralelismo.** Engenharia e preparação de obra podem avançar durante produção/trânsito.
 12. **Antes de criar um módulo novo, procure componente, store, tabela, função ou rota existente** que já represente o domínio.
-13. **Atualize documentação junto com mudanças estruturais.** Se o fluxo mudou, este README não pode ficar para trás novamente.
+13. **Mudou o comportamento de um módulo? O documento daquele módulo muda no mesmo PR** (e `npm run rag`). Este README só muda quando muda o conceito do produto, a jornada, o glossário ou a lista de módulos — nunca por causa de uma tela.
 
 ### Checklist mínimo antes de uma alteração
 
@@ -443,11 +313,10 @@ Se Você é uma pessoa, Claude Code, Codex, ChatGPT ou outro agente trabalhando 
 [ ] Há impacto em logs/auditoria?
 [ ] Há impacto em documentos/PDF/assinatura?
 [ ] Há impacto em integrações (Omie, AIS, NCM/DUIMP etc.)?
-[ ] Testes e documentação foram atualizados?
+[ ] O documento do módulo e a ajuda do "?" foram atualizados? Testes também?
 ```
 
 ---
-
 ## 📚 Leitura do produto por volume
 
 Para documentação aprofundada, a jornada pode ser estudada em oito volumes:
@@ -502,9 +371,9 @@ Quando essa continuidade está íntegra, o software deixa de apenas registrar a 
 
 ## 🌳 Btime — Vistorias em Equipamentos (sistema externo)
 
-> **O que é isto:** documentação de engenharia reversa de um sistema **de terceiros**, não código deste repositório. O VP Gestão não integra com o Btime hoje (nenhuma tabela, edge function ou rota chama `btime.io`) — isto é um mapa de reconhecimento para orientar uma futura integração ou migração de conteúdo. Levantado em 01/09/2026 por navegação manual da conta `gelson.simoes@verticalparts.com.br` em `verticalparts.btime.io` (build v6.317.21), sem acesso a banco de dados ou API do produto.
+> **O que é isto:** documentação de engenharia reversa de um sistema **de terceiros**, não código deste repositório. O VP Gestão não integra com o Btime hoje (nenhuma tabela, edge function ou rota chama `btime.io`) — isto é um mapa de reconhecimento para orientar uma futura integração ou migração de conteúdo. Conferido de novo em 02/11/2026: nenhuma tabela, função, rota ou tela do VP Gestão chama o Btime (só um comentário em `src/vistorias-envio.jsx` aponta para esta seção). Levantado em 01/09/2026 por navegação manual da conta `gelson.simoes@verticalparts.com.br` em `verticalparts.btime.io` (build v6.317.21), sem acesso a banco de dados ou API do produto.
 
-O Btime é onde a VerticalParts hoje **executa e audita o trabalho de campo**: vistorias de elevador, entrega de equipamento, comissionamento de quadro de comando, ordens de serviço gerais. É o sistema que guarda, com muito mais granularidade do que `vistorias_obras`/`instalacao-checklist-store.js` hoje, o checklist técnico completo de entrega/vistoria de elevador (~90 perguntas). Tenant único: *Vertical Parts Indústria Com. de Peças Escadas e Esteiras Rolantes e Elevadores Ltda*, 9 usuários (grupo Instalação/Engenharia), 894 atividades registradas, 155 locais cadastrados, 30 questionários configurados. Tem app mobile companheiro (um checklist exige validação por QR Code do local).
+O Btime é onde a VerticalParts hoje **executa e audita o trabalho de campo**: vistorias de elevador, entrega de equipamento, comissionamento de quadro de comando, ordens de serviço gerais. É o sistema que guarda, com muito mais granularidade do que `vistorias_atividades`/`instalacao-checklist-store.js` hoje, o checklist técnico completo de entrega/vistoria de elevador (~90 perguntas). Tenant único: *Vertical Parts Indústria Com. de Peças Escadas e Esteiras Rolantes e Elevadores Ltda*, 9 usuários (grupo Instalação/Engenharia), 894 atividades registradas, 155 locais cadastrados, 30 questionários configurados. Tem app mobile companheiro (um checklist exige validação por QR Code do local).
 
 ### 🌱 Raiz — a cadeia de dados
 
@@ -524,7 +393,7 @@ Equivalência aproximada com o VP Gestão — **não há chave estrangeira real 
 |---|---|
 | Local | `dossier_obra` |
 | Ativos (aba do Local) | `equipamentos_obra` |
-| Atividade + Questionário | `vistorias_obras` / checklist de instalação (hoje sem motor de perguntas nem ramos condicionais) |
+| Atividade + Questionário | `vistorias_atividades` / checklists digitais de vistoria (conferido em 02/11/2026: é a tabela que o código lê; ver `09_obras_instalacao.md`) |
 
 ### 🌳 Tronco — os 6 módulos (galhos principais)
 
@@ -568,25 +437,22 @@ Existe uma conta **`Command Center (integração)`** (`command-center+verticalpa
 2. Decidir a direção: Btime como fonte de verdade dos checklists técnicos (VP Gestão só lê/espelha) **vs.** migrar o conteúdo dos 30 questionários para dentro do VP Gestão.
 3. Se for espelhar: mapear `Local ↔ dossier_obra` e `Ativo ↔ equipamentos_obra` por nome/endereço, com revisão manual (sem chave compartilhada hoje).
 4. Se for migrar: os ~90 itens do checklist de elevador são um roteiro pronto para enriquecer as fases de vistoria/entrega já existentes em `vistorias-obras.jsx`.
-
 ---
 
-## 📌 Estado desta documentação
+## 📌 Como este README é mantido
 
-Este README foi reestruturado em **17/08/2026** para substituir a visão histórica centrada em “Cotação/Importação” por uma documentação orientada ao ciclo de vida completo do VP Gestão.
+Este README foi reestruturado em **17/08/2026** (visão do ciclo de vida completo) e de novo em **02/11/2026**, quando o antigo "Mapa funcional" (que descrevia tela por tela e já tinha envelhecido) foi trocado por ponteiros para os documentos de módulo. Em 01/09/2026 entrou a seção do Btime, que é um levantamento datado de um sistema externo.
 
-Em **01/09/2026** foi adicionada a seção [Btime — Vistorias em Equipamentos](#-btime--vistorias-em-equipamentos-sistema-externo), documentando por engenharia reversa um sistema externo de terceiros usado pela operação (checklists de vistoria/entrega de campo) — ainda sem integração real com o VP Gestão, mas com achado de uma conta de integração (`Command Center`) criada recentemente no Btime que merece confirmação com o time antes de qualquer trabalho de integração.
+**O que mora aqui e o que não mora:**
 
-O README deve ser atualizado sempre que houver mudança estrutural em:
+| Muda neste README | NÃO muda neste README (muda no documento do módulo) |
+|---|---|
+| a visão do produto, a jornada e os princípios | telas, botões, rotas, abas |
+| o glossário | regras de negócio e gates em detalhe |
+| a lista de módulos (módulo novo ou renomeado) | tabelas, integrações, testes, pendências |
+| o estado do Btime, se a integração sair do papel | qualquer coisa que um clique na tela mude |
 
-- sidebar ou rotas principais;
-- fontes de verdade;
-- Master ID / Dossiê;
-- gates e decisões;
-- etapas de compra/importação;
-- engenharia/instalação/entrega;
-- integrações críticas;
-- módulos que mudem de `planned` para operacional.
+**Como não ficar para trás:** a mudança de um módulo atualiza o documento dele no mesmo PR; o CI confere `docs/rag/` (`npm run rag:conferir`) e avisa quando um arquivo de módulo muda sem o documento dele (`npm run docs:conferir`). O README fica pequeno justamente para quase nunca precisar de atualização.
 
 ---
 

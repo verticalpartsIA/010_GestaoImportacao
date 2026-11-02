@@ -5,7 +5,7 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `CLAUDE.md#âncora`. Em divergência vale a origem.
 
 - **Selo:** não se aplica (CLAUDE.md não é documento de módulo; o Art. 6 vale para `docs/modulos/`).
-- **Palavras:** 86540 · **blocos:** 1323
+- **Palavras:** 86805 · **blocos:** 1324
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -14,7 +14,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 🔒🔒 ÁREA BLINDADA — ESTE ARQUIVO É A CONSTITUIÇÃO DO SITE (31/10/2026, regra do Gelson) | `CLAUDE.md#-área-blindada--este-arquivo-é-a-constituição-do-site-31102026-regra-do-gelson` | 2 | — | 1 | m1 |
 | 📘 Documentos de módulo (docs/modulos/) — devem ser respeitados (31/10/2026, regra do Gelson) | `CLAUDE.md#-documentos-de-módulo-docsmodulos--devem-ser-respeitados-31102026-regra-do-gelson` | 3 | — | 1 | m1 |
 | ⚖️ Onde estão as leis (31/10/2026) | `CLAUDE.md#️-onde-estão-as-leis-31102026` | 3 | — | 2 | m2 |
-| Constituição do VP Gestão (hub.vpsistema.com) — 51 artigos (31/10/2026, aprovada pelo Gelson; Art. 51 acrescentado em 02/11/2026) | `CLAUDE.md#constituição-do-vp-gestão-hubvpsistemacom--51-artigos-31102026-aprovada-pelo-gelson-art-51-acrescentado-em-02112026` | 2 | — | 1 | m1 |
+| Constituição do VP Gestão (hub.vpsistema.com) — 52 artigos (31/10/2026, aprovada pelo Gelson; Arts. 51 e 52 acrescentados em 02/11/2026) | `CLAUDE.md#constituição-do-vp-gestão-hubvpsistemacom--52-artigos-31102026-aprovada-pelo-gelson-arts-51-e-52-acrescentados-em-02112026` | 2 | — | 1 | m1 |
 | Preâmbulo | `CLAUDE.md#preâmbulo` | 3 | — | 1 | m1 |
 | Título I — Leis de verdade e de conduta | `CLAUDE.md#título-i--leis-de-verdade-e-de-conduta` | 3 | Não verificado (misto (vale o mais fraco)) | 11 | m11 |
 | Título II — Autoridade, escopo e confirmação | `CLAUDE.md#título-ii--autoridade-escopo-e-confirmação` | 3 | — | 7 | m7 |
@@ -24,7 +24,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | Título VI — Fluxo de trabalho | `CLAUDE.md#título-vi--fluxo-de-trabalho` | 3 | — | 4 | m4 |
 | Título VII — Documentos | `CLAUDE.md#título-vii--documentos` | 3 | — | 6 | m6 |
 | Título VIII — Contexto técnico do site | `CLAUDE.md#título-viii--contexto-técnico-do-site` | 3 | — | 8 | m8 |
-| Título IX — Emendas | `CLAUDE.md#título-ix--emendas` | 3 | Não verificado (uniforme) | 5 | m5 |
+| Título IX — Emendas | `CLAUDE.md#título-ix--emendas` | 3 | Não verificado (uniforme) | 6 | m6 |
 | Índice, glossário e mapa dos módulos (31/10/2026, pedido do Gelson) | `CLAUDE.md#índice-glossário-e-mapa-dos-módulos-31102026-pedido-do-gelson` | 2 | meta | 0 | — |
 | Como ler esta Constituição | `CLAUDE.md#como-ler-esta-constituição` | 3 | — | 4 | m4 |
 | Índice deste arquivo | `CLAUDE.md#índice-deste-arquivo` | 3 | meta | 5 | m5 |
