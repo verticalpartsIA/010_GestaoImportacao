@@ -36,14 +36,33 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
-      # PLACEHOLDER: o script "lint" ainda é só um echo. Será trocado por um
-      # lint de verdade (ver plano do item 4).
-      - name: Lint (placeholder)
+      # ESLint com regras de erro real (eslint.config.js). Erro falha o CI.
+      - name: Lint
         run: npm run lint
+
+      # Recompila os 4 bundles de PDF (Vite, ~6 s). Falha se algum build quebrar.
+      - name: Build (bundles de PDF)
+        run: npm run build
+
+      # Os bundles gerados são versionados: se o resultado difere do commit,
+      # alguém editou um .entry.js sem rodar o build (ou o inverso).
+      - name: Bundles de PDF em dia com o código-fonte
+        run: |
+          if ! git diff --quiet -- src/*.bundle.js; then
+            echo "❌ src/*.bundle.js difere do build. Rode 'npm run build' e commite:"
+            git diff --stat -- src/*.bundle.js
+            exit 1
+          fi
+          echo "✅ Bundles de PDF idênticos ao build."
 
       # Testes reais: node --test em src/*.test.js (ver scripts/run-tests.js).
       - name: Testes unitários (node --test)
         run: npm run test
+
+      # Informativo (sem limite mínimo): cobertura nativa do Node.
+      - name: Cobertura (informativo)
+        continue-on-error: true
+        run: node --test --experimental-test-coverage src/*.test.js 2>&1 | tail -30
 
       - name: Cache-busting (?v=) incrementado nos arquivos alterados
         env:
