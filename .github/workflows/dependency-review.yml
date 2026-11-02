@@ -1,10 +1,12 @@
 name: Dependency Review
 
-# Analisa mudanças de dependências em PRs e bloqueia a introdução de
-# pacotes com vulnerabilidades conhecidas (severidade alta ou crítica).
+# DESATIVADO: o Dependency Review exige GitHub Code Security em repositórios
+# privados, indisponível no plano atual. A checagem de dependências foi
+# substituída pelo workflow "Security — npm audit e Gitleaks".
+# Para reativar, restaure o gatilho abaixo:
+#   pull_request: { branches: [main] }
 on:
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
