@@ -55,6 +55,11 @@ jobs:
           fi
           echo "✅ Bundles de PDF idênticos ao build."
 
+      # docs/rag/ é gerado por scripts/gerar-rag.js a partir de docs/modulos/, CLAUDE.md e README.md.
+      # Mudou um desses documentos? Rode `npm run rag` e commite docs/rag/ (mesmo desenho do passo acima).
+      - name: Índice RAG (docs/rag) em dia com os documentos
+        run: node scripts/gerar-rag.js --conferir
+
       # Testes reais: node --test em src/*.test.js (ver scripts/run-tests.js).
       - name: Testes unitários (node --test)
         run: npm run test

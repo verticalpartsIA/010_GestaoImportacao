@@ -18,7 +18,7 @@
 
 Notas operacionais para uma sessão futura do Claude Code neste repo. O README.md tem a visão de produto/telas; este arquivo é sobre "como trabalhar aqui".
 
-## Constituição do VP Gestão (hub.vpsistema.com) — 50 artigos (31/10/2026, aprovada pelo Gelson)
+## Constituição do VP Gestão (hub.vpsistema.com) — 51 artigos (31/10/2026, aprovada pelo Gelson; Art. 51 acrescentado em 02/11/2026)
 
 > **Status:** aprovada pelo Gelson em 31/10/2026. Vale para toda sessão do Claude, inclusive as concorrentes. Artigo marcado **(Meta)** é a direção que o projeto persegue, não uma prática verificada em todo o código.
 > **Origem:** parte vem do guia genérico de Spec-Driven Development (SDD) que estava neste arquivo; o que não servia ao site foi trocado pela realidade do repositório; as leis de verdade (Título I) são do Gelson.
@@ -76,6 +76,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 35. **Art. 35 — Padrão de teste.** Nome que descreve o comportamento; Arrange-Act-Assert; um conceito por teste; dados explícitos; mock só para dependência externa. Meta de cobertura numérica **não** é lei aqui (seria inventar um número); a lei é: regra de negócio nova tem teste; bug corrigido ganha o teste que o teria pego **quando for viável** (o histórico do projeto traz muitas correções sem teste: isso é dívida, não exemplo).
 36. **Art. 36 — CI.** O merge em `main` exige os checks "Validar estrutura do projeto" e "Todas as telas abrem sem erro". Se um job for renomeado, a proteção da branch muda junto. Não se contorna a proteção (`--admin`, `--no-verify`).
     > **Emenda de 02/11/2026 (PR #1341):** o job "Validar estrutura do projeto" agora roda, nesta ordem, Lint, Build (bundles de PDF), Testes unitários, cobertura (só informativa, sem limite mínimo) e a conferência de que `src/*.bundle.js` batem com o build. **Editou um `pdf-bundle/*.entry.js`? Rode `npm run build` e commite os bundles**, senão o CI falha. Não se divide o E2E em matrix/shards sem manter o nome exato do check "Todas as telas abrem sem erro".
+    > **Emenda de 02/11/2026 (Art. 51):** o job "Validar estrutura do projeto" ganhou o passo "Índice RAG (docs/rag) em dia com os documentos", depois da conferência dos bundles de PDF e antes dos testes unitários. Editou `docs/modulos/*.md`, `CLAUDE.md` ou `README.md`? Rode `npm run rag` e commite `docs/rag/`, senão o CI falha. Os nomes do job e dos checks do Art. 36 não mudam.
 
 ### Título VI — Fluxo de trabalho
 37. **Art. 37 — SDD para trabalho novo.** Ordem: **Specify → Clarify → Plan → Tasks → Analyze → Implement.**
@@ -113,6 +114,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 48. **Art. 48 — Dúvida sobre o que esta Constituição manda:** a sessão pergunta ao Gelson e não escolhe a leitura que lhe seja mais cômoda.
 49. **Art. 49 — Doação de benefícios entre módulos** *(emenda de 31/10/2026, pedido do Gelson: nenhum módulo fica rico enquanto outro fica pobre)*. Quando uma sessão cria ou melhora, num módulo, algo de valor geral — uma regra aprendida, um padrão de código, um cuidado de teste, uma seção de documento, um achado que vale para outras telas —, ela confere **todos** os documentos de módulo já existentes em `docs/modulos/` e acrescenta o benefício, no tema certo de cada um, **na mesma sessão**, com o selo de verificação e a data (se a tela ainda não tem onde receber, marca como pendência). O texto completo fica num lugar só (Art. 44): no módulo de origem ou na Parte comum do Geral; os outros apontam. O documento de módulo novo já nasce com tudo o que os anteriores acumularam. Cada documento registra, na sua Parte comum, o que recebeu e o que doou.
 50. **Art. 50 — Concatenar** *(emenda de 31/10/2026, pedido do Gelson)*. Ao estruturar o documento de um módulo, a sessão procura o que fala dele em toda a raiz do repositório, em `docs/`, em `docs/superpowers/specs/`, em `handoffs/` e no próprio `CLAUDE.md`. O que está atualizado e vale a pena manter é **concatenado** (reunido) no documento do módulo, no tema certo e com selo; o que é de outro módulo é apontado para lá; o que é só histórico fica onde está; o que parece obsoleto **não é apagado sem decisão do Gelson** (e, apagado, continua no Git). A seção do `CLAUDE.md` que passou para o módulo é substituída por um ponteiro. O destino de cada arquivo fica registrado no tema "Documentos soltos e destino do que foi concatenado" do módulo (PC-11).
+51. **Art. 51 — Documentos derivados e gerados (`docs/rag/`)** *(emenda de 02/11/2026, pedido do Gelson: o Super RAG precisa de uma camada de curadoria que nunca vire segunda fonte da verdade)*. A pasta `docs/rag/` guarda arquivos **gerados** por `scripts/gerar-rag.js` (`npm run rag`) a partir de `docs/modulos/*.md`, `CLAUDE.md` e `README.md`. O conteúdo de `docs/rag/` é **derivado: nunca é fonte da verdade, nunca se edita à mão e não copia o texto dos documentos** (Art. 44). Cada item aponta para o arquivo e a âncora do documento de origem e mostra o selo do Art. 6 e **de onde ele veio** (do próprio bloco, da seção, de uma seção-pai ou do cabeçalho do documento); só é "Não verificado" quando não há selo em nenhum nível. Em divergência entre `docs/rag/` e a origem, **vale a origem**. Quem altera um desses documentos roda `npm run rag` e commita `docs/rag/` junto: o job "Validar estrutura do projeto" confere (`npm run rag:conferir`) e **falha se o índice estiver desatualizado**, mas **nunca falha por falta de selo** num documento.
 
 ## Índice, glossário e mapa dos módulos (31/10/2026, pedido do Gelson)
 
@@ -123,7 +125,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 - A numeração dos documentos é móvel, como cláusula de contrato (módulo = N, telas filhas = N.1, N.2…); quem acrescenta item reescreve índice e glossário do documento.
 
 ### Índice deste arquivo
-- **A. Leis e travas permanentes:** a **Constituição** (Títulos I a IX, 50 artigos),  áreas blindadas (Cadastros Mestres, E-mail/Inbox, Ver documento, Containers, Mão de obra, Assinatura digital, PDF assinado), trava por "Confirmo" (Atualização de Custos).
+- **A. Leis e travas permanentes:** a **Constituição** (Títulos I a IX, 51 artigos),  áreas blindadas (Cadastros Mestres, E-mail/Inbox, Ver documento, Containers, Mão de obra, Assinatura digital, PDF assinado), trava por "Confirmo" (Atualização de Custos).
 - **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico, Suprimentos & Importação, Engenharia & Produto, Obras & Instalação, Entrega & Documentação, Parceiros & Instaladores, Logística Interna, Fabricação e Administração), mais o documento dos serviços (15, Central de Avisos).
 - **C. Procedimentos:** acessos, cache-busting, stack e testes, `pdf-bundle/`, fluxo de trabalho, método (SDD), pendências.
 - **D. Resíduo por módulo:** seções de entregas ainda não absorvidas pelo documento do seu módulo (ver marcas "→ módulo N").
@@ -143,6 +145,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 - **Achado, sem correção:** comportamento que parece defeito, descrito como é e registrado em "Pendências" sem mexer no código (Art. 45).
 - **Concatenar:** reunir num só documento o que estava espalhado (seções do `CLAUDE.md`, arquivos soltos na raiz, em `docs/` ou em `docs/superpowers/specs/`). Quando o que está atualizado e vale a pena é copiado para o documento do módulo, a seção de origem vira ponteiro (Art. 50).
 - **Doação de benefícios:** passar a todos os documentos de módulo existentes o que um deles ganhou de bom e novo (regra, padrão, cuidado de teste, seção), para nenhum módulo ficar rico enquanto outro fica pobre (Art. 49).
+- **Derivado gerado:** arquivo produzido por script a partir dos documentos (hoje `docs/rag/`); nunca é fonte da verdade, nunca se edita à mão e em divergência vale a origem (Art. 51).
 - **Nomes antigos que ainda aparecem no texto:** "Gatilhos & Prazo" e "Gatilhos" = hoje **Prazos & Pendências** (renomeada em 03/10/2026; a rota interna continua `financeiro`); "Central de Alertas" = a tela Notificações.
 
 ### Mapa dos 14 módulos
