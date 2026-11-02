@@ -53,8 +53,8 @@
 | T004 | Backtest no histórico | ver seção 5 |
 | T005 | Passo de CI (aviso), `package.json`, modelo de PR | **Conferido**: YAML válido, 14 passos, o novo na posição 8; nome do job intacto |
 | T006 | `npm run rag` (o README mudou) | **Conferido**: só `docs/rag/indice/README.md` mudou de conteúdo |
-| T007 | Emenda do Art. 52 | **Aguarda o "Confirmo" do Gelson** |
-| T008 | Trocar `--modo aviso` por `--modo falha` | **Depende do Gelson**: depois de uma fase de aviso |
+| T007 | Emenda do Art. 52 | **Aplicada em 02/11/2026** (Gelson: "Lei 52 Confirmo") |
+| T008 | Trocar `--modo aviso` por `--modo falha` | **Aguardar uma semana em modo aviso** (decisão do Gelson, 02/11/2026); trocar a partir de 09/11/2026 |
 
 ## 5. Analyze
 
