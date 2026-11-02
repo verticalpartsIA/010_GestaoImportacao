@@ -403,3 +403,203 @@ A **lei** está no `CLAUDE.md` (Art. 16 e a seção "🔒 ÁREA BLINDADA — Cad
 
 ---
 *Documento reescrito em 31/10/2026 no molde de `01_geral.md` e `02_crm.md`. Aprovado como REAL pelo Gelson em 31/10/2026.*
+
+--------------------------------------------------
+
+### 1) Mapa do site em Mermaid flowchart TD
+
+```mermaid
+flowchart TD
+    Menu[Menu: Cadastros Mestres] --> Clientes[Clientes: /cadastros/cadastro-clientes]
+    Menu --> Fornecedores[Fornecedores: /cadastros/cadastro-fornecedores]
+    
+    Clientes --> CliNovo[Novo Cliente: /novo]
+    Clientes --> CliEdit[Editar Cliente: /<id>]
+    Clientes --> CliHist[Modal Histórico: /<id>/historico]
+    
+    Fornecedores --> FornNovo[Novo Fornecedor: /novo]
+    Fornecedores --> FornEdit[Editar Fornecedor: /<id>]
+
+```
+
+---
+
+### 2) Wireframe da home e de uma página interna em texto/ASCII
+
+```text
+======================================================================
+  Cadastros > Clientes                                 [ Novo cliente ]
+  Cadastro central de clientes — inclui os criados automaticamente... 
+======================================================================
+  [ Buscar por código, nome ou CNPJ/CPF... ]       N cliente(s) enc.
+----------------------------------------------------------------------
+  Código ▲ | Razão social ▲ | CNPJ/CPF ▲ | Cidade/UF ▲ | Status | Ações
+  VPCLI-.. | Empresa A      | 00.00...   | São José..  | Ativo  | [Ed][Ex][H]
+----------------------------------------------------------------------
+
+======================================================================
+  Editar cliente <VPCLI-NNNN>                               
+======================================================================
+  (o) PJ   ( ) PF
+  CNPJ: [ 00.000.000/0001-00 ]                     [ Buscar CNPJ ]
+  Razão social / Nome *: [ Empresa A                             ]
+  Contribuinte de ICMS *: [ Sim — contribuinte (tem inscrição) v ]
+  [x] Documento pendente (CNPJ/CPF ainda não regularizado)
+
+  Endereço
+  Logradouro: [ Rua X... ] Número: [ 123 ] Bairro: [ Centro      ]
+  
+  [x] Cliente ativo            [ Cancelar ] [ Salvar alterações ]
+======================================================================
+
+```
+
+---
+
+### 3) Storyboard de 5–8 telas da jornada principal
+
+**Jornada: Cadastro de Novo Cliente**
+
+1. **Tela 1 (Lista):** O usuário acessa a lista vazia e clica no botão superior "Novo cliente".
+
+
+2. **Tela 2 (Formulário Limpo):** A URL muda para `/novo`. O usuário seleciona o Tipo de pessoa "PJ", digita o CNPJ e clica em "Buscar CNPJ".
+
+
+3. **Tela 3 (Autopreenchimento):** O sistema chama a Edge Function `omie-buscar-cliente` (ou BrasilAPI) e preenche os campos vazios (Razão Social, Endereço). O usuário vê uma notificação indicando a origem dos dados.
+
+
+4. **Tela 4 (Preenchimento Manual):** O usuário seleciona a opção "Sim" no campo obrigatório "Contribuinte de ICMS?" e clica em "Cadastrar cliente".
+
+
+5. **Tela 5 (Processamento e Validação):** A store executa conferências em background: valida dígitos do CNPJ, verifica se há duplicata de documento único no banco, e chama o RPC para gerar o código `VPCLI-NNNN`.
+
+
+6. **Tela 6 (Sucesso):** O sistema exibe o toast "Cliente cadastrado.", retorna para a lista e recarrega todos os registros para exibir o novo cliente inserido.
+
+
+
+---
+
+### 4) Fluxograma de tarefa crítica em Mermaid
+
+```mermaid
+flowchart TD
+    Start([Usuário clica no ícone da Lixeira]) --> CallRPC[Chama função cadastro_vinculos no banco]
+    CallRPC --> CheckFail{Consulta falhou?}
+    CheckFail -- Sim --> ShowError[Mostra erro e não apaga nada]
+    CheckFail -- Não --> CheckTrans{Possui transações?}
+    
+    CheckTrans -- Sim --> CheckStatus{Já está inativo?}
+    CheckStatus -- Sim --> ShowWarn[Avisa que não pode excluir e mantém como está]
+    CheckStatus -- Não --> OfferInact[Lista fontes das transações e oferece Inativar]
+    OfferInact --> ConfInact[Usuário confirma inativação?]
+    ConfInact -- Sim --> Update[Grava ativo = false]
+    
+    CheckTrans -- Não --> ConfirmDel[Pede confirmação: Excluir definitivamente?]
+    ConfirmDel -- Sim --> Delete[Executa comando DELETE no banco]
+
+```
+
+---
+
+### 5) Organograma das seções em Mermaid
+
+```mermaid
+flowchart TD
+    Doc[3. Cadastros Mestres] --> T31[3.1 Clientes]
+    Doc --> T32[3.2 Fornecedores]
+    Doc --> TPC[Parte Comum]
+
+    T31 --> T311[3.1.1 O que é]
+    T31 --> T314[3.1.4 O que mostra]
+    T31 --> T316[3.1.6 Comportamento]
+    T31 --> T31X[...até 3.1.11]
+
+    T32 --> T321[3.2.1 O que é]
+    T32 --> T328[3.2.8 Regras e armadilhas]
+    T32 --> T3210[3.2.10 Pendências]
+    T32 --> T32X[...até 3.2.11]
+
+    TPC --> PC1[PC-1 Mapa de ligações]
+    TPC --> PC3[PC-3 Consulta Omie]
+    TPC --> PC5[PC-5 Nunca excluir com transação]
+    TPC --> PCX[...até PC-12]
+
+```
+
+---
+
+### 6) Diagrama de teia para relações não hierárquicas em Mermaid
+```mermaid
+graph TD
+    CLI((Clientes)) --- FORM[Formulário de Elevador]
+    CLI --- PROP[Proposta]
+    CLI --- LEADS[Leads / CRM]
+    CLI --- DOSS[Dossiê da Obra]
+    CLI --- PROJ[Projeto de Elevadores]
+
+    FORN((Fornecedores)) --- PI[P.I.]
+    FORN --- EMB[Embarques]
+    FORN --- VAREJ[Cotações de Varejo]
+    FORN --- RFQ[RFQ de Importação]
+    
+    FORM -.- FORN
+
+```
+
+---
+
+### 7) Diagrama de estrela com nó central em Mermaid
+```mermaid
+flowchart TD
+    Centro((Cadastro\nÚnico\nFornecedores)) --- Cat1([Agente de Carga])
+    Centro --- Cat2([Transportador])
+    Centro --- Cat3([Prestador IMS])
+    Centro --- Cat4([Fornecedor padrão])
+    Centro --- Atrib[Dados: CNPJ,\nAvaliações, Status]
+
+```
+
+---
+
+### 8) Diagrama de arquitetura front-end/back-end em Mermaid flowchart LR
+```mermaid
+flowchart LR
+    subgraph Front-end React
+        UI[cadastros.jsx / Componentes PI]
+        StoreCLI[cadastros-clientes-store.js]
+        StoreFORN[cadastros-fornecedores-store.js]
+        EndAPI[enderecos-api.js]
+    end
+
+    subgraph Middleware / APIs
+        EdgeOmie[Edge Function:\nomie-buscar-cliente]
+        BrasilAPI[BrasilAPI / ViaCEP]
+    end
+
+    subgraph Supabase Backend
+        TCLI[(Tabela: clientes)]
+        TFORN[(Tabela: fornecedores)]
+        RPC1[[RPC: gerar_codigo_*]]
+        RPC2[[RPC: cadastro_vinculos]]
+        Trig[[Gatilho: bloquear_exclusao]]
+    end
+
+    UI --> StoreCLI
+    UI --> StoreFORN
+    UI --> EndAPI
+    
+    EndAPI --> EdgeOmie
+    EndAPI --> BrasilAPI
+    
+    StoreCLI --> TCLI
+    StoreFORN --> TFORN
+    
+    StoreCLI --> RPC1
+    UI --> RPC2
+    
+    TCLI --> Trig
+    TFORN --> Trig
+
+```

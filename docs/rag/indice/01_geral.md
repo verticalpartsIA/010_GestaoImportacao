@@ -5,7 +5,7 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/01_geral.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `fd5cf97`)
-- **Palavras:** 22851 · **blocos:** 497 · **seções com selo próprio:** 8 de 74
+- **Palavras:** 22850 · **blocos:** 497 · **seções com selo próprio:** 8 de 74
 - **Origem do selo dos blocos:** próprio 24 · da seção 79 · da seção-pai 0 · do cabeçalho 350 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 44
 - **Selo efetivo dos blocos:** Conferido 418 · Herdado 0 · Não verificado 35
 

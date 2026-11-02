@@ -677,3 +677,49 @@ Busca feita em `CLAUDE.md`, raiz, `docs/`, `docs/superpowers/specs/`, `docs/supe
   - **A todos: achados de lista cortada.** `PropostasPage` pede 300 de 340; o quadro 200; contratos sociais 1.000; planilha de cotações 894 sem paginar. Padrão seguro: ler em páginas de 1.000 e avisar quando a lista veio incompleta.
 - **Pedidos de mudança de código** que estes benefícios sugerem ficam como pendência (4.5.10, 4.1.10); nenhuma linha de código foi alterada.
 - **Recebido de Serviços (01/11/2026, texto em `15_servicos.md` PC-2):** todo alerta com destinatário também vira WhatsApp pelo gi-avisos; para chegar certo, título curto com o essencial na frente, sem "teste", sem R$ no título e com o dia da semana por extenso, a obra ou o código do contrato quando houver vários no mesmo dia (o agrupamento de 24 h apaga números). **Conferido** no código do gi-avisos. O Copiloto em uso é o da VPS e **não lê** `vp_copiloto_docs`: o "ajuste por UPDATE sem redeploy" citado neste documento só valia para a Edge Function antiga `vp-copiloto`, removida em 01/11/2026 (`15_servicos.md` S3.5, divergência D1). **Conferido.**
+#### Fluxograma das ligações do módulo
+
+```mermaid
+graph TD
+    %% Fontes e Origens (Doadores para o Módulo 4)
+    Leads[Módulo 2: Leads] -->|Dados de contacto, prédio, cliente| Form41
+    Cadastros[Módulo 3: Cadastros] -->|Seletor de cliente| Form41
+    Omie[Omie / ERP] -->|Consulta de CNPJ, catálogo| Form41
+
+    %% Núcleo do Módulo 4: Comercial | Pré-venda
+    subgraph M4["Módulo 4: Comercial | Pré-venda"]
+        Form41(4.1 Formulários / Quadro de Comando)
+        CotFornecedor(4.3 Cotações a Fornecedor)
+        Proposta(4.5 Propostas)
+    end
+
+    %% Fluxos Internos e com o Módulo 5 (Precificação)
+    Form41 -->|Equipamentos com Fornecedor| CotFornecedor
+    Form41 -->|Herança: Obra, Cliente, Equipamentos| Proposta
+    CotFornecedor -->|Resposta de Preço e Câmbio| Precificacao(Módulo 5: Precificação)
+    Precificacao -->|Preço de venda e parcelas| Proposta
+
+    %% Destinos e Herdeiros (Saídas do Módulo 4)
+    Form41 -->|Link Público cria/vincula| Leads
+    Form41 -->|Escopo, Lista de Materiais, Checklist| PCP[Módulos 12/13: PCP e Fabricação]
+    
+    CotFornecedor -->|Compra Autorizada| Compra[Módulo 7: Compra e Embarque]
+    
+    Proposta -->|Margem < 15% ou indefinida| Decisoes[Módulo 1: Decisão Gestor/CEO]
+    Proposta -->|Proposta Aprovada| Avais[Módulos 5/6: Avais Financeiro e Jurídico]
+    Proposta -->|Proposta Assinada| Contratos[Módulo 6: Contrato de Venda]
+    Proposta -->|Proposta Assinada| Dossie[Módulo 9: Dossiê da Obra]
+
+    %% Acionamentos Transversais (Módulo 1)
+    M4 -.->|Disparo de e-mails / RFQ| Inbox[Módulo 1: Inbox e WhatsApp]
+    M4 -.->|Eventos de fluxo| Prazos[Módulo 1: Prazos & Pendências]
+
+    %% Estilos
+    classDef mod4 fill:#0052cc,stroke:#003d99,stroke-width:2px,color:#fff;
+    classDef externo fill:#f4f5f7,stroke:#dfe1e6,stroke-width:2px,color:#333;
+    classDef transversal fill:#e3fcef,stroke:#36b37e,stroke-width:2px,color:#006644;
+    
+    class Form41,CotFornecedor,Proposta mod4;
+    class Leads,Cadastros,Omie,Precificacao,PCP,Compra,Avais,Contratos,Dossie,Decisoes externo;
+    class Inbox,Prazos transversal;
+```

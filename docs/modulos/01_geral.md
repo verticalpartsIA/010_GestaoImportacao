@@ -330,7 +330,7 @@ Em 31/10/2026 havia **72 decisões**: 7 pendentes, 3 bloqueadas por dependência
 - Rota `decisoes` → `/geral/decisoes[/<id>/<modal>]` ou `/geral/decisoes/decididas[/<id>]`, com filtros `?tipo=&q=`. Aba, modal de aprovar/reprovar/cancelar, cartão destacado e filtros moram na URL (F5 e link funcionam). Nenhum id de decisão é a palavra "decididas" (são uuid), então links antigos seguem valendo.
 - Tela: `src/decisoes.jsx` (`DecisoesPage`, `DecCard`, os 3 modais, `gerarLinkDecisao`). Regras e gates: `src/decisoes-store.js` (`window.DecisoesStore`). Montados em `app.jsx` com `setRoute` e `setSubsel`.
 - Menu: grupo "Geral", 3º item, com **selo de pendentes** (conferido a cada navegação, a cada 3 minutos e quando a Central avisa pelo evento `vp:decisoes`). Caminho do topo "Geral / Central de Decisões". Texto do "?" em `HELP_TOPICS`. Tutorial `geral/central-de-decisoes`.
-- Specs antigas que pertenciam aqui (WhatsApp na Central, de 17/09, e o aval do instalador por WhatsApp) foram absorvidas em 1.3.8 e 1.3.11 e **excluídas do disco em 31/10/2026**; continuam no histórico do Git. O assunto WhatsApp passa a ter documento próprio em `docs/servicos/` (ver `CLAUDE.md`, "Serviços transversais").
+- Specs antigas que pertenciam aqui (WhatsApp na Central, de 17/09, e o aval do instalador por WhatsApp) foram absorvidas em 1.3.8 e 1.3.11 e **excluídas do disco em 31/10/2026**; continuam no histórico do Git. O assunto WhatsApp tem documento próprio em `docs/modulos/15_servicos.md` (S1) (ver `CLAUDE.md`, "Serviços transversais").
 
 ### 1.3.3 Perfil e acesso
 - Não há alçada para abrir a tela: qualquer pessoa logada abre. Cada um vê o que espera por ele (`souAprovador`: o e-mail está em `aprovadores_esperados`) e, em Decididas, o que decidiu, pediu ou era aprovador.
