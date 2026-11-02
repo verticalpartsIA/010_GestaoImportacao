@@ -65,6 +65,44 @@ jobs:
           tar -xzf gitleaks.tar.gz gitleaks
           ./gitleaks version
 
-      # --redact oculta os valores nos logs; o job falha se encontrar algo
+      # --redact oculta os valores; o relatório JSON fica só no runner.
       - name: Procurar secrets
-        run: ./gitleaks detect --source . --redact --verbose --exit-code 1
+        run: |
+          rc=0
+          ./gitleaks detect --source . --redact --no-banner \
+            --report-format json --report-path "$RUNNER_TEMP/gitleaks.json" \
+            --exit-code 1 || rc=$?
+          echo "GITLEAKS_RC=$rc" >> "$GITHUB_ENV"
+          exit 0
+
+      # Resumo SEGURO: só tipo da regra, arquivo, quantidade, commits e se o
+      # arquivo ainda existe hoje. Nunca imprime Secret/Match.
+      - name: Resumo dos achados (sem valores)
+        run: |
+          python3 - <<'PY'
+          import json, os, collections
+          p = os.path.join(os.environ["RUNNER_TEMP"], "gitleaks.json")
+          data = json.load(open(p)) if os.path.exists(p) else []
+          print(f"Total de achados: {len(data)}\n")
+          by_rule = collections.Counter(d["RuleID"] for d in data)
+          print("== Por tipo de regra ==")
+          for r, n in by_rule.most_common():
+              print(f"{n:4d}  {r}")
+          groups = collections.defaultdict(lambda: {"n": 0, "lines": set(), "commits": set()})
+          for d in data:
+              g = groups[(d["RuleID"], d["File"])]
+              g["n"] += 1
+              g["lines"].add(d.get("StartLine"))
+              g["commits"].add(d["Commit"][:7])
+          print("\n== Por regra + arquivo ==")
+          for (r, f), g in sorted(groups.items()):
+              exists = "AINDA NO CÓDIGO" if os.path.exists(f) else "só no histórico"
+              print(f"{r} | {f} | {g['n']}x | linhas {sorted(x for x in g['lines'] if x)[:5]} | commits {sorted(g['commits'])[:4]} | {exists}")
+          PY
+
+      - name: Falhar se houver achados
+        run: |
+          if [ "${GITLEAKS_RC:-0}" != "0" ]; then
+            echo "Gitleaks encontrou possíveis secrets (veja o resumo acima)."
+            exit 1
+          fi
