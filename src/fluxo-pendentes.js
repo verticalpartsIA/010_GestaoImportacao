@@ -13,6 +13,8 @@
   const INTERVALO_MS = 30000;
   /* Tipos que ESTA versão sabe executar — o banco só entrega estes (uma versão antiga em cache nunca pega tipo novo e o marca como falho). */
   const TIPOS = ['proposta_assinada', 'proposta_recusada', 'proposta_revisao', 'contrato_venda_assinado', 'contrato_venda_representante', 'contrato_venda_signatario', 'contrato_instalador_assinado', 'projeto_instalacao_assinado'];
+  /* Erros devolvidos por executar() em que nenhum efeito chegou a rodar — por isso o item pode voltar à fila com segurança. */
+  const NADA_EXECUTADO = ['módulos ainda não carregados', 'evento não registrado'];
   let rodando = false;
 
   function sb() { return (window.__VP_SB || {}).sb; }
@@ -74,7 +76,9 @@
       for (const item of data || []) {
         let erro = null;
         try { erro = await executar(item); } catch (e) { erro = (e && e.message) || String(e); }
-        try { await c.rpc('fluxo_pendentes_concluir', { p_id: item.id, p_erro: erro }); } catch (e) { console.warn('[FluxoPendentes] concluir falhou', e); }
+        /* Só volta para a fila quando nada foi executado (os efeitos não são idempotentes); o banco limita a 5 tentativas. */
+        const repetir = !!erro && NADA_EXECUTADO.indexOf(erro) >= 0;
+        try { await c.rpc('fluxo_pendentes_concluir', { p_id: item.id, p_erro: erro, p_repetir: repetir }); } catch (e) { console.warn('[FluxoPendentes] concluir falhou', e); }
         if (erro) console.warn('[FluxoPendentes] item ' + item.id + ' (' + item.tipo + ') com problema:', erro);
         else feitos++;
       }

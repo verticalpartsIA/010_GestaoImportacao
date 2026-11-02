@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/01_geral.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `fd5cf97`)
-- **Palavras:** 22850 · **blocos:** 497 · **seções com selo próprio:** 8 de 74
-- **Origem do selo dos blocos:** próprio 24 · da seção 79 · da seção-pai 0 · do cabeçalho 350 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 44
-- **Selo efetivo dos blocos:** Conferido 418 · Herdado 0 · Não verificado 35
+- **Palavras:** 22952 · **blocos:** 497 · **seções com selo próprio:** 9 de 74
+- **Origem do selo dos blocos:** próprio 25 · da seção 85 · da seção-pai 0 · do cabeçalho 343 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 44
+- **Selo efetivo dos blocos:** Conferido 411 · Herdado 0 · Não verificado 42
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -80,7 +80,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | Parte comum do Geral | `docs/modulos/01_geral.md#parte-comum-do-geral` | 2 | — | 1 | c1 |
 | PC-1 Mapa de ligações entre as 5 telas | `docs/modulos/01_geral.md#pc-1-mapa-de-ligações-entre-as-5-telas` | 3 | — | 2 | c2 |
 | PC-2 Trilha de eventos e motor de etapas | `docs/modulos/01_geral.md#pc-2-trilha-de-eventos-e-motor-de-etapas` | 3 | — | 3 | c3 |
-| PC-3 Fila de efeitos da assinatura pública (fluxo_pendentes) | `docs/modulos/01_geral.md#pc-3-fila-de-efeitos-da-assinatura-pública-fluxo_pendentes` | 3 | — | 7 | c7 |
+| PC-3 Fila de efeitos da assinatura pública (fluxo_pendentes) | `docs/modulos/01_geral.md#pc-3-fila-de-efeitos-da-assinatura-pública-fluxo_pendentes` | 3 | Não verificado (uniforme) | 7 | b1 s6 |
 | PC-4 Alertas como barramento | `docs/modulos/01_geral.md#pc-4-alertas-como-barramento` | 3 | — | 7 | c7 |
 | PC-5 Registro de atividades (vp_logs) | `docs/modulos/01_geral.md#pc-5-registro-de-atividades-vp_logs` | 3 | — | 4 | c4 |
 | PC-6 Identidade, alçadas e segurança | `docs/modulos/01_geral.md#pc-6-identidade-alçadas-e-segurança` | 3 | — | 5 | c5 |
