@@ -150,7 +150,6 @@ const STATUS_MAP = {
   "Laudo em revisão": "warning",
   "Vistoria agendada": "info",
   "Aguardando aprovação": "warning",
-  "Em análise": "warning",
   "Reprovado": "danger",
   "Em estoque": "success",
   "Reposição": "warning",
