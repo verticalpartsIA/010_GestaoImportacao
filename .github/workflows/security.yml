@@ -76,35 +76,39 @@ jobs:
           echo "GITLEAKS_RC=$rc" >> "$GITHUB_ENV"
           exit 0
 
-      # Resumo SEGURO: classifica cada achado sem imprimir o valor.
-      # JWT -> imprime só o papel (role) e o ref do projeto.
-      # Outros -> imprime só o nome da variável e o tipo/tamanho.
-      - name: Resumo dos achados (sem valores)
+      # Política (revisada em 2026-11-02):
+      #  - JWT com role=anon e chaves sb_publishable_ são PÚBLICAS por desenho
+      #    (vão no navegador) e são aceitas.
+      #  - Itens em ALLOW foram conferidos manualmente (falsos positivos).
+      #  - FALHA para: JWT com role diferente de anon (ex.: service_role),
+      #    JWT ilegível, chave sb_secret_, ou qualquer achado desconhecido.
+      # Nunca imprime valores: só papel, nome da variável, arquivo e linha.
+      - name: Classificar achados (sem valores)
         run: |
           python3 - <<'PY'
-          import json, os, re, base64, collections
+          import json, os, re, base64, collections, sys
+
+          ALLOW = {
+              ("generic-api-key", "src/fornecedor-rpc-publica.test.js", "TOKEN"),
+              ("generic-api-key", "src/quadro-comando.jsx", "key"),
+              ("curl-auth-header", "research/notes/github_supabase_integrated_guide.md", "Authorization"),
+              ("curl-auth-header", "research/notes/supabase_comprehensive_study_guide.md", "Authorization"),
+          }
 
           p = os.path.join(os.environ["RUNNER_TEMP"], "gitleaks.json")
+          rc = os.environ.get("GITLEAKS_RC", "0")
+          if rc not in ("0", "1"):
+              print(f"ERRO: gitleaks terminou com código inesperado {rc}")
+              sys.exit(1)
           data = json.load(open(p)) if os.path.exists(p) else []
 
-          def jwt_info(tok):
+          def jwt_role(tok):
               try:
                   part = tok.split(".")[1]
                   part += "=" * (-len(part) % 4)
-                  pl = json.loads(base64.urlsafe_b64decode(part))
-                  return f"JWT role={pl.get('role', '?')} ref={pl.get('ref', '?')} exp={'sim' if 'exp' in pl else 'nao'}"
+                  return json.loads(base64.urlsafe_b64decode(part)).get("role", "?")
               except Exception:
-                  return "JWT (não decodificável)"
-
-          def classify(secret):
-              s = secret or ""
-              if s.startswith("eyJ") and s.count(".") == 2:
-                  return jwt_info(s)
-              if s.startswith("sb_secret_"):
-                  return "Supabase SECRET key (sb_secret_) !!!"
-              if s.startswith("sb_publishable_"):
-                  return "Supabase publishable key (pública)"
-              return f"outro (len={len(s)})"
+                  return None
 
           def varname(match, secret):
               m = match or ""
@@ -113,26 +117,37 @@ jobs:
               ids = re.findall(r"([A-Za-z_][\w.\-]*)\s*[\"']?\s*[:=]", m)
               return ids[-1] if ids else "-"
 
-          rows = collections.OrderedDict()
+          def classify(d):
+              s = d.get("Secret") or ""
+              if s.startswith("eyJ") and s.count(".") == 2:
+                  role = jwt_role(s)
+                  if role == "anon":
+                      return "ok", "JWT anon (público)"
+                  return "BAD", f"JWT role={role}"
+              if s.startswith("sb_publishable_"):
+                  return "ok", "chave publishable (pública)"
+              if s.startswith("sb_secret_"):
+                  return "BAD", "Supabase SECRET key"
+              key = (d["RuleID"], d["File"], varname(d.get("Match"), s))
+              if key in ALLOW:
+                  return "ok", "falso positivo conferido"
+              return "BAD", "desconhecido (revisar)"
+
+          bad, counts = [], collections.Counter()
           for d in data:
-              rec = (d["RuleID"], d["File"], d.get("StartLine"), varname(d.get("Match"), d.get("Secret")), classify(d.get("Secret")))
-              rows.setdefault(rec, set()).add(d["Commit"][:7])
+              status, desc = classify(d)
+              counts[desc] += 1
+              if status == "BAD":
+                  bad.append((desc, d["RuleID"], d["File"], d.get("StartLine"), d["Commit"][:7]))
 
-          print(f"Total de achados: {len(data)}\n")
-          print("== Classificação (regra | arquivo:linha | variável | tipo | no código hoje?) ==")
-          for (rule, f, line, var, kind), commits in sorted(rows.items(), key=lambda x: (x[0][4], x[0][1], x[0][2] or 0)):
-              hoje = "NO CÓDIGO" if os.path.exists(f) else "só histórico"
-              print(f"{kind} | {rule} | {f}:{line} | var={var} | {hoje} | commits={sorted(commits)[:3]}")
-
-          print("\n== Contagem por tipo ==")
-          c = collections.Counter(k[4] for k in rows)
-          for k, n in c.most_common():
+          print(f"Total de achados: {len(data)}")
+          for k, n in counts.most_common():
               print(f"{n:4d}  {k}")
+          if bad:
+              print("\nACHADOS QUE EXIGEM ATENÇÃO (valores ocultos):")
+              for desc, rule, f, line, commit in bad:
+                  hoje = "no código hoje" if os.path.exists(f) else "só histórico"
+                  print(f"  {desc} | {rule} | {f}:{line} | commit {commit} | {hoje}")
+              sys.exit(1)
+          print("\nNenhum segredo real encontrado.")
           PY
-
-      - name: Falhar se houver achados
-        run: |
-          if [ "${GITLEAKS_RC:-0}" != "0" ]; then
-            echo "Gitleaks encontrou possíveis secrets (veja o resumo acima)."
-            exit 1
-          fi
