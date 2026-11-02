@@ -1,13 +1,12 @@
 name: CodeQL
 
+# DESATIVADO: o Code scanning exige GitHub Code Security em repositórios
+# privados, indisponível no plano atual. O workflow só roda manualmente.
+# Para reativar, restaure os gatilhos abaixo:
+#   push:         { branches: [main] }
+#   pull_request: { branches: [main] }
+#   schedule:     [{ cron: "17 6 * * 1" }]
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  schedule:
-    # Toda segunda-feira, 06:17 UTC
-    - cron: "17 6 * * 1"
   workflow_dispatch:
 
 concurrency:
