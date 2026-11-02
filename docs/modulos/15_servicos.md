@@ -4,7 +4,8 @@
 > - **01/11/2026 — Claude do repositório:** criou o rascunho `serviços.md` na raiz (S1 a S5, fatos de partida, modelo a manter).
 > - **01/11/2026 — Claude da VPS (esta versão):** por ordem do Gelson, o rascunho **mudou-se para `docs/modulos/15_servicos.md`** e virou o compilado de **todos os serviços de aviso e mensagem do hub, inclusive o que existe no vpsistema.com** (a "central de avisos"). Conferi o código e a configuração da VPS (gi-avisos, Copiloto, ponte do Telegram, Evolution), o banco do hub e do vpsistema (só SELECT) e os ~40 documentos do repositório que falam de gi-avisos, WhatsApp, Telegram e Inbox. Acrescentei o **S6 E-mail (canal do Inbox)**, por decisão do Gelson (canal aqui, tela e lei no 1.5). Corrigi seis fatos do rascunho que o código desmente (ver "Fatos do rascunho corrigidos", no fim).
 > - **01/11/2026 — aprovado pelo Gelson.** Respostas dele registradas em "Decisões do Gelson" (abaixo). No mesmo dia: lido o repositório privado `17_gente-gestao` (autorizado), o que corrigiu S1.2, S1.4 e S1.5 e revelou que **ninguém chama a função do aval por WhatsApp** (achado A19); restaurados na lista "quem recebe" (S2.5) os nomes que o texto antigo do Geral trazia. A troca das origens por ponteiros, as doações aos módulos e a emenda do apontamento no `CLAUDE.md` vão no PR seguinte.
-> - **Ficou pendente:** as perguntas abertas em "Pendências para o Gelson" (remoção das duas funções obsoletas, `vp_copiloto_docs`, aval por WhatsApp, achados de segurança).
+> - **02/11/2026 — fechamento da parte documental (Claude da VPS).** Pedido do Gelson: "se encontrar algo fora desse contexto crie issues […] no documento deve constar os achados e números das issues além dos links". Cada achado do quadro ganhou **uma issue** (#1312 a #1339) com o link ao lado. As decisões de 02/11 (aval por WhatsApp, Copiloto lendo `vp_copiloto_docs`) foram registradas, e a parte **operacional** (publicar e testar) ficou para a próxima fase, também em issues. Duas correções conferidas neste dia: o repositório **010 está privado** (o "repositório público" dos A2 e A18 estava errado; o do vpsistema é que é público) e o **A16 foi confirmado** (a Evolution é alcançável pela internet, sem criptografia).
+> - **Ficou pendente:** só decisões e operação, todas com issue (quadro de achados).
 
 > **Status: REAL (documento oficial dos serviços), aprovado pelo Gelson em 01/11/2026.** Mora em `docs/modulos/` **por ordem explícita do Gelson**; o Art. 41 do `CLAUDE.md` passa a apontar para cá (emenda pedida por ele no mesmo dia). Histórico de entrega (PR, hash, `?v=`) não se repete aqui: o Git guarda.
 >
@@ -27,7 +28,7 @@
    &nbsp;&nbsp;&nbsp;Cada serviço: x.1 O que é · x.2 Onde está · x.3 Quem usa · x.4 Como entra e sai · x.5 Regras e janelas · x.6 Dados · x.7 Segurança · x.8 Falhas e como se percebe · x.9 Testes · x.10 Pendências e achados · x.11 Histórico
    Parte comum (sem número de serviço)
    &nbsp;&nbsp;&nbsp;PC-1 Mapa de ligações · PC-2 Um aviso de ponta a ponta · PC-3 Endereços e páginas públicas · PC-4 Segurança e segredos · PC-5 Quem faz o quê · PC-6 Edge Functions e crons · PC-7 Tabelas · PC-8 Testes · PC-9 Tutoriais e menu "?" · PC-10 Vizinhos que usam o mesmo número · PC-11 Documentos soltos e destino do que foi concatenado · PC-12 Benefícios trocados com os módulos
-   Quadro de achados, sem correção · Pendências para o Gelson · Fatos do rascunho corrigidos
+   Quadro de achados, com issue · Pendências para o Gelson · Fatos do rascunho corrigidos
 
 ## Glossário (serviços)
 Termos gerais (alerta, alerta global/dirigido, alçada, evento de fluxo, caixa compartilhada) estão em `01_geral.md`. Não se repetem aqui.
@@ -111,9 +112,9 @@ Não há teste automatizado do canal (**Conferido**, busca no repositório). O t
 
 ### S1.10 Pendências e achados
 - **Achado, sem correção (A1):** `whatsapp-notify` está no ar sem trava de quem chama e sem limite de taxa, embora ninguém a chame; já registrada como risco na auditoria (`AUDITORIA_FORENSE_E2E_SCORE.md`, E2E-006). Decidir: remover (com pasta em `supabase/functions-removidas/`, Art. 23) ou manter. **Conferido** (código).
-- **Achado, sem correção (A2):** o repositório público tem telefones de pessoas em `supabase/migrations/20261020120000_aval_ceo_whatsapp.sql`, `20261022190000_aval_instalador_juliana.sql`, no comentário de `supabase/functions/decisao-resposta-whatsapp/index.ts` e em `docs/eventos/vphub-instalador.md` (valores não copiados; Art. 28). O comentário da função ainda diz que quem responde é o Diego; a regra atual é a Juliana (módulo 11).
+- **Achado, sem correção (A2, [#1312](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1312)):** o repositório (**privado**, conferido em 02/11/2026) tem telefones de pessoas em `supabase/migrations/20261020120000_aval_ceo_whatsapp.sql`, `20261022190000_aval_instalador_juliana.sql`, no comentário de `supabase/functions/decisao-resposta-whatsapp/index.ts` e em `docs/eventos/vphub-instalador.md` (valores não copiados; Art. 28). O comentário da função ainda diz que quem responde é o Diego; a regra atual é a Juliana (módulo 11).
 - **Achado, sem correção (A3):** um só número e uma só instância para todos os serviços; a instância de reserva `posvenda360` está desconectada.
-- **Achado, sem correção (A19):** ninguém chama `decisao-resposta-whatsapp`; o aval por WhatsApp não decide nada (S1.5). Ligar exige mudar o dispatcher do vpsistema (repositório `17_gente-gestao`) — decisão do Gelson.
+- **Achado (A19, [#1329](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1329)):** ninguém chama `decisao-resposta-whatsapp`; o aval por WhatsApp não decide nada (S1.5). **Decisão do Gelson (02/11/2026): ligar.** Mudança pronta no `17_gente-gestao`, [PR #62](https://github.com/verticalpartsIA/17_gente-gestao/pull/62), **não publicada**: o `whatsapp-dispatcher` manda ao hub, antes do Copiloto, a mensagem que é só SIM/NÃO (com ou sem código), assinada com o segredo da origem `vphub`. Publicar e testar é da fase operacional.
 - **Achado, sem correção (A20):** no RH, conversa aberta pelo `whatsapp-start` não grava a hora da última mensagem; quando o candidato responde, o dispatcher acha a conversa "fria" (24 h) e devolve o menu em vez de gravar para o RH. Contatos no formato `@lid` não seriam reconhecidos. Mídia vira "[mídia]". 31 das 37 conversas pararam no menu; nenhuma mensagem de RH desde 07/08/2026. **Conferido** (código e SELECT no vpsistema).
 - **Achado, sem correção (A22):** se o Copiloto demorar mais de 12 s para aceitar uma mensagem, o dispatcher segue para o menu/Pós-Venda e a pessoa pode receber duas respostas.
 
@@ -247,7 +248,7 @@ Sem teste automatizado. Validações registradas: classificação NCM e "Preench
 
 ### S3.10 Pendências e achados
 - **Achado, sem correção (A10):** em `/perguntar`, a fila cheia devolve 429 sem devolver a cota (o `/ncm` devolve); a cota vive só em memória.
-- Decidir o destino da Edge Function `vp-copiloto` (remover ou religar) e da tabela `vp_copiloto_docs` (se o Copiloto da VPS deve passar a lê-la).
+- `vp-copiloto` **removida em 01/11/2026**. **Decisão do Gelson (02/11/2026), opção "a":** o Copiloto da VPS passa a ler `vp_copiloto_docs` (só a linha `rota:<rota>` da tela aberta). Pronto e testado na VPS, **não publicado** ([#1334](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1334)). Até a publicação, vale a divergência D1.
 - Pendente desde 25/10/2026: um modo da VPS **sem memória** para a descrição com IA não apagar a conversa da bolinha. **Herdado.**
 
 ### S3.11 Histórico
@@ -293,7 +294,7 @@ Sem teste automatizado. **Conferido.**
 
 ### S4.10 Pendências e achados
 - **Achado, sem correção (A12):** o script e a mensagem de falha do Borderô dizem "06:00 BRT / 09 UTC"; o cron roda às 13:00 UTC (10:00 BRT).
-- Pergunta ao Gelson: o Telegram deve virar canal de avisos do hub (com a mesma estrutura do WhatsApp) ou fica como está (conversa + Borderô + alerta de falha)?
+- ~~Pergunta ao Gelson: o Telegram vira canal de avisos do hub?~~ **Respondida (01/11/2026): fica como está** (conversa + Borderô + alerta de falha).
 
 ### S4.11 Histórico
 O antigo agente Hermes (Telegram) foi desligado em 10/06/2026 e substituído pela ponte Claude; os containers do Hermes **não existem mais** na VPS. **Conferido** (`docker ps -a`) / **Herdado** (data).
@@ -444,8 +445,8 @@ e-mail: telas ──send-email──▶ SMTP · IMAP ──read-inbox (10 min)�
 - **Nenhum valor de segredo neste documento** (Art. 28). Os nomes estão em S1.7, S2.7, S3.7, S4.7, S5.7 e S6.7.
 - **`alertas` aceita INSERT, SELECT e UPDATE de qualquer papel (`public`)**; como todo alerta dirigido vira WhatsApp, esse problema de segurança já conhecido (#571, `14_administracao.md` PC-4) também afeta quem recebe mensagem. **Conferido** (`pg_policies`, 01/11/2026). Fechar `alertas` é decisão da segurança real (#571).
 - **Credenciais compartilhadas entre serviços da VPS** (achado A7): gi-avisos lê a senha do banco no arquivo do Copiloto e o bot no arquivo do Borderô; o Copiloto lê a Evolution e a conexão do vpsistema no arquivo do gi-avisos.
-- **A Evolution escuta em todas as interfaces da VPS;** se está acessível de fora: **Não verificado** (achado A16).
-- Telefones no repositório público: achado A2.
+- **A Evolution é alcançável pela internet, sem criptografia** (achado A16, [#1326](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1326)): a porta da API é publicada pelo Docker por fora do firewall (que só libera 22, 80 e 443), e o `whatsapp-dispatcher` do vpsistema a chama pelo IP público, por HTTP. A única proteção é a chave da API. **Conferido** (`ss`, `ufw`, código do dispatcher, 02/11/2026).
+- Telefones no repositório (privado desde a conferência de 02/11/2026; o Art. 28 continua valendo): achado A2, [#1312](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1312).
 
 ## PC-5 Quem faz o quê
 - **Gelson:** decide regras, janelas e mudanças; recebe o alerta de falha pelo Telegram.
@@ -533,35 +534,43 @@ Nada foi apagado. Por decisão do Gelson (01/11/2026), **a troca das origens por
 
 ---
 
-## Quadro de achados, sem correção
-Nenhum foi corrigido (Art. 45). Ordem por gravidade percebida.
+## Quadro de achados, com issue
+Nenhum foi corrigido aqui (Art. 45). **Cada achado tem uma issue** no repositório 010 (privado; achados do vpsistema também ficam aqui, porque o repositório dele é público). A decisão e a correção acontecem na issue; quando ela for fechada, esta linha é atualizada. Ordem: numeração do documento.
 
-| Nº | Achado | Onde |
-|---|---|---|
-| A1 | ~~`whatsapp-notify` no ar sem trava e sem chamador~~ — **removida em 01/11/2026** | S1.10 |
-| A2 | Telefones de pessoas no repositório público (migrations, comentário de função, `docs/eventos/`) | S1.10 |
-| A3 | Um só número/instância para todos os serviços; reserva desconectada | S1.10 |
-| A4 | Central de Eventos com regras "ativas" que nunca enviam | S5.10 |
-| A5 | `read-inbox` e `sign-email-anexos` sem conferência de quem chama | S6.10 |
-| A6 | Allowlist aceita quem já escreveu para a caixa; `suggest-email-reply` sem limite de taxa | S6.10 |
-| A7 | Credenciais compartilhadas entre serviços da VPS | PC-4 |
-| A8 | Pessoa inativa pode receber aviso do gi-avisos | S2.10 |
-| A9 | R$ não mascarado no título do aviso | S2.10 |
-| A10 | Copiloto conta pergunta recusada; cota só em memória | S3.10 |
-| A11 | Ponte do Telegram sem trava de ferramentas; troca do token pendente | S4.7 |
-| A12 | Horário do Borderô errado no texto do script | S4.10 |
-| A13 | Segredo de reserva no código público do vpsistema | S5.7 |
-| A14 | Mensagens próprias do vpsistema sem registro na Central | S5.10 |
-| A15 | vpsistema: funções no ar sem pasta e pasta sem função | S5.10 |
-| A16 | Evolution escutando em todas as interfaces (acesso externo não verificado) | PC-4 |
-| A17 | VP Click perde aviso em silêncio quando a IA falha | PC-10 |
-| A18 | Documento antigo com segredo (`docs/CONTEXTO_workflow_setores_vpclick.md`) | PC-11 |
-| A19 | **Aval por WhatsApp não decide nada:** ninguém chama `decisao-resposta-whatsapp` | S1.5 |
-| A20 | RH: resposta de candidato pode cair no menu; `@lid` e mídia | S1.10 |
-| A21 | `evolution-webhook-admin` e `admissao-portal` (pública, dados pessoais) no ar sem código no repositório | S1.2 |
-| A22 | Resposta dupla se o Copiloto passar de 12 s | S1.10 |
-| A23 | Avisos `instalador.*` da Central nunca ligados (o "contrato assinado" real sai pelo gi-avisos a Cleiton, Maurício e Felipe) | S5.10 |
-| — | `alertas` aberta a escrita pela chave pública (já conhecido, #571) | PC-4 |
+| Nº | Achado | Onde | Issue |
+|---|---|---|---|
+| A1 | ~~`whatsapp-notify` no ar sem trava e sem chamador~~ — **removida em 01/11/2026** | S1.10 | — (resolvido) |
+| A2 | Telefones de pessoas no repositório (migrations, comentário de função); o 010 está **privado** (02/11/2026) | S1.10 | [#1312](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1312) |
+| A3 | Um só número/instância para todos os serviços; reserva desconectada | S1.10 | [#1313](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1313) |
+| A4 | Central de Eventos com regras "ativas" que nunca enviam | S5.10 | [#1314](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1314) |
+| A5 | `read-inbox` e `sign-email-anexos` sem conferência de quem chama | S6.10 | [#1315](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1315) |
+| A6 | Allowlist aceita quem já escreveu para a caixa; `suggest-email-reply` sem limite de taxa | S6.10 | [#1316](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1316) |
+| A7 | Credenciais compartilhadas entre serviços da VPS | PC-4 | [#1317](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1317) |
+| A8 | Pessoa inativa pode receber aviso do gi-avisos | S2.10 | [#1318](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1318) |
+| A9 | R$ não mascarado no título do aviso | S2.10 | [#1319](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1319) |
+| A10 | Copiloto conta pergunta recusada; cota só em memória | S3.10 | [#1320](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1320) |
+| A11 | Ponte do Telegram sem trava de ferramentas; troca do token pendente | S4.7 | [#1321](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1321) |
+| A12 | Horário do Borderô errado no texto do script | S4.10 | [#1322](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1322) |
+| A13 | Segredo de reserva no código do vpsistema (repositório **público**, conferido 02/11/2026) | S5.7 | [#1323](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1323) |
+| A14 | Mensagens próprias do vpsistema sem registro na Central | S5.10 | [#1324](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1324) |
+| A15 | vpsistema: funções no ar sem pasta e pasta sem função | S5.10 | [#1325](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1325) |
+| A16 | Evolution alcançável pela internet, sem criptografia (**Conferido** 02/11/2026) | PC-4 | [#1326](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1326) |
+| A17 | VP Click perde aviso em silêncio quando a IA falha; log com telefones sem máscara | PC-10 | [#1327](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1327) |
+| A18 | Documento antigo com segredo (`docs/CONTEXTO_workflow_setores_vpclick.md`) | PC-11 | [#1328](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1328) |
+| A19 | **Aval por WhatsApp não decide nada** — decidido ligar (02/11); [PR 17_gente-gestao#62](https://github.com/verticalpartsIA/17_gente-gestao/pull/62) pronto, publicação na fase operacional | S1.5 | [#1329](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1329) |
+| A20 | RH: resposta de candidato pode cair no menu; `@lid` e mídia | S1.10 | [#1330](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1330) |
+| A21 | `evolution-webhook-admin` e `admissao-portal` (pública, dados pessoais) no ar sem código no repositório | S1.2 | [#1331](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1331) |
+| A22 | Resposta dupla se o Copiloto passar de 12 s | S1.10 | [#1332](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1332) |
+| A23 | Gatilhos `instalador.*` da Central nunca ligados; ~24 alertas `ci-` sem destinatário (o "contrato assinado" real sai pelo gi-avisos a Cleiton, Maurício e Felipe, como deve ser) | S5.10 | [#1333](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1333) |
+| A24 | Credenciais que apareceram sem máscara numa sessão do Claude (01/11/2026): decidir a troca | PC-4 | [#1335](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1335) |
+| A25 | README do gi-avisos desatualizado (diz "lê o hub, só leitura") | S2.10 | [#1336](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1336) |
+| A26 | Espelho `colaboradores_vpsistema` com 51 ativos × 48 perfis no vpsistema | S5.10 | [#1337](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1337) |
+| A27 | Pendências herdadas das regras do gi-avisos (cliente sem vendedor; exceções de horário) | S2.10 | [#1338](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1338) |
+| A28 | Copiloto: "Descrição com IA" apaga a conversa da bolinha (falta modo sem memória) | S3.10 | [#1339](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1339) |
+| D1 | Copiloto e `vp_copiloto_docs` — decidido "opção a" (02/11); pronto na VPS, publicação na fase operacional | S3.10 | [#1334](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1334) |
+| — | `alertas` aberta a escrita pela chave pública (já conhecido) | PC-4 | [#571](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/571) |
+
+**Trabalho operacional que nasceu deste documento** (próxima fase, cada passo com "Confirmo", Art. 14): [#1329](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1329) (publicar o SIM/NÃO do aval) e [#1334](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1334) (publicar o Copiloto lendo `vp_copiloto_docs`). Também ligados aos serviços e ainda abertos: PR [#1194](https://github.com/verticalpartsIA/010_GestaoImportacao/pull/1194) (migration da coluna `emails_projeto.cc`, já criada no banco) e [#1237](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1237) (comentário do limite de taxa do `send-email`).
 
 ## Decisões do Gelson (01/11/2026)
 1. **Documento aprovado** (status REAL).
@@ -571,15 +580,21 @@ Nenhum foi corrigido (Art. 45). Ordem por gravidade percebida.
 5. **`whatsapp-notify` e `vp-copiloto`:** remover **se forem obsoletas**; se a estrutura funciona, manter. Conferido em 01/11/2026: as duas estão sem chamador no código e sem chamada nas últimas 24 h; `whatsapp-notify` não registra uso desde 15/10/2026 e o próprio serviço da VPS se declara substituto da `vp-copiloto`. **Removidas em 01/11/2026** com o "Confirmo remoção" do Gelson (Art. 14); pastas em `supabase/functions-removidas/` (Art. 23).
 6. **Leitura do `17_gente-gestao`:** autorizada e feita (S1.4, S5.2).
 
+## Decisões do Gelson (02/11/2026)
+1. **Merge:** "Confirmo o merge do #1299 e do #1300". O #1299 foi mergeado; o #1300 depende de a base dele passar a ser `main`.
+2. **Aval por WhatsApp (A19):** "ligue o SIM/NÃO do WhatsApp à decisão" → PR [17_gente-gestao#62](https://github.com/verticalpartsIA/17_gente-gestao/pull/62), [#1329](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1329).
+3. **`vp_copiloto_docs` (D1):** "opção a" — o Copiloto da VPS passa a ler a tabela → [#1334](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1334).
+4. **Achados:** "monte a proposta" e, em seguida, "se encontrar algo fora desse contexto crie issues": cada achado virou issue (quadro acima). **Primeiro se fecha toda a parte documental; depois vem a parte operacional.**
+
 ## Pendências para o Gelson (o Claude da VPS não decide)
 1. ~~Remover `whatsapp-notify` e `vp-copiloto`~~ **Feito em 01/11/2026** com o "Confirmo remoção" do Gelson: apagadas da produção (respondem 404), pastas movidas para `supabase/functions-removidas/`; as versões de produção (diferentes do repositório; a do `whatsapp-notify` tinha telefone fixo) estão guardadas só na VPS.
-2. **Aval por WhatsApp (A19):** a decisão "avais ficam como estão" foi dada achando que o SIM/NÃO pelo WhatsApp funciona; **hoje não funciona** (só pela Central de Decisões). Ligar exige mudança no dispatcher do vpsistema. Quer que seja ligado?
-3. **Copiloto:** o Copiloto da VPS deve passar a ler `vp_copiloto_docs`, ou a regra "UPDATE sem redeploy" sai dos módulos (D1)?
-4. **Achados de segurança e do RH** (A1, A2, A11, A13, A16, A18, A20, A21): tratar à parte, com "Confirmo" para cada um.
+2. ~~Aval por WhatsApp (A19): quer que seja ligado?~~ **Respondida (02/11/2026): ligar.** Publicação na fase operacional ([#1329](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1329)).
+3. ~~Copiloto e `vp_copiloto_docs` (D1)~~ **Respondida (02/11/2026): opção "a", o Copiloto passa a ler.** Publicação na fase operacional ([#1334](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1334)).
+4. **Achados:** cada um tem issue (quadro de achados); decidir em cada issue, com "Confirmo" para o que mexer em produção.
 5. ~~`docs/eventos/vphub-instalador.md`~~ **Resolvido (01/11/2026):** virou ponteiro, sem telefones (os números antigos continuam no histórico do Git). Cleiton recebe o "contrato assinado" e o Gustavo não, como o Gelson quer (nada mudou no serviço).
 
 ### Divergências registradas (Art. 12 — nenhuma corrigida)
-- **D1 — Copiloto e `vp_copiloto_docs`:** `CLAUDE.md` e módulos 4, 5, 6, 8 e 10 dizem que a tabela alimenta o Copiloto; o Copiloto em uso (VPS) não a lê.
+- **D1 — Copiloto e `vp_copiloto_docs`:** `CLAUDE.md` e módulos 4, 5, 6, 8 e 10 dizem que a tabela alimenta o Copiloto; o Copiloto em uso (VPS) não a lê. Decidido em 02/11/2026 que vai ler; vale até a publicação ([#1334](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1334)).
 - **D2 — de onde o gi-avisos lê:** `CLAUDE.md` ("Evolução dos Equipamentos") e `01_geral.md` PC-4 dizem `alertas`; o código lê a Central (`hub.aviso_fluxo`, cinco origens).
 - **D3 — janela:** os mesmos textos dizem "janela por departamento (Engenharia 07–18)"; o código tem a janela padrão para todos e a exceção da Juliana.
 - **D4 — feriados:** as regras do gi-avisos dizem "leitura do hub desligada"; está ligada desde 24/10/2026.
@@ -604,3 +619,5 @@ Nenhum foi corrigido (Art. 45). Ordem por gravidade percebida.
 **Histórico deste documento**
 - 01/11/2026: rascunho `serviços.md` criado pelo Claude do repositório (raiz).
 - 01/11/2026: movido para `docs/modulos/15_servicos.md` por ordem do Gelson e escrito pelo Claude da VPS, com conferência do código da VPS, do banco do hub e do vpsistema e dos documentos do repositório. Status: em aprovação.
+- 01/11/2026: aprovado pelo Gelson (status REAL); removidas `whatsapp-notify` e `vp-copiloto`; ponteiros e doações no PR seguinte.
+- 02/11/2026: fechamento da parte documental: 28 issues de achados e de trabalho operacional (#1312–#1339) ligadas ao quadro; decisões de 02/11; correções "010 privado" e "A16 confirmado".
