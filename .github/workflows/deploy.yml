@@ -9,20 +9,37 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Preparar chave SSH
+        env:
+          SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          # Remove CR (chaves geradas no Windows) e garante a quebra de linha final
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Valida o formato da chave sem imprimir nada sensível
+          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null || { echo "ERRO: HOSTINGER_SSH_KEY não é uma chave privada SSH válida"; exit 1; }
+          ssh-keyscan -p 65002 -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.HOSTINGER_SSH_HOST }}
-          username: ${{ secrets.HOSTINGER_SSH_USER }}
-          key: ${{ secrets.HOSTINGER_SSH_KEY }}
-          port: 65002
-          script: |
-            cd /home/u969661049/domains/hub.vpsistema.com/nodejs
-            export PATH=/opt/alt/alt-nodejs22/root/usr/bin:$PATH
-            set -e
-            git checkout -- package-lock.json 2>/dev/null || true
-            git pull origin main
-            npm install --omit=dev
-            echo "{\"buildTime\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"commit\":\"$(git rev-parse HEAD)\"}" > version.json
-            touch tmp/restart.txt
-            echo "Deploy concluído: $(git log --oneline -1)"
+        env:
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p 65002 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" 'bash -s' <<'REMOTE'
+          cd /home/u969661049/domains/hub.vpsistema.com/nodejs
+          export PATH=/opt/alt/alt-nodejs22/root/usr/bin:$PATH
+          set -e
+          git checkout -- package-lock.json 2>/dev/null || true
+          git pull origin main
+          npm install --omit=dev
+          echo "{\"buildTime\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"commit\":\"$(git rev-parse HEAD)\"}" > version.json
+          touch tmp/restart.txt
+          echo "Deploy concluído: $(git log --oneline -1)"
+          REMOTE
+
+      - name: Remover chave do runner
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
