@@ -209,6 +209,7 @@ Imprimir (Zebra Browser Print ou navegador), etiqueta de teste, escolha de impre
 - **QR e Code 128 sempre nativos da impressora**; endereço `END:R2A4`, item = o `codigo`, pedido `PED:<nº>`, posição `POS:`, rua `RUA:`, palete `PAL:`, equipamento `EQP:`, OP `OP:`. **Herdado** (spec e issue #862).
 - Modelo cujo tamanho não bate é **adaptado** (escala única, centralizado); sem modelo próprio de tamanho, avisa a escala. Máximo de 500 etiquetas por impressão, em lotes de 100. **Herdado.**
 - Expedição imprime **como imagem** (`^GFA`), por causa do giro de 90°. **Herdado.**
+- **OP / série do quadro: padrão 100 × 100 mm** (`OP_QUADRO_100x100`, pedido do Gelson em 03/11/2026); o `OP_QUADRO_100x50` continua disponível. Sem rolo lembrado para o tipo, a tela começa em 100 × 100 (`ETQ_ROLO_PADRAO` em `etiquetas.jsx`); rolo já lembrado vence (botão "Esquecer"). O campo da OP ocupa a largura toda (no 100 × 50 uma OP longa, ex. com sufixo de quadro, saía como "OP…"). **Conferido** (código e teste unitário em 03/11/2026); **Não verificado** na impressora física.
 - Endereço digitado à mão (Almoxarifado, Compras) é conferido pela regra do galpão; valor igual ao já gravado passa. **Herdado.**
 
 ### 12.4.7 Dados
