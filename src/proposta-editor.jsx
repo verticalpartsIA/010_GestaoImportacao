@@ -641,10 +641,12 @@ function PropostaEditor({ setRoute, subsel }) {
   // é responsabilidade do store (PropostaStore.salvar) — revisão de
   // arquitetura 18/08, candidato 2: isso morava aqui na UI antes.
   const saveToSupabase = React.useCallback(async () => {
-    const row = await window.PropostaStore.salvar({ data, eq, editId, valorTotal: calcularValorTotal(data, eq) });
+    /* Depois do 1º Salvar de uma proposta nova, os seguintes usam o id da linha criada (recordId): sem ele o store achava a
+       proposta pelo número e a trava de proposta enviada não valia na mesma tela. */
+    const row = await window.PropostaStore.salvar({ data, eq, editId: editId || recordId, valorTotal: calcularValorTotal(data, eq) });
     if (row?.id) setRecordId(row.id);
     return row;
-  }, [data, eq, editId]);
+  }, [data, eq, editId, recordId]);
 
   /* ---- Publicar = congelar a versão oficial (ver proposta-store.js) ----
      Salva antes se ainda não existir linha no banco. O primeiro envio já
@@ -728,9 +730,15 @@ function PropostaEditor({ setRoute, subsel }) {
            blocos de escada/esteira, textos jurídicos). */
         const ehLegado = window.PropostaLegado.ehPropostaSchemaLegado(dj);
         const convertido = ehLegado ? window.PropostaLegado.converterPropostaLegado(dj, row.titulo) : null;
+        /* data_json vazio ({}) ou sem bloco de equipamento (125 propostas importadas em 06/04/2026): `{}` é "verdadeiro", então
+           o editor abria sem o bloco `elevador` e a tela inteira caía em "Erro ao carregar o VP Gestão". Completa com o padrão e
+           mantém o número da própria proposta (o padrão VP-<ano>-001 não pode virar o número dela). */
+        const semConteudo = !ehLegado && !(dj && (dj.elevador || dj.escada || dj.esteira));
         const carregado = ehLegado
           ? { ...deepMergeProposta(makeDefaultProposta(), convertido), __legadoOriginal: dj }
-          : (row.data_json || makeDefaultProposta());
+          : (semConteudo
+            ? { ...deepMergeProposta(makeDefaultProposta(), dj || {}), numero: row.numero_documento || (dj && dj.numero) || makeDefaultProposta().numero }
+            : row.data_json);
         /* Rascunho de escada/esteira antigo: completa só o que está vazio com os textos padrão (Garantia,
            Condições, Acabamento…). O eq real é resolvido logo abaixo; antes de saber, tenta os dois. */
         const eqReal = window.PropostaStore.resolverEq(row, convertido);
