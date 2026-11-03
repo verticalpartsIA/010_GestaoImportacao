@@ -844,9 +844,20 @@
       // uma proposta já enviada/assinada.
       let existing = editId ? { id: editId } : null;
       if (!existing && chave) {
-        const { data: rows } = await c.from('propostas').select('id')
+        const { data: rows } = await c.from('propostas').select('id, status, vendedor_id, destravada_em')
           .eq('numero_documento', chave).order('criado_em', { ascending: false }).limit(1);
         existing = rows && rows[0];
+        /* 02/11/2026 (revisão do módulo 4): a proposta nova nasce com o número padrão VP-<ano>-001 e esta busca por número
+           atualizava QUALQUER proposta que já tivesse esse número (a de outro vendedor, e sem conferir a trava de proposta
+           enviada). Sem editId, só se atualiza o próprio rascunho do vendedor (caso de quem perdeu o id da tela); do contrário
+           recusa e pede para abrir a proposta existente ou mudar o número. */
+        if (existing && existing.id) {
+          const meu = await resolverVendedorId();
+          const proprioRascunho = existing.status === 'rascunho' && !!meu && existing.vendedor_id === meu;
+          if (!proprioRascunho) {
+            return { erro: `Já existe a proposta ${chave} (${existing.status || 'sem status'}) e ela não é um rascunho seu. Abra essa proposta pela lista para editá-la, ou mude o Nº da proposta para criar outra.` };
+          }
+        }
       }
 
       /* precificacao_id pendurado: um rascunho salvo no navegador (ver
