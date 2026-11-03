@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/12_logistica_interna.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 01/11/2026 (origin/main `307ee15`)
-- **Palavras:** 4931 · **blocos:** 132 · **seções com selo próprio:** 53 de 60
-- **Origem do selo dos blocos:** próprio 97 · da seção 11 · da seção-pai 0 · do cabeçalho 3 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 21
-- **Selo efetivo dos blocos:** Conferido 50 · Herdado 55 · Não verificado 6
+- **Palavras:** 5009 · **blocos:** 133 · **seções com selo próprio:** 53 de 60
+- **Origem do selo dos blocos:** próprio 98 · da seção 11 · da seção-pai 0 · do cabeçalho 3 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 21
+- **Selo efetivo dos blocos:** Conferido 50 · Herdado 55 · Não verificado 7
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -58,7 +58,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 12.4.3 Perfil e acesso | `docs/modulos/12_logistica_interna.md#1243-perfil-e-acesso` | 3 | Conferido (uniforme) | 1 | b1 |
 | 12.4.4 O que a tela mostra | `docs/modulos/12_logistica_interna.md#1244-o-que-a-tela-mostra` | 3 | Conferido (uniforme) | 1 | b1 |
 | 12.4.5 Botões e controles | `docs/modulos/12_logistica_interna.md#1245-botões-e-controles` | 3 | Conferido (uniforme) | 1 | b1 |
-| 12.4.6 Comportamento | `docs/modulos/12_logistica_interna.md#1246-comportamento` | 3 | Herdado (uniforme) | 4 | b4 |
+| 12.4.6 Comportamento | `docs/modulos/12_logistica_interna.md#1246-comportamento` | 3 | Não verificado (misto (vale o mais fraco)) | 5 | b5 |
 | 12.4.7 Dados | `docs/modulos/12_logistica_interna.md#1247-dados` | 3 | Conferido (uniforme) | 1 | b1 |
 | 12.4.8 Regras e armadilhas | `docs/modulos/12_logistica_interna.md#1248-regras-e-armadilhas` | 3 | Herdado (uniforme) | 6 | b6 |
 | 12.4.9 Testes | `docs/modulos/12_logistica_interna.md#1249-testes` | 3 | Herdado (misto (vale o mais fraco)) | 1 | b1 |
