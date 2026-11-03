@@ -159,6 +159,12 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
   const [buscandoCnpj, setBuscandoCnpj] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [savedLead, setSavedLead] = React.useState(null);
+  /* Edição de lead com cliente: enquanto os dados do cliente (CNPJ, razão social) não chegam, salvar mandaria o
+     documento vazio ao cliente vinculado. */
+  const [carregandoCliente, setCarregandoCliente] = React.useState(isEdit && !!lead.cliente_id);
+  /* onClose chega novo a cada render da lista; fora das dependências do relógio de 4 s para ele não reiniciar. */
+  const onCloseRef = React.useRef(onClose);
+  onCloseRef.current = onClose;
 
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
 
@@ -170,9 +176,11 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
     if (!isEdit || !lead.cliente_id) return;
     let alive = true;
     const store = window.CadastrosClientesStore;
-    if (!store?.obter) return;
+    if (!store?.obter) { setCarregandoCliente(false); return; }
     Promise.resolve(store.obter(lead.cliente_id)).then((c) => {
-      if (!alive || !c) return;
+      if (!alive) return;
+      setCarregandoCliente(false);
+      if (!c) return;
       setF((p) => ({
         ...p,
         tipoPessoa: c.tipo_pessoa || p.tipoPessoa,
@@ -182,7 +190,7 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
       }));
     }).catch((e) => {
       console.warn('[comercial] Erro ao carregar cliente do lead:', e);
-      if (alive) window.toast?.('Não foi possível carregar os dados do cliente vinculado.', 'warning');
+      if (alive) { setCarregandoCliente(false); window.toast?.('Não foi possível carregar os dados do cliente vinculado.', 'warning'); }
     });
     return () => { alive = false; };
   }, [isEdit, lead?.cliente_id]);
@@ -243,6 +251,9 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
     if (f.contribuinteIcms !== 'true' && f.contribuinteIcms !== 'false') return window.toast('Informe se o cliente é Contribuinte de ICMS (Sim ou Não) — define quem recolhe o DIFAL na venda.', 'warning');
     const comissaoTxt = String(f.comissaoPct == null ? '' : f.comissaoPct).replace(',', '.').trim();
     if (comissaoTxt !== '' && !(Number(comissaoTxt) >= 0 && Number(comissaoTxt) <= 100)) return window.toast('Comissão deve ser um percentual entre 0 e 100 (deixe em branco para usar 2%).', 'warning');
+    // `value` é bigint no banco: centavos seriam recusados com uma mensagem técnica; avisa antes, no campo certo.
+    const valorNum = f.value === '' || f.value == null ? null : Number(f.value);
+    if (valorNum !== null && (!Number.isInteger(valorNum) || valorNum < 0)) return window.toast('Valor estimado deve ser um número inteiro em reais, sem centavos (ex.: 150000).', 'warning');
     const sb = comercialSb();
     if (!sb) return window.toast('Banco de dados indisponível — recarregue a página.', 'error');
     setSaving(true);
@@ -251,7 +262,7 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
       building: f.building, contact: f.contact, role: f.role || null,
       phone: f.phone || null, email: f.email || null,
       origin: f.origin, status: f.status, owner: f.owner || null,
-      value: f.value ? parseFloat(f.value) : null,
+      value: valorNum,
       priority: ({ 'Alta': 'alta', 'Média': 'media', 'Baixa': 'baixa' }[f.priority] || 'media'),
       next_action: f.next || null,
       documento_pendente: f.documentoPendente,
@@ -403,11 +414,11 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
     if (savedLead) {
       const timer = setTimeout(() => {
         setSavedLead(null);
-        onClose();
+        onCloseRef.current();
       }, 4000);  // fecha automaticamente em 4 segundos
       return () => clearTimeout(timer);
     }
-  }, [savedLead, onClose]);
+  }, [savedLead]);
 
   /* ---- pós-save: seguir pro Formulário (aloca equipamento lá) ---- */
   if (savedLead) {
@@ -443,8 +454,8 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
     <Modal title={isEdit ? 'Editar Lead' : 'Novo Lead'} onClose={onClose} width={600}
       footer={<>
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button variant="primary" onClick={save} disabled={saving}>
-          {saving ? 'Salvando…' : (isEdit ? 'Salvar Alterações' : 'Criar Lead')}
+        <Button variant="primary" onClick={save} disabled={saving || carregandoCliente}>
+          {saving ? 'Salvando…' : carregandoCliente ? 'Carregando cliente…' : (isEdit ? 'Salvar Alterações' : 'Criar Lead')}
         </Button>
       </>}>
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>

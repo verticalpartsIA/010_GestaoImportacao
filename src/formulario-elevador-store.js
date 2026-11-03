@@ -268,8 +268,14 @@
        preenchido nesta sessão, o provisório vira o registro definitivo em
        vez de nascer um cliente novo e orfanar o provisório. */
     if (dados.clienteIdProvisorio) {
+      /* Quem não informou um campo opcional (ex.: a janela do Lead, que não tem endereço nem IE) NÃO o apaga no cliente:
+         só sobrescreve o que veio em `dados`. Antes, editar um Lead com cliente zerava endereço, cidade, UF e IE dele. */
+      const campos = _camposCliente(dados, doc);
+      const OPCIONAIS = ['inscricao_estadual', 'endereco_logradouro', 'endereco_complemento', 'endereco_bairro', 'endereco_cep', 'endereco_cidade', 'endereco_estado', 'cidade', 'estado'];
+      OPCIONAIS.forEach((k) => { if (!(k in dados)) delete campos[k]; });
+      if (!OPCIONAIS.slice(1, 7).some((k) => k in dados)) delete campos.endereco;
       const { data: atualizado, error: erroUpdate } = await c.from('clientes')
-        .update(_camposCliente(dados, doc)).eq('id', dados.clienteIdProvisorio).select().single();
+        .update(campos).eq('id', dados.clienteIdProvisorio).select().single();
       if (!erroUpdate && atualizado) return atualizado;
     }
     if (doc) {

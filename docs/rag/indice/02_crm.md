@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/02_crm.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `5d62c56`)
-- **Palavras:** 10412 · **blocos:** 247 · **seções com selo próprio:** 23 de 80
-- **Origem do selo dos blocos:** próprio 37 · da seção 100 · da seção-pai 0 · do cabeçalho 85 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
-- **Selo efetivo dos blocos:** Conferido 138 · Herdado 13 · Não verificado 71
+- **Palavras:** 10612 · **blocos:** 248 · **seções com selo próprio:** 23 de 80
+- **Origem do selo dos blocos:** próprio 38 · da seção 100 · da seção-pai 0 · do cabeçalho 85 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
+- **Selo efetivo dos blocos:** Conferido 161 · Herdado 13 · Não verificado 49
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -24,10 +24,10 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 2.1.5 Botões e controles (conferidos no código em 31/10/2026) | `docs/modulos/02_crm.md#215-botões-e-controles-conferidos-no-código-em-31102026` | 3 | Não verificado (uniforme) | 17 | b1 s16 |
 | 2.1.6 Comportamento | `docs/modulos/02_crm.md#216-comportamento` | 3 | Conferido (uniforme) | 10 | b1 s9 |
 | 2.1.7 Dados — o que lê e o que grava | `docs/modulos/02_crm.md#217-dados--o-que-lê-e-o-que-grava` | 3 | Conferido (uniforme) | 5 | b1 s4 |
-| 2.1.8 Regras e armadilhas | `docs/modulos/02_crm.md#218-regras-e-armadilhas` | 3 | Não verificado (misto (vale o mais fraco)) | 24 | b3 s21 |
+| 2.1.8 Regras e armadilhas | `docs/modulos/02_crm.md#218-regras-e-armadilhas` | 3 | Conferido (uniforme) | 24 | b3 s21 |
 | 2.1.9 Testes | `docs/modulos/02_crm.md#219-testes` | 3 | Conferido (uniforme) | 3 | b1 s2 |
 | 2.1.10 Pendências e decisões | `docs/modulos/02_crm.md#2110-pendências-e-decisões` | 3 | Não verificado (misto (vale o mais fraco)) | 8 | b2 s6 |
-| 2.1.11 Histórico (só o que ainda ensina) | `docs/modulos/02_crm.md#2111-histórico-só-o-que-ainda-ensina` | 3 | Herdado (uniforme) | 9 | b1 s8 |
+| 2.1.11 Histórico (só o que ainda ensina) | `docs/modulos/02_crm.md#2111-histórico-só-o-que-ainda-ensina` | 3 | Herdado (misto (vale o mais fraco)) | 10 | b2 s8 |
 | 2.2 Canais | `docs/modulos/02_crm.md#22-canais` | 2 | — | 0 | — |
 | 2.2.1 O que é | `docs/modulos/02_crm.md#221-o-que-é` | 3 | — | 1 | c1 |
 | 2.2.2 Rota e arquivos | `docs/modulos/02_crm.md#222-rota-e-arquivos` | 3 | Conferido (selo explícito da seção) | 1 | b1 |
