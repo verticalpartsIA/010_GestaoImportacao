@@ -48,10 +48,13 @@
       case 'aberta': return ator + ' abriu a solicitação';
       case 'aviso_engenharia':
         if (d.aviso_enviado === false) return 'O aviso para ' + alvo + ' NÃO saiu (escolhido(a) por ' + ator + ')';
+        if (d.automatico) return alvo + ' foi avisado(a) automaticamente para criar a Ficha Técnica (regra antiga, sem escolha)';
         return alvo + ' foi avisado(a) para criar a Ficha Técnica (escolhido(a) por ' + ator + ')';
       case 'analise_iniciada': return ator + ' iniciou a análise';
       case 'ficha_criada': return ator + ' criou a Ficha Técnica';
-      case 'aviso_importacao': return alvo + ' foi avisado(a) para conferir o NCM e publicar no Omie (escolhido(a) por ' + ator + ')';
+      case 'aviso_importacao':
+        if (d.automatico) return alvo + ' foi avisado(a) automaticamente para conferir o NCM e publicar no Omie (regra antiga, sem escolha)';
+        return alvo + ' foi avisado(a) para conferir o NCM e publicar no Omie (escolhido(a) por ' + ator + ')';
       case 'ficha_publicada': {
         var verbo = /^republicou/i.test(String(d.acao || '')) ? 'republicou' : 'publicou';
         return ator + ' ' + verbo + ' no Omie' + (d.codigo_produto ? ' (' + d.codigo_produto + ')' : '');
