@@ -246,8 +246,40 @@ function ModalExcluirSolicitacao({ solicitacao, onClose, onExcluida }) {
   );
 }
 
+/* Indicador de etapas (Recebido → Engenharia → Importação → Cadastro). Verde = feito (✓ no Cadastro), amarelo = a próxima,
+   cinza = depois dela, tracejado = sem como saber (eventos ilegíveis). Regra em SolProdTimeline.etapasDoCiclo. */
+function SolEtapas({ etapas }) {
+  const cor = { feito: 'var(--vp-success)', atual: 'var(--vp-yellow)', pendente: 'var(--border)', desconhecido: 'transparent' };
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', padding: '2px 0 6px' }} aria-label="Etapas da solicitação">
+      {etapas.map((e, i) => (
+        <React.Fragment key={e.chave}>
+          {i > 0 && <div style={{ width: 56, height: 4, marginTop: 9, background: etapas[i - 1].estado === 'feito' && e.estado === 'feito' ? 'var(--vp-success)' : 'var(--border)' }} />}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 70 }} title={e.estado === 'desconhecido' ? 'Sem permissão para ler os registros' : e.label + ' — ' + ({ feito: 'concluído', atual: 'próxima etapa', pendente: 'ainda não chegou' }[e.estado])}>
+            <div style={{ width: 22, height: 22, borderRadius: '50%', background: cor[e.estado], border: e.estado === 'desconhecido' ? '2px dashed var(--border)' : '2px solid ' + (e.estado === 'feito' ? 'var(--vp-success)' : e.estado === 'atual' ? 'var(--vp-yellow)' : 'var(--border)'), color: '#fff', fontSize: 13, fontWeight: 700, lineHeight: '18px', textAlign: 'center' }}>
+              {e.estado === 'feito' && e.chave === 'cadastro' ? '✓' : ''}
+            </div>
+            <div style={{ fontSize: 11, marginTop: 3, color: e.estado === 'feito' ? 'var(--fg1)' : 'var(--fg2)', fontWeight: e.estado === 'atual' ? 700 : 500 }}>{e.label}</div>
+          </div>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
 function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo, onFiltroStatusChange, onFiltroTipoChange, onNovaClick, onAbrirClick, podeExcluir, onExcluirClick, user }) {
   const statusCores = SP_STATUS_CORES;
+  // eventos de cada solicitação (para o indicador de etapas); null = não consegui ler (ex.: sem sessão)
+  const [eventosPorSol, setEventosPorSol] = React.useState(null);
+  const idsChave = solicitacoes.map((s) => s.id).join(',');
+  React.useEffect(() => {
+    let vivo = true;
+    if (!idsChave) { setEventosPorSol({}); return undefined; }
+    window.SolicitacoesProdutoStore.listarEventosDeVarias(idsChave.split(',').map(Number))
+      .then((m) => { if (vivo) setEventosPorSol(m); })
+      .catch((e) => { console.warn('[Solicitações] eventos indisponíveis:', e); if (vivo) setEventosPorSol(null); });
+    return () => { vivo = false; };
+  }, [idsChave]);
 
   const tiposLabel = {
     elevador: 'Elevador',
@@ -343,7 +375,8 @@ function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo,
             </thead>
             <tbody>
               {solicitacoes.map((sol) => (
-                <tr key={sol.id} style={styles.tbodyTr}>
+                <React.Fragment key={sol.id}>
+                <tr style={{ ...styles.tbodyTr, borderBottom: 'none' }}>
                   <td style={{ ...styles.td, fontWeight: 600 }}>{sol.numero_solicitacao}</td>
                   <td style={styles.td}>{tiposLabel[sol.tipo_equipamento]}</td>
                   <td style={styles.td}>{sol.categoria_sku || '—'}</td>
@@ -376,6 +409,12 @@ function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo,
                     </div>
                   </td>
                 </tr>
+                <tr style={styles.tbodyTr}>
+                  <td colSpan={8} style={{ ...styles.td, paddingTop: 0 }}>
+                    <SolEtapas etapas={window.SolProdTimeline.etapasDoCiclo(sol, eventosPorSol ? (eventosPorSol[sol.id] || []) : null)} />
+                  </td>
+                </tr>
+                </React.Fragment>
               ))}
             </tbody>
           </table>
