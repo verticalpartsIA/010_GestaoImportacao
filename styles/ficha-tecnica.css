@@ -89,6 +89,8 @@
 @keyframes ft-omie-pulse-pend { 0% { box-shadow: 0 0 0 0 rgba(217,119,6,.55); } 100% { box-shadow: 0 0 0 10px rgba(217,119,6,0); } }
 @media (prefers-reduced-motion: reduce) { .ft-omie-status { animation: none !important; } }
 
+.ft-aviso-imp { font-size: 12px; font-weight: 600; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--ft-steel-200); background: #fff; color: inherit; cursor: pointer; max-width: 190px; }
+
 /* Body de 3 colunas: sidebar | work | preview */
 .ft-gen-body {
   flex: 1; min-height: 0;
