@@ -395,6 +395,7 @@ function NovaView({ onSalvar, onCancelar, user }) {
     categoria_sku: '',
     solicitante_nome: user.nome || 'Usuário',
     solicitante_email: user.email || '',
+    avisar_email: '', // quem da Engenharia será avisado(a) — obrigatório
     descricao_inicial: '',
     observacoes_comercial: '',
     fornecedor_contato: '',
@@ -428,6 +429,7 @@ function NovaView({ onSalvar, onCancelar, user }) {
   function _validar() {
     const novosErros = {};
     if (!form.descricao_inicial) novosErros.descricao_inicial = 'Explique o que você precisa';
+    if (!window.SolProdTimeline.escolhaValida(window.SolProdTimeline.ENGENHARIA, form.avisar_email)) novosErros.avisar_email = 'Escolha quem da Engenharia deve ser avisado(a)';
     setErros(novosErros);
     return Object.keys(novosErros).length === 0;
   }
@@ -777,6 +779,21 @@ function NovaView({ onSalvar, onCancelar, user }) {
           </div>
         )}
 
+        <div style={styles.secaoTitulo}>Quem da Engenharia deve ser avisado(a)?</div>
+        <div style={styles.formGroup}>
+          <label style={styles.label}>Avisar por WhatsApp *</label>
+          <div style={styles.ajuda}>A pessoa escolhida recebe a mensagem de que há uma Ficha Técnica a criar. Quem criar a ficha pode ser outra pessoa da Engenharia.</div>
+          <select
+            value={form.avisar_email}
+            onChange={(e) => setForm({ ...form, avisar_email: e.target.value })}
+            style={{ ...styles.input, ...(erros.avisar_email ? { borderColor: 'var(--vp-danger)' } : {}) }}
+          >
+            <option value="">Escolha uma pessoa…</option>
+            {window.SolProdTimeline.ENGENHARIA.map((p) => <option key={p.email} value={p.email}>{p.nome}</option>)}
+          </select>
+          {erros.avisar_email && <div style={{ color: 'var(--vp-danger)', fontSize: 12, marginTop: 4 }}>{erros.avisar_email}</div>}
+        </div>
+
         <div style={styles.formActions}>
           <button onClick={onCancelar} style={styles.btnSecondary}>
             CANCELAR
@@ -786,6 +803,45 @@ function NovaView({ onSalvar, onCancelar, user }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* Linha do tempo REAL da solicitação: cada linha vem de `solicitacao_produto_eventos` (gravada no momento do fato, com o
+   usuário logado como autor). "Foi avisado" e "executou" são pessoas diferentes e aparecem separados. */
+function SolLinhaDoTempo({ solicitacao, irParaFicha }) {
+  const [eventos, setEventos] = React.useState(null);
+  const [erro, setErro] = React.useState('');
+  React.useEffect(() => {
+    let vivo = true;
+    setErro('');
+    window.SolicitacoesProdutoStore.listarEventos(solicitacao.id)
+      .then((l) => { if (vivo) setEventos(window.SolProdTimeline.ordenar(l)); })
+      .catch((e) => { if (vivo) { setEventos([]); setErro(e.message || String(e)); } });
+    return () => { vivo = false; };
+  }, [solicitacao.id, solicitacao.status, solicitacao.data_atualizacao]);
+
+  const fmt = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return (
+    <div style={{ ...styles.detalheSection, marginTop: 16 }}>
+      <div style={styles.detalheSectionTitle}>LINHA DO TEMPO</div>
+      {eventos === null && <div style={styles.detalheText}>⏳ Carregando…</div>}
+      {erro && <div style={{ color: 'var(--vp-danger)', fontSize: 12 }}>Não consegui ler a linha do tempo: {erro}</div>}
+      {eventos && !erro && eventos.length === 0 && <div style={styles.detalheText}>Nenhum registro ainda.</div>}
+      {eventos && eventos.map((ev) => (
+        <div key={ev.id} style={{ display: 'flex', gap: 12, padding: '6px 0', borderBottom: '1px solid var(--border)', alignItems: 'baseline' }}>
+          <div style={{ minWidth: 130, fontSize: 12, fontWeight: 600, color: 'var(--fg2)' }}>{fmt(ev.criado_em)}</div>
+          <div style={{ fontSize: 13 }}>
+            {window.SolProdTimeline.frase(ev)}
+            {ev.tipo === 'ficha_criada' && solicitacao.ficha_tecnica_id && (
+              <> — <button onClick={() => irParaFicha(solicitacao.ficha_tecnica_id)} style={styles.btnLink}>abrir ficha</button></>
+            )}
+            {ev.detalhe && ev.detalhe.origem === 'reconstruido' && (
+              <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--fg2)' }} title="Registro anterior à linha do tempo, reconstruído dos dados que já existiam">(reconstruído)</span>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -880,7 +936,7 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user, setRou
       await window.SolicitacoesProdutoStore.converterEmFicha(solicitacao.id, rec.id);
       onAtualizar({});
       const familia = solicitacao.categoria_sku ? ` Prefixo do código: ${solicitacao.categoria_sku} — na publicação o sistema usa o próximo número livre no Omie (ou informe o Código do Produto completo).` : '';
-      alert('Ficha técnica criada!' + familia + (semImagem ? '\nA imagem anexada não pôde ser copiada — anexe a foto na ficha.' : '') + '\nAbrindo editor…');
+      alert('Ficha técnica criada!' + familia + (semImagem ? '\nA imagem anexada não pôde ser copiada — anexe a foto na ficha.' : '') + '\nQuando terminar a ficha, escolha na própria edição quem da Importação deve ser avisado(a).\nAbrindo editor…');
       irParaFicha(rec.id);
     } catch (e) {
       alert('Erro ao converter em ficha técnica: ' + e.message);
@@ -1038,6 +1094,8 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user, setRou
           </div>
         )}
       </div>
+
+      <SolLinhaDoTempo solicitacao={solicitacao} irParaFicha={irParaFicha} />
 
       {solicitacao.status === 'novo' && (
         <div style={styles.formActions}>

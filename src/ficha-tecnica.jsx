@@ -538,6 +538,30 @@ function FtGenerator({ initial, onSaved, onCancel }) {
      Publica (ou republica) a ficha como anexo no Omie. Admin sempre pode
      (temCapacidade trata nivel==='Administrador' como bypass). */
   const [podePublicarOmie, setPodePublicarOmie] = _ftUS(false);
+  /* Solicitação de Produto de origem (se a ficha veio de uma): habilita o menu "Avisar Importação" e alimenta a linha do tempo. */
+  const [solOrigem, setSolOrigem] = _ftUS(null);
+  const [avisandoImp, setAvisandoImp] = _ftUS(false);
+  const fichaIdAtual = state.__id || (initial && initial.__id) || null;
+  _ftUE(() => {
+    let vivo = true;
+    if (fichaIdAtual && window.SolicitacoesProdutoStore) {
+      window.SolicitacoesProdutoStore.porFicha(fichaIdAtual).then((s) => { if (vivo) setSolOrigem(s); });
+    }
+    return () => { vivo = false; };
+  }, [fichaIdAtual]);
+  const avisarImportacao = async (email) => {
+    if (!email || !solOrigem || avisandoImp) return;
+    const alvo = window.SolProdTimeline.pessoa(window.SolProdTimeline.IMPORTACAO, email);
+    if (!alvo) return;
+    if (!confirm('Avisar ' + alvo.nome + ' por WhatsApp para conferir o NCM e publicar esta ficha no Omie?\n\nSalve a ficha antes, se ainda tiver alterações.')) return;
+    setAvisandoImp(true);
+    try {
+      await window.SolicitacoesProdutoStore.avisarImportacao(solOrigem, email, state.identificacao.nomeProduto);
+      window.toast?.('✅ ' + alvo.nome + ' foi avisado(a).', 'success');
+    } catch (e) {
+      window.toast?.(e.message || String(e), 'error');
+    } finally { setAvisandoImp(false); }
+  };
 
   _ftUE(() => {
     const el = previewWrap.current; if (!el) return;
@@ -743,6 +767,8 @@ function FtGenerator({ initial, onSaved, onCancel }) {
                   try { await window.FTStore.gravarCodigoPublicado(fichaId, res.codigo_produto); }
                   catch (er) { window.toast?.('Publicou, mas não consegui gravar o código ' + res.codigo_produto + ' na ficha: ' + (er.message || er) + '. Digite-o no campo Código e salve.', 'error'); }
                 }
+                // quem publicou entra na linha do tempo da Solicitação de origem (se houver)
+                window.SolicitacoesProdutoStore?.registrarPublicacao(fichaId, { codigo_produto: res.codigo_produto || state.identificacao.codigoProduto, republicou: !!state.omie_publicado_em });
               }
             } catch (e) { console.error('[Omie publish]', e); }
           }}
@@ -758,6 +784,14 @@ function FtGenerator({ initial, onSaved, onCancel }) {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
           {state.omie_publicado_em ? 'Republicar no Omie' : 'Publicar no Omie'}
         </button>
+        {solOrigem && !state.omie_publicado_em && (
+          <select className="ft-aviso-imp" value="" disabled={avisandoImp}
+            onChange={(e) => avisarImportacao(e.target.value)}
+            title="Terminou a ficha? Escolha quem da Importação deve conferir o NCM e publicar no Omie">
+            <option value="">{avisandoImp ? 'Avisando…' : 'Avisar Importação…'}</option>
+            {window.SolProdTimeline.IMPORTACAO.map((p) => <option key={p.email} value={p.email}>{p.nome}</option>)}
+          </select>
+        )}
         {state.omie_publicado_em ? (
           <span className="ft-omie-status is-ok" role="status">
             ✓ Publicado no Omie em {window.FTStore.fmtDateTime(state.omie_publicado_em)}
