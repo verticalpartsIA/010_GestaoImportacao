@@ -160,7 +160,14 @@
     const c = sb();
     const cur = await getById(id);
     if (!cur) return null;
-    const ident = state.identificacao || {};
+    let ident = state.identificacao || {};
+    /* Código já gerado no Omie vale mais que o prefixo solto ("VPEL-") que a tela
+       ainda carregue: gravar o prefixo por cima faria a próxima publicação criar
+       um produto duplicado no Omie. */
+    if (soPrefixo(ident.codigoProduto) && !soPrefixo(cur.codigo_produto)
+        && String(cur.codigo_produto).toUpperCase().startsWith(String(ident.codigoProduto).replace(/-+$/, '').toUpperCase())) {
+      ident = { ...ident, codigoProduto: cur.codigo_produto };
+    }
     const patch = {
       nome_produto: ident.nomeProduto || 'Sem nome',
       categoria_produto: ident.categoriaProduto || null,
@@ -185,6 +192,28 @@
     const updated = { ...cur, ...patch };
     await syncCatalogoProduto(updated, state);
     return updated;
+  }
+
+  /* true para vazio ou só o prefixo ("VPEL", "VPEL-"): ainda não é um código de produto */
+  function soPrefixo(cod) {
+    const t = String(cod || '').trim();
+    return !t || /^[A-Za-z]+-?$/.test(t);
+  }
+
+  /* Depois de publicar um produto NOVO no Omie: grava o código gerado também em
+     `identificacao.codigoProduto` (a função só grava a coluna codigo_produto e o
+     editor lê o jsonb). Devolve o erro em vez de engolir (Art. 9). */
+  async function gravarCodigoPublicado(id, codigo) {
+    if (!id || !codigo) return null;
+    const c = sb();
+    const cur = await getById(id);
+    if (!cur) return null;
+    const { error } = await c.from('fichas_tecnicas').update({
+      codigo_produto: codigo,
+      identificacao: { ...(cur.identificacao || {}), codigoProduto: codigo },
+    }).eq('id', id);
+    if (error) throw error;
+    return codigo;
   }
 
   async function remove(id) {
@@ -264,7 +293,7 @@
 
   window.FTStore = {
     uuid, fmtDateTime, relative,
-    listAll, getById, createDraft, update, remove,
+    listAll, getById, createDraft, update, remove, gravarCodigoPublicado, soPrefixo,
     syncCatalogoProduto, extractNCM, buildAtributos,
     loadLibrary, saveCategoryToLibrary, saveFieldToLibrary, libFieldKey,
     deleteCategoryFromLibrary, deleteFieldFromLibrary,

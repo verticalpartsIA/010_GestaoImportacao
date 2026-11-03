@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/08_engenharia_produto.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 01/11/2026 (origin/main `4653a17`)
-- **Palavras:** 7956 · **blocos:** 175 · **seções com selo próprio:** 40 de 73
-- **Origem do selo dos blocos:** próprio 73 · da seção 28 · da seção-pai 0 · do cabeçalho 51 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 23
-- **Selo efetivo dos blocos:** Conferido 127 · Herdado 23 · Não verificado 2
+- **Palavras:** 8135 · **blocos:** 177 · **seções com selo próprio:** 40 de 73
+- **Origem do selo dos blocos:** próprio 75 · da seção 28 · da seção-pai 0 · do cabeçalho 51 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 23
+- **Selo efetivo dos blocos:** Conferido 129 · Herdado 23 · Não verificado 2
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -60,7 +60,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 8.4.5 Botões e controles | `docs/modulos/08_engenharia_produto.md#845-botões-e-controles` | 3 | — | 1 | c1 |
 | 8.4.6 Comportamento | `docs/modulos/08_engenharia_produto.md#846-comportamento` | 3 | — | 5 | c5 |
 | 8.4.7 Dados | `docs/modulos/08_engenharia_produto.md#847-dados` | 3 | Conferido (uniforme) | 1 | b1 |
-| 8.4.8 Regras e armadilhas | `docs/modulos/08_engenharia_produto.md#848-regras-e-armadilhas` | 3 | Não verificado (misto (vale o mais fraco)) | 9 | b8 s1 |
+| 8.4.8 Regras e armadilhas | `docs/modulos/08_engenharia_produto.md#848-regras-e-armadilhas` | 3 | Não verificado (misto (vale o mais fraco)) | 11 | b10 s1 |
 | 8.4.9 Testes | `docs/modulos/08_engenharia_produto.md#849-testes` | 3 | — | 1 | c1 |
 | 8.4.10 Pendências e decisões | `docs/modulos/08_engenharia_produto.md#8410-pendências-e-decisões` | 3 | — | 1 | c1 |
 | 8.4.11 Histórico | `docs/modulos/08_engenharia_produto.md#8411-histórico` | 3 | Herdado (uniforme) | 1 | b1 |

@@ -730,12 +730,20 @@ function FtGenerator({ initial, onSaved, onCancel }) {
                 user.nome,
                 user.setor
               );
-              if (res) setState((s) => ({
-                ...s,
-                omie_publicado_em: new Date().toISOString(),
-                // produto novo: herda o código gerado no Omie (ex.: VPEL-1000)
-                identificacao: res.codigo_produto ? { ...s.identificacao, codigoProduto: res.codigo_produto } : s.identificacao,
-              }));
+              if (res) {
+                setState((s) => ({
+                  ...s,
+                  omie_publicado_em: new Date().toISOString(),
+                  // produto novo: herda o código gerado no Omie (ex.: VPEL-1000)
+                  identificacao: res.codigo_produto ? { ...s.identificacao, codigoProduto: res.codigo_produto } : s.identificacao,
+                }));
+                // a função só grava a coluna; sem isto a ficha reabre com "VPEL-" e
+                // o próximo Salvar/Publicar criaria um produto duplicado no Omie
+                if (res.codigo_produto) {
+                  try { await window.FTStore.gravarCodigoPublicado(fichaId, res.codigo_produto); }
+                  catch (er) { window.toast?.('Publicou, mas não consegui gravar o código ' + res.codigo_produto + ' na ficha: ' + (er.message || er) + '. Digite-o no campo Código e salve.', 'error'); }
+                }
+              }
             } catch (e) { console.error('[Omie publish]', e); }
           }}
           title={(() => {
@@ -750,9 +758,13 @@ function FtGenerator({ initial, onSaved, onCancel }) {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
           {state.omie_publicado_em ? 'Republicar no Omie' : 'Publicar no Omie'}
         </button>
-        {state.omie_publicado_em && (
-          <span style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap' }}>
-            Publicado no Omie em {window.FTStore.fmtDateTime(state.omie_publicado_em)}
+        {state.omie_publicado_em ? (
+          <span className="ft-omie-status is-ok" role="status">
+            ✓ Publicado no Omie em {window.FTStore.fmtDateTime(state.omie_publicado_em)}
+          </span>
+        ) : (
+          <span className="ft-omie-status is-pend" role="status">
+            Ainda não publicado no Omie
           </span>
         )}
       </div>

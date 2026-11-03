@@ -81,6 +81,14 @@
 .ft-btn.omie:hover { background: #1d4ed8; }
 .ft-btn.omie.off, .ft-btn.omie:disabled { background: var(--ft-steel-200); color: var(--ft-steel); cursor: not-allowed; }
 
+/* Situação da ficha no Omie: verde = publicado, âmbar = ainda não; pulsa 4x ao abrir/publicar */
+.ft-omie-status { font-size: 11px; font-weight: 600; white-space: nowrap; padding: 4px 10px; border-radius: 999px; }
+.ft-omie-status.is-ok { color: #166534; background: #dcfce7; animation: ft-omie-pulse 1.6s ease-out 4; }
+.ft-omie-status.is-pend { color: #92400e; background: #fef3c7; animation: ft-omie-pulse-pend 1.6s ease-out 4; }
+@keyframes ft-omie-pulse { 0% { box-shadow: 0 0 0 0 rgba(22,163,74,.55); } 100% { box-shadow: 0 0 0 10px rgba(22,163,74,0); } }
+@keyframes ft-omie-pulse-pend { 0% { box-shadow: 0 0 0 0 rgba(217,119,6,.55); } 100% { box-shadow: 0 0 0 10px rgba(217,119,6,0); } }
+@media (prefers-reduced-motion: reduce) { .ft-omie-status { animation: none !important; } }
+
 /* Body de 3 colunas: sidebar | work | preview */
 .ft-gen-body {
   flex: 1; min-height: 0;
