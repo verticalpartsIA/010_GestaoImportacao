@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/03_cadastros_mestres.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `980586c`)
-- **Palavras:** 9946 · **blocos:** 228 · **seções com selo próprio:** 24 de 45
-- **Origem do selo dos blocos:** próprio 48 · da seção 108 · da seção-pai 0 · do cabeçalho 48 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 24
-- **Selo efetivo dos blocos:** Conferido 167 · Herdado 20 · Não verificado 17
+- **Palavras:** 10067 · **blocos:** 229 · **seções com selo próprio:** 25 de 45
+- **Origem do selo dos blocos:** próprio 49 · da seção 114 · da seção-pai 0 · do cabeçalho 42 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 24
+- **Selo efetivo dos blocos:** Conferido 168 · Herdado 20 · Não verificado 17
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -27,7 +27,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 3.1.8 Regras e armadilhas | `docs/modulos/03_cadastros_mestres.md#318-regras-e-armadilhas` | 3 | Conferido (uniforme) | 8 | b2 s6 |
 | 3.1.9 Testes | `docs/modulos/03_cadastros_mestres.md#319-testes` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 3.1.10 Pendências e decisões | `docs/modulos/03_cadastros_mestres.md#3110-pendências-e-decisões` | 3 | Conferido (uniforme) | 14 | b5 s9 |
-| 3.1.11 Histórico (só o que ainda ensina) | `docs/modulos/03_cadastros_mestres.md#3111-histórico-só-o-que-ainda-ensina` | 3 | — | 6 | c6 |
+| 3.1.11 Histórico (só o que ainda ensina) | `docs/modulos/03_cadastros_mestres.md#3111-histórico-só-o-que-ainda-ensina` | 3 | Conferido (uniforme) | 7 | b1 s6 |
 | 3.2 Fornecedores | `docs/modulos/03_cadastros_mestres.md#32-fornecedores` | 2 | — | 0 | — |
 | 3.2.1 O que é | `docs/modulos/03_cadastros_mestres.md#321-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 3.2.2 Rota e arquivos | `docs/modulos/03_cadastros_mestres.md#322-rota-e-arquivos` | 3 | Conferido (uniforme) | 2 | b1 s1 |
