@@ -160,6 +160,7 @@ Todos são **achados, sem correção** (Art. 45), salvo onde dito.
 - **21/09/2026:** `VPCLI-0001` fixo como reserva do código colidiu com um cliente real; hoje a falha da função é erro claro.
 - **04/10/2026:** CPF/CNPJ com dígito verificador e coerente com o tipo (PC-4); todos os 1.043 CNPJ e 75 CPF da época eram válidos.
 - **31/10/2026:** nunca excluir com transação, documento único, busca com pontuação, aviso de cadastro inexistente e desempate de homônimo do lead (PC-4, PC-5, 3.1.6). Decisões do Gelson em PC-5.
+- **02/11/2026 (revisão de código):** (1) editar cliente antigo apagava cidade, UF e endereço — 157 clientes têm cidade/UF só nas colunas de compatibilidade (`cidade`, `estado`) e 7 só o texto `endereco`, e a store regrava essas três a partir dos campos `endereco_*`; o formulário agora preenche `endereco_*` a partir delas ao abrir (**Conferido**: banco e teste e2e). (2) O Histórico contava leads excluídos (`excluido_em`); agora filtra. **Conferido** (e2e `e2e/cadastros.spec.js`, 6 testes). Achados **não corrigidos**: clique duplo em Salvar durante a consulta de CNPJ pode gravar duas vezes; `listarAtivos` devolve lista vazia sem aviso se o banco falhar (área blindada do RFQ); a leitura de clientes pagina sem desempate (`criado_em` repete em 15 grupos; hoje sem falha); busca não ignora acento.
 
 ---
 

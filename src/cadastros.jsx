@@ -147,8 +147,19 @@ function useCnpjOmieFirst(form, setForm) {
   return { buscando, buscar: () => (window.EnderecoAPI?.isCnpjValido(digitos) ? aplicar(false) : window.toast?.('Informe um CNPJ válido para buscar.', 'warning')), garantirConsulta };
 }
 
+/* Cliente antigo (carga do Omie, Leads) tem cidade/UF/endereço só nas colunas de compatibilidade (cidade, estado, endereco).
+   A store regrava essas três a partir dos campos endereco_*; sem este preenchimento, salvar a edição as apagaria. */
+function cadCompletarEnderecoLegado(d) {
+  const vazio = (v) => !String(v ?? '').trim();
+  const f = { ...CLI_EMPTY, ...d };
+  if (vazio(f.endereco_cidade) && !vazio(d.cidade)) f.endereco_cidade = d.cidade;
+  if (vazio(f.endereco_estado) && !vazio(d.estado)) f.endereco_estado = d.estado;
+  if (vazio(f.endereco_logradouro) && !vazio(d.endereco)) f.endereco_logradouro = d.endereco;
+  return f;
+}
+
 function ClienteForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
-  const [form, setForm] = React.useState(() => (initialData ? { ...CLI_EMPTY, ...initialData } : CLI_EMPTY));
+  const [form, setForm] = React.useState(() => (initialData ? cadCompletarEnderecoLegado(initialData) : CLI_EMPTY));
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
   const cnpjBusca = useCnpjOmieFirst(form, setForm);
   const submit = async () => {

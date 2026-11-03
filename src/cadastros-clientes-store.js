@@ -77,7 +77,7 @@
     const c = sb(); if (!c || !clienteId) return null;
 
     const { data: leads } = await c.from('leads')
-      .select('id, building, origin, owner, status, date').eq('cliente_id', clienteId)
+      .select('id, building, origin, owner, status, date').eq('cliente_id', clienteId).is('excluido_em', null)
       .order('date', { ascending: true });
 
     /* Auditoria 12/10: só 2 de 67 dossiês têm cliente_id gravado — a "Vida do Cliente" quase nunca mostrava obras.
