@@ -34,6 +34,13 @@ test('frase: aviso que não saiu não diz que a pessoa foi avisada', () => {
   assert.equal(T.frase(ev), 'O aviso para Brayan Souza NÃO saiu (escolhido(a) por Guilherme Garcia)');
 });
 
+test('frase: aviso antigo automático não diz que alguém escolheu', () => {
+  const eng = { tipo: 'aviso_engenharia', ator_nome: 'Guilherme Garcia', alvo_nome: 'Mauricio Araujo', detalhe: { automatico: true } };
+  assert.equal(T.frase(eng), 'Mauricio Araujo foi avisado(a) automaticamente para criar a Ficha Técnica (regra antiga, sem escolha)');
+  const imp = { tipo: 'aviso_importacao', ator_nome: 'Guilherme Garcia', alvo_nome: 'Bianca Mayumi', detalhe: { automatico: true } };
+  assert.ok(!/escolhido/.test(T.frase(imp)));
+});
+
 test('frase: republicação e nome ausente (cai no e-mail, depois em "Alguém")', () => {
   assert.equal(T.frase({ tipo: 'ficha_publicada', ator_nome: 'Andreia Oliveira', detalhe: { acao: 'republicou ficha no Omie' } }), 'Andreia Oliveira republicou no Omie');
   assert.equal(T.frase({ tipo: 'aberta', ator_nome: '', ator_email: 'x@verticalparts.com.br' }), 'x@verticalparts.com.br abriu a solicitação');
