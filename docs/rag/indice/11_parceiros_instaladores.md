@@ -5,7 +5,7 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/11_parceiros_instaladores.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 01/11/2026 (origin/main `e53dfa8`)
-- **Palavras:** 8097 · **blocos:** 171 · **seções com selo próprio:** 48 de 73
+- **Palavras:** 8241 · **blocos:** 171 · **seções com selo próprio:** 48 de 73
 - **Origem do selo dos blocos:** próprio 87 · da seção 31 · da seção-pai 0 · do cabeçalho 29 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 24
 - **Selo efetivo dos blocos:** Conferido 120 · Herdado 20 · Não verificado 7
 
@@ -51,7 +51,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 11.3.8 Regras e armadilhas | `docs/modulos/11_parceiros_instaladores.md#1138-regras-e-armadilhas` | 3 | Herdado (misto (vale o mais fraco)) | 9 | b9 |
 | 11.3.9 Testes | `docs/modulos/11_parceiros_instaladores.md#1139-testes` | 3 | Herdado (uniforme) | 1 | b1 |
 | 11.3.10 Pendências e decisões | `docs/modulos/11_parceiros_instaladores.md#11310-pendências-e-decisões` | 3 | — | 1 | c1 |
-| 11.3.11 Histórico | `docs/modulos/11_parceiros_instaladores.md#11311-histórico` | 3 | Herdado (uniforme) | 1 | b1 |
+| 11.3.11 Histórico | `docs/modulos/11_parceiros_instaladores.md#11311-histórico` | 3 | Herdado (misto (vale o mais fraco)) | 1 | b1 |
 | 11.4 Pagamentos a Instaladores | `docs/modulos/11_parceiros_instaladores.md#114-pagamentos-a-instaladores` | 2 | — | 0 | — |
 | 11.4.1 O que é | `docs/modulos/11_parceiros_instaladores.md#1141-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 11.4.2 Rota e arquivos | `docs/modulos/11_parceiros_instaladores.md#1142-rota-e-arquivos` | 3 | Conferido (uniforme) | 1 | b1 |
