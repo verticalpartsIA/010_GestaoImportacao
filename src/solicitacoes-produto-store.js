@@ -108,6 +108,20 @@ window.SolicitacoesProdutoStore = (() => {
     return data || [];
   }
 
+  /* Eventos de várias solicitações de uma vez (indicador de etapas da lista): { [solicitacao_id]: [eventos] }. */
+  async function listarEventosDeVarias(ids) {
+    const lista = (ids || []).filter((x) => x != null);
+    if (!lista.length) return {};
+    const { data, error } = await window.__VP_SB.sb
+      .from('solicitacao_produto_eventos')
+      .select('solicitacao_id, tipo, criado_em')
+      .in('solicitacao_id', lista);
+    if (error) throw error;
+    const mapa = {};
+    (data || []).forEach((e) => { (mapa[e.solicitacao_id] = mapa[e.solicitacao_id] || []).push(e); });
+    return mapa;
+  }
+
   /* O título do aviso leva um resumo do pedido: o gi-avisos agrupa por 24 h os avisos de mesmo título (sem números),
      então "Nova Solicitação — SOL-…" de duas solicitações no mesmo dia faria a segunda não sair. */
   function _notificarEngenharia(solicitacao, alvo) {
@@ -455,6 +469,7 @@ window.SolicitacoesProdutoStore = (() => {
     converterEmFicha,
     excluir,
     listarEventos,
+    listarEventosDeVarias,
     porFicha,
     avisarImportacao,
     registrarPublicacao,

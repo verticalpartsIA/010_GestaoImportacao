@@ -63,6 +63,38 @@
     }
   }
 
+  /* Indicador de etapas da lista: Recebido → Engenharia → Importação → Cadastro.
+     feito = já aconteceu; atual = a próxima a acontecer; pendente = depois dela;
+     desconhecido = sem como ler os eventos (Importação e Cadastro só existem nos eventos).
+     Etapa anterior a uma já feita conta como feita (ex.: publicou sem registrar o aviso). */
+  var ETAPAS_CICLO = [
+    { chave: 'recebido', label: 'Recebido' },
+    { chave: 'engenharia', label: 'Engenharia' },
+    { chave: 'importacao', label: 'Importação' },
+    { chave: 'cadastro', label: 'Cadastro' },
+  ];
+  function etapasDoCiclo(sol, eventos) {
+    var lista = Array.isArray(eventos) ? eventos : null;
+    var tem = function (t) { return !!lista && lista.some(function (e) { return e.tipo === t; }); };
+    var feito = {
+      recebido: true,
+      engenharia: !!(sol && sol.ficha_tecnica_id) || tem('ficha_criada'),
+      importacao: tem('aviso_importacao'),
+      cadastro: tem('ficha_publicada'),
+    };
+    var ultimo = -1;
+    ETAPAS_CICLO.forEach(function (e, i) { if (feito[e.chave]) ultimo = i; });
+    var atualMarcado = false;
+    return ETAPAS_CICLO.map(function (e, i) {
+      var estado;
+      if (i <= ultimo) estado = 'feito';
+      else if (!lista && (e.chave === 'importacao' || e.chave === 'cadastro')) estado = 'desconhecido';
+      else if (!atualMarcado) { atualMarcado = true; estado = 'atual'; }
+      else estado = 'pendente';
+      return { chave: e.chave, label: e.label, estado: estado };
+    });
+  }
+
   function ordenar(eventos) {
     return (eventos || []).slice().sort(function (a, b) {
       return new Date(a.criado_em) - new Date(b.criado_em);
@@ -74,6 +106,6 @@
     return !!pessoa(lista, email);
   }
 
-  root.SolProdTimeline = { ENGENHARIA: ENGENHARIA, IMPORTACAO: IMPORTACAO, pessoa: pessoa, nomeDe: nomeDe, resumo: resumo, frase: frase, ordenar: ordenar, escolhaValida: escolhaValida };
+  root.SolProdTimeline = { ENGENHARIA: ENGENHARIA, IMPORTACAO: IMPORTACAO, pessoa: pessoa, nomeDe: nomeDe, resumo: resumo, frase: frase, etapasDoCiclo: etapasDoCiclo, ordenar: ordenar, escolhaValida: escolhaValida };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.SolProdTimeline;
 }(typeof window !== 'undefined' ? window : globalThis));

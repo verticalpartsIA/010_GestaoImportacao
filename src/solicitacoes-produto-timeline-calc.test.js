@@ -47,6 +47,24 @@ test('frase: republicação e nome ausente (cai no e-mail, depois em "Alguém")'
   assert.equal(T.frase({ tipo: 'analise_iniciada' }), 'Alguém iniciou a análise');
 });
 
+const estados = (sol, evs) => T.etapasDoCiclo(sol, evs).map((e) => e.estado).join(',');
+
+test('etapasDoCiclo: Recebido sempre feito; a próxima etapa é a atual', () => {
+  assert.equal(estados({ id: 1 }, []), 'feito,atual,pendente,pendente');
+  assert.equal(estados({ id: 1, ficha_tecnica_id: 'f1' }, []), 'feito,feito,atual,pendente');
+  assert.equal(estados({ id: 1, ficha_tecnica_id: 'f1' }, [{ tipo: 'aviso_importacao' }]), 'feito,feito,feito,atual');
+  assert.equal(estados({ id: 1, ficha_tecnica_id: 'f1' }, [{ tipo: 'aviso_importacao' }, { tipo: 'ficha_publicada' }]), 'feito,feito,feito,feito');
+});
+
+test('etapasDoCiclo: publicar sem aviso registrado não deixa Importação como atual', () => {
+  assert.equal(estados({ id: 1 }, [{ tipo: 'ficha_publicada' }]), 'feito,feito,feito,feito');
+});
+
+test('etapasDoCiclo: sem leitura dos eventos, Importação e Cadastro ficam desconhecidos', () => {
+  assert.equal(estados({ id: 1, ficha_tecnica_id: 'f1' }, null), 'feito,feito,desconhecido,desconhecido');
+  assert.equal(estados({ id: 1 }, null), 'feito,atual,desconhecido,desconhecido');
+});
+
 test('ordenar: do mais antigo para o mais novo, sem alterar a lista original', () => {
   const evs = [{ tipo: 'b', criado_em: '2026-10-27T10:00:00Z' }, { tipo: 'a', criado_em: '2026-10-19T10:00:00Z' }];
   assert.deepEqual(T.ordenar(evs).map((e) => e.tipo), ['a', 'b']);
