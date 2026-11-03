@@ -79,6 +79,19 @@ async function fetchSinay(
   }
 }
 
+// Quanto do trajeto o navio já percorreu (0 = origem, 1 = destino), pelo ponto
+// do trajeto mais próximo da posição atual.
+function progressoNaRota(trajeto: Array<{ lat: number; lng: number }>, p: { lat: number; lng: number }): number | null {
+  if (trajeto.length < 2) return null;
+  let melhor = 0;
+  let melhorDist = Infinity;
+  trajeto.forEach((pt, i) => {
+    const d = (pt.lat - p.lat) ** 2 + (pt.lng - p.lng) ** 2;
+    if (d < melhorDist) { melhorDist = d; melhor = i; }
+  });
+  return Math.round((melhor / (trajeto.length - 1)) * 1000) / 1000;
+}
+
 // Extrai {lat,lng,eta,etd,vessel,imo,status} de um response da Sinay.
 function mapSinayResponse(j: Record<string, unknown>) {
   const metadata = (j.metadata ?? {}) as Record<string, unknown>;
@@ -91,17 +104,18 @@ function mapSinayResponse(j: Record<string, unknown>) {
   const events = (containers[0]?.events ?? []) as Array<Record<string, unknown>>;
 
   const isoDate = (v: unknown) => (typeof v === "string" && v.length >= 10 ? v.slice(0, 10) : null);
-  const coordsOf = (loc: unknown) => (loc as Record<string, unknown> | undefined)?.coordinates as
-    { lat?: number; lng?: number } | undefined;
 
-  // A Sinay nem sempre devolve o bloco top-level "coordinates" (posição AIS
-  // ao vivo do navio). Quando falta, usamos a localização do último evento
-  // confirmado (isActual=true) como posição aproximada — melhor que nada.
-  let coords = j.coordinates as { lat?: number; lng?: number } | undefined;
-  if (!coords?.lat) {
-    const lastActual = [...events].reverse().find((ev) => ev.isActual);
-    coords = coordsOf(lastActual?.location) ?? coordsOf((pol as Record<string, unknown>)?.location);
-  }
+  // Posição real do navio: routeData.ais.data.lastVesselPosition (AIS ao vivo),
+  // senão routeData.coordinates. NUNCA usar a coordenada do porto/último evento:
+  // ela fica no porto de origem e faz o navio aparecer parado na China.
+  const rd = (j.routeData ?? {}) as Record<string, any>;
+  const aisPos = rd.ais?.data?.lastVesselPosition as { lat?: number; lng?: number } | undefined;
+  const coords = (aisPos?.lat != null ? aisPos : (rd.coordinates?.lat != null ? rd.coordinates : null)) as
+    { lat?: number; lng?: number } | null;
+  // Progresso real: posição do navio no trajeto da Sinay (routeSegments), 0 = origem, 1 = destino.
+  const trajeto = ((rd.routeSegments ?? []) as Array<{ path?: Array<{ lat: number; lng: number }> }>)
+    .flatMap((s) => s.path ?? []);
+  const position = coords?.lat != null && coords?.lng != null ? progressoNaRota(trajeto, coords as { lat: number; lng: number }) : null;
 
   // Linha do tempo de eventos reais (Container Arrival / Departure / Gate-In /
   // Gate-Out etc.) — mesmo dado que o Safecube exibe em "Linha Do Tempo De
@@ -122,6 +136,7 @@ function mapSinayResponse(j: Record<string, unknown>) {
     sinayUpdatedAt: (metadata.updatedAt as string) ?? null,
     lat: coords?.lat ?? null,
     lng: coords?.lng ?? null,
+    position,
     eta: isoDate((pod as Record<string, unknown>)?.date),
     etd: isoDate((pol as Record<string, unknown>)?.date),
     polName: (((pol as Record<string, unknown>)?.location as Record<string, unknown>)?.name as string) ?? null,
@@ -181,11 +196,19 @@ Deno.serve(async (req) => {
     let patch: Record<string, unknown> = {};
     let handled = false;
 
-    const shipmentNumber = e.bl || e.container_number;
+    const shipmentNumber = e.container_number || e.bl;
     if (hasSinay && shipmentNumber) {
-      const shipmentType = e.bl ? "BL" : "CT";
-      const raw = await fetchSinay(shipmentNumber, shipmentType, e.sealine || null);
-      await sleep(1100); // respeita o rate limit de 10 req/10s da Sinay
+      // Container primeiro: o BL gravado nem sempre bate com a Sinay (WRONG_NUMBER).
+      // Só cai para o BL se a consulta pelo container falhar.
+      const tentativas: Array<[string, "BL" | "CT"]> = [];
+      if (e.container_number) tentativas.push([e.container_number, "CT"]);
+      if (e.bl) tentativas.push([e.bl, "BL"]);
+      let raw: Record<string, unknown> | null = null;
+      for (const [numero, tipo] of tentativas) {
+        raw = await fetchSinay(numero, tipo, e.sealine || null);
+        await sleep(1100); // respeita o rate limit de 10 req/10s da Sinay
+        if (raw && !raw.__error && !raw.__rateLimited) break;
+      }
 
       if (raw && !raw.__rateLimited && !raw.__error) {
         const mapped = mapSinayResponse(raw);
@@ -200,10 +223,7 @@ Deno.serve(async (req) => {
         if (mapped.lat != null && mapped.lng != null) {
           patch.lat = mapped.lat;
           patch.lng = mapped.lng;
-          const start = portOf(e.origin, [31.2, 121.5]);
-          const end = portOf(e.destination, [-23.95, -46.3]);
-          const total = Math.hypot(end[0] - start[0], end[1] - start[1]);
-          if (total > 0) patch.position = Math.round(Math.max(0, Math.min(0.99, Math.hypot(mapped.lat - start[0], mapped.lng - start[1]) / total)) * 1000) / 1000;
+          if (mapped.position != null) patch.position = mapped.position;
           patch.speed = null; patch.heading = null; // a Sinay não informa velocidade/rumo
         }
         if (mapped.eta) patch.eta = mapped.eta;
