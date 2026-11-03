@@ -516,9 +516,9 @@ function ImportacaoPage({ setRoute, setSubsel }) {
                   </td>
                   <td style={{ width: 160 }}>
                     <div className="progress" style={{ marginBottom: 4 }}>
-                      <span style={{ width: (e.position * 100) + "%" }}/>
+                      <span style={{ width: (rtChegou(e) ? 100 : (e.position || 0) * 100) + "%" }}/>
                     </div>
-                    <div className="cell-sub mono">{Math.round(e.position * 100)}%</div>
+                    <div className="cell-sub mono">{rtChegou(e) ? 100 : Math.round((e.position || 0) * 100)}%</div>
                   </td>
                   <td>
                     {e.channel ? <Badge variant={e.channel === "Verde" ? "success" : e.channel === "Amarelo" ? "warning" : "danger"} dot>{e.channel}</Badge> : <span className="muted">—</span>}
