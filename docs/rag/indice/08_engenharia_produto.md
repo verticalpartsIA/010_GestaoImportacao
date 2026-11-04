@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/08_engenharia_produto.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 01/11/2026 (origin/main `4653a17`)
-- **Palavras:** 10190 · **blocos:** 211 · **seções com selo próprio:** 43 de 74
-- **Origem do selo dos blocos:** próprio 82 · da seção 63 · da seção-pai 0 · do cabeçalho 43 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 23
-- **Selo efetivo dos blocos:** Conferido 163 · Herdado 23 · Não verificado 2
+- **Palavras:** 10452 · **blocos:** 212 · **seções com selo próprio:** 43 de 74
+- **Origem do selo dos blocos:** próprio 83 · da seção 63 · da seção-pai 0 · do cabeçalho 43 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 23
+- **Selo efetivo dos blocos:** Conferido 164 · Herdado 23 · Não verificado 2
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -44,7 +44,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 8.3.1 O que é | `docs/modulos/08_engenharia_produto.md#831-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 8.3.2 Rota e arquivos | `docs/modulos/08_engenharia_produto.md#832-rota-e-arquivos` | 3 | Conferido (uniforme) | 1 | b1 |
 | 8.3.3 Perfil e acesso | `docs/modulos/08_engenharia_produto.md#833-perfil-e-acesso` | 3 | Conferido (uniforme) | 1 | b1 |
-| 8.3.4 O que a tela mostra | `docs/modulos/08_engenharia_produto.md#834-o-que-a-tela-mostra` | 3 | Conferido (uniforme) | 3 | b1 s2 |
+| 8.3.4 O que a tela mostra | `docs/modulos/08_engenharia_produto.md#834-o-que-a-tela-mostra` | 3 | Conferido (uniforme) | 4 | b2 s2 |
 | 8.3.5 Botões e controles | `docs/modulos/08_engenharia_produto.md#835-botões-e-controles` | 3 | — | 1 | c1 |
 | 8.3.6 Comportamento | `docs/modulos/08_engenharia_produto.md#836-comportamento` | 3 | Conferido (uniforme) | 6 | b2 s4 |
 | 8.3.7 Dados | `docs/modulos/08_engenharia_produto.md#837-dados` | 3 | Conferido (uniforme) | 1 | b1 |

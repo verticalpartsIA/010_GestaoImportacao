@@ -147,3 +147,14 @@ test('frase: devolução cita o destino e, se houver, o nome citado', () => {
   assert.equal(T.frase({ tipo: 'devolvida', ator_nome: 'Alexandre Schmidt', alvo_nome: 'Andreia Oliveira', detalhe: { para: 'importacao' } }), 'Alexandre Schmidt devolveu à Importação (citou Andreia Oliveira)');
   assert.equal(T.frase({ tipo: 'devolucao_respondida', ator_nome: 'Guilherme Garcia' }), 'Guilherme Garcia respondeu a devolução');
 });
+
+test('setorDoUsuario: listas mandam; quem abriu escreve como solicitante; Administrador usa o departamento da vez', () => {
+  const sol = { solicitante_email: 'guilherme@verticalparts.com.br' };
+  assert.equal(T.setorDoUsuario(sol, 'alexandre@verticalparts.com.br', false), 'engenharia');
+  assert.equal(T.setorDoUsuario(sol, 'bianca@verticalparts.com.br', false), 'importacao');
+  assert.equal(T.setorDoUsuario(sol, 'guilherme@verticalparts.com.br', false), 'solicitante');
+  assert.equal(T.setorDoUsuario(sol, 'vendedor.qualquer@verticalparts.com.br', false), 'solicitante');
+  assert.equal(T.setorDoUsuario(sol, 'diretoria@verticalparts.com.br', true, 'importacao'), 'importacao');
+  assert.equal(T.setorDoUsuario(sol, 'diretoria@verticalparts.com.br', true), 'engenharia');
+  assert.equal(T.setorDoUsuario(sol, 'guilherme@verticalparts.com.br', true, 'solicitante'), 'solicitante');
+});

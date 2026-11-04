@@ -134,6 +134,19 @@
     return { ok: false, motivo: 'Destino inválido.' };
   }
 
+  /* Em nome de qual departamento a pessoa escreve no chat. Engenharia e Importação vêm das listas; quem abriu a
+     solicitação (e qualquer outra pessoa do Comercial) escreve como "solicitante". Administrador fora das listas
+     escreve como o departamento que tem a vez (`preferido`), senão como Engenharia. */
+  function setorDoUsuario(sol, email, admin, preferido) {
+    if (preferido === 'engenharia' && (admin || ehDe(ENGENHARIA, email))) return 'engenharia';
+    if (preferido === 'importacao' && (admin || ehDe(IMPORTACAO, email))) return 'importacao';
+    if (preferido === 'solicitante' && String(sol && sol.solicitante_email || '').trim().toLowerCase() === String(email || '').trim().toLowerCase()) return 'solicitante';
+    if (ehDe(ENGENHARIA, email)) return 'engenharia';
+    if (ehDe(IMPORTACAO, email)) return 'importacao';
+    if (admin && !(sol && String(sol.solicitante_email || '').trim().toLowerCase() === String(email || '').trim().toLowerCase())) return 'engenharia';
+    return 'solicitante';
+  }
+
   /* Quem responde: só o solicitante (1ª volta); qualquer pessoa do departamento (demais), mesmo que a mensagem cite um nome. */
   function podeResponder(sol, email, admin) {
     var com = sol && sol.pendente_com;
@@ -179,7 +192,7 @@
   }
 
   root.SolProdTimeline = { ENGENHARIA: ENGENHARIA, IMPORTACAO: IMPORTACAO, pessoa: pessoa, nomeDe: nomeDe, resumo: resumo, frase: frase, etapasDoCiclo: etapasDoCiclo, ordenar: ordenar, escolhaValida: escolhaValida,
-    DESTINOS: DESTINOS, rotuloPendencia: rotuloPendencia, podeDevolver: podeDevolver, podeResponder: podeResponder,
+    DESTINOS: DESTINOS, rotuloPendencia: rotuloPendencia, podeDevolver: podeDevolver, podeResponder: podeResponder, setorDoUsuario: setorDoUsuario,
     somarHorasComerciais: somarHorasComerciais, prazoDevolucao: prazoDevolucao, emAtraso: emAtraso };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.SolProdTimeline;
 }(typeof window !== 'undefined' ? window : globalThis));

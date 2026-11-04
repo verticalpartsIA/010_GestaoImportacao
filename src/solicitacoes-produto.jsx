@@ -44,16 +44,23 @@ function SolicitacoesProdutoPage({ solicitacaoId, setRoute, setSubsel }) {
     if (solicitacaoId) {
       _carregarDetalhe(solicitacaoId);
     } else {
+      // Voltar do navegador tira o id da URL: a tela também precisa sair do detalhe (achado de 8.3.8).
+      setView((v) => (v === 'detalhe' ? 'lista' : v));
+      setAtual(null);
       _carregarLista();
     }
   }, [solicitacaoId]);
 
-  async function _carregarLista() {
+  async function _carregarLista(novos = {}) {
     setLoading(true);
     try {
+      // `novos` traz o valor que acabou de ser escolhido: o estado (setFiltro…) só atualiza no próximo render,
+      // então ler filtroStatus/filtroTipo aqui aplicava o filtro da escolha ANTERIOR (achado de 8.3.8).
+      const status = novos.status !== undefined ? novos.status : filtroStatus;
+      const tipo = novos.tipo !== undefined ? novos.tipo : filtroTipo;
       const filtros = {};
-      if (filtroStatus) filtros.status = filtroStatus;
-      if (filtroTipo) filtros.tipo_equipamento = filtroTipo;
+      if (status) filtros.status = status;
+      if (tipo) filtros.tipo_equipamento = tipo;
 
       const dados = await window.SolicitacoesProdutoStore.listar(filtros);
       setSolicitacoes(dados);
@@ -112,11 +119,11 @@ function SolicitacoesProdutoPage({ solicitacaoId, setRoute, setSubsel }) {
           filtroTipo={filtroTipo}
           onFiltroStatusChange={(s) => {
             setFiltroStatus(s);
-            _carregarLista();
+            _carregarLista({ status: s });
           }}
           onFiltroTipoChange={(t) => {
             setFiltroTipo(t);
-            _carregarLista();
+            _carregarLista({ tipo: t });
           }}
           onNovaClick={() => setView('nova')}
           onAbrirClick={_abrirDetalhe}
@@ -138,7 +145,7 @@ function SolicitacoesProdutoPage({ solicitacaoId, setRoute, setSubsel }) {
           user={user}
         />
       ) : (
-        <DetalheView
+        <DetalheComAbas
           setRoute={setRoute}
           setSubsel={setSubsel}
           solicitacao={atual}
@@ -248,6 +255,52 @@ function ModalExcluirSolicitacao({ solicitacao, onClose, onExcluida }) {
 
 /* Indicador de etapas (Recebido → Engenharia → Importação → Cadastro). Verde = feito (✓ no Cadastro), amarelo = a próxima,
    cinza = depois dela, tracejado = sem como saber (eventos ilegíveis). Regra em SolProdTimeline.etapasDoCiclo. */
+/* Aba do detalhe na URL: /engenharia/solicitacoes-produto/<id>[/chat]. Lê da URL a cada render (não duplica em estado):
+   Voltar/Avançar do navegador e link direto funcionam; "informações" deixa a URL limpa. */
+function useAbaDaSolicitacao(id) {
+  const [, setN] = React.useState(0);
+  React.useEffect(() => {
+    const R = window.VpRouter;
+    const re = () => setN((n) => n + 1);
+    const unsub = R && R.subscribe ? R.subscribe(re) : null;
+    window.addEventListener('vp:navigate', re);
+    return () => { if (unsub) unsub(); window.removeEventListener('vp:navigate', re); };
+  }, []);
+  const loc = (window.VpRouter && window.VpRouter.parseLocation && window.VpRouter.parseLocation()) || {};
+  const aba = loc.route === 'solicitacoes-produto' && String(loc.id) === String(id) && loc.tab === 'chat' ? 'chat' : 'info';
+  const ir = (nova) => {
+    if (window.VpRouter) window.VpRouter.navigate('solicitacoes-produto', id, nova === 'chat' ? 'chat' : null);
+    setN((n) => n + 1);
+  };
+  return [aba, ir];
+}
+
+/* Detalhe com abas Informações | Chat. O detalhe de antes (DetalheView) segue intacto na aba Informações. */
+function DetalheComAbas(props) {
+  const { solicitacao, loading, onVoltar, onAtualizar } = props;
+  const [aba, irAba] = useAbaDaSolicitacao(solicitacao && solicitacao.id);
+  if (loading || !solicitacao) return <DetalheView {...props} />;
+  const Faixa = window.SolPendenciaFaixa;
+  const tabBtn = (id, label) => (
+    <button onClick={() => irAba(id)} aria-selected={aba === id} role="tab"
+      style={{ padding: '8px 16px', border: 'none', borderBottom: aba === id ? '3px solid var(--vp-yellow)' : '3px solid transparent', background: 'none', fontWeight: aba === id ? 700 : 500, cursor: 'pointer', color: 'var(--fg1)' }}>
+      {label}
+    </button>
+  );
+  return (
+    <div>
+      {Faixa && aba === 'info' && <div style={{ marginBottom: 10 }}><Faixa sol={solicitacao} /></div>}
+      <div role="tablist" style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 12 }}>
+        {tabBtn('info', '📋 Informações')}
+        {tabBtn('chat', '💬 Chat' + (solicitacao.pendente_com ? ' ⏳' : ''))}
+      </div>
+      {aba === 'chat' && window.SolChat
+        ? <window.SolChat sol={solicitacao} onVoltar={onVoltar} onMudou={() => onAtualizar({})} />
+        : <DetalheView {...props} />}
+    </div>
+  );
+}
+
 function SolEtapas({ etapas }) {
   const cor = { feito: 'var(--vp-success)', atual: 'var(--vp-yellow)', pendente: 'var(--border)', desconhecido: 'transparent' };
   return (
@@ -267,8 +320,10 @@ function SolEtapas({ etapas }) {
   );
 }
 
-function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo, onFiltroStatusChange, onFiltroTipoChange, onNovaClick, onAbrirClick, podeExcluir, onExcluirClick, user }) {
+function ListaView({ solicitacoes: todas, loading, podeCriar, filtroStatus, filtroTipo, onFiltroStatusChange, onFiltroTipoChange, onNovaClick, onAbrirClick, podeExcluir, onExcluirClick, user }) {
   const statusCores = SP_STATUS_CORES;
+  const [soPendentes, setSoPendentes] = React.useState(false);
+  const solicitacoes = soPendentes ? todas.filter((s) => s.pendente_com) : todas;
   // eventos de cada solicitação (para o indicador de etapas); null = não consegui ler (ex.: sem sessão)
   const [eventosPorSol, setEventosPorSol] = React.useState(null);
   const idsChave = solicitacoes.map((s) => s.id).join(',');
@@ -333,6 +388,14 @@ function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo,
           </select>
         </div>
 
+        <div style={styles.filtroGrupo}>
+          <label style={styles.filtroLabel}>Pendência</label>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+            <input type="checkbox" checked={soPendentes} onChange={(e) => setSoPendentes(e.target.checked)} />
+            Só devolvidas, pendentes de resposta ({todas.filter((s) => s.pendente_com).length})
+          </label>
+        </div>
+
         <div style={styles.statsGrupo}>
           <div style={styles.stat}>
             <div style={styles.statNumero}>{solicitacoes.length}</div>
@@ -386,6 +449,7 @@ function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo,
                     <div style={{ ...styles.badge, background: statusCores[sol.status] }}>
                       {sol.status.replace(/_/g, ' ').toUpperCase()}
                     </div>
+                    {sol.pendente_com && window.SolPendenciaFaixa && <div style={{ marginTop: 4 }}><window.SolPendenciaFaixa sol={sol} compacta /></div>}
                   </td>
                   <td style={styles.td}>{new Date(sol.data_criacao).toLocaleDateString('pt-BR')}</td>
                   <td style={styles.td}>
