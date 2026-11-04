@@ -388,7 +388,7 @@ function App() {
       case "ncm-detail": return <NcmDetailPage product={subsel?.ncmProduct} setRoute={setRoute}/>;
       case "eng-projeto-elevadores": return <window.ProjetoElevadorPage setRoute={setRoute}/>;
       case "eng-configurador": return <ConfiguradorPage setRoute={setRoute}/>;
-      case "ficha-tecnica": return <FichaTecnicaPage fichaId={subsel}/>; /* deep-link support: /nova-ficha-tecnica */
+      case "ficha-tecnica": return <FichaTecnicaPage fichaId={subsel} setRoute={setRoute} setSubsel={setSubsel}/>; /* deep-link support: /nova-ficha-tecnica */
       case "solicitacoes-produto": return <SolicitacoesProdutoPage solicitacaoId={subsel} setRoute={setRoute} setSubsel={setSubsel}/>; /* deep-link support */
       case "juridico": return <JuridicoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "contrato-editor": return <ContratoEditorPage contrato={subsel} setRoute={setRoute} onSaved={() => {}} />;

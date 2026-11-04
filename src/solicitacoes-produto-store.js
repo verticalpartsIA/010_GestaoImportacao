@@ -179,6 +179,102 @@ window.SolicitacoesProdutoStore = (() => {
     });
   }
 
+  /* ---------- Chat interno e devolução com pendência (8.3, spec de 04/11/2026) ---------- */
+  const _sbc = () => { const c = window.__VP_SB && window.__VP_SB.sb; if (!c) throw new Error('Supabase não carregado'); return c; };
+
+  let _adminCache = null;
+  async function souAdmin() {
+    if (_adminCache !== null) return _adminCache;
+    try {
+      const email = String((window.__VP_USER || {}).email || '').toLowerCase();
+      const { data } = await _sbc().from('perfis').select('nivel').eq('email', email).maybeSingle();
+      _adminCache = !!data && data.nivel === 'Administrador';
+    } catch (e) { _adminCache = false; }
+    return _adminCache;
+  }
+
+  /* Feriados que contam no SLA (mesma tabela do motor de gatilhos). Falha de leitura = só fim de semana, e avisa no console. */
+  async function _feriados() {
+    try {
+      const { data, error } = await _sbc().from('calendario_feriados').select('data, conta_no_sla').eq('ativo', true);
+      if (error) throw error;
+      return (data || []).filter((l) => l.conta_no_sla !== false).map((l) => l.data);
+    } catch (e) { console.warn('[SolicitacoesProdutoStore] feriados indisponíveis — prazo usa só fim de semana', e); return []; }
+  }
+
+  /* A Ficha já foi publicada no Omie? (lê omie_publicado_em, NÃO a `etapa`: 93 fichas publicadas e só 1 em "publicado".)
+     null = não consegui ler (a função do banco confere de qualquer modo). */
+  async function fichaPublicada(sol) {
+    if (!sol || !sol.ficha_tecnica_id) return false;
+    try {
+      const { data, error } = await _sbc().from('fichas_tecnicas').select('omie_publicado_em').eq('id', sol.ficha_tecnica_id).maybeSingle();
+      if (error) throw error;
+      return !!(data && data.omie_publicado_em);
+    } catch (e) { console.warn('[SolicitacoesProdutoStore] não li a publicação da ficha:', e); return null; }
+  }
+
+  async function listarMensagens(solicitacaoId) {
+    const { data, error } = await _sbc().from('solicitacao_produto_mensagens')
+      .select('*').eq('solicitacao_id', solicitacaoId).order('criado_em', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  }
+
+  /* Aviso por WhatsApp (alertas → gi-avisos). O título leva um resumo da mensagem: o gi-avisos agrupa por 24 h os avisos de
+     mesmo título sem números e ignora "teste", "claude" e "excluir". Devolve { enviados, falhas } — nunca silencioso (Art. 9). */
+  async function _avisarMensagem(sol, emails, texto, quem) {
+    const lista = Array.from(new Set((emails || []).map((e) => String(e || '').trim().toLowerCase()).filter(Boolean)));
+    if (!lista.length) return { enviados: 0, falhas: 0 };
+    const ok = await _avisar(lista, {
+      idBase: `sol-chat-${sol.numero_solicitacao}-${Date.now().toString(36)}`,
+      title: `${TL().resumo(texto, 40)} — conversa sobre pedido de produto`,
+      sub: [sol.numero_solicitacao, quem ? quem + ' escreveu' : null, sol.cliente_nome].filter(Boolean).join(' · '),
+      rota: `/engenharia/solicitacoes-produto/${sol.id}/chat`,
+    });
+    return ok ? { enviados: lista.length, falhas: 0 } : { enviados: 0, falhas: lista.length };
+  }
+
+  async function enviarMensagem(sol, { texto, anexos, setor, whatsapp }) {
+    const u = window.__VP_USER || {};
+    const t = String(texto || '').trim();
+    if (!t) throw new Error('Escreva a mensagem.');
+    const { error } = await _sbc().from('solicitacao_produto_mensagens').insert([{
+      solicitacao_id: sol.id, autor_email: String(u.email || '').toLowerCase(), autor_nome: u.nome || null,
+      setor, tipo: 'mensagem', texto: t, anexos: anexos || [],
+    }]);
+    if (error) throw new Error(error.message);
+    return _avisarMensagem(sol, whatsapp, t, u.nome);
+  }
+
+  /* Abre a pendência (a função do banco confere status, ficha publicada e pendência já aberta, e grava mensagem + evento). */
+  async function devolver(sol, { para, motivo, setor, cita, whatsapp }) {
+    const u = window.__VP_USER || {};
+    const prazo = TL().prazoDevolucao(new Date(), await _feriados());
+    const { error } = await _sbc().rpc('solicitacao_devolver', {
+      p_id: sol.id, p_para: para, p_motivo: motivo, p_setor_autor: setor, p_autor_nome: u.nome || null,
+      p_cita_email: cita ? cita.email : null, p_cita_nome: cita ? cita.nome : null, p_prazo: prazo.toISOString(),
+    });
+    if (error) throw new Error(error.message);
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Solicitações de Produto', acao: 'Devolveu a solicitação — ' + (TL().DESTINOS[para] || para),
+      alvo: sol.numero_solicitacao, alvo_id: sol.id, detalhe: { para, prazo: prazo.toISOString() },
+    });
+    const aviso = await _avisarMensagem(sol, whatsapp, 'Devolvida: ' + motivo, u.nome);
+    return { prazo, aviso };
+  }
+
+  async function responder(sol, { texto, anexos, setor, whatsapp }) {
+    const u = window.__VP_USER || {};
+    const { error } = await _sbc().rpc('solicitacao_responder', {
+      p_id: sol.id, p_texto: texto, p_setor_autor: setor, p_autor_nome: u.nome || null, p_anexos: anexos || [],
+    });
+    if (error) throw new Error(error.message);
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Solicitações de Produto', acao: 'Respondeu a devolução', alvo: sol.numero_solicitacao, alvo_id: sol.id,
+    });
+    return _avisarMensagem(sol, whatsapp, 'Resposta: ' + texto, u.nome);
+  }
+
   function _gerarNumero() {
     const now = new Date();
     const ano = now.getFullYear();
@@ -470,6 +566,12 @@ window.SolicitacoesProdutoStore = (() => {
     excluir,
     listarEventos,
     listarEventosDeVarias,
+    souAdmin,
+    fichaPublicada,
+    listarMensagens,
+    enviarMensagem,
+    devolver,
+    responder,
     porFicha,
     avisarImportacao,
     registrarPublicacao,

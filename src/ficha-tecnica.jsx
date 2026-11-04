@@ -526,7 +526,7 @@ function FtAddCategoryModal({ onAdd, onClose }) {
 /* ============================================================
    GENERATOR (wizard universal) — sub-componente da página
    ============================================================ */
-function FtGenerator({ initial, onSaved, onCancel }) {
+function FtGenerator({ initial, onSaved, onCancel, setRoute, setSubsel }) {
   const [state, setState] = _ftUS(initial || window.FT.freshState());
   const [search, setSearch] = _ftUS('');
   const [modal, setModal] = _ftUS(null);
@@ -541,6 +541,21 @@ function FtGenerator({ initial, onSaved, onCancel }) {
   /* Solicitação de Produto de origem (se a ficha veio de uma): habilita o menu "Avisar Importação" e alimenta a linha do tempo. */
   const [solOrigem, setSolOrigem] = _ftUS(null);
   const [avisandoImp, setAvisandoImp] = _ftUS(false);
+  const [devolvendo, setDevolvendo] = _ftUS(false);
+  const recarregarSolOrigem = () => {
+    if (fichaIdAtual && window.SolicitacoesProdutoStore) window.SolicitacoesProdutoStore.porFicha(fichaIdAtual).then(setSolOrigem);
+  };
+  /* Conversa da solicitação de origem: Art. 22 — setSubsel + setRoute recebidos por prop; a aba "chat" vai na URL depois. */
+  const abrirChatDaSolicitacao = () => {
+    if (!solOrigem) return;
+    if (setSubsel && setRoute) {
+      setSubsel(String(solOrigem.id)); setRoute('solicitacoes-produto');
+      setTimeout(() => { if (window.VpRouter) window.VpRouter.navigate('solicitacoes-produto', String(solOrigem.id), 'chat'); }, 0);
+    } else if (window.VpRouter) {
+      window.VpRouter.navigate('solicitacoes-produto', String(solOrigem.id), 'chat');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  };
   const fichaIdAtual = state.__id || (initial && initial.__id) || null;
   _ftUE(() => {
     let vivo = true;
@@ -791,6 +806,18 @@ function FtGenerator({ initial, onSaved, onCancel }) {
             <option value="">{avisandoImp ? 'Avisando…' : 'Avisar Importação…'}</option>
             {window.SolProdTimeline.IMPORTACAO.map((p) => <option key={p.email} value={p.email}>{p.nome}</option>)}
           </select>
+        )}
+        {solOrigem && (
+          <button type="button" className="ft-aviso-imp" onClick={abrirChatDaSolicitacao}
+            title="Abre a conversa da solicitação de origem (Solicitante, Engenharia e Importação)">💬 Chat da solicitação</button>
+        )}
+        {solOrigem && solOrigem.status === 'convertido_em_ficha' && !solOrigem.pendente_com && !state.omie_publicado_em && window.SolDevolverModal && (
+          <button type="button" className="ft-aviso-imp" onClick={() => setDevolvendo(true)}
+            title="Dúvida ou problema nesta ficha? Devolve à Engenharia (ou à Importação) com motivo e prazo de resposta">↩ Devolver à Engenharia…</button>
+        )}
+        {solOrigem && solOrigem.pendente_com && window.SolPendenciaFaixa && <window.SolPendenciaFaixa sol={solOrigem} compacta />}
+        {devolvendo && window.SolDevolverModal && (
+          <window.SolDevolverModal sol={solOrigem} onClose={() => setDevolvendo(false)} onFeito={() => { setDevolvendo(false); recarregarSolOrigem(); }} />
         )}
         {state.omie_publicado_em ? (
           <span className="ft-omie-status is-ok" role="status">
@@ -1117,7 +1144,7 @@ function FtDashboard({ onNew, onOpen }) {
 /* ============================================================
    PAGE — abas Painel / Nova ficha
    ============================================================ */
-function FichaTecnicaPage({ fichaId }) {
+function FichaTecnicaPage({ fichaId, setRoute, setSubsel }) {
   const [view, setView] = _ftUS('painel'); // painel | nova
   const [initial, setInitial] = _ftUS(null);
   const [libReady, setLibReady] = _ftUS(false);
@@ -1248,7 +1275,7 @@ function FichaTecnicaPage({ fichaId }) {
       <div className="ci-page-body">
         {view === 'painel'
           ? <FtDashboard onNew={() => { setInitial(null); setView('nova'); }} onOpen={handleOpen}/>
-          : <FtGenerator initial={initial} onSaved={() => { setView('painel'); setInitial(null); }} onCancel={() => { setView('painel'); setInitial(null); }}/>}
+          : <FtGenerator initial={initial} setRoute={setRoute} setSubsel={setSubsel} onSaved={() => { setView('painel'); setInitial(null); }} onCancel={() => { setView('painel'); setInitial(null); }}/>}
       </div>
     </div>
   );
