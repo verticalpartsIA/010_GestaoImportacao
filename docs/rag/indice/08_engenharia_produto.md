@@ -5,8 +5,8 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/08_engenharia_produto.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 01/11/2026 (origin/main `4653a17`)
-- **Palavras:** 10107 · **blocos:** 211 · **seções com selo próprio:** 43 de 74
-- **Origem do selo dos blocos:** próprio 81 · da seção 64 · da seção-pai 0 · do cabeçalho 43 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 23
+- **Palavras:** 10190 · **blocos:** 211 · **seções com selo próprio:** 43 de 74
+- **Origem do selo dos blocos:** próprio 82 · da seção 63 · da seção-pai 0 · do cabeçalho 43 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 23
 - **Selo efetivo dos blocos:** Conferido 163 · Herdado 23 · Não verificado 2
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
@@ -51,7 +51,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 8.3.8 Regras e armadilhas | `docs/modulos/08_engenharia_produto.md#838-regras-e-armadilhas` | 3 | Conferido (uniforme) | 9 | b6 s3 |
 | 8.3.9 Testes | `docs/modulos/08_engenharia_produto.md#839-testes` | 3 | — | 1 | c1 |
 | 8.3.10 Pendências e decisões | `docs/modulos/08_engenharia_produto.md#8310-pendências-e-decisões` | 3 | Conferido (uniforme) | 1 | b1 |
-| Em especificação (04/11/2026) — Chat interno e devolução entre Solicitação, Engenharia e Importação | `docs/modulos/08_engenharia_produto.md#em-especificação-04112026--chat-interno-e-devolução-entre-solicitação-engenharia-e-importação` | 4 | Conferido (selo explícito da seção) | 33 | b3 s30 |
+| Em especificação (04/11/2026) — Chat interno e devolução entre Solicitação, Engenharia e Importação | `docs/modulos/08_engenharia_produto.md#em-especificação-04112026--chat-interno-e-devolução-entre-solicitação-engenharia-e-importação` | 4 | Conferido (selo explícito da seção) | 33 | b4 s29 |
 | 8.3.11 Histórico | `docs/modulos/08_engenharia_produto.md#8311-histórico` | 3 | Herdado (uniforme) | 1 | b1 |
 | 8.4 Ficha Técnica | `docs/modulos/08_engenharia_produto.md#84-ficha-técnica` | 2 | — | 0 | — |
 | 8.4.1 O que é | `docs/modulos/08_engenharia_produto.md#841-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
