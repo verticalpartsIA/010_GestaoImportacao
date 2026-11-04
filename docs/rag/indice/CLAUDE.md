@@ -5,7 +5,7 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `CLAUDE.md#âncora`. Em divergência vale a origem.
 
 - **Selo:** não se aplica (CLAUDE.md não é documento de módulo; o Art. 6 vale para `docs/modulos/`).
-- **Palavras:** 86805 · **blocos:** 1324
+- **Palavras:** 87218 · **blocos:** 1330
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -29,8 +29,8 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | Como ler esta Constituição | `CLAUDE.md#como-ler-esta-constituição` | 3 | — | 4 | m4 |
 | Índice deste arquivo | `CLAUDE.md#índice-deste-arquivo` | 3 | meta | 5 | m5 |
 | Glossário | `CLAUDE.md#glossário` | 3 | meta | 15 | m15 |
-| Mapa dos 14 módulos | `CLAUDE.md#mapa-dos-14-módulos` | 3 | — | 2 | m2 |
-| Serviços transversais → docs/modulos/15_servicos.md (fonte da verdade; aprovado em 01/11/2026) | `CLAUDE.md#serviços-transversais--docsmodulos15_servicosmd-fonte-da-verdade-aprovado-em-01112026` | 3 | — | 4 | m4 |
+| Mapa dos 15 módulos | `CLAUDE.md#mapa-dos-15-módulos` | 3 | — | 2 | m2 |
+| Serviços transversais → docs/modulos/16_servicos.md (fonte da verdade; aprovado em 01/11/2026) | `CLAUDE.md#serviços-transversais--docsmodulos16_servicosmd-fonte-da-verdade-aprovado-em-01112026` | 3 | — | 4 | m4 |
 | Módulo 1 — Geral → docs/modulos/01_geral.md (fonte da verdade) | `CLAUDE.md#módulo-1--geral--docsmodulos01_geralmd-fonte-da-verdade` | 2 | — | 4 | m4 |
 | Módulo 2 — CRM → docs/modulos/02_crm.md (fonte da verdade; aprovado em 31/10/2026) | `CLAUDE.md#módulo-2--crm--docsmodulos02_crmmd-fonte-da-verdade-aprovado-em-31102026` | 2 | — | 4 | m4 |
 | Módulo 3 — Cadastros Mestres → docs/modulos/03_cadastros_mestres.md (fonte da verdade; aprovado em 31/10/2026) | `CLAUDE.md#módulo-3--cadastros-mestres--docsmodulos03_cadastros_mestresmd-fonte-da-verdade-aprovado-em-31102026` | 2 | — | 4 | m4 |
@@ -43,8 +43,9 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | Módulo 10 — Entrega & Documentação → docs/modulos/10_entrega_documentacao.md (fonte da verdade; aprovado em 01/11/2026) | `CLAUDE.md#módulo-10--entrega--documentação--docsmodulos10_entrega_documentacaomd-fonte-da-verdade-aprovado-em-01112026` | 2 | — | 5 | m5 |
 | Módulo 11 — Parceiros & Instaladores → docs/modulos/11_parceiros_instaladores.md (fonte da verdade; aprovado em 01/11/2026) | `CLAUDE.md#módulo-11--parceiros--instaladores--docsmodulos11_parceiros_instaladoresmd-fonte-da-verdade-aprovado-em-01112026` | 2 | — | 5 | m5 |
 | Módulo 12 — Logística Interna → docs/modulos/12_logistica_interna.md (fonte da verdade; aprovado em 01/11/2026) | `CLAUDE.md#módulo-12--logística-interna--docsmodulos12_logistica_internamd-fonte-da-verdade-aprovado-em-01112026` | 2 | — | 5 | m5 |
-| Módulo 13 — Fabricação → docs/modulos/13_fabricacao.md (fonte da verdade; aprovado em 01/11/2026) | `CLAUDE.md#módulo-13--fabricação--docsmodulos13_fabricacaomd-fonte-da-verdade-aprovado-em-01112026` | 2 | — | 5 | m5 |
-| Módulo 14 — Administração → docs/modulos/14_administracao.md (fonte da verdade; aprovado em 01/11/2026) | `CLAUDE.md#módulo-14--administração--docsmodulos14_administracaomd-fonte-da-verdade-aprovado-em-01112026` | 2 | — | 5 | m5 |
+| Módulo 13 — Fabricação → docs/modulos/13_fabricacao.md (fonte da verdade; aprovado em 01/11/2026) | `CLAUDE.md#módulo-13--fabricação--docsmodulos13_fabricacaomd-fonte-da-verdade-aprovado-em-01112026` | 2 | — | 6 | m6 |
+| Módulo 14 — Quadros de Comando → docs/modulos/14_quadros_comando.md (fonte da verdade; criado em 04/11/2026) | `CLAUDE.md#módulo-14--quadros-de-comando--docsmodulos14_quadros_comandomd-fonte-da-verdade-criado-em-04112026` | 2 | — | 5 | m5 |
+| Módulo 15 — Administração → docs/modulos/15_administracao.md (fonte da verdade; aprovado em 01/11/2026) | `CLAUDE.md#módulo-15--administração--docsmodulos15_administracaomd-fonte-da-verdade-aprovado-em-01112026` | 2 | — | 5 | m5 |
 | 🔒 ÁREA BLINDADA — Cadastros Mestres: cliente/fornecedor com transação NUNCA é excluído (31/10/2026, regra do Gelson) | `CLAUDE.md#-área-blindada--cadastros-mestres-clientefornecedor-com-transação-nunca-é-excluído-31102026-regra-do-gelson` | 2 | — | 5 | m5 |
 | Cronograma de Pagamento da Instalação — reposicionado no menu (29/10/2026, PR #1135, squash 0258872) | `CLAUDE.md#cronograma-de-pagamento-da-instalação--reposicionado-no-menu-29102026-pr-1135-squash-0258872` | 2 | — | 8 | m8 |
 | Embarques de Importação — aba do formulário na URL (29/10/2026, PR #1156, squash d4ee98d) | `CLAUDE.md#embarques-de-importação--aba-do-formulário-na-url-29102026-pr-1156-squash-d4ee98d` | 2 | — | 8 | m8 |
@@ -153,7 +154,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PCP — Etapa 10 do Omie entra só como PREVISÃO na Necessidade (03/10/2026) | `CLAUDE.md#pcp--etapa-10-do-omie-entra-só-como-previsão-na-necessidade-03102026` | 2 | — | 5 | m5 |
 | PCP — Gerar OP a partir da Necessidade (03/10/2026) | `CLAUDE.md#pcp--gerar-op-a-partir-da-necessidade-03102026` | 2 | — | 5 | m5 |
 | PCP — decisões do usuário de 03/10/2026 (ciclo, alertas, variantes, corrimão, 1º envio real) | `CLAUDE.md#pcp--decisões-do-usuário-de-03102026-ciclo-alertas-variantes-corrimão-1º-envio-real` | 2 | — | 6 | m6 |
-| Segurança real (#571) — andamento (04/10/2026, local, não commitado) [resumo já em 01_geral.md · detalhe → módulo 14] | `CLAUDE.md#segurança-real-571--andamento-04102026-local-não-commitado-resumo-já-em-01_geralmd--detalhe--módulo-14` | 2 | — | 7 | m7 |
+| Segurança real (#571) — andamento (04/10/2026, local, não commitado) [resumo já em 01_geral.md · detalhe → módulo 15] | `CLAUDE.md#segurança-real-571--andamento-04102026-local-não-commitado-resumo-já-em-01_geralmd--detalhe--módulo-15` | 2 | — | 7 | m7 |
 | CPF/CNPJ de verdade + comissão manual do lead (04/10/2026, local, não commitado; coluna do banco JÁ criada) | `CLAUDE.md#cpfcnpj-de-verdade--comissão-manual-do-lead-04102026-local-não-commitado-coluna-do-banco-já-criada` | 2 | — | 9 | m9 |
 | Segurança real (#571) — Fase 1 concluída (04/10/2026; banco JÁ em produção, arquivos locais não commitados) | `CLAUDE.md#segurança-real-571--fase-1-concluída-04102026-banco-já-em-produção-arquivos-locais-não-commitados` | 3 | — | 11 | m11 |
 | Formulário de Elevador — opções de aço nos campos de porta/cabina (06/10/2026, PR #715, squash 92fd710) | `CLAUDE.md#formulário-de-elevador--opções-de-aço-nos-campos-de-portacabina-06102026-pr-715-squash-92fd710` | 2 | — | 5 | m5 |
@@ -170,7 +171,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | Varredura de URLs — deep-linking, Voltar/Avançar e F5 em todo o sistema (09/10/2026, PR #797, squash f76bd71, issue fechada #796) [mecanismo já em 01_geral.md · detalhe → cada módulo] | `CLAUDE.md#varredura-de-urls--deep-linking-voltaravançar-e-f5-em-todo-o-sistema-09102026-pr-797-squash-f76bd71-issue-fechada-796-mecanismo-já-em-01_geralmd--detalhe--cada-módulo` | 2 | — | 10 | m10 |
 | Auditoria de amarrações entre telas — correções 1 a 3 (11/10/2026) [roteador já em 01_geral.md · resto → módulos 4, 7, 9 e 12] | `CLAUDE.md#auditoria-de-amarrações-entre-telas--correções-1-a-3-11102026-roteador-já-em-01_geralmd--resto--módulos-4-7-9-e-12` | 2 | — | 23 | m23 |
 | Trava do Formulário e da Proposta + destrave pelo Líder (12/10/2026, local — não aplicado em produção) | `CLAUDE.md#trava-do-formulário-e-da-proposta--destrave-pelo-líder-12102026-local--não-aplicado-em-produção` | 2 | — | 8 | m8 |
-| Auditoria #843 — o que foi resolvido em 12/10/2026 (não refazer) [→ módulo 14] | `CLAUDE.md#auditoria-843--o-que-foi-resolvido-em-12102026-não-refazer--módulo-14` | 2 | Conferido (uniforme) | 14 | m14 |
+| Auditoria #843 — o que foi resolvido em 12/10/2026 (não refazer) [→ módulo 15] | `CLAUDE.md#auditoria-843--o-que-foi-resolvido-em-12102026-não-refazer--módulo-15` | 2 | Conferido (uniforme) | 14 | m14 |
 | Proposta de Elevador — cada equipamento é único, com o SEU código (10/10/2026) | `CLAUDE.md#proposta-de-elevador--cada-equipamento-é-único-com-o-seu-código-10102026` | 2 | — | 9 | m9 |
 | Proposta de Elevador — tudo o que o menu lateral grava tem que sair no PDF e no preview (13/10/2026) | `CLAUDE.md#proposta-de-elevador--tudo-o-que-o-menu-lateral-grava-tem-que-sair-no-pdf-e-no-preview-13102026` | 2 | — | 5 | m5 |
 | Proposta de Elevador — acabamentos e texto comercial POR TIPO de equipamento (20/10/2026, PR #991, squash f0e8b81) | `CLAUDE.md#proposta-de-elevador--acabamentos-e-texto-comercial-por-tipo-de-equipamento-20102026-pr-991-squash-f0e8b81` | 2 | — | 14 | m14 |

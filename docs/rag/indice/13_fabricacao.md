@@ -5,18 +5,18 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/13_fabricacao.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 01/11/2026 (origin/main `df8b84e`)
-- **Palavras:** 6295 · **blocos:** 218 · **seções com selo próprio:** 140 de 156
-- **Origem do selo dos blocos:** próprio 171 · da seção 21 · da seção-pai 0 · do cabeçalho 4 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 22
-- **Selo efetivo dos blocos:** Conferido 105 · Herdado 82 · Não verificado 9
+- **Palavras:** 6682 · **blocos:** 224 · **seções com selo próprio:** 144 de 156
+- **Origem do selo dos blocos:** próprio 176 · da seção 20 · da seção-pai 0 · do cabeçalho 5 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 23
+- **Selo efetivo dos blocos:** Conferido 111 · Herdado 81 · Não verificado 9
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
 | Seção | Âncora | Nível | Selo da seção | Blocos | Blocos por origem do selo |
 |---|---|---|---|---|---|
 | Como esta numeração funciona | `docs/modulos/13_fabricacao.md#como-esta-numeração-funciona` | 2 | meta | 3 | m3 |
-| Índice | `docs/modulos/13_fabricacao.md#índice` | 2 | meta | 2 | m2 |
+| Índice | `docs/modulos/13_fabricacao.md#índice` | 2 | meta | 3 | m3 |
 | Glossário (módulo Fabricação) | `docs/modulos/13_fabricacao.md#glossário-módulo-fabricação` | 2 | meta | 12 | m12 |
-| 13.1 PCP | `docs/modulos/13_fabricacao.md#131-pcp` | 2 | — | 0 | — |
+| 13.1 PCP | `docs/modulos/13_fabricacao.md#131-pcp` | 2 | Conferido (uniforme) | 1 | b1 |
 | 13.1.1 O que é | `docs/modulos/13_fabricacao.md#1311-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 13.1.2 Rota e arquivos | `docs/modulos/13_fabricacao.md#1312-rota-e-arquivos` | 3 | Conferido (uniforme) | 1 | b1 |
 | 13.1.3 Perfil e acesso | `docs/modulos/13_fabricacao.md#1313-perfil-e-acesso` | 3 | Não verificado (misto (vale o mais fraco)) | 1 | b1 |
@@ -28,7 +28,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 13.1.9 Testes | `docs/modulos/13_fabricacao.md#1319-testes` | 3 | Herdado (misto (vale o mais fraco)) | 1 | b1 |
 | 13.1.10 Pendências e decisões | `docs/modulos/13_fabricacao.md#13110-pendências-e-decisões` | 3 | Herdado (uniforme) | 5 | b4 s1 |
 | 13.1.11 Histórico | `docs/modulos/13_fabricacao.md#13111-histórico` | 3 | Herdado (uniforme) | 1 | b1 |
-| 13.2 MES | `docs/modulos/13_fabricacao.md#132-mes` | 2 | — | 0 | — |
+| 13.2 MES | `docs/modulos/13_fabricacao.md#132-mes` | 2 | Conferido (uniforme) | 1 | b1 |
 | 13.2.1 O que é | `docs/modulos/13_fabricacao.md#1321-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 13.2.2 Rota e arquivos | `docs/modulos/13_fabricacao.md#1322-rota-e-arquivos` | 3 | Conferido (uniforme) | 1 | b1 |
 | 13.2.3 Perfil e acesso | `docs/modulos/13_fabricacao.md#1323-perfil-e-acesso` | 3 | Herdado (misto (vale o mais fraco)) | 1 | b1 |
@@ -40,7 +40,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 13.2.9 Testes | `docs/modulos/13_fabricacao.md#1329-testes` | 3 | Herdado (misto (vale o mais fraco)) | 1 | b1 |
 | 13.2.10 Pendências e decisões | `docs/modulos/13_fabricacao.md#13210-pendências-e-decisões` | 3 | Herdado (uniforme) | 3 | b1 s2 |
 | 13.2.11 Histórico | `docs/modulos/13_fabricacao.md#13211-histórico` | 3 | Herdado (uniforme) | 1 | b1 |
-| 13.3 MES · Cadastros | `docs/modulos/13_fabricacao.md#133-mes--cadastros` | 2 | — | 0 | — |
+| 13.3 MES · Cadastros | `docs/modulos/13_fabricacao.md#133-mes--cadastros` | 2 | — | 1 | c1 |
 | 13.3.1 O que é | `docs/modulos/13_fabricacao.md#1331-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 13.3.2 Rota e arquivos | `docs/modulos/13_fabricacao.md#1332-rota-e-arquivos` | 3 | Conferido (uniforme) | 1 | b1 |
 | 13.3.3 Perfil e acesso | `docs/modulos/13_fabricacao.md#1333-perfil-e-acesso` | 3 | Não verificado (misto (vale o mais fraco)) | 1 | b1 |
@@ -100,7 +100,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 13.7.9 Testes | `docs/modulos/13_fabricacao.md#1379-testes` | 3 | Conferido (uniforme) | 1 | b1 |
 | 13.7.10 Pendências e decisões | `docs/modulos/13_fabricacao.md#13710-pendências-e-decisões` | 3 | Herdado (uniforme) | 1 | b1 |
 | 13.7.11 Histórico | `docs/modulos/13_fabricacao.md#13711-histórico` | 3 | Herdado (uniforme) | 1 | b1 |
-| 13.8 Evolução da Fabricação | `docs/modulos/13_fabricacao.md#138-evolução-da-fabricação` | 2 | — | 0 | — |
+| 13.8 Evolução da Fabricação | `docs/modulos/13_fabricacao.md#138-evolução-da-fabricação` | 2 | Conferido (uniforme) | 1 | b1 |
 | 13.8.1 O que é | `docs/modulos/13_fabricacao.md#1381-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 13.8.2 Rota e arquivos | `docs/modulos/13_fabricacao.md#1382-rota-e-arquivos` | 3 | Conferido (uniforme) | 1 | b1 |
 | 13.8.3 Perfil e acesso | `docs/modulos/13_fabricacao.md#1383-perfil-e-acesso` | 3 | Não verificado (misto (vale o mais fraco)) | 1 | b1 |
@@ -124,7 +124,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 13.9.9 Testes | `docs/modulos/13_fabricacao.md#1399-testes` | 3 | Herdado (misto (vale o mais fraco)) | 1 | b1 |
 | 13.9.10 Pendências e decisões | `docs/modulos/13_fabricacao.md#13910-pendências-e-decisões` | 3 | Herdado (uniforme) | 1 | b1 |
 | 13.9.11 Histórico | `docs/modulos/13_fabricacao.md#13911-histórico` | 3 | Herdado (uniforme) | 1 | b1 |
-| 13.10 Fabricação Corte | `docs/modulos/13_fabricacao.md#1310-fabricação-corte` | 2 | — | 0 | — |
+| 13.10 Fabricação Corte | `docs/modulos/13_fabricacao.md#1310-fabricação-corte` | 2 | Conferido (uniforme) | 1 | b1 |
 | 13.10.1 O que é | `docs/modulos/13_fabricacao.md#13101-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 13.10.2 Rota e arquivos | `docs/modulos/13_fabricacao.md#13102-rota-e-arquivos` | 3 | Conferido (uniforme) | 1 | b1 |
 | 13.10.3 Perfil e acesso | `docs/modulos/13_fabricacao.md#13103-perfil-e-acesso` | 3 | Conferido (uniforme) | 1 | b1 |
@@ -171,4 +171,4 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-9 Navegação, cache e testes | `docs/modulos/13_fabricacao.md#pc-9-navegação-cache-e-testes` | 2 | — | 1 | c1 |
 | PC-10 Menu "?" e tutoriais | `docs/modulos/13_fabricacao.md#pc-10-menu--e-tutoriais` | 2 | Não verificado (uniforme) | 1 | b1 |
 | PC-11 Documentos soltos e destino do que foi concatenado | `docs/modulos/13_fabricacao.md#pc-11-documentos-soltos-e-destino-do-que-foi-concatenado` | 2 | — | 1 | c1 |
-| PC-12 Benefícios trocados com os outros módulos | `docs/modulos/13_fabricacao.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 2 | Herdado (misto (vale o mais fraco)) | 3 | b2 s1 |
+| PC-12 Benefícios trocados com os outros módulos | `docs/modulos/13_fabricacao.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 2 | Herdado (misto (vale o mais fraco)) | 3 | b3 |

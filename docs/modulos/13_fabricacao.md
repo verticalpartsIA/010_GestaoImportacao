@@ -21,7 +21,8 @@
    &nbsp;&nbsp;&nbsp;Cada tela tem os temas: x.1 O que é · x.2 Rota e arquivos · x.3 Perfil e acesso · x.4 O que a tela mostra · x.5 Botões e controles · x.6 Comportamento · x.7 Dados (lê/grava) · x.8 Regras e armadilhas · x.9 Testes · x.10 Pendências e decisões · x.11 Histórico
    Parte comum de Fabricação (sem número de tela)
    &nbsp;&nbsp;&nbsp;PC-1 Mapa de ligações · PC-2 Do pedido à fábrica: os três acompanhamentos · PC-3 Rotas, páginas públicas e arquivos · PC-4 Regras de negócio que atravessam as telas · PC-5 Quem faz o quê (alçadas, custo, hora-homem) · PC-6 Identidade, alçadas e segurança · PC-7 Gatilhos, eventos, crons e funções · PC-8 Tabelas · PC-9 Navegação, cache e testes · PC-10 Menu "?" e tutoriais · PC-11 Documentos soltos e destino do que foi concatenado · PC-12 Benefícios trocados com os outros módulos
-14. Administração → `14_administracao.md` (REAL)
+14. Quadros de Comando → `14_quadros_comando.md` (REAL)
+15. Administração → `15_administracao.md` (REAL)
 
 ## Glossário (módulo Fabricação)
 Termos gerais (alçada, soft-delete, evento de fluxo) estão em `01_geral.md`; **Almoxarifado, Separação, Expedição** em `12_logistica_interna.md`. Não se repetem aqui.
@@ -40,6 +41,8 @@ Termos gerais (alçada, soft-delete, evento de fluxo) estão em `01_geral.md`; *
 ---
 
 ## 13.1 PCP
+
+> **Atualização de 04/11/2026 (Quadros de Comando, `14_quadros_comando.md`, PC-1):** saíram desta tela a aba **Pedidos de Quadro** e o botão **Enviar para Pedidos de Quadro** (criavam `quadros_comando` redundantes; o código da aba foi mantido, desligado). O **Gerar OPs** do pedido **continua** e é hoje o único jeito de criar a OP de quadro. O que este documento diz abaixo sobre a aba, o botão e a coluna "Pedidos de Quadro" da lista de itens vale **até esta data**. **Conferido** (código).
 
 ### 13.1.1 O que é
 O centro do planejamento: lista as **OPs**, mostra os **pedidos do Omie que precisam de produção**, transforma **pedidos de quadro** em OP-mãe + frentes, planeja por produto e controla a execução. **Conferido** em `pcp.jsx` (1.700 linhas).
@@ -96,6 +99,8 @@ Módulo completo em 02–03/10/2026; fila → Emissão de NF → Expedição em 
 
 ## 13.2 MES
 
+> **Atualização de 04/11/2026:** o **MES saiu do produto** (menu, rotas, scripts e alçadas removidos) por decisão do Gelson; a Fabricação QC (`14_quadros_comando.md`, 14.4) é o acompanhamento que vale. Os arquivos `mes*.jsx` e as tabelas `mes_*` **ficam** até haver "Confirmo" para apagar. O texto abaixo descreve o que existia. **Conferido** (código e contagens do banco).
+
 ### 13.2.1 O que é
 O acompanhamento da **OP de quadro de comando** no chão de fábrica, em **12 etapas** e 8 colunas de kanban, com checklist obrigatório, apontamento de tempo, bloqueios, testes e não conformidades. **Conferido** em `mes.jsx` (901 linhas).
 
@@ -142,6 +147,8 @@ Entregue em 4 fases em 07/10/2026. **Herdado.**
 ---
 
 ## 13.3 MES · Cadastros
+
+> **Atualização de 04/11/2026:** tela **removida do menu junto com o MES** (13.2); arquivos e tabelas ficam. O texto abaixo é histórico.
 
 ### 13.3.1 O que é
 Cadastros que o MES usa: **Frentes, Postos, Etapas modelo, Jornada, Operadores**. **Conferido** em `mes-cadastros.jsx` (364 linhas) e `mes-cadastros-store.js`.
@@ -340,6 +347,8 @@ Montagem em out/2026; Lista de fios em 19/10/2026. **Herdado.**
 
 ## 13.8 Evolução da Fabricação
 
+> **Atualização de 04/11/2026:** esta tela **mudou de módulo e de nome**: hoje é a **Fabricação QC**, em `14_quadros_comando.md` (14.4), na URL `/quadros-de-comando/evolucao-fabricacao` (o endereço antigo continua abrindo). O texto detalhado das regras **continua aqui** até a tela ser reestruturada (Art. 44). **Conferido.**
+
 ### 13.8.1 O que é
 Um card por **OP de quadro** em aberto, com **6 etapas fixas** flegáveis, fiação, ocorrências que pausam e o link do chão de fábrica. **Conferido** em `evolucao-fabricacao-quadro.jsx` (689 linhas).
 
@@ -422,6 +431,8 @@ Entregue em 22/10/2026. **Herdado.**
 ---
 
 ## 13.10 Fabricação Corte
+
+> **Atualização de 04/11/2026:** o Corte passou a tratar **só cabo de aço e cinta de tração**. O **cabo de manobra** e os cabos modulares (BST) foram para a Separação FAB QC (`14_quadros_comando.md`, 14.3). Existem 23 OPs de corte antigas desses cabos ainda "aguardando", fora da tela (pendência em 14.3.10). **Conferido** (`categoriaCorte` devolve nulo para manobra).
 
 ### 13.10.1 O que é
 Acompanha os itens de **corte** — **Cabos de Aço, Cintas de Tração e Cabos de Manobra** — em 3 etapas (**Separar material, Corte, Qualidade**), com registro de **sobra**. **Conferido** (`FO_DESTINOS`).
@@ -590,6 +601,8 @@ Aba na URL (`useRouteTab`) e item na URL (`useRotaItem`/`useRotaId`); ao criar a
 Seções do `CLAUDE.md` que tratam do módulo e têm destino aqui (a troca por ponteiro depende da confirmação do Gelson, Art. 13): "PCP — Planejamento e Controle da Produção" (parte de fabricação e relatórios), "MES — Sistema de Execução da Manufatura", "Evolução da Fabricação do Quadro", "PCP › Pedidos para Produzir" (as duas), "Fabricação Corrimão + Corte + envio direto da Separação", "Fabricação Corte — escopo restrito", "Lista de fios do quadro de comando", "Matérias-Primas × Produtos — regra VPMP", "Rastreabilidade — o nº do pedido do Omie é a raiz", "Etiquetas › Chicote do quadro" (→ 12.4) e as seções do Quadro de Comando (BOM, formulário público, chicotes, cabo de manobra — já em 4.4). Specs: `2026-10-19-evolucao-fabricacao-quadro-design.md` e `2026-10-22-fabricacao-corrimao-corte-design.md` (histórico). **Nada foi apagado.**
 
 ## PC-12 Benefícios trocados com os outros módulos
+
+- **Recebido de Quadros de Comando (04/11/2026, texto em `14_quadros_comando.md` PC-12, Art. 49):** (a) o Omie repete a linha do item com **quantidade 0** — somar por código e ignorar o zero antes de contar linhas ou unidades; (b) **metro e peça nunca se somam** — total por unidade de medida; (c) a caixa de uma tabela longa deve ter a **altura da janela**, para a barra de rolagem lateral ficar à vista; (d) função de banco nova se testa **numa transação que se desfaz**, incluindo um usuário ativo **sem** a alçada (a recusa por "sem sessão" não prova a trava de alçada); (e) a **observação do item** do pedido do Omie (`pcp_pedido_itens.obs_item`) guarda o que a proposta mostra dentro do item. **Conferido** (04/11/2026).
 **Recebidos:** de Logística Interna — escrita no Omie em dois passos; estado calculado em vez de novo valor de coluna; parâmetro de decisão não fica aberto; afirmação de documento envelhece; link como senha. **Doados** (texto nos documentos de 1 a 12, linha "Recebido de Fabricação"): ver cada módulo.
-- **Recebido de Administração (01/11/2026, texto em `14_administracao.md` PC-12):** o contraste de segurança Corrimão/Corte (RPC por token, tabelas fechadas) × Evolução do Quadro (tabelas abertas) é o melhor exemplo da Ordem de fechamento do #571 (14, PC-4). **Herdado.**
-- **Recebido de Serviços (01/11/2026, texto em `15_servicos.md` PC-2):** todo alerta com destinatário também vira WhatsApp pelo gi-avisos; para chegar certo, título curto com o essencial na frente, sem "teste", sem R$ no título e com o dia da semana por extenso, a obra ou o código do contrato quando houver vários no mesmo dia (o agrupamento de 24 h apaga números). **Conferido** no código do gi-avisos.
+- **Recebido de Administração (01/11/2026, texto em `15_administracao.md` PC-12):** o contraste de segurança Corrimão/Corte (RPC por token, tabelas fechadas) × Evolução do Quadro (tabelas abertas) é o melhor exemplo da Ordem de fechamento do #571 (14, PC-4). **Herdado.**
+- **Recebido de Serviços (01/11/2026, texto em `16_servicos.md` PC-2):** todo alerta com destinatário também vira WhatsApp pelo gi-avisos; para chegar certo, título curto com o essencial na frente, sem "teste", sem R$ no título e com o dia da semana por extenso, a obra ou o código do contrato quando houver vários no mesmo dia (o agrupamento de 24 h apaga números). **Conferido** no código do gi-avisos.

@@ -5,7 +5,7 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `README.md#âncora`. Em divergência vale a origem.
 
 - **Selo:** não se aplica (README.md não é documento de módulo; o Art. 6 vale para `docs/modulos/`).
-- **Palavras:** 3714 · **blocos:** 110
+- **Palavras:** 3742 · **blocos:** 110
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 

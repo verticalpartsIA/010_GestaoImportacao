@@ -698,7 +698,14 @@
 
   const _capacidadeCache = {};
   function resetAlcadasCache() { _perfilAtualCache = undefined; Object.keys(_capacidadeCache).forEach((k) => delete _capacidadeCache[k]); }
+  // Só localhost (/?dev=admin | /?dev=pleno, ver supabase.js): sem perfil real em `perfis`, o dev local
+  // vira "Administrador" ou "pleno" (usuário comum com todas as alçadas). Em produção nunca entra aqui.
+  function devLocal() {
+    const u = window.__VP_USER || {};
+    return u.id === 'dev-local' && /^(localhost|127\.0\.0\.1|0\.0\.0\.0)/.test(window.location.hostname) ? u.devPerfil || 'admin' : null;
+  }
   async function temCapacidade(modulo, capacidade) {
+    if (devLocal()) return true;
     const perfil = await resolverPerfilAtual();
     if (!perfil) return false;
     if (perfil.nivel === 'Administrador') return true;

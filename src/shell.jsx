@@ -42,7 +42,6 @@ const NAV_GROUPS = [
     { id: "formularios", label: "Formulários", icon: "layers" },
     { id: "controle-cotacoes", label: "Controle de Cotações", icon: "history" },
     { id: "cotacoes-fornecedor", label: "Cotações a Fornecedor", icon: "globe" },
-    { id: "cotacao-quadro-comando", label: "Cotação Quadro de Comando", icon: "grid" },
     { id: "propostas", label: "Propostas", icon: "proposal" },
     { id: "contratos-sociais", label: "Contratos Social", icon: "fileText" },
   ]},
@@ -144,18 +143,25 @@ const NAV_GROUPS = [
   /* Fabricação (17/10/2026): só reagrupa no menu o que já era PCP/MES. As rotas e URLs continuam /logistica/<rota> (mudar a URL é outra decisão). */
   { label: "Fabricação", items: [
     { id: "pcp", label: "PCP", icon: "calendar" },
-    { id: "mes", label: "MES", icon: "settings" },
-    { id: "mes-cadastros", label: "MES · Cadastros", icon: "layers" },
     { id: "carga-maquina", label: "Carga Máquina", icon: "calculator" },
     /* 18/10/2026: Matérias-Primas (só VPMP) e Produtos saíram de Cadastros Mestres — quem consome é a Fabricação. Rotas/URLs/alçadas não mudaram. */
     { id: "cadastro-materias-primas", label: "Matérias-Primas", icon: "layers" },
     { id: "cadastro-produtos", label: "Produtos", icon: "package" },
     { id: "montagem-produto", label: "Montagem do Produto", icon: "layers" },
-    { id: "evolucao-fabricacao", label: "Evolução da Fabricação", icon: "history" },
     { id: "fabricacao-corrimao", label: "Fabricação Corrimão", icon: "history" },
     { id: "fabricacao-corte", label: "Fabricação Corte", icon: "history" },
     { id: "simulacao-producao", label: "Simulação", icon: "history" },
     { id: "relatorios-pcp", label: "Relatórios", icon: "fileText" },
+  ]},
+  /* Quadros de Comando (04/11/2026, pedido do Gelson): módulo 14 — nasce VAZIO ("Em breve"), sem telas nem rotas.
+     O conteúdo entra aos poucos, ponto a ponto. Administração passa a ser o 15 (ver docs/modulos). */
+  { label: "Quadros de Comando", items: [
+    { id: "quadros-pedidos", label: "Pedidos com Quadro", icon: "layers" },
+    { id: "quadros-separacao", label: "Separação PV QC", icon: "package" },
+    { id: "quadros-separacao-fab", label: "Separação FAB QC", icon: "package" },
+    /* 04/11/2026: a antiga "Evolução da Fabricação" (grupo Fabricação) mudou para cá com o nome "Fabricação QC". O id da rota continua
+       evolucao-fabricacao, então links antigos (/logistica/evolucao-fabricacao) seguem abrindo. */
+    { id: "evolucao-fabricacao", label: "Fabricação QC", icon: "history" },
   ]},
   { label: "Administração", items: [
     { id: "logs", label: "Logs de Atividade", icon: "history", restrict: ["admin"] },
@@ -205,7 +211,7 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
   const gruposAlocados = (window.__VP_USER || {}).gruposAlocados;
   const filtrarPorAlocacao = Array.isArray(gruposAlocados) && gruposAlocados.length > 0;
   /* Quem já tinha "Logística Interna" alocada continua vendo o grupo novo (o PCP/MES saiu de lá). */
-  const GRUPO_ALIAS = { "Fabricação": ["Logística Interna"] };
+  const GRUPO_ALIAS = { "Fabricação": ["Logística Interna"], "Quadros de Comando": ["Fabricação", "Logística Interna"] };
   const grupoVisivel = (group) => !filtrarPorAlocacao || group.label === "Geral" || group.empty || gruposAlocados.includes(group.label) || (GRUPO_ALIAS[group.label] || []).some((a) => gruposAlocados.includes(a));
   /* Módulos recolhidos individualmente (clique no título) — persiste por navegador. */
   const [collapsedGroups, setCollapsedGroups] = React.useState(() => {
@@ -411,9 +417,12 @@ const BREADCRUMB_MAP = {
   almoxarifado: { module: "Logística", page: "Almoxarifado", icon: "package" },
   "carga-maquina": { module: "Logística", page: "Carga Máquina", icon: "calculator" },
   "montagem-produto": { module: "Logística", page: "Montagem do Produto", icon: "layers" },
-  "evolucao-fabricacao": { module: "Logística", page: "Evolução da Fabricação", icon: "history" },
+  "evolucao-fabricacao": { module: "Quadros de Comando", page: "Fabricação QC", icon: "history" },
   "fabricacao-corrimao": { module: "Logística", page: "Fabricação Corrimão", icon: "history" },
   "fabricacao-corte": { module: "Logística", page: "Fabricação Corte", icon: "history" },
+  "quadros-pedidos": { module: "Quadros de Comando", page: "Pedidos com Quadro", icon: "layers" },
+  "quadros-separacao": { module: "Quadros de Comando", page: "Separação PV QC", icon: "package" },
+  "quadros-separacao-fab": { module: "Quadros de Comando", page: "Separação FAB QC", icon: "package" },
   "simulacao-producao": { module: "Logística", page: "Simulação", icon: "history" },
   "relatorios-pcp": { module: "Logística", page: "Relatórios", icon: "fileText" },
   expedicao: { module: "Logística", page: "Expedição", icon: "truck" },

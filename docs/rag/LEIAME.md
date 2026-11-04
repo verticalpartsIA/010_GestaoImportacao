@@ -9,7 +9,7 @@ Esta pasta é **gerada** por `node scripts/gerar-rag.js` (`npm run rag`). O cont
 - `mapa-de-telas.md` — módulo, tela, rota citada e âncora.
 - `indice/<arquivo>.md` — uma página por fonte, com todas as seções (âncora), o selo de cada seção e **de onde veio o selo** de cada bloco.
 
-## Fontes lidas (17)
+## Fontes lidas (18)
 
 - `docs/modulos/01_geral.md`
 - `docs/modulos/02_crm.md`
@@ -24,8 +24,9 @@ Esta pasta é **gerada** por `node scripts/gerar-rag.js` (`npm run rag`). O cont
 - `docs/modulos/11_parceiros_instaladores.md`
 - `docs/modulos/12_logistica_interna.md`
 - `docs/modulos/13_fabricacao.md`
-- `docs/modulos/14_administracao.md`
-- `docs/modulos/15_servicos.md`
+- `docs/modulos/14_quadros_comando.md`
+- `docs/modulos/15_administracao.md`
+- `docs/modulos/16_servicos.md`
 - `CLAUDE.md` (sem selos: não é documento de módulo)
 - `README.md` (sem selos: não é documento de módulo)
 

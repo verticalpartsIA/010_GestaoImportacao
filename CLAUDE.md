@@ -7,7 +7,7 @@
 > - Nunca apague nem reescreva seção existente para "limpar" ou "resumir"; acréscimos só no ponto certo e com data.
 >
 > ### 📘 Documentos de módulo (`docs/modulos/`) — devem ser respeitados (31/10/2026, regra do Gelson)
-> - O site tem **14 módulos**; cada um terá **um `.md` próprio e personalizado** em `docs/modulos/<nn>_<modulo>.md` (ex.: `01_geral.md`, `02_crm.md`, `03_cadastros_mestres.md`), cobrindo o módulo **e todas as suas telas/submódulos ("filhos")**.
+> - O site tem **15 módulos** (mais o documento dos serviços, 16); cada um terá **um `.md` próprio e personalizado** em `docs/modulos/<nn>_<modulo>.md` (ex.: `01_geral.md`, `02_crm.md`, `03_cadastros_mestres.md`), cobrindo o módulo **e todas as suas telas/submódulos ("filhos")**.
 > - Esses documentos são a **referência oficial de cada módulo**: rotas, telas, regras de negócio, herança/doação de dados, tabelas, diagnósticos, decisões e os passos Specify → Clarify → Plan → Tasks → Analyze. **Antes de mexer num módulo, leia o `.md` dele e respeite o que está escrito lá.**
 > - Mudança num módulo (código, regra ou decisão) é registrada **no `.md` daquele módulo**, nunca aqui. Aqui (Constituição) só entram regras permanentes e áreas blindadas que valem para o site inteiro.
 > - Se o código e o `.md` do módulo divergirem, **não "corrija" nenhum dos dois por conta própria**: avise o Gelson e pergunte qual vale.
@@ -93,7 +93,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 40. **Art. 40 — Depois de mesclar,** a branch de trabalho é recriada a partir de `origin/main` antes do próximo commit; push forçado só com `--force-with-lease`.
 
 ### Título VII — Documentos
-41. **Art. 41 — Quem é quem.** Este arquivo (`CLAUDE.md`) é a **Constituição**: leis e procedimentos permanentes, nunca especificação nem diagnóstico de tela. A **fonte da verdade de cada módulo** é `docs/modulos/<nn>_<modulo>.md`, um por módulo, cobrindo o módulo e todas as suas telas filhas. Serviços usados por vários módulos (WhatsApp, gi-avisos, Copiloto, Telegram, vpsistema e o canal de e-mail) têm documento próprio em `docs/modulos/15_servicos.md` (Central de Avisos). *(Emenda de 01/11/2026, pedido do Gelson: o documento dos serviços mora em `docs/modulos/`, não em `docs/servicos/` como estava previsto.)*
+41. **Art. 41 — Quem é quem.** Este arquivo (`CLAUDE.md`) é a **Constituição**: leis e procedimentos permanentes, nunca especificação nem diagnóstico de tela. A **fonte da verdade de cada módulo** é `docs/modulos/<nn>_<modulo>.md`, um por módulo, cobrindo o módulo e todas as suas telas filhas. Serviços usados por vários módulos (WhatsApp, gi-avisos, Copiloto, Telegram, vpsistema e o canal de e-mail) têm documento próprio em `docs/modulos/16_servicos.md` (Central de Avisos). *(Emenda de 01/11/2026, pedido do Gelson: o documento dos serviços mora em `docs/modulos/`, não em `docs/servicos/` como estava previsto.)*
 42. **Art. 42 — Antes de mexer num módulo,** a sessão lê o documento dele e respeita o que está escrito. Mudança, regra ou decisão nova entra **no documento do módulo**, no tema certo, nunca aqui.
 43. **Art. 43 — Numeração móvel.** Módulo = N; telas filhas = N.1, N.2…; temas = N.k.1 a N.k.11 (O que é · Rota e arquivos · Perfil e acesso · O que a tela mostra · Botões e controles · Comportamento · Dados · Regras e armadilhas · Testes · Pendências e decisões · Histórico). É como cláusula de contrato: item novo ganha a posição certa e tudo o que vem depois se desloca; a mesma sessão reescreve Índice, Glossário e referências cruzadas. O conteúdo comum do módulo fica na **Parte comum**, sem número de tela.
 44. **Art. 44 — Uma regra em um lugar só.** Se aparece em dois, um deles aponta para o outro. Histórico de entrega (PR, hash, versões `?v=`) não se repete nos documentos: o Git guarda.
@@ -106,9 +106,9 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 - **Front:** React 18 UMD + Babel Standalone + `@supabase/supabase-js` + jsPDF + html2canvas, por CDN; servidor `node server.js` (Express, porta 3000) serve estático e a rota `/api/feedback`. PDFs vetoriais vêm de bundles Vite versionados em `src/*.bundle.js`.
 - **Banco e funções:** Supabase, projeto `jxtqwzmpgofwctqajewt`; Edge Functions em Deno; `pg_cron` agenda os jobs; migrations em `supabase/migrations/`.
 - **Login:** SSO do vpsistema (projeto Supabase `ubdkoqxfwcraftesgmbw`); o app guarda o e-mail do usuário no navegador (Art. 25).
-- **Integrações:** Omie (ERP), caixa de e-mail `suporte@vpsistema.com` (IMAP/SMTP), serviço de avisos por WhatsApp (gi-avisos, na VPS), Copiloto VP — todos descritos em `docs/modulos/15_servicos.md`.
+- **Integrações:** Omie (ERP), caixa de e-mail `suporte@vpsistema.com` (IMAP/SMTP), serviço de avisos por WhatsApp (gi-avisos, na VPS), Copiloto VP — todos descritos em `docs/modulos/16_servicos.md`.
 - **Comandos:** `npm install` · `node server.js` · `npm test` · `npm run test:e2e` · `node scripts/check-cache-bust.js origin/main`.
-- **Detalhe por módulo:** `docs/modulos/` (índice e mapa dos 14 módulos no `CLAUDE.md`).
+- **Detalhe por módulo:** `docs/modulos/` (índice e mapa dos 15 módulos no `CLAUDE.md`).
 
 ### Título IX — Emendas
 47. **Art. 47 — Como esta Constituição muda.** Só por pedido explícito do Gelson (Art. 13). Cada emenda leva data e motivo no texto. Artigo que se mostrar falso na prática (por exemplo, um comando que deixou de existir) é corrigido por emenda, nunca ignorado.
@@ -128,7 +128,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 
 ### Índice deste arquivo
 - **A. Leis e travas permanentes:** a **Constituição** (Títulos I a IX, 52 artigos),  áreas blindadas (Cadastros Mestres, E-mail/Inbox, Ver documento, Containers, Mão de obra, Assinatura digital, PDF assinado), trava por "Confirmo" (Atualização de Custos).
-- **B. Mapa dos 14 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico, Suprimentos & Importação, Engenharia & Produto, Obras & Instalação, Entrega & Documentação, Parceiros & Instaladores, Logística Interna, Fabricação e Administração), mais o documento dos serviços (15, Central de Avisos).
+- **B. Mapa dos 15 módulos** (abaixo) e os ponteiros dos módulos já migrados (Geral, CRM, Cadastros Mestres, Comercial | Pré-venda, Financeiro & Preços, Contratos & Jurídico, Suprimentos & Importação, Engenharia & Produto, Obras & Instalação, Entrega & Documentação, Parceiros & Instaladores, Logística Interna, Fabricação, Quadros de Comando e Administração), mais o documento dos serviços (16, Central de Avisos).
 - **C. Procedimentos:** acessos, cache-busting, stack e testes, `pdf-bundle/`, fluxo de trabalho, método (SDD), pendências.
 - **D. Resíduo por módulo:** seções de entregas ainda não absorvidas pelo documento do seu módulo (ver marcas "→ módulo N").
 - **E. Research Base (hyperresearch).**
@@ -150,7 +150,7 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 - **Derivado gerado:** arquivo produzido por script a partir dos documentos (hoje `docs/rag/`); nunca é fonte da verdade, nunca se edita à mão e em divergência vale a origem (Art. 51).
 - **Nomes antigos que ainda aparecem no texto:** "Gatilhos & Prazo" e "Gatilhos" = hoje **Prazos & Pendências** (renomeada em 03/10/2026; a rota interna continua `financeiro`); "Central de Alertas" = a tela Notificações.
 
-### Mapa dos 14 módulos
+### Mapa dos 15 módulos
 | Nº | Módulo | Documento | Situação |
 |---|---|---|---|
 | 1 | Geral (Dashboard, Notificações, Central de Decisões, Prazos & Pendências, Inbox) | `docs/modulos/01_geral.md` | **Real** (fonte da verdade, aprovado em 31/10/2026) — o `CLAUDE.md` só aponta |
@@ -165,16 +165,17 @@ Esta Constituição é a lei do projeto. Toda sessão do Claude, inclusive as qu
 | 10 | Entrega & Documentação (Central de Documentos, Data Book & Termo, Entrega Final, Repositório Documentos) | `docs/modulos/10_entrega_documentacao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; o Cronograma de Pagamento da Instalação é do módulo 11 |
 | 11 | Parceiros & Instaladores (Empresas Instaladoras, Homologação de Instaladores, Contrato Instalador, Pagamentos a Instaladores, Cronograma de Pagamento da Instalação) | `docs/modulos/11_parceiros_instaladores.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta |
 | 12 | Logística Interna (Almoxarifado, Expedição, Separação, Etiquetas) | `docs/modulos/12_logistica_interna.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; PCP, MES e Fabricação Corrimão/Corte são do módulo 13 |
-| 13 | Fabricação (PCP, MES, MES · Cadastros, Carga Máquina, Matérias-Primas, Produtos, Montagem do Produto, Evolução da Fabricação, Fabricação Corrimão, Fabricação Corte, Simulação, Relatórios) | `docs/modulos/13_fabricacao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta |
-| 14 | Administração (Logs de Atividade, Configurações do Sistema) | `docs/modulos/14_administracao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; a segurança real (#571), o inventário de Edge Functions, crons e buckets moram lá |
-| 15 | Serviços — Central de Avisos (WhatsApp, gi-avisos, Copiloto VP, Telegram, vpsistema, E-mail) | `docs/modulos/15_servicos.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; não é um item do menu: reúne os serviços usados por vários módulos; a lei blindada do e-mail continua neste arquivo e no `01_geral.md` 1.5 |
-Os nomes de arquivo dos módulos 4 a 14 são sugestão, a confirmar quando cada documento for criado; "hoje" lista o que está espalhado neste arquivo.
+| 13 | Fabricação (PCP, Carga Máquina, Matérias-Primas, Produtos, Montagem do Produto, Evolução da Fabricação, Fabricação Corrimão, Fabricação Corte, Simulação, Relatórios; o MES e o MES · Cadastros saíram do produto em 04/11/2026 e a Evolução da Fabricação foi para o módulo 14) | `docs/modulos/13_fabricacao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta |
+| 14 | Quadros de Comando (Pedidos com Quadro, Separação PV QC, Separação FAB QC, Fabricação QC) | `docs/modulos/14_quadros_comando.md` | **Real** (fonte da verdade, criado em 04/11/2026; **em construção**: a entrada automática do Omie ainda não existe) — o `CLAUDE.md` só aponta; tudo de quadro de comando mora ali, salvo as Etiquetas (12.4) |
+| 15 | Administração (Logs de Atividade, Configurações do Sistema) | `docs/modulos/15_administracao.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; a segurança real (#571), o inventário de Edge Functions, crons e buckets moram lá |
+| 16 | Serviços — Central de Avisos (WhatsApp, gi-avisos, Copiloto VP, Telegram, vpsistema, E-mail) | `docs/modulos/16_servicos.md` | **Real** (fonte da verdade, aprovado em 01/11/2026) — o `CLAUDE.md` só aponta; não é um item do menu: reúne os serviços usados por vários módulos; a lei blindada do e-mail continua neste arquivo e no `01_geral.md` 1.5 |
+Os nomes de arquivo dos módulos 4 a 15 são sugestão, a confirmar quando cada documento for criado; "hoje" lista o que está espalhado neste arquivo.
 
-### Serviços transversais → `docs/modulos/15_servicos.md` (fonte da verdade; aprovado em 01/11/2026)
+### Serviços transversais → `docs/modulos/16_servicos.md` (fonte da verdade; aprovado em 01/11/2026)
 **Aqui não se escreve mais nada sobre os serviços transversais.** WhatsApp (S1), gi-avisos (S2), Copiloto VP (S3), Telegram (S4), vpsistema (S5) e o canal de e-mail (S6) têm um documento só, a **Central de Avisos**, no molde dos módulos (temas x.1 a x.11 e Parte comum PC-1 a PC-12). Quem for mexer num deles **lê, entende e atende** esse documento; mudança nova entra lá, no tema certo.
 - A tela Inbox e a **lei blindada do e-mail** continuam em `docs/modulos/01_geral.md` 1.5 e na seção "ÁREA BLINDADA — Sistema de E-mail / Inbox" deste arquivo.
-- As regras do gi-avisos continuam também em `.claude/gi-avisos-regras-whatsapp.md` (não excluir); a comparação delas com o código está em `15_servicos.md` S2.10.
-- *(Plano anterior, de 31/10/2026: três documentos em `docs/servicos/` — `whatsapp.md`, `gi-avisos.md` e `copiloto.md` — depois dos 14 módulos. Trocado em 01/11/2026 por decisão do Gelson.)*
+- As regras do gi-avisos continuam também em `.claude/gi-avisos-regras-whatsapp.md` (não excluir); a comparação delas com o código está em `16_servicos.md` S2.10.
+- *(Plano anterior, de 31/10/2026: três documentos em `docs/servicos/` — `whatsapp.md`, `gi-avisos.md` e `copiloto.md` — depois dos 14 módulos de então. Trocado em 01/11/2026 por decisão do Gelson.)*
 
 ## Módulo 1 — Geral → `docs/modulos/01_geral.md` (fonte da verdade)
 
@@ -273,13 +274,22 @@ Os nomes de arquivo dos módulos 4 a 14 são sugestão, a confirmar quando cada 
 - Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
 - Almoxarifado, Separação, Expedição e Etiquetas são do módulo 12; Emissão de NF, do 5; o Formulário do Quadro de Comando, do 4.
 - Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (cada uma ganhou a nota "→ parte já migrada"); as seções **mistas** nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
+- **Atualização de 04/11/2026:** o **MES e o MES · Cadastros saíram do produto**, a **Evolução da Fabricação** foi para o módulo 14 (Fabricação QC), a aba e o botão de **Pedidos de Quadro** saíram do PCP e o **Corte** ficou só com cabo de aço e cinta de tração. Detalhe nas notas datadas de `13_fabricacao.md`.
 
-## Módulo 14 — Administração → `docs/modulos/14_administracao.md` (fonte da verdade; aprovado em 01/11/2026)
+## Módulo 14 — Quadros de Comando → `docs/modulos/14_quadros_comando.md` (fonte da verdade; criado em 04/11/2026)
+
+**Aqui não se escreve mais nada sobre Quadros de Comando.** Regra do Gelson (04/11/2026): nada de quadro de comando mora fora deste módulo, **salvo as Etiquetas**. Quem for trabalhar nele **lê, entende e atende** o documento do módulo:
+- **14.1 Pedidos com Quadro** · **14.2 Separação PV QC** · **14.3 Separação FAB QC** · **14.4 Fabricação QC** (a antiga Evolução da Fabricação) · e a **Parte comum** (PC-1 a PC-12: fios desligados, do Omie à fábrica, rotas, regras de classificação do item, alçadas, segurança, rotinas, tabelas, testes, tutoriais, documentos concatenados e benefícios trocados).
+- Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
+- **Fios desligados em 04/11/2026** (nada foi apagado): o Formulário do Quadro de Comando ficou **ilhado** (sem item de menu; segue valendo o que está em `04_comercial_pre_venda.md`); o **MES** saiu do produto (arquivos e tabelas `mes_*` ficam até haver "Confirmo" para apagar); no PCP saíram a aba e o botão de Pedidos de Quadro; na Separação saiu o botão Quadro de Comando; o Corte ficou só com cabo de aço e cinta de tração.
+- **Em construção:** a entrada automática do Omie (o pedido chegar à etapa 20 e criar sozinho as OPs de quadro) **não existe**; hoje a OP nasce pelo "Gerar OPs" do PCP (`13_fabricacao.md` 13.1). As Etiquetas já não leem `mes_ordens` (religadas em 04/11/2026; a série é digitada na tela); ainda leem `quadros_comando` do Formulário ilhado.
+
+## Módulo 15 — Administração → `docs/modulos/15_administracao.md` (fonte da verdade; aprovado em 01/11/2026)
 
 **Aqui não se escreve mais nada sobre Administração.** Quem for trabalhar nela **lê, entende e atende** o documento do módulo:
-- **14.1 Logs de Atividade** · **14.2 Configurações do Sistema** (Administração, Usuários & Perfis, Permissões, Parâmetros, Integrações, Buckets) · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, pessoas/perfis/alçadas, rotas, segurança real #571, alçadas, inventário de Edge Functions, crons/buckets/integrações, tabelas, CI e testes, tutoriais, documentos concatenados e benefícios trocados).
+- **15.1 Logs de Atividade** · **15.2 Configurações do Sistema** (Administração, Usuários & Perfis, Permissões, Parâmetros, Integrações, Buckets) · e a **Parte comum** (PC-1 a PC-12: mapa de ligações, pessoas/perfis/alçadas, rotas, segurança real #571, alçadas, inventário de Edge Functions, crons/buckets/integrações, tabelas, CI e testes, tutoriais, documentos concatenados e benefícios trocados).
 - Mudança, regra ou decisão nova do módulo entra **lá**, no tema certo, e a mesma sessão reescreve o Índice e o Glossário. Se o código e o documento divergirem, avise o Gelson e pergunte qual vale.
-- Identidade, modo do `vp-auth.js` e `vp_logs` como API ficam em `docs/modulos/01_geral.md` (PC-3, PC-5, PC-6). Os serviços transversais (WhatsApp, gi-avisos, Copiloto VP, Telegram, vpsistema, e-mail) estão em `docs/modulos/15_servicos.md`.
+- Identidade, modo do `vp-auth.js` e `vp_logs` como API ficam em `docs/modulos/01_geral.md` (PC-3, PC-5, PC-6). Os serviços transversais (WhatsApp, gi-avisos, Copiloto VP, Telegram, vpsistema, e-mail) estão em `docs/modulos/16_servicos.md`.
 - Ficam **neste arquivo**, por enquanto, as seções antigas do módulo (cada uma ganhou a nota "→ parte já migrada"); as seções **mistas** nunca se apagam. Histórico de entrega (PR, squash, versões `?v=`) não se repete aqui: o Git guarda.
 
 ## 🔒 ÁREA BLINDADA — Cadastros Mestres: cliente/fornecedor com transação NUNCA é excluído (31/10/2026, regra do Gelson)
@@ -362,7 +372,7 @@ Sistema construído, testado ao vivo e **em produção**. Quem for "mexer, melho
 
 ## Edge Functions: órfãs apagadas, funções do Omie/webhook endurecidas e como redeployar (01–02/10/2026) → módulos 7 e 14 (NÃO é do Geral)
 
-> **→ Parte já migrada para Administração.** O conteúdo desta seção (ou o trecho de administração dela) está concatenado em `docs/modulos/14_administracao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+> **→ Parte já migrada para Administração.** O conteúdo desta seção (ou o trecho de administração dela) está concatenado em `docs/modulos/15_administracao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 > **→ Parte já migrada para Engenharia & Produto.** O trecho do módulo 8 desta seção está em `docs/modulos/08_engenharia_produto.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
@@ -464,7 +474,7 @@ Pedido do usuário: comparar o envio de Proposta a clientes com o RFQ a forneced
 
 ## Acessos confirmados (sessão de 2026-07-16)
 
-> **→ Parte já migrada para Administração.** O conteúdo desta seção (ou o trecho de administração dela) está concatenado em `docs/modulos/14_administracao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+> **→ Parte já migrada para Administração.** O conteúdo desta seção (ou o trecho de administração dela) está concatenado em `docs/modulos/15_administracao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 - **GitHub**: `verticalpartsIA/010_GestaoImportacao` — leitura/escrita completas (commits, PRs, issues, Actions) via MCP `github`.
 - **Supabase** projeto `jxtqwzmpgofwctqajewt` (nome interno "vpprd") — leitura/escrita completas via MCP `Supabase`/`SupabaseEscamax`.
@@ -609,7 +619,7 @@ Primeiro uso de Supabase Realtime no projeto (PR #417, merge squash `caf9a7a`, i
 
 ## Copiloto VP — contexto da tela "Solicitação de Produto" (28/09/2026)
 
-> **→ Copiloto (serviço):** `docs/modulos/15_servicos.md` S3 (01/11/2026). Conferido: o Copiloto em uso é o da VPS, que **não** lê `vp_copiloto_docs`; a Edge Function `vp-copiloto` foi removida em 01/11/2026 (não tinha chamador).
+> **→ Copiloto (serviço):** `docs/modulos/16_servicos.md` S3 (01/11/2026). Conferido: o Copiloto em uso é o da VPS, que **não** lê `vp_copiloto_docs`; a Edge Function `vp-copiloto` foi removida em 01/11/2026 (não tinha chamador).
 >
 > **→ Parte já migrada para Engenharia & Produto.** O conteúdo desta seção está concatenado em `docs/modulos/08_engenharia_produto.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
@@ -1521,7 +1531,7 @@ Para trabalho novo de produto/telas/banco: **SPECIFY → CLARIFY → PLAN → TA
 
 > **→ Parte já migrada para Obras & Instalação.** O conteúdo desta seção está concatenado em `docs/modulos/09_obras_instalacao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 >
-> **→ Avisos por WhatsApp (gi-avisos):** a mecânica (fila, Central de Eventos, janela, agrupamento, regras de título) está em `docs/modulos/15_servicos.md` S2 e PC-2 (01/11/2026). Conferido no código: o serviço lê a Central de Eventos, não a tabela `alertas` direto, e não há janela por departamento.
+> **→ Avisos por WhatsApp (gi-avisos):** a mecânica (fila, Central de Eventos, janela, agrupamento, regras de título) está em `docs/modulos/16_servicos.md` S2 e PC-2 (01/11/2026). Conferido no código: o serviço lê a Central de Eventos, não a tabela `alertas` direto, e não há janela por departamento.
 
 Spec/Clarify/Plan/Analyze em `docs/superpowers/specs/2026-10-24-evolucao-qualidade-dados.md`. **Quem alimenta a Evolução hoje:** os **montadores** (Diário de Obra) e o gestor **Felipe Barros** (`equipamentos_obra`, fase do dossiê, nº de série). A tela só mostra o que eles registram — dado parado ou incoerente aparece como atraso/0%, não como "erro do sistema".
 - **Regras** (`src/evolucao-conferir-calc.js`, `window.EvolucaoConferirCalc`, 18 testes): data real no futuro / depois da última edição (a mais recente entre o dossiê e o equipamento — `equipamentos_obra.atualizado_em`, achado do Codex no PR #1089), ordem inválida, fase que não avançou (término real e ainda "Instalação"), previsão vencida de **qualquer** etapa (≥ 1 dia útil; registro "parado" > 14 dias), previsão desatualizada (> 14 dias) ou anterior à chegada, obra em Instalação sem Diário (≥ 3 dias úteis; **só detecta quem nunca lançou**), sem nº de série, remoção "saindo da fábrica", irmão (mesma obra) já iniciou, chegada destoa dos irmãos (> 60 dias — pega mês digitado errado). **Só aponta, nunca corrige.** Cada achado tem `quem`: `felipe` (cadastro) ou `montador` (Diário).
@@ -1847,15 +1857,15 @@ Na aba Necessidade, tabela "A produzir": caixas de seleção + botão **Gerar OP
 - **Cabos de aço:** o cadastro do Omie traz diâmetro/construção na descrição, kg/m e o tamanho das bobinas na observação interna, mas **não há característica de comprimento por elevador** — o comprimento depende de percurso e tração do elevador e continua digitado no formulário.
 - **1º envio real ao Omie (autorizado):** requisição de compra de 1 item (VPMP-303, 8 un.), cód. Omie 9233703086, categoria 2.01.90, fila `194a2d82…`. Funcionou. O traço longo "—" das observações chega ao Omie como "¿¿¿" (cosmético; trocar por "-" em `pcp-omie-escrever` quando a função for mexida de novo). A requisição de teste fica no Omie; excluir lá se não for necessária.
 
-## Segurança real (#571) — andamento (04/10/2026, local, não commitado) [resumo já em 01_geral.md · detalhe → módulo 14]
+## Segurança real (#571) — andamento (04/10/2026, local, não commitado) [resumo já em 01_geral.md · detalhe → módulo 15]
 
-> **→ Parte já migrada para Administração.** O conteúdo desta seção (ou o trecho de administração dela) está concatenado em `docs/modulos/14_administracao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+> **→ Parte já migrada para Administração.** O conteúdo desta seção (ou o trecho de administração dela) está concatenado em `docs/modulos/15_administracao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 > **→ Parte já migrada para Financeiro & Preços.** O trecho do módulo 5 desta seção está em `docs/modulos/05_financeiro_precos.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
 > **→ Parte já migrada para Comercial | Pré-venda.** O trecho do Formulário/Proposta/Cotação desta seção está em `docs/modulos/04_comercial_pre_venda.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
-> **→ Parte já migrada.** Resumo em `docs/modulos/01_geral.md` PC-3 e PC-6. O detalhe técnico será absorvido no módulo 14 (Administração).
+> **→ Parte já migrada.** Resumo em `docs/modulos/01_geral.md` PC-3 e PC-6. O detalhe técnico será absorvido no módulo 15 (Administração).
 > **[SUPERADO quanto ao modo de autenticação.]** Onde esta seção diz "modo sombra", vale o histórico de 04/10/2026. Em 31/10/2026 a tabela `vp_auth_piloto` tem o coringa `*`, então todo usuário com sessão nativa está em `on`. Ver `docs/modulos/01_geral.md` PC-6.
 
 Plano completo em `docs/superpowers/plans/2026-10-02-autenticacao-e-rls-571.md` (fases 0–5, ondas A/B/C, decisões D1–D7). **Pedido do usuário em 04/10: "Pode seguir para a segurança real"** (depois de mostrar a Central de Decisões — onde o Aprovar/Reprovar hoje só é protegido pelo navegador).
@@ -2091,13 +2101,13 @@ Regra do usuário: o vendedor só edita o Formulário **antes da 1ª Precificaç
 
 - **#843 B4 (12/10/2026)**: a policy de DELETE de rascunho do Contrato de Venda foi recriada **só para `authenticated` + `vp_usuario_ativo()`** (migration `20261012130000`, aplicada); a versão anterior (`delete_rascunho_anon`) deixava a chave pública apagar rascunhos. **#843 D1 NÃO aplicado**: `contratos_venda_equipamentos` ainda tem `leitura_publica`/`update_anon`/`escrita_anon` abertas a `public`. Fechar com `vp_fechar_tabela('contratos_venda_equipamentos','interno','D1')` derruba quem ainda usa a chave pública: em 12/10 só 14 dos 26 perfis ativos tinham sessão em `auth.users` (modo `on` para todos desde 09/10, mas sem evidência de que todos já entraram). Fechar depois que todos os perfis ativos tiverem sessão (conferir `auth.users` × `perfis`) — a página `/assinar` usa RPC `SECURITY DEFINER` e não é afetada.
 
-## Auditoria #843 — o que foi resolvido em 12/10/2026 (não refazer) [→ módulo 14]
+## Auditoria #843 — o que foi resolvido em 12/10/2026 (não refazer) [→ módulo 15]
 
-> **→ Parte já migrada para Administração.** O conteúdo desta seção (ou o trecho de administração dela) está concatenado em `docs/modulos/14_administracao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
+> **→ Parte já migrada para Administração.** O conteúdo desta seção (ou o trecho de administração dela) está concatenado em `docs/modulos/15_administracao.md` (ver o Índice e a Parte comum, PC-11). Até a aprovação do documento, o texto abaixo permanece como estava.
 
 > **→ Parte já migrada para Comercial | Pré-venda.** O trecho do Formulário/Proposta/Cotação desta seção está em `docs/modulos/04_comercial_pre_venda.md` (PC-11); o resto segue aqui até o módulo dono ter documento.
 
-> **→ Parte já migrada.** Será absorvida no módulo 14 (Administração).
+> **→ Parte já migrada.** Será absorvida no módulo 15 (Administração).
 
 - **A1 (#846):** `salvarDesenhos` (`projeto-elevador-store.js`) emite `PROJETO_ELEVADOR_CRIADO` (1º desenho da cotação) e `PROJETO_ELEVADOR_FINALIZADO` (1º Projeto de Instalação) logo após cada insert que deu certo. As etapas `PROJETO_CRIADO`/`PROJETO_ENVIADO` da cotação 955 foram fechadas à mão no banco (`conclusao_tipo = 'retroativo'`).
 - **A2 — Importação Varejo (#849):** o envio da Requisição de Compra grava as linhas em `importacao_varejo_comprado` (`origem = 'requisicao'`, `requisicao_omie`, previsão +90 dias, editável/excluível no modal "Comprado"), então a mesma sugestão não é reenviada. Itens com erro no Omie **não** são registrados. Migration `20261012140000`.

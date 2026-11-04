@@ -1,6 +1,6 @@
 <!-- GERADO por scripts/gerar-rag.js — não edite à mão. Rode: npm run rag -->
 
-**81 telas; 75 citam rota; 0 citam rota que não está em `KNOWN_ROUTES`.**
+**85 telas; 79 citam rota; 2 citam rota que não está em `KNOWN_ROUTES`.**
 
 # Mapa de telas (módulo → tela → rota)
 
@@ -70,8 +70,8 @@
 | `12_logistica_interna.md` | 12.3 Separação | `separacao` | `/logistica/separacao` | sim | `docs/modulos/12_logistica_interna.md#123-separação` |
 | `12_logistica_interna.md` | 12.4 Etiquetas | `etiquetas` | `/logistica/etiquetas` | sim | `docs/modulos/12_logistica_interna.md#124-etiquetas` |
 | `13_fabricacao.md` | 13.1 PCP | `pcp` | `/logistica/pcp` | sim | `docs/modulos/13_fabricacao.md#131-pcp` |
-| `13_fabricacao.md` | 13.2 MES | `mes` | `/logistica/mes` | sim | `docs/modulos/13_fabricacao.md#132-mes` |
-| `13_fabricacao.md` | 13.3 MES · Cadastros | `mes-cadastros` |  | sim | `docs/modulos/13_fabricacao.md#133-mes--cadastros` |
+| `13_fabricacao.md` | 13.2 MES | `mes` | `/logistica/mes` | não | `docs/modulos/13_fabricacao.md#132-mes` |
+| `13_fabricacao.md` | 13.3 MES · Cadastros | `mes-cadastros` |  | não | `docs/modulos/13_fabricacao.md#133-mes--cadastros` |
 | `13_fabricacao.md` | 13.4 Carga Máquina | `carga-maquina` |  | sim | `docs/modulos/13_fabricacao.md#134-carga-máquina` |
 | `13_fabricacao.md` | 13.5 Matérias-Primas | `cadastro-materias-primas` | `/cadastros/cadastro-materias-primas` | sim | `docs/modulos/13_fabricacao.md#135-matérias-primas` |
 | `13_fabricacao.md` | 13.6 Produtos | `cadastro-produtos` | `/cadastros/cadastro-produtos` | sim | `docs/modulos/13_fabricacao.md#136-produtos` |
@@ -81,11 +81,15 @@
 | `13_fabricacao.md` | 13.10 Fabricação Corte | `fabricacao-corte` |  | sim | `docs/modulos/13_fabricacao.md#1310-fabricação-corte` |
 | `13_fabricacao.md` | 13.11 Simulação | `simulacao-producao` |  | sim | `docs/modulos/13_fabricacao.md#1311-simulação` |
 | `13_fabricacao.md` | 13.12 Relatórios | `relatorios-pcp` |  | sim | `docs/modulos/13_fabricacao.md#1312-relatórios` |
-| `14_administracao.md` | 14.1 Logs de Atividade | `logs` | `/admin/logs` | sim | `docs/modulos/14_administracao.md#141-logs-de-atividade` |
-| `14_administracao.md` | 14.2 Configurações do Sistema | `configuracoes` | `/admin/configuracoes` | sim | `docs/modulos/14_administracao.md#142-configurações-do-sistema` |
-| `15_servicos.md` | S1 WhatsApp (canal Evolution) |  |  | — | `docs/modulos/15_servicos.md#s1-whatsapp-canal-evolution` |
-| `15_servicos.md` | S2 gi-avisos (avisos do fluxo do hub) |  |  | — | `docs/modulos/15_servicos.md#s2-gi-avisos-avisos-do-fluxo-do-hub` |
-| `15_servicos.md` | S3 Copiloto VP |  |  | — | `docs/modulos/15_servicos.md#s3-copiloto-vp` |
-| `15_servicos.md` | S4 Telegram |  |  | — | `docs/modulos/15_servicos.md#s4-telegram` |
-| `15_servicos.md` | S5 vpsistema (login, pessoas, alçadas, Central de Eventos e mensagens próprias) |  |  | — | `docs/modulos/15_servicos.md#s5-vpsistema-login-pessoas-alçadas-central-de-eventos-e-mensagens-próprias` |
-| `15_servicos.md` | S6 E-mail (canal do Inbox) |  |  | — | `docs/modulos/15_servicos.md#s6-e-mail-canal-do-inbox` |
+| `14_quadros_comando.md` | 14.1 Pedidos com Quadro | `quadros-pedidos` | `/quadros-de-comando/quadros-pedidos` | sim | `docs/modulos/14_quadros_comando.md#141-pedidos-com-quadro` |
+| `14_quadros_comando.md` | 14.2 Separação PV QC | `quadros-separacao` | `/quadros-de-comando/quadros-separacao` | sim | `docs/modulos/14_quadros_comando.md#142-separação-pv-qc` |
+| `14_quadros_comando.md` | 14.3 Separação FAB QC | `quadros-separacao-fab` | `/quadros-de-comando/quadros-separacao-fab` | sim | `docs/modulos/14_quadros_comando.md#143-separação-fab-qc` |
+| `14_quadros_comando.md` | 14.4 Fabricação QC | `evolucao-fabricacao` | `/quadros-de-comando/evolucao-fabricacao` | sim | `docs/modulos/14_quadros_comando.md#144-fabricação-qc` |
+| `15_administracao.md` | 15.1 Logs de Atividade | `logs` | `/admin/logs` | sim | `docs/modulos/15_administracao.md#151-logs-de-atividade` |
+| `15_administracao.md` | 15.2 Configurações do Sistema | `configuracoes` | `/admin/configuracoes` | sim | `docs/modulos/15_administracao.md#152-configurações-do-sistema` |
+| `16_servicos.md` | S1 WhatsApp (canal Evolution) |  |  | — | `docs/modulos/16_servicos.md#s1-whatsapp-canal-evolution` |
+| `16_servicos.md` | S2 gi-avisos (avisos do fluxo do hub) |  |  | — | `docs/modulos/16_servicos.md#s2-gi-avisos-avisos-do-fluxo-do-hub` |
+| `16_servicos.md` | S3 Copiloto VP |  |  | — | `docs/modulos/16_servicos.md#s3-copiloto-vp` |
+| `16_servicos.md` | S4 Telegram |  |  | — | `docs/modulos/16_servicos.md#s4-telegram` |
+| `16_servicos.md` | S5 vpsistema (login, pessoas, alçadas, Central de Eventos e mensagens próprias) |  |  | — | `docs/modulos/16_servicos.md#s5-vpsistema-login-pessoas-alçadas-central-de-eventos-e-mensagens-próprias` |
+| `16_servicos.md` | S6 E-mail (canal do Inbox) |  |  | — | `docs/modulos/16_servicos.md#s6-e-mail-canal-do-inbox` |

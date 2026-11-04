@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/07_suprimentos_importacao.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `fe50b5b`)
-- **Palavras:** 10890 · **blocos:** 269 · **seções com selo próprio:** 68 de 145
-- **Origem do selo dos blocos:** próprio 82 · da seção 59 · da seção-pai 0 · do cabeçalho 103 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
-- **Selo efetivo dos blocos:** Conferido 169 · Herdado 64 · Não verificado 11
+- **Palavras:** 11014 · **blocos:** 270 · **seções com selo próprio:** 68 de 145
+- **Origem do selo dos blocos:** próprio 83 · da seção 59 · da seção-pai 0 · do cabeçalho 103 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
+- **Selo efetivo dos blocos:** Conferido 170 · Herdado 64 · Não verificado 11
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -160,4 +160,4 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-9 Navegação, cache e testes | `docs/modulos/07_suprimentos_importacao.md#pc-9-navegação-cache-e-testes` | 3 | — | 1 | c1 |
 | PC-10 Menu "?" e tutoriais | `docs/modulos/07_suprimentos_importacao.md#pc-10-menu--e-tutoriais` | 3 | Conferido (uniforme) | 1 | b1 |
 | PC-11 Documentos soltos e destino do que foi concatenado | `docs/modulos/07_suprimentos_importacao.md#pc-11-documentos-soltos-e-destino-do-que-foi-concatenado` | 3 | Não verificado (misto (vale o mais fraco)) | 2 | b1 s1 |
-| PC-12 Benefícios trocados com os outros módulos | `docs/modulos/07_suprimentos_importacao.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 3 | Herdado (misto (vale o mais fraco)) | 10 | b6 s4 |
+| PC-12 Benefícios trocados com os outros módulos | `docs/modulos/07_suprimentos_importacao.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 3 | Herdado (misto (vale o mais fraco)) | 11 | b7 s4 |

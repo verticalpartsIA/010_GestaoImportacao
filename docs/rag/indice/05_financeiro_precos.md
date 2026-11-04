@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/05_financeiro_precos.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `980586c`)
-- **Palavras:** 14073 · **blocos:** 298 · **seções com selo próprio:** 49 de 72
-- **Origem do selo dos blocos:** próprio 66 · da seção 142 · da seção-pai 0 · do cabeçalho 58 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 32
-- **Selo efetivo dos blocos:** Conferido 233 · Herdado 17 · Não verificado 16
+- **Palavras:** 14197 · **blocos:** 299 · **seções com selo próprio:** 49 de 72
+- **Origem do selo dos blocos:** próprio 67 · da seção 142 · da seção-pai 0 · do cabeçalho 58 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 32
+- **Selo efetivo dos blocos:** Conferido 234 · Herdado 17 · Não verificado 16
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -87,4 +87,4 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-9 Navegação, cache e testes | `docs/modulos/05_financeiro_precos.md#pc-9-navegação-cache-e-testes` | 2 | Conferido (uniforme) | 4 | b1 s3 |
 | PC-10 Menu "?" e tutoriais | `docs/modulos/05_financeiro_precos.md#pc-10-menu--e-tutoriais` | 2 | Conferido (uniforme) | 5 | b1 s4 |
 | PC-11 Documentos soltos e destino do que foi concatenado | `docs/modulos/05_financeiro_precos.md#pc-11-documentos-soltos-e-destino-do-que-foi-concatenado` | 2 | Não verificado (uniforme) | 2 | b1 s1 |
-| PC-12 Benefícios trocados com os outros módulos | `docs/modulos/05_financeiro_precos.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 2 | Não verificado (misto (vale o mais fraco)) | 16 | b8 s8 |
+| PC-12 Benefícios trocados com os outros módulos | `docs/modulos/05_financeiro_precos.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 2 | Não verificado (misto (vale o mais fraco)) | 17 | b9 s8 |

@@ -124,7 +124,7 @@ function parsear(textoBruto) {
 
 /* ---------- selo do cabeçalho do documento ---------- */
 /* O cabeçalho dos 14 primeiros documentos diz "**Fonte da verdade:** ... conferidos em <data> (`origin/main` `<hash>`)";
-   o do 15_servicos diz "**Fonte da verdade e selos:** ... `origin/main` `<hash>`, tudo em **<data>**". */
+   o do 16_servicos diz "**Fonte da verdade e selos:** ... `origin/main` `<hash>`, tudo em **<data>**". */
 function seloDoCabecalho(doc) {
   const topo = doc.secoes.filter((s) => s.nivel <= 1);
   for (const s of topo) {

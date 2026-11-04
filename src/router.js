@@ -39,7 +39,8 @@
     'status-obras', 'linha-do-tempo', 'central-documentos', 'dossier-obra', 'vistorias-envio', 'vistorias', 'instalacao', 'mapa-obras',
     'art', 'cronograma', 'databook', 'handover', 'repositorio-documentos',
     'rh-homologacao',
-    'almoxarifado', 'carga-maquina', 'montagem-produto', 'evolucao-fabricacao', 'fabricacao-corrimao', 'fabricacao-corte', 'simulacao-producao', 'pcp', 'mes', 'mes-cadastros', 'relatorios-pcp', 'expedicao', 'separacao', 'etiquetas', 'emissao-nf',
+    'almoxarifado', 'carga-maquina', 'montagem-produto', 'evolucao-fabricacao', 'fabricacao-corrimao', 'fabricacao-corte', 'simulacao-producao', 'pcp', 'relatorios-pcp', 'expedicao', 'separacao', 'etiquetas', 'emissao-nf',
+    'quadros-pedidos', 'quadros-separacao', 'quadros-separacao-fab',
     'logs', 'configuracoes', 'comissoes', 'pagamentos-instalador',
   ];
   const KNOWN_ROUTES_SET = new Set(KNOWN_ROUTES);
@@ -64,6 +65,7 @@
     'Obras & Instalação': 'engenharia',
     'Entrega & Documentação': 'engenharia',
     'Parceiros & Instaladores': 'engenharia',
+    'Quadros de Comando': 'quadros-de-comando',
     'Financeiro': 'adm-financeiro',
     'RH Operacional': 'rh',
     'Admin': 'admin',

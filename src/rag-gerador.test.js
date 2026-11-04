@@ -127,7 +127,7 @@ test('sem selo na seção herda de uma seção-pai; sem selo em nenhuma herda do
   assert.deepEqual([blocosDe(semCab.doc, '9.2 Outra')[0].origem, blocosDe(semCab.doc, '9.2 Outra')[0].selo], ['nenhum', 'Não verificado']);
 });
 
-test('cabeçalho aceita a grafia "Fonte da verdade e selos:" do 15_servicos, sem a frase "conferidos em"', () => {
+test('cabeçalho aceita a grafia "Fonte da verdade e selos:" do 16_servicos, sem a frase "conferidos em"', () => {
   const t = ['# 15 Serviços', '', '> **Fonte da verdade e selos:** o código e o repositório em `origin/main` `ae64ebf`, tudo em **01/11/2026**.', '', '## S1 Algo', '- sem selo'].join('\n');
   const { r } = analisar(t);
   assert.deepEqual([r.cab.presente, r.cab.data, r.cab.hash], [true, '01/11/2026', 'ae64ebf']);
