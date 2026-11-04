@@ -56,13 +56,16 @@ test('unidadeDoTitulo', () => {
   assert.equal(C.unidadeDoTitulo('Corrimão X'), null);
 });
 
-test('corte: escopo só cabo de aço, cinta de tração e cabo de manobra, com descrição comercial', () => {
+test('corte: escopo só cabo de aço e cinta de tração (cabo de manobra saiu em 04/11/2026), com descrição comercial', () => {
   assert.equal(C.categoriaCorte('VPEL-692'), 'aco');
   assert.equal(C.categoriaCorte('vpel-234n'), 'cinta');
-  assert.equal(C.categoriaCorte('SAO_OT06MB132420'), 'manobra');
-  assert.equal(C.categoriaCorte('VPB-101'), 'manobra');
+  // cabo de manobra e cabos modulares BST vão com o quadro (módulo Quadros de Comando): fora do Corte
+  assert.equal(C.categoriaCorte('SAO_OT06MB132420'), null);
+  assert.equal(C.categoriaCorte('VPB-101'), null);
+  assert.equal(C.categoriaCorte('VPB-086'), null);
+  assert.equal(C.categoriaCorte('VPEL-529n', 'Cabo Manobra Elétrico com 23 Vias'), null);
+  assert.equal(C.categoriaCorte('VPEL-999', 'Cabo de Comando Elétrico 24 Vias'), null);
   assert.equal(C.descricaoCorte('VPB-101', 'Cabo BST X'), 'Cabo BST X');
-  assert.equal(C.categoriaCorte('VPB-086'), 'manobra');
   assert.equal(C.categoriaCorte('VPEL-999', 'Cabo de Aço 8x19 10MM'), 'aco');
   assert.equal(C.categoriaCorte('VPEL-702b', 'Sistema de Comando para Elevador'), null);
   assert.equal(C.rotuloItemCorte('VPEL-692', 'x'), 'VPEL-692 — Cabo de Aço para Elevador 8*19S+FC 9,5MM (3/8 pol)');
@@ -75,6 +78,6 @@ test('corte: OP antiga sem item_codigo usa o código do título', () => {
   assert.equal(C.codigoDaOrdem({ item_codigo: 'VPEL-692', titulo: 'x' }), 'VPEL-692');
   assert.equal(C.codigoDaOrdem({ item_codigo: null, titulo: 'Corte — VPEL-529n' }), 'VPEL-529n');
   assert.equal(C.categoriaCorte(C.codigoDaOrdem({ titulo: 'Corte — VPEL-692' })), 'aco');
-  assert.equal(C.categoriaCorte(C.codigoDaOrdem({ titulo: 'Corte — VPB-101' }), 'Corte — VPB-101'), 'manobra');
+  assert.equal(C.categoriaCorte(C.codigoDaOrdem({ titulo: 'Corte — VPB-101' }), 'Corte — VPB-101'), null);   // cabo modular: fora do Corte
   assert.equal(C.categoriaCorte('VPB-107', 'Corte — VPB-107'), null);
 });

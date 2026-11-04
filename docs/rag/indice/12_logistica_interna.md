@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/12_logistica_interna.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 01/11/2026 (origin/main `307ee15`)
-- **Palavras:** 5009 · **blocos:** 133 · **seções com selo próprio:** 53 de 60
-- **Origem do selo dos blocos:** próprio 98 · da seção 11 · da seção-pai 0 · do cabeçalho 3 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 21
-- **Selo efetivo dos blocos:** Conferido 50 · Herdado 55 · Não verificado 7
+- **Palavras:** 5168 · **blocos:** 134 · **seções com selo próprio:** 54 de 60
+- **Origem do selo dos blocos:** próprio 100 · da seção 10 · da seção-pai 0 · do cabeçalho 3 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 21
+- **Selo efetivo dos blocos:** Conferido 51 · Herdado 55 · Não verificado 7
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -40,7 +40,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 12.2.9 Testes | `docs/modulos/12_logistica_interna.md#1229-testes` | 3 | Herdado (misto (vale o mais fraco)) | 1 | b1 |
 | 12.2.10 Pendências e decisões | `docs/modulos/12_logistica_interna.md#12210-pendências-e-decisões` | 3 | Não verificado (misto (vale o mais fraco)) | 3 | b2 s1 |
 | 12.2.11 Histórico | `docs/modulos/12_logistica_interna.md#12211-histórico` | 3 | Herdado (uniforme) | 1 | b1 |
-| 12.3 Separação | `docs/modulos/12_logistica_interna.md#123-separação` | 2 | — | 0 | — |
+| 12.3 Separação | `docs/modulos/12_logistica_interna.md#123-separação` | 2 | Conferido (uniforme) | 1 | b1 |
 | 12.3.1 O que é | `docs/modulos/12_logistica_interna.md#1231-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 12.3.2 Rota e arquivos | `docs/modulos/12_logistica_interna.md#1232-rota-e-arquivos` | 3 | Conferido (uniforme) | 1 | b1 |
 | 12.3.3 Perfil e acesso | `docs/modulos/12_logistica_interna.md#1233-perfil-e-acesso` | 3 | Conferido (uniforme) | 1 | b1 |
@@ -75,4 +75,4 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-9 Navegação, cache e testes | `docs/modulos/12_logistica_interna.md#pc-9-navegação-cache-e-testes` | 2 | — | 1 | c1 |
 | PC-10 Menu "?" e tutoriais | `docs/modulos/12_logistica_interna.md#pc-10-menu--e-tutoriais` | 2 | Não verificado (uniforme) | 1 | b1 |
 | PC-11 Documentos soltos e destino do que foi concatenado | `docs/modulos/12_logistica_interna.md#pc-11-documentos-soltos-e-destino-do-que-foi-concatenado` | 2 | — | 1 | c1 |
-| PC-12 Benefícios trocados com os outros módulos | `docs/modulos/12_logistica_interna.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 2 | Conferido (uniforme) | 4 | b3 s1 |
+| PC-12 Benefícios trocados com os outros módulos | `docs/modulos/12_logistica_interna.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 2 | Conferido (uniforme) | 4 | b4 |

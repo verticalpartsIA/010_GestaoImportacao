@@ -120,9 +120,10 @@ Por isso, uma IA ou pessoa que analise apenas os itens do menu terá uma visão 
 | 10 | Entrega & Documentação | Central de documentos, data book, termo e entrega final | [`10_entrega_documentacao.md`](docs/modulos/10_entrega_documentacao.md) |
 | 11 | Parceiros & Instaladores | Empresas instaladoras, homologação, contrato e pagamentos do instalador | [`11_parceiros_instaladores.md`](docs/modulos/11_parceiros_instaladores.md) |
 | 12 | Logística Interna | Almoxarifado, expedição, separação, etiquetas | [`12_logistica_interna.md`](docs/modulos/12_logistica_interna.md) |
-| 13 | Fabricação | PCP, MES, carga de máquina, corrimão e corte, relatórios | [`13_fabricacao.md`](docs/modulos/13_fabricacao.md) |
-| 14 | Administração | Logs de atividade e configurações do sistema | [`14_administracao.md`](docs/modulos/14_administracao.md) |
-| 15 | Serviços | WhatsApp, gi-avisos, Copiloto VP, Telegram, vpsistema e o canal de e-mail (usados por vários módulos; não é item do menu) | [`15_servicos.md`](docs/modulos/15_servicos.md) |
+| 13 | Fabricação | PCP, carga de máquina, matérias-primas e produtos, corrimão e corte, simulação, relatórios | [`13_fabricacao.md`](docs/modulos/13_fabricacao.md) |
+| 14 | Quadros de Comando | Pedidos com quadro vindos do Omie, separação (PV QC e FAB QC) e Fabricação QC | [`14_quadros_comando.md`](docs/modulos/14_quadros_comando.md) |
+| 15 | Administração | Logs de atividade e configurações do sistema | [`15_administracao.md`](docs/modulos/15_administracao.md) |
+| 16 | Serviços | WhatsApp, gi-avisos, Copiloto VP, Telegram, vpsistema e o canal de e-mail (usados por vários módulos; não é item do menu) | [`16_servicos.md`](docs/modulos/16_servicos.md) |
 
 **Mapas gerados do código e dos documentos** (não se editam à mão; sempre em dia):
 - [`docs/rag/mapa-de-telas.md`](docs/rag/mapa-de-telas.md) — módulo → tela → rota → onde está no documento;
@@ -278,7 +279,7 @@ npm run docs:conferir -- origin/main  # documento do módulo mudou junto com o c
 
 - sistema corporativo, não destinado a exposição pública irrestrita;
 - nunca commitar secrets, tokens ou credenciais;
-- **estado real:** o app fala com o banco pela chave pública e boa parte das tabelas ainda tem leitura/escrita abertas a ela; trava na tela é organização, não segurança. O isolamento de verdade é a issue #571 — ver o Art. 25 do [`CLAUDE.md`](CLAUDE.md) e [`14_administracao.md`](docs/modulos/14_administracao.md);
+- **estado real:** o app fala com o banco pela chave pública e boa parte das tabelas ainda tem leitura/escrita abertas a ela; trava na tela é organização, não segurança. O isolamento de verdade é a issue #571 — ver o Art. 25 do [`CLAUDE.md`](CLAUDE.md) e [`15_administracao.md`](docs/modulos/15_administracao.md);
 - tabela nova nasce com RLS fechada; decisões, aprovações e mudanças críticas devem ser auditáveis.
 
 ---

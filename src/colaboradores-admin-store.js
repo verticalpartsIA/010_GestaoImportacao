@@ -25,7 +25,7 @@
     'Geral', 'CRM', 'Cadastros Mestres', 'Comercial | Pré-venda', 'Financeiro & Preços',
     'Contratos & Jurídico', 'Suprimentos & Importação', 'Engenharia & Produto',
     'Obras & Instalação', 'Entrega & Documentação', 'Parceiros & Instaladores',
-    'Logística Interna', 'Fabricação', 'Administração',
+    'Logística Interna', 'Fabricação', 'Quadros de Comando', 'Administração',
   ];
 
   async function listarColaboradores() {
@@ -268,8 +268,6 @@
       { modulo: 'montagem-produto', label: 'Montagem do Produto' },
       { modulo: 'lista-fios', label: 'Lista de fios do quadro (Montagem do Produto)' },
       { modulo: 'simulacao-producao', label: 'Simulação' },
-      { modulo: 'mes', label: 'MES — Sistema de Execução da Manufatura' },
-      { modulo: 'mes-cadastros', label: 'MES — Cadastros do chão de fábrica' },
       { modulo: 'relatorios-pcp', label: 'Relatórios do PCP' },
       { modulo: 'expedicao', label: 'Expedição' },
       { modulo: 'separacao', label: 'Separação (painel TV dos pedidos a separar)', capacidades: [
@@ -279,6 +277,9 @@
       ]},
       { modulo: 'fabricacao-corrimao', label: 'Fabricação Corrimão' },
       { modulo: 'fabricacao-corte', label: 'Fabricação Corte' },
+      { modulo: 'quadros-pedidos', label: 'Quadros de Comando — Pedidos' },
+      { modulo: 'quadros-separacao', label: 'Quadros de Comando — Separação PV QC' },
+      { modulo: 'quadros-separacao-fab', label: 'Quadros de Comando — Separação FAB QC (a gravação do Peguei usa a alçada da Separação PV QC)' },
       /* Etiquetas (endereço, item…). Spec: docs/superpowers/specs/2026-10-17-modulo-etiquetas-design.md. As chaves são as que o SQL confere
          (migration 20261017160000: política de etiqueta_impressoes). Só quem tem 'imprimir' imprime; 'reimprimir' é outra alçada e exige motivo. */
       { modulo: 'etiquetas', label: 'Etiquetas (endereço, item, palete…)', capacidades: [
@@ -333,10 +334,11 @@
     'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'mapa-obras', 'cronograma', 'art'],
     'Entrega & Documentação': ['central-documentos', 'databook', 'handover', 'repositorio-documentos'],
     'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador', 'cronograma'],
-    'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'pcp', 'mes', 'mes-cadastros', 'relatorios-pcp', 'expedicao', 'separacao', 'etiquetas', 'fabricacao-corrimao', 'fabricacao-corte'],
+    'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'pcp', 'relatorios-pcp', 'expedicao', 'separacao', 'etiquetas', 'fabricacao-corrimao', 'fabricacao-corte'],
     /* Fabricação saiu de Logística Interna (17/10/2026). Logística Interna mantém a lista completa de propósito: quem já tinha o grupo alocado não perde nada. */
     /* Matérias-Primas e Produtos passaram a morar aqui no menu (18/10/2026); continuam também em Cadastros Mestres acima, para ninguém perder a alçada já concedida. */
-    'Fabricação': ['pcp', 'mes', 'mes-cadastros', 'carga-maquina', 'cadastro-materias-primas', 'cadastro-produtos', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'relatorios-pcp', 'fabricacao-corrimao', 'fabricacao-corte'],
+    'Fabricação': ['pcp', 'carga-maquina', 'cadastro-materias-primas', 'cadastro-produtos', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'relatorios-pcp', 'fabricacao-corrimao', 'fabricacao-corte'],
+    'Quadros de Comando': ['quadros-pedidos', 'quadros-separacao', 'quadros-separacao-fab'],
     'Administração': ['logs'],
   };
 

@@ -416,7 +416,7 @@ const PUBLIC_ROOT_FILES = new Set([
 const PUBLIC_DIRS = new Set(['src', 'styles', 'assets', 'TreinamentoVP']);
 const SPA_MODULES = new Set([
   'geral', 'comercial', 'crm', 'cadastros', 'engenharia', 'logistica', 'gestao-importacao',
-  'adm-financeiro', 'juridico', 'rh', 'admin',
+  'adm-financeiro', 'juridico', 'rh', 'admin', 'quadros-de-comando',
 ]);
 function primeiroSegmento(reqPath) {
   const seg = String(reqPath || '/').split('/').filter(Boolean);

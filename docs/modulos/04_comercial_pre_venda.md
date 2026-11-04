@@ -53,6 +53,8 @@ Termos gerais (soft-delete, alerta, alçada, Nº da cotação) estão no glossá
 
 ## 4.1 Formulários
 
+> **Atualização de 04/11/2026 (Quadros de Comando, `14_quadros_comando.md`, PC-1):** o card do **Formulário do Quadro de Comando** no hub virou "Em breve" e ficou **ilhado** (sem rota para o usuário); o código, as tabelas e o **link público** continuam existindo. Será ligado dentro do Omie, criando o pedido de venda sozinho (futuro). **Conferido** (`comercial.jsx`).
+
 ### 4.1.1 O que é
 O ponto de partida de toda venda de equipamento: o hub **Formulários** (cartões por tipo de formulário), o **Formulário de Equipamento** (dados do cliente, da obra e de cada elevador, escada rolante ou esteira rolante), o formulário **Quadro de Comando** (levantamento do quadro de comando: fabricar interno ou comprar pronto) e as duas **páginas públicas** (o cliente preenche o formulário de equipamento pelo link; o cliente ou instalador pede orçamento de quadro). Criar o Formulário gera o **Nº da cotação** (PC-2) e dispara a linha do tempo da cotação. **Conferido** em `comercial.jsx` (hub), `formulario-elevador.jsx`, `formulario-elevador-store.js`, `quadro-comando.jsx`, `quadro-comando-store.js` e no banco, 31/10/2026.
 
@@ -346,6 +348,8 @@ O portal em português, inglês e chinês chegou em 06/10/2026; Tratativas ⇄ I
 ---
 
 ## 4.4 Cotação Quadro de Comando
+
+> **Atualização de 04/11/2026:** o item **"Cotação Quadro de Comando" saiu do menu** (a tela e a rota existem, sem acesso pelo menu), pelo mesmo motivo da nota em 4.1. **Conferido** (`shell.jsx`).
 
 ### 4.4.1 O que é
 A **lista dos pedidos de quadro de comando**: os que o usuário criou e **todos** os que chegaram pelo link público. Daqui se abre o pedido (4.1) ou se exclui (de forma lógica). **Conferido** em `cotacao-quadro-comando.jsx`, 31/10/2026.
@@ -661,6 +665,8 @@ Busca feita em `CLAUDE.md`, raiz, `docs/`, `docs/superpowers/specs/`, `docs/supe
 | **Parecem obsoletos — decisão do Gelson** | — | `docs/DIAGNOSTICO_separacao_envio_producao.md` e `docs/PLANO_separacao_envio_producao.md` (da Separação, módulo 12; a spec de 26/10 supera). `CotacaoQuadroComandoStore` e `ModalVisualizarChecklist` (código, 4.4.10) |
 
 ## PC-12 Benefícios trocados com os outros módulos
+
+- **Recebido de Quadros de Comando (04/11/2026, texto em `14_quadros_comando.md` PC-12, Art. 49):** (a) o Omie repete a linha do item com **quantidade 0** — somar por código e ignorar o zero antes de contar linhas ou unidades; (b) **metro e peça nunca se somam** — total por unidade de medida; (c) a caixa de uma tabela longa deve ter a **altura da janela**, para a barra de rolagem lateral ficar à vista; (d) função de banco nova se testa **numa transação que se desfaz**, incluindo um usuário ativo **sem** a alçada (a recusa por "sem sessão" não prova a trava de alçada); (e) a **observação do item** do pedido do Omie (`pcp_pedido_itens.obs_item`) guarda o que a proposta mostra dentro do item. **Conferido** (04/11/2026).
 - **Recebido de Geral (`01_geral.md`):** a regra de numeração e o molde; hooks antes do `return` condicional (4.1.8); estado na URL; fila `fluxo_pendentes` e a cascata de assinatura; alerta individual ao vendedor (4.3.6 item 7); o gate de envio e a Central de Decisões (PC-5).
 - **Recebido de CRM (`02_crm.md`):** o link público do Quadro cria Lead ou liga ao cliente do Omie (PC-1); o campo de comissão e documento de lead; o achado do `id` do lead.
 - **Recebido de Cadastros (`03_cadastros_mestres.md`):** conferência prévia de duplicidade e índice único (aplicável a `propostas`: um Nº/tipo/letra só, já feito no `salvar`); código pela sequência do banco (o Nº da cotação já nasce assim); aviso para link de registro inexistente (o Formulário aberto por link direto com id que não existe: **Não verificado** o que a tela faz); leitura paginada de 1000 em 1000 (aplicável a `PropostasPage`, que corta em 300: 4.5.10 item 1).
@@ -670,7 +676,7 @@ Busca feita em `CLAUDE.md`, raiz, `docs/`, `docs/superpowers/specs/`, `docs/supe
 - **Recebido de Parceiros & Instaladores (01/11/2026, texto em `11_parceiros_instaladores.md` PC-12):** o número do Contrato Instalador nasce do Nº da cotação da Proposta (`VPNI-<Nº>`) e dos ativos marcados nela (11.3.6); mudar os ativos da Proposta muda o que o Contrato oferece. **Conferido** no código, 01/11/2026.
 - **Recebido de Logística Interna (01/11/2026, texto em `12_logistica_interna.md` PC-12):** nada específico do Comercial; vale o bloco do `01_geral.md`.
 - **Recebido de Fabricação (01/11/2026, texto em `13_fabricacao.md` PC-12):** o **Pedido de Quadro** (4.4) vira OP-mãe + frentes no PCP (13.1); o nº "Pedido" do quadro é sequência interna, não o do Omie, e o vínculo com o pedido do Omie é escolhido na hora de gerar. **Conferido** no código.
-- **Recebido de Administração (01/11/2026, texto em `14_administracao.md` PC-12):** as funções públicas `capturar-lead-verticalparts` e `capturar-lead-quadro-comando` são das 8 com `verify_jwt: false` (PC-6 do 14); a defesa é o limite de taxa. **Conferido** na lista de funções.
+- **Recebido de Administração (01/11/2026, texto em `15_administracao.md` PC-12):** as funções públicas `capturar-lead-verticalparts` e `capturar-lead-quadro-comando` são das 8 com `verify_jwt: false` (PC-6 do 14); a defesa é o limite de taxa. **Conferido** na lista de funções.
 - **Recebido de Suprimentos & Importação (31/10/2026, texto em `07_suprimentos_importacao.md` PC-12):** a **P.I. nasce do Nº da cotação** (herda os modelos da Precificação) e a decisão de compra passa pelo gate de avais; P.I., RFQ e IMS **sem** Nº de cotação são legítimos (varejo). A Tratativa e a RFQ de **equipamento** (4.3) não se misturam com o lote de varejo (7.3/7.10). Os containers da Precificação alimentam o embarque (7.5): trocar o vocabulário ISO quebra o casamento (área blindada de Containers).
 - **Recebido de Contratos & Jurídico (31/10/2026, texto em `06_contratos_juridico.md` PC-12):** a assinatura da proposta e a do contrato passam pela mesma página pública e pelo mesmo desenho de fila (PC-3 de lá); o PDF assinado e a regra de um link por pessoa valem para a proposta. Cuidados de lá que valem aqui: o documento remontado mostra a data de hoje (conferir `proposta-preview.jsx`; **Não verificado** na proposta) e a função que regrava depois do fechamento (a proposta travada recusa `salvar`, 4.5.8). O contrato de venda **não** lista a fila de propostas assinadas por vigência (6.1.10 item 8).
 - **Doado** (acrescentado na mesma sessão aos outros documentos, no tema certo, texto completo aqui):
@@ -678,7 +684,7 @@ Busca feita em `CLAUDE.md`, raiz, `docs/`, `docs/superpowers/specs/`, `docs/supe
   - **A Geral (PC-9): trava com destrave por motivo.** Padrão usado no Formulário e na Proposta: ação travada por regra de negócio, destrave só por alçada de Líder, motivo obrigatório de no mínimo 10 letras, aviso ao dono e registro em `vp_logs`. Outras telas com a mesma necessidade podem reaproveitar (PC-4).
   - **A todos: achados de lista cortada.** `PropostasPage` pede 300 de 340; o quadro 200; contratos sociais 1.000; planilha de cotações 894 sem paginar. Padrão seguro: ler em páginas de 1.000 e avisar quando a lista veio incompleta.
 - **Pedidos de mudança de código** que estes benefícios sugerem ficam como pendência (4.5.10, 4.1.10); nenhuma linha de código foi alterada.
-- **Recebido de Serviços (01/11/2026, texto em `15_servicos.md` PC-2):** todo alerta com destinatário também vira WhatsApp pelo gi-avisos; para chegar certo, título curto com o essencial na frente, sem "teste", sem R$ no título e com o dia da semana por extenso, a obra ou o código do contrato quando houver vários no mesmo dia (o agrupamento de 24 h apaga números). **Conferido** no código do gi-avisos. O Copiloto em uso é o da VPS e **não lê** `vp_copiloto_docs`: o "ajuste por UPDATE sem redeploy" citado neste documento só valia para a Edge Function antiga `vp-copiloto`, removida em 01/11/2026 (`15_servicos.md` S3.5, divergência D1). **Conferido.**
+- **Recebido de Serviços (01/11/2026, texto em `16_servicos.md` PC-2):** todo alerta com destinatário também vira WhatsApp pelo gi-avisos; para chegar certo, título curto com o essencial na frente, sem "teste", sem R$ no título e com o dia da semana por extenso, a obra ou o código do contrato quando houver vários no mesmo dia (o agrupamento de 24 h apaga números). **Conferido** no código do gi-avisos. O Copiloto em uso é o da VPS e **não lê** `vp_copiloto_docs`: o "ajuste por UPDATE sem redeploy" citado neste documento só valia para a Edge Function antiga `vp-copiloto`, removida em 01/11/2026 (`16_servicos.md` S3.5, divergência D1). **Conferido.**
 #### Fluxograma das ligações do módulo
 
 ```mermaid

@@ -95,12 +95,11 @@
   // Categoria do item de corte: pelo código do dicionário; senão pelo texto (descrição do cadastro ou título da OP). null = fora do escopo.
   function categoriaCorte(codigo, texto) {
     const d = CORTE_DESCRICOES[String(codigo || '').trim().toUpperCase()];
-    if (d) return d[0];
+    if (d) return d[0] === 'manobra' ? null : d[0];   // cabo de manobra: fora do escopo do Corte (ver abaixo)
     const t = semAcento(texto);
     if (/cabo\s+de\s+aco|cabo\s+aco/.test(t)) return 'aco';
     if (/cinta\s+de\s+tracao|cinta\s+tracao/.test(t)) return 'cinta';
-    if (/cabo\s+(de\s+)?(manobra|comando)/.test(t)) return 'manobra';
-    return null;
+    return null;   // cabo de manobra / cabos modulares (BST) saíram do Corte em 04/11/2026: vão com o quadro, no módulo Quadros de Comando
   }
   // Código efetivo da OP: OPs de corte antigas (Gerar OPs do PCP) nasceram sem item_codigo e só trazem o código no título ("Corte — VPEL-692").
   function codigoDaOrdem(o) {

@@ -1409,7 +1409,9 @@ const FE_CATEGORIAS = [
   { id: 'mod-elevador', label: 'Modernização Elevador', icon: 'tool', pronto: false },
   { id: 'mod-er-es', label: 'Modernização Escadas e Esteiras', icon: 'tool', pronto: false },
   { id: 'maquina-tracao', label: 'Máquina de Tração', icon: 'grid', pronto: false },
-  { id: 'quadro-comando', label: 'Quadro de Comando', icon: 'grid', route: 'formulario-quadro-comando', pronto: true },
+  /* 04/11/2026: Formulário do Quadro de Comando ILHADO (desligado do hub, a pedido do Gelson). A tela, as tabelas e o link público continuam
+     existindo; no futuro ele será ligado dentro do Omie e criará o pedido de venda sozinho. Sem rota aqui, o card não abre. */
+  { id: 'quadro-comando', label: 'Quadro de Comando', icon: 'grid', pronto: false },
   { id: 'portas', label: 'Portas', icon: 'grid', pronto: false },
 ];
 

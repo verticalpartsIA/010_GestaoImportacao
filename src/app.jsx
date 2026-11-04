@@ -25,9 +25,12 @@ const ROUTE_TITLE = {
   almoxarifado: "Almoxarifado",
   "carga-maquina": "Carga Máquina",
   "montagem-produto": "Montagem do Produto",
-  "evolucao-fabricacao": "Evolução da Fabricação",
+  "evolucao-fabricacao": "Quadros de Comando · Fabricação QC",
   "fabricacao-corrimao": "Fabricação Corrimão",
   "fabricacao-corte": "Fabricação Corte",
+  "quadros-pedidos": "Quadros de Comando · Pedidos",
+  "quadros-separacao": "Quadros de Comando · Separação PV QC",
+  "quadros-separacao-fab": "Quadros de Comando · Separação FAB QC",
   "simulacao-producao": "Simulação",
   "relatorios-pcp": "Relatórios do PCP",
   expedicao: "Expedição",
@@ -36,7 +39,6 @@ const ROUTE_TITLE = {
   "emissao-nf": "Emissão de NF",
   pcp: "PCP — Planejamento e Controle da Produção",
   mes: "MES — Sistema de Execução da Manufatura",
-  "mes-cadastros": "MES — Cadastros do chão de fábrica",
   leads: "Pipeline de Leads",
   "lead-detail": "Detalhe de Lead",
   formularios: "Formulários",
@@ -429,9 +431,10 @@ function App() {
       case "evolucao-fabricacao": return <window.EvolucaoFabricacaoQuadroPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "fabricacao-corrimao": return <window.FabricacaoCorrimaoPage/>;
       case "fabricacao-corte": return <window.FabricacaoCortePage/>;
+      case "quadros-pedidos": return <window.QuadrosPedidosPage/>;
+      case "quadros-separacao": return <window.QuadrosSeparacaoPage/>;
+      case "quadros-separacao-fab": return <window.QuadrosSeparacaoFabPage/>;
       case "pcp": return <window.PCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "mes": return <window.MESPage setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "mes-cadastros": return <window.MESCadastrosPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "pi-importacao": return <window.PIPage/>;
       case "rfq-importacao": return <window.RFQPage/>;
       case "ims-importacao": return <window.IMSPage/>;
