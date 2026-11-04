@@ -104,5 +104,15 @@
     return 'op:' + (op && op.numero);
   }
 
-  window.QuadrosPedidosCalc = { progressoFabricacao, classificarItem, resumoItens, itensParaSeparar, itensDoKit, lerLinhaComponente, componentesDoQuadro, chaveDaOp };
+  // Quanto FALTA de um item: quantidade do pedido − estoque físico (nunca negativo). Sem estoque conhecido (item sem código de estoque,
+  // como a linha de componente do quadro, ou leitura que falhou) devolve null: a tela mostra "—" e NÃO chuta zero.
+  // Usa o físico, não o disponível: o "reservado" do Omie já inclui a reserva deste próprio pedido (mesma regra da Necessidade do PCP).
+  function calcularFalta(quantidade, estoqueFisico) {
+    if (estoqueFisico == null || estoqueFisico === '' || !isFinite(Number(estoqueFisico))) return null;
+    const q = Number(quantidade);
+    if (!isFinite(q)) return null;
+    return Math.max(0, Math.round((q - Number(estoqueFisico)) * 1000) / 1000);
+  }
+
+  window.QuadrosPedidosCalc = { calcularFalta, progressoFabricacao, classificarItem, resumoItens, itensParaSeparar, itensDoKit, lerLinhaComponente, componentesDoQuadro, chaveDaOp };
 })();

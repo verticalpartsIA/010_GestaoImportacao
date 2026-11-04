@@ -1,0 +1,22 @@
+/* Quadros de Comando — impressão das telas Pedidos com Quadro, Separação PV QC e Separação FAB QC (04/11/2026).
+   O botão "Imprimir" abre a impressão do navegador; aqui sai o que não é conteúdo (menu, topo, botões, bolha do assistente) e a caixa
+   rolável vira página corrida. Em A4 deitado, com as colunas completas. */
+.qc-print-only { display: none; }
+@media print {
+  @page { size: A4 landscape; margin: 10mm; }
+  .sidebar, .header, .toast-viewport, .vpc-bubble, .qc-no-print { display: none !important; }
+  .app { display: block !important; }
+  .main { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+  .qc-print-only { display: block !important; }
+  .qc-caixa { max-height: none !important; overflow: visible !important; box-shadow: none !important; border: 0 !important; }
+  .qc-sub { background: #fff !important; }
+  table.t { width: 100% !important; font-size: 10px !important; }
+  table.t th, table.t td { padding: 3px 5px !important; }
+  tr { break-inside: avoid; }
+  thead { display: table-header-group; }
+  body, .page { background: #fff !important; }
+}
+
+/* A tabela de itens dentro do pedido não herda a largura mínima de 280 px que pcp-tabelas.css dá à 2ª coluna das tabelas pcp-grid
+   (o Código ficava largo e a caixa ganhava rolagem horizontal, escondendo Peguei e Código). */
+table.t.pcp-grid.qc-itens tbody td:nth-child(2) { min-width: 0; }

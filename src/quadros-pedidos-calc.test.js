@@ -140,3 +140,13 @@ test('chaveDaOp: pedido da OP, senão o da OP-mãe (OS), senão a própria OP', 
   assert.equal(C.chaveDaOp({ numero: 'OP-0003-Q1', pedido_codigo: null }, 9224550374), '9224550374');
   assert.equal(C.chaveDaOp({ numero: 'OP-0016-Q', pedido_codigo: null }, null), 'op:OP-0016-Q');
 });
+
+test('calcularFalta: pede 20, tem 4 → faltam 16; tem de sobra → 0; estoque desconhecido → null (nunca chuta zero)', () => {
+  assert.equal(C.calcularFalta(20, 4), 16);
+  assert.equal(C.calcularFalta(2, 5), 0);
+  assert.equal(C.calcularFalta(2, 0), 2);
+  assert.equal(C.calcularFalta(1.5, 0.25), 1.25);
+  assert.equal(C.calcularFalta(20, null), null);
+  assert.equal(C.calcularFalta(20, undefined), null);
+  assert.equal(C.calcularFalta(20, 'x'), null);
+});

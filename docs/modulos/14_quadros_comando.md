@@ -57,10 +57,10 @@ Uma linha **por pedido do Omie**, com sete colunas: **Nº do pedido**, **Cliente
 - Etiquetas pequenas: **OS** (Ordem de Serviço) e "etapa N no Omie" quando o pedido não está na 20 (o 29972 está na 00).
 
 ### 14.1.5 Botões e controles
-Só ordenar por coluna. Sem botão de ação e sem clique na linha. **Conferido.**
+Ordenar por coluna e **🖨 Imprimir** (abre a impressão do navegador, A4 deitado, sem menu nem botões e com a data e o nome de quem imprimiu; estilos em `styles/quadros-comando.css`). Sem clique na linha. **Conferido** (código; a impressão em papel/PDF **não foi vista** nesta sessão).
 
 ### 14.1.6 Comportamento
-Recarrega sozinha a cada minuto e ao voltar para a aba. A caixa da tabela tem a **altura da janela** (cálculo por `getBoundingClientRect`), para a **barra de rolagem lateral ficar sempre à vista** (a altura fixa "tela − 190 px" do padrão `pcp-rolagem` deixava a barra fora da tela nesta página). **Conferido** (medido: a caixa terminava em 826 px numa janela de 846 px).
+Recarrega sozinha a cada minuto e ao voltar para a aba. A caixa da tabela tem a **altura da janela** (cálculo por `getBoundingClientRect`), para a **barra de rolagem lateral ficar sempre à vista** (a altura fixa "tela − 190 px" do padrão `pcp-rolagem` deixava a barra fora da tela nesta página). A altura é **recalculada a cada renderização**: avisos que aparecem depois da carga (como o de "sem acesso") empurravam a caixa e a barra saía da janela. **Conferido** (medido: a caixa termina em 825 px numa janela de 846 px).
 
 ### 14.1.7 Dados
 **Só lê:** `pcp_quadro_variante` (5 variantes com produto; a de 30 kW/220 V ainda sem produto), `pcp_ordens` (OPs de quadro `aguardando`/`em_producao`: **18** em 04/11/2026; 25 no total), `fabricacao_quadro_status` e `fabricacao_quadro_itens` (andamento), `pcp_pedidos` e `pcp_pedido_itens`. Nenhuma gravação. **Conferido** (consultas e código).
@@ -100,19 +100,21 @@ Rota `quadros-separacao`; URL `/quadros-de-comando/quadros-separacao[/<codigo_pe
 Gravar "Peguei" exige **sessão real do portal** e a alçada `quadros-separacao` **editar**; ler o que já foi pego exige **ver** (decisão no banco, funções abaixo). Em 04/11/2026 a alçada (`ver` e `editar`) foi concedida a **9 perfis** do departamento Logística/Almoxarifado/Produção (18 linhas, `concedido_por` "sistema (04/11/2026 — Separação PV QC…)", com o "Confirmo" do Gelson): Almoxarifado, Caio Silva, Danilo Oliveira, Franklin Costa, Geovanna Resende, Magda Torres, Matheus Leão (conta de Expedição), Produção Corrimão (conta compartilhada) e Tiago Acácio. O Administrador passa sempre. **Conferido** (`alcadas_capacidade`).
 
 ### 14.2.4 O que a tela mostra
-Tabela de duas colunas. Aberto o pedido: "N de M itens pegos · <total por unidade>" e a tabela **Peguei · Código · Descrição · Quantidade · Un.** Item pego mostra "quem · dia e hora" e fica esmaecido. **Total por unidade de medida** ("23 PC"; **metro e peça nunca se somam**). Itens da lista = os "itens de separação" (Glossário). Sem itens: "Nada para separar neste pedido (só quadro e cabos, ou serviço)". **Conferido.**
+Tabela de duas colunas. Aberto o pedido: "N de M itens pegos · <total por unidade>" e a tabela **Peguei · Código · Descrição · Quantidade · Un.** Item pego mostra "quem · dia e hora" e fica esmaecido. **Total por unidade de medida** ("23 PC"; **metro e peça nunca se somam**). Itens da lista = os "itens de separação" (Glossário). **Cinco colunas novas (04/11/2026):** **Em estoque** (estoque **físico** do Omie, de `importacao_varejo_estoque`, senão `pcp_estoque`), **Estoque real** (o usuário **digita** o que há de verdade na prateleira; em branco vale o do sistema), **Falta** (quantidade do pedido − estoque, nunca negativa, usando o **real** se digitado; ex.: pede 23, sistema 14, **faltam 9**; com real 0, faltam 23; em vermelho), **Previsão de entrega** (data) e **Observações** (texto livre, até 300 caracteres). Estoque desconhecido (item sem registro de estoque, linha de componente do quadro, ou leitura que falhou) mostra "—" e **não** zero. Item já "Peguei" mostra "—" em Falta; sem falta, a Falta mostra 0 e a Previsão "—". O resumo do pedido diz quantos itens têm falta. Sem itens: "Nada para separar neste pedido (só quadro e cabos, ou serviço)". **Conferido.**
 
 ### 14.2.5 Botões e controles
-A linha expande/recolhe (um pedido por vez); a caixa **Peguei** marca e desmarca. **Conferido.**
+A linha expande/recolhe (um pedido por vez); a caixa **Peguei** marca e desmarca; **🖨 Imprimir** expande **todos** os pedidos e abre a impressão do navegador (14.1.5); em cada item, o **estoque real**, a **previsão de entrega** (só quando há falta) e as **observações** gravam ao sair do campo (a data, ao mudar). **Conferido** (código e tela; a falta recalculou ao vivo ao digitar o real). Gravar usa as migrations `20261104140000` (aplicada) e `20261104150000` (estoque real, aplicada em 04/11/2026 e testada em transação desfeita: zero é valor válido, negativo e item inexistente recusados, sem alçada e sem sessão recusados, limpar tudo apaga a linha).
 
 ### 14.2.6 Comportamento
 Marcar chama `qc_separacao_marcar`; sucesso atualiza a tela; **erro vira aviso** na faixa vermelha e numa mensagem (Art. 9). Com a chave pública (localhost "Dev Admin") a leitura e a gravação são **recusadas** e a tela **avisa** em vez de fingir que gravou ("Esta sessão não tem acesso para gravar. Entre pela sua conta do portal."). Recarrega a cada minuto. **Conferido** (comportamento no localhost; a gravação pela tela com login real **não foi vista**: só o banco foi testado).
 
 ### 14.2.7 Dados
-**Lê:** a carga de 14.1; `qc_separacao_itens` por `qc_separacao_listar`. **Grava:** `qc_separacao_itens` (um registro por pedido + item pego) e `qc_separacao_hist` (imutável: "pegou" e "devolveu"), **só** por `qc_separacao_marcar`. Em 04/11/2026 as duas tabelas estão **vazias**. **Conferido.**
+**Lê:** a carga de 14.1 (mais o estoque físico: `importacao_varejo_estoque`, `pcp_estoque`); `qc_separacao_itens` por `qc_separacao_listar`; `qc_separacao_previsao` (previsão, observação e estoque real) por `qc_separacao_previsao_listar`. **Grava:** `qc_separacao_itens` (um registro por pedido + item pego) e `qc_separacao_hist` (imutável: "pegou" e "devolveu"), **só** por `qc_separacao_marcar`; `qc_separacao_previsao` e `qc_separacao_previsao_hist` (imutável: "definiu", "alterou", "limpou"), **só** por `qc_separacao_previsao_gravar` (migration `20261104140000`, mesma alçada ver/editar do Peguei). Em 04/11/2026 as duas tabelas estão **vazias**. **Conferido.**
 
 ### 14.2.8 Regras e armadilhas
 - **O que se separa** (Glossário e PC-4): tudo do pedido **menos** o quadro, os cabos do kit, as matérias-primas (VPMP) e o serviço (VPSVC). A **máquina de tração** entra (decisão do Gelson, 04/11/2026). Item novo no Omie que não seja cabo cai aqui por padrão.
+- **O estoque real é anotação, não corrige o Omie:** vale só para a Falta desta tela e fica no histórico (`qc_separacao_previsao_hist`); o ajuste do estoque no Omie continua pelo fluxo de contagem/ajuste (12.1).
+- **Falta usa o estoque FÍSICO, não o disponível:** o "reservado" do Omie já inclui a reserva deste próprio pedido (mesma regra da Necessidade do PCP, 13.1). **Limite:** não desconta o que **outros pedidos** também esperam do mesmo estoque (dois pedidos pedindo 10 de um item com 12 em estoque mostram falta 0 nos dois). **Conferido** (pedido 9226351151: VPB-065, 23 pedidos, 14 em estoque, 9 de falta).
 - **O servidor confere** que o item existe naquele pedido do Omie antes de gravar; repetir a marca **não duplica** nem gera histórico à toa. **Conferido** (teste em transação desfeita).
 - **Quem marca sem a alçada é recusado** ("sem alçada editar"). **Conferido** com uma usuária ativa sem a alçada (Amanda Silva); a primeira rodada do teste usou um e-mail que não era perfil ativo e foi recusada por "sem sessão", o que **não** provava a trava de alçada — por isso foi refeita.
 - **As duas contas compartilhadas** (Almoxarifado, Expedição, Produção Corrimão) têm a alçada; quando uma delas marca, o histórico registra o **e-mail da conta**, não a pessoa.
@@ -122,6 +124,8 @@ Marcar chama `qc_separacao_marcar`; sucesso atualiza a tela; **erro vira aviso**
 
 ### 14.2.10 Pendências e decisões
 - A **gravação pela tela com login real** ainda não foi vista (só o banco foi testado): conferir no primeiro uso.
+- A gravação da previsão pela **tela com login real** ainda não foi vista (o banco foi testado: definir, repetir sem duplicar, alterar, listar, limpar, item inexistente, data fora do intervalo, sem alçada e sem sessão, numa transação desfeita; `anon` sem acesso).
+- Decidir se a **falta** deve descontar o que outros pedidos já esperam do mesmo estoque (hoje não desconta).
 - Ligar o **status da Separação** (pendente, parcial, pronto) à coluna de 14.1.
 - Decidir se as contas compartilhadas devem manter a alçada (rastreio por pessoa).
 
@@ -147,7 +151,7 @@ O "Peguei" usa a **mesma alçada** da PV QC (`quadros-separacao`, ver/editar), p
 Por pedido: primeiro os **cabos do kit** (rótulo "Cabo do kit", código do item), depois os **componentes do quadro** (rótulo "Componente do quadro", código "VPEL-735A · item 3"). No 30614: **31 linhas** = 9 do kit (VPB-097, 098, 099, 100, 101, 102, 105, 106 e o VPEL-529n de **40 M**) + 22 componentes; total "40 M · 104 PC · 2 UN". **Conferido** (leitura na tela).
 
 ### 14.3.5 Botões e controles
-Igual à 14.2: expandir a linha e marcar "Peguei". **Conferido.**
+Igual à 14.2: expandir a linha, marcar "Peguei", **Imprimir** e gravar a **previsão de entrega**. As colunas **Em estoque** e **Falta** valem para os **cabos do kit** (têm código de estoque); as **linhas de componente do quadro** não têm código de estoque e mostram "—" (a previsão pode ser digitada mesmo assim). **Conferido** (código).
 
 ### 14.3.6 Comportamento
 Igual à 14.2. **Os componentes só aparecem se o pedido já foi relido pela rotina** depois de 04/11/2026; pedido não relido mostra só o kit. **Conferido.**
@@ -257,7 +261,7 @@ Catálogo (`CATALOGO_MODULOS`): `quadros-pedidos`, `quadros-separacao` e `quadro
 - **Nenhum cron novo** foi criado para este módulo. **Conferido** (`cron.job`).
 
 ## PC-8 Tabelas
-**Novas (04/11/2026):** `qc_separacao_itens`, `qc_separacao_hist`; coluna nova `pcp_pedido_itens.obs_item`. **Lidas:** `pcp_pedidos`, `pcp_pedido_itens`, `pcp_ordens`, `pcp_quadro_variante`, `fabricacao_quadro_*`. **Ilhadas (formulário):** `quadros_comando` e suas filhas. **Fora do produto, com dado:** `mes_*` (PC-1). **Conferido.**
+**Novas (04/11/2026):** `qc_separacao_itens`, `qc_separacao_hist`, `qc_separacao_previsao` e `qc_separacao_previsao_hist` (estas duas nas migrations `20261104140000` e `20261104150000`, aplicadas em 04/11/2026 com o "Confirmo" do Gelson; a segunda acrescenta o estoque real); coluna nova `pcp_pedido_itens.obs_item`. **Lidas:** `pcp_pedidos`, `pcp_pedido_itens`, `pcp_ordens`, `pcp_quadro_variante`, `fabricacao_quadro_*`. **Ilhadas (formulário):** `quadros_comando` e suas filhas. **Fora do produto, com dado:** `mes_*` (PC-1). **Conferido.**
 
 ## PC-9 Navegação, cache e testes
 Aba e item na URL (`useRotaId`); `?v=` obrigatório (Art. 19). **O verificador local `check-cache-bust.js` só enxerga o que já foi commitado:** antes do commit, conferir à mão que cada arquivo alterado tem `?v=` acima do de `origin/main` (inclusive `fabricacao-oficina.html`, que carrega o cálculo do Corte). Testes do módulo: `quadros-pedidos-calc.test.js` (12); a suíte passou **991/991** em 04/11/2026. **Sem teste:** as quatro telas e a carga de dados. **Conferido.**

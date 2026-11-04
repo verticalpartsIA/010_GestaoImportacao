@@ -5,7 +5,7 @@
    Quem entra: pedidos do Omie na etapa 20 que têm item que é quadro de comando (pcp_quadro_variante) + o pedido de toda OP de quadro
    ativa (aguardando/em produção), inclusive Ordem de Serviço (pedido da OP-mãe) e proposta (etapa 00). OP de quadro SEM pedido de
    venda do Omie não entra (decisão do Gelson, 04/11/2026: não se fabrica o que não é pedido de venda).
-   Cada linha traz: pedido, ops, esperado (nº de quadros), fab {pct, sub}, sep {linhas, unidades}, itensSeparar [...], cabos,
+   Cada linha traz: itens (com estoque físico e falta), pedido, ops, esperado (nº de quadros), fab {pct, sub}, sep {linhas, unidades}, itensSeparar [...], cabos,
    numero, cliente, vendedor, incluido, prazo. Regras puras em quadros-pedidos-calc.js; andamento = mesmo % da Evolução da Fabricação.
    ============================================================ */
 (function () {
@@ -79,7 +79,7 @@
     });
     ops.forEach((op) => { linha(chaveOp(op)).ops.push(op); });
 
-    return Array.from(porChave.values()).filter((r) => r.pedido).map((r) => {
+    const linhasFinais = Array.from(porChave.values()).filter((r) => r.pedido).map((r) => {
       const f = C.progressoFabricacao(r.ops.map(pctDaOp), r.esperado);
       // Quadro de comando = código de variante ou o produto da OP de quadro (ex.: 702b/704b); cabos vão no kit do quadro.
       const codigosDoQuadro = [...codigosQuadro, ...r.ops.map((x) => x.produto).filter(Boolean)];
@@ -100,6 +100,31 @@
         prazo: r.pedido.data_previsao,
       };
     }).sort((a, b) => String(a.prazo || '9999').localeCompare(String(b.prazo || '9999')));
+
+    // 7) estoque físico dos itens com código de estoque (a linha de componente "<ITEM>#n" não tem). Falha ao ler NÃO derruba a tela:
+    //    as linhas ficam com estoque desconhecido (null) e `estoqueErro` diz por quê (a tela mostra "—" e avisa).
+    const codigos = new Set();
+    linhasFinais.forEach((r) => { [...r.itensSeparar, ...r.itensKit].forEach((i) => { if (i.codigo && !String(i.codigo).includes('#')) codigos.add(String(i.codigo)); }); });
+    const fisico = {};
+    let estoqueErro = null;
+    try {
+      const lista = Array.from(codigos);
+      for (let k = 0; k < lista.length; k += 150) {
+        const parte = lista.slice(k, k + 150);
+        const a = await sb.from('importacao_varejo_estoque').select('codigo, fisico').in('codigo', parte);
+        if (a.error) throw a.error;
+        (a.data || []).forEach((x) => { fisico[String(x.codigo).toUpperCase()] = Number(x.fisico) || 0; });
+        const faltam = parte.filter((c) => fisico[c.toUpperCase()] === undefined);
+        if (faltam.length) {
+          const b = await sb.from('pcp_estoque').select('codigo, quantidade, local_estoque').in('codigo', faltam);
+          if (b.error) throw b.error;
+          (b.data || []).forEach((x) => { const c = String(x.codigo).toUpperCase(); fisico[c] = (fisico[c] || 0) + (Number(x.quantidade) || 0); });
+        }
+      }
+    } catch (e) { estoqueErro = (e && e.message) || String(e); }
+    const estoqueDe = (i) => (estoqueErro || String(i.codigo).includes('#') ? null : (fisico[String(i.codigo).toUpperCase()] ?? null));
+    const comEstoque = (i) => ({ ...i, estoque: estoqueDe(i), falta: C.calcularFalta(i.quantidade, estoqueDe(i)) });
+    return linhasFinais.map((r) => ({ ...r, itensSeparar: r.itensSeparar.map(comEstoque), itensKit: r.itensKit.map(comEstoque), itensComponentes: r.itensComponentes.map(comEstoque), estoqueErro }));
   }
 
   /* "Peguei" dos itens a separar (tabela qc_separacao_itens, só por função: exige sessão real do portal + alçada
@@ -122,5 +147,24 @@
     return data;
   }
 
-  window.QuadrosPedidosStore = { carregar, listarPegos, marcar, chavePeguei };
+  /* Anotações por item: previsão de entrega, observação e ESTOQUE REAL digitado (tabela qc_separacao_previsao, migrations 20261104140000 e 20261104150000; só por função, mesma alçada do Peguei).
+     Mapa "<codigo_pedido>|<CODIGO>" → { previsao 'AAAA-MM-DD' | null, obs, por, em }. */
+  async function listarPrevisoes(sb, codigosPedido) {
+    const ids = (codigosPedido || []).map(Number).filter(Boolean);
+    if (!ids.length) return {};
+    const { data, error } = await sb.rpc('qc_separacao_previsao_listar', { p_pedidos: ids });
+    if (error) throw error;
+    const m = {};
+    (data || []).forEach((x) => { m[chavePeguei(x.codigo_pedido, x.codigo)] = { previsao: x.previsao, obs: x.obs, estoque_real: x.estoque_real == null ? null : Number(x.estoque_real), por: x.atualizado_por, em: x.atualizado_em }; });
+    return m;
+  }
+
+  async function gravarPrevisao(sb, codigoPedido, codigo, previsao, obs, estoqueReal) {
+    const real = estoqueReal === '' || estoqueReal == null ? null : Number(estoqueReal);
+    const { data, error } = await sb.rpc('qc_separacao_previsao_gravar', { p_codigo_pedido: Number(codigoPedido), p_codigo: String(codigo), p_previsao: previsao || null, p_obs: obs || null, p_estoque_real: real });
+    if (error) throw error;
+    return data;
+  }
+
+  window.QuadrosPedidosStore = { carregar, listarPegos, marcar, chavePeguei, listarPrevisoes, gravarPrevisao };
 })();
