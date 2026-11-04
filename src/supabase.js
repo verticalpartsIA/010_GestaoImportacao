@@ -108,10 +108,14 @@
       if (!simulaReal) {
         const pedido = params.get('dev');
         const perfil = (pedido === 'admin' || pedido === 'pleno') ? pedido : ((atual && atual.devPerfil) || 'admin');
+        // Navegador automatizado (testes e2e) sem ?dev=: mantém o dev comum de antes, sem alçadas nem perfil de admin.
+        const automatizado = !pedido && !(atual && atual.devPerfil) && !!navigator.webdriver;
         sessionStorage.setItem('vpprd_sso_ok', '1');
-        saveUser(perfil === 'pleno'
-          ? { nome: 'Dev Pleno', email: 'dev@localhost', iniciais: 'DP', id: 'dev-local', devPerfil: 'pleno' }
-          : { nome: 'Dev Admin', email: 'dev@localhost', iniciais: 'DA', id: 'dev-local', devPerfil: 'admin' });
+        saveUser(automatizado
+          ? { nome: 'Desenvolvimento', email: 'dev@localhost', iniciais: 'DV', id: 'dev-local', devPerfil: 'nenhum' }
+          : perfil === 'pleno'
+            ? { nome: 'Dev Pleno', email: 'dev@localhost', iniciais: 'DP', id: 'dev-local', devPerfil: 'pleno' }
+            : { nome: 'Dev Admin', email: 'dev@localhost', iniciais: 'DA', id: 'dev-local', devPerfil: 'admin' });
       }
     }
 
