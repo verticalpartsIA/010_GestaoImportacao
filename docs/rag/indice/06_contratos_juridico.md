@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/06_contratos_juridico.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `53e05d6`)
-- **Palavras:** 10915 · **blocos:** 236 · **seções com selo próprio:** 35 de 48
-- **Origem do selo dos blocos:** próprio 61 · da seção 115 · da seção-pai 0 · do cabeçalho 36 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 24
-- **Selo efetivo dos blocos:** Conferido 171 · Herdado 22 · Não verificado 19
+- **Palavras:** 11039 · **blocos:** 237 · **seções com selo próprio:** 35 de 48
+- **Origem do selo dos blocos:** próprio 62 · da seção 115 · da seção-pai 0 · do cabeçalho 36 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 24
+- **Selo efetivo dos blocos:** Conferido 172 · Herdado 22 · Não verificado 19
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -63,4 +63,4 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-9 Navegação, cache e testes | `docs/modulos/06_contratos_juridico.md#pc-9-navegação-cache-e-testes` | 2 | Conferido (uniforme) | 4 | b2 s2 |
 | PC-10 Menu "?" e tutoriais | `docs/modulos/06_contratos_juridico.md#pc-10-menu--e-tutoriais` | 2 | Conferido (uniforme) | 5 | b1 s4 |
 | PC-11 Documentos soltos e destino do que foi concatenado | `docs/modulos/06_contratos_juridico.md#pc-11-documentos-soltos-e-destino-do-que-foi-concatenado` | 2 | Não verificado (uniforme) | 2 | b1 s1 |
-| PC-12 Benefícios trocados com os outros módulos | `docs/modulos/06_contratos_juridico.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 2 | Não verificado (misto (vale o mais fraco)) | 14 | b6 s8 |
+| PC-12 Benefícios trocados com os outros módulos | `docs/modulos/06_contratos_juridico.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 2 | Não verificado (misto (vale o mais fraco)) | 15 | b7 s8 |

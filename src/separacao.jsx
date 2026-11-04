@@ -259,7 +259,6 @@ function SepDetalhe({ codigo, caps, voltar, onMudou, embutido }) {
                       {pd && <div style={{ fontSize: 12 }}><Badge variant="warning">{SEP_SIT[pd.situacao]}</Badge> <i>{pd.obs}</i> <span style={{ color: 'var(--fg3)' }}>— {sepNome(pd.por)}, {sepData(pd.em)}</span></div>}
                       {pd && pd.situacao === 'na_operacao' && caps.enviarFab && (
                         <div style={{ marginTop: 4 }}>
-                          <button className="btn btn--sm" disabled={ocupado} title="Registra o item no Quadro de Comando (se for um quadro, cria o pedido de quadro)" onClick={() => enviarDest(i, 'quadro')}>Quadro de Comando</button>{' '}
                           <button className="btn btn--sm" disabled={ocupado} title="Cria a OP e leva o item para a tela de Fabricação Corrimão" onClick={() => enviarFab(i, 'corrimao')}>Corrimão</button>{' '}
                           <button className="btn btn--sm" disabled={ocupado} title="Cria a OP e leva o item para a tela de Fabricação Corte" onClick={() => enviarFab(i, 'corte')}>Corte</button>{' '}
                           <button className="btn btn--sm" disabled={ocupado} title="Registra o item como pronto para a Expedição" onClick={() => enviarDest(i, 'expedicao')}>Expedição</button>

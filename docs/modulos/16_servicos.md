@@ -1,8 +1,8 @@
-# 15 Serviços — Central de Avisos (WhatsApp, gi-avisos, Copiloto, Telegram, vpsistema, E-mail) — REAL, fonte da verdade (01/11/2026)
+# 16 Serviços — Central de Avisos (WhatsApp, gi-avisos, Copiloto, Telegram, vpsistema, E-mail) — REAL, fonte da verdade (01/11/2026)
 
 > **Nota de histórico (pedido do rascunho, item 9)**
 > - **01/11/2026 — Claude do repositório:** criou o rascunho `serviços.md` na raiz (S1 a S5, fatos de partida, modelo a manter).
-> - **01/11/2026 — Claude da VPS (esta versão):** por ordem do Gelson, o rascunho **mudou-se para `docs/modulos/15_servicos.md`** e virou o compilado de **todos os serviços de aviso e mensagem do hub, inclusive o que existe no vpsistema.com** (a "central de avisos"). Conferi o código e a configuração da VPS (gi-avisos, Copiloto, ponte do Telegram, Evolution), o banco do hub e do vpsistema (só SELECT) e os ~40 documentos do repositório que falam de gi-avisos, WhatsApp, Telegram e Inbox. Acrescentei o **S6 E-mail (canal do Inbox)**, por decisão do Gelson (canal aqui, tela e lei no 1.5). Corrigi seis fatos do rascunho que o código desmente (ver "Fatos do rascunho corrigidos", no fim).
+> - **01/11/2026 — Claude da VPS (esta versão):** por ordem do Gelson, o rascunho **mudou-se para `docs/modulos/16_servicos.md`** e virou o compilado de **todos os serviços de aviso e mensagem do hub, inclusive o que existe no vpsistema.com** (a "central de avisos"). Conferi o código e a configuração da VPS (gi-avisos, Copiloto, ponte do Telegram, Evolution), o banco do hub e do vpsistema (só SELECT) e os ~40 documentos do repositório que falam de gi-avisos, WhatsApp, Telegram e Inbox. Acrescentei o **S6 E-mail (canal do Inbox)**, por decisão do Gelson (canal aqui, tela e lei no 1.5). Corrigi seis fatos do rascunho que o código desmente (ver "Fatos do rascunho corrigidos", no fim).
 > - **01/11/2026 — aprovado pelo Gelson.** Respostas dele registradas em "Decisões do Gelson" (abaixo). No mesmo dia: lido o repositório privado `17_gente-gestao` (autorizado), o que corrigiu S1.2, S1.4 e S1.5 e revelou que **ninguém chama a função do aval por WhatsApp** (achado A19); restaurados na lista "quem recebe" (S2.5) os nomes que o texto antigo do Geral trazia. A troca das origens por ponteiros, as doações aos módulos e a emenda do apontamento no `CLAUDE.md` vão no PR seguinte.
 > - **02/11/2026 — fechamento da parte documental (Claude da VPS).** Pedido do Gelson: "se encontrar algo fora desse contexto crie issues […] no documento deve constar os achados e números das issues além dos links". Cada achado do quadro ganhou **uma issue** (#1312 a #1339) com o link ao lado. As decisões de 02/11 (aval por WhatsApp, Copiloto lendo `vp_copiloto_docs`) foram registradas, e a parte **operacional** (publicar e testar) ficou para a próxima fase, também em issues. Duas correções conferidas neste dia: o repositório **010 está privado** (o "repositório público" dos A2 e A18 estava errado; o do vpsistema é que é público) e o **A16 foi confirmado** (a Evolution é alcançável pela internet, sem criptografia).
 > - **Ficou pendente:** só decisões e operação, todas com issue (quadro de achados).
@@ -15,15 +15,15 @@
 >
 > **Escopo:** os serviços que **levam ou trazem mensagens** para as pessoas do hub (hub.vpsistema.com) e do vpsistema.com: S1 WhatsApp (canal Evolution), S2 gi-avisos, S3 Copiloto VP, S4 Telegram, S5 vpsistema (login, pessoas, alçadas, Central de Eventos e mensagens próprias) e S6 E-mail (canal do Inbox). **Não são deste documento:** a **regra de negócio** de cada aviso (quem aprova o quê, quando um prazo vence) — mora no módulo que cria o aviso, e aqui só se aponta; a **tela** Inbox e a sua **lei blindada** (`01_geral.md` 1.5); a tela Notificações (1.2) e a Central de Decisões (1.3); os sistemas vizinhos que usam o mesmo número de WhatsApp (pv360/Verti, VP Click, Escamax, VPRequisições), descritos só como vizinhos em PC-10.
 >
-> **Já documentado em outro lugar (não se repete, aponta):** `alertas` como barramento, rota padrão e expiração em `01_geral.md` PC-4 e 1.2; o aval do montador por WhatsApp em `11_parceiros_instaladores.md` e `01_geral.md` 1.3; segurança real (#571), inventário completo de Edge Functions e crons em `14_administracao.md` PC-4, PC-6 e PC-7; a lei do e-mail em `01_geral.md` 1.5 e no `CLAUDE.md` ("ÁREA BLINDADA — Sistema de E-mail / Inbox").
+> **Já documentado em outro lugar (não se repete, aponta):** `alertas` como barramento, rota padrão e expiração em `01_geral.md` PC-4 e 1.2; o aval do montador por WhatsApp em `11_parceiros_instaladores.md` e `01_geral.md` 1.3; segurança real (#571), inventário completo de Edge Functions e crons em `15_administracao.md` PC-4, PC-6 e PC-7; a lei do e-mail em `01_geral.md` 1.5 e no `CLAUDE.md` ("ÁREA BLINDADA — Sistema de E-mail / Inbox").
 
 ## Como esta numeração funciona
-- A regra de numeração (móvel, como cláusula de contrato) mora uma vez só em `docs/modulos/01_geral.md`. Aqui o "módulo" é **15** e cada serviço é um **S** (S1 a S6), no lugar das telas. A ordem S1–S5 veio do rascunho; o **S6** foi acrescentado no fim para não renumerar (Art. 43). Proposta de nova ordem, se houver, entra aqui no topo, não se renumera sozinho.
+- A regra de numeração (móvel, como cláusula de contrato) mora uma vez só em `docs/modulos/01_geral.md`. Aqui o "módulo" é **16** e cada serviço é um **S** (S1 a S6), no lugar das telas. A ordem S1–S5 veio do rascunho; o **S6** foi acrescentado no fim para não renumerar (Art. 43). Proposta de nova ordem, se houver, entra aqui no topo, não se renumera sozinho.
 - Cada serviço tem os mesmos temas: **x.1 O que é · x.2 Onde está · x.3 Quem usa · x.4 Como entra e sai · x.5 Regras e janelas · x.6 Dados · x.7 Segurança · x.8 Falhas e como se percebe · x.9 Testes · x.10 Pendências e achados · x.11 Histórico**.
 - O que vale para todos fica na **Parte comum** (PC-1 a PC-12), sem número de serviço. Mudou algo? Escreva no tema certo e **reescreva o Índice e o Glossário** na mesma sessão.
 
 ## Índice
-15. **Serviços — Central de Avisos**
+16. **Serviços — Central de Avisos**
    S1 WhatsApp (canal Evolution) · S2 gi-avisos (avisos do fluxo) · S3 Copiloto VP · S4 Telegram · S5 vpsistema (login, pessoas, alçadas, Central de Eventos, mensagens próprias) · S6 E-mail (canal do Inbox)
    &nbsp;&nbsp;&nbsp;Cada serviço: x.1 O que é · x.2 Onde está · x.3 Quem usa · x.4 Como entra e sai · x.5 Regras e janelas · x.6 Dados · x.7 Segurança · x.8 Falhas e como se percebe · x.9 Testes · x.10 Pendências e achados · x.11 Histórico
    Parte comum (sem número de serviço)
@@ -443,7 +443,7 @@ e-mail: telas ──send-email──▶ SMTP · IMAP ──read-inbox (10 min)�
 
 ## PC-4 Segurança e segredos
 - **Nenhum valor de segredo neste documento** (Art. 28). Os nomes estão em S1.7, S2.7, S3.7, S4.7, S5.7 e S6.7.
-- **`alertas` aceita INSERT, SELECT e UPDATE de qualquer papel (`public`)**; como todo alerta dirigido vira WhatsApp, esse problema de segurança já conhecido (#571, `14_administracao.md` PC-4) também afeta quem recebe mensagem. **Conferido** (`pg_policies`, 01/11/2026). Fechar `alertas` é decisão da segurança real (#571).
+- **`alertas` aceita INSERT, SELECT e UPDATE de qualquer papel (`public`)**; como todo alerta dirigido vira WhatsApp, esse problema de segurança já conhecido (#571, `15_administracao.md` PC-4) também afeta quem recebe mensagem. **Conferido** (`pg_policies`, 01/11/2026). Fechar `alertas` é decisão da segurança real (#571).
 - **Credenciais compartilhadas entre serviços da VPS** (achado A7): gi-avisos lê a senha do banco no arquivo do Copiloto e o bot no arquivo do Borderô; o Copiloto lê a Evolution e a conexão do vpsistema no arquivo do gi-avisos.
 - **A Evolution é alcançável pela internet, sem criptografia** (achado A16, [#1326](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1326)): a porta da API é publicada pelo Docker por fora do firewall (que só libera 22, 80 e 443), e o `whatsapp-dispatcher` do vpsistema a chama pelo IP público, por HTTP. A única proteção é a chave da API. **Conferido** (`ss`, `ufw`, código do dispatcher, 02/11/2026).
 - Telefones no repositório (privado desde a conferência de 02/11/2026; o Art. 28 continua valendo): achado A2, [#1312](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1312).
@@ -456,7 +456,7 @@ e-mail: telas ──send-email──▶ SMTP · IMAP ──read-inbox (10 min)�
 - **Claude do repositório / Claude da VPS:** o primeiro mexe no hub; o segundo, nos serviços da VPS; **não mexer no gi-avisos** sem pedido (S2.5).
 
 ## PC-6 Edge Functions e crons
-**Hub, Edge Functions ligadas a mensagens** (versão e `verify_jwt` conferidos de 30/10 a 01/11/2026): `send-email` v24 (true) · `read-inbox` v17 (true) · `sign-email-anexos` v7 (true) · `suggest-email-reply` v7 (true) · `eventos-publicar` v3 (true) · `decisao-resposta-whatsapp` v1 (false) · ~~`whatsapp-notify` v10~~ e ~~`vp-copiloto` v36~~ (removidas em 01/11/2026) · `sso-exchange` v5 (false) · `vpsistema-sync` v8 (false) · `alerta-pcp-compras` e `alerta-pcp-prazos` (gravam `alertas`). Inventário completo e regras de deploy: `14_administracao.md` PC-6.
+**Hub, Edge Functions ligadas a mensagens** (versão e `verify_jwt` conferidos de 30/10 a 01/11/2026): `send-email` v24 (true) · `read-inbox` v17 (true) · `sign-email-anexos` v7 (true) · `suggest-email-reply` v7 (true) · `eventos-publicar` v3 (true) · `decisao-resposta-whatsapp` v1 (false) · ~~`whatsapp-notify` v10~~ e ~~`vp-copiloto` v36~~ (removidas em 01/11/2026) · `sso-exchange` v5 (false) · `vpsistema-sync` v8 (false) · `alerta-pcp-compras` e `alerta-pcp-prazos` (gravam `alertas`). Inventário completo e regras de deploy: `15_administracao.md` PC-6.
 
 **Hub, crons que geram mensagem** (UTC; **Conferido** em `cron.job`, 01/11/2026, todos ativos):
 
@@ -519,7 +519,7 @@ Nada foi apagado. Por decisão do Gelson (01/11/2026), **a troca das origens por
 | `01_geral.md` 1.5 | Inbox inteiro | tela e lei **ficam**; canal → S6 |
 | `01_geral.md` 1.3 | aval por WhatsApp | regra → 1.3/módulo 11; mecânica → S1.5 |
 | `11_parceiros_instaladores.md` (fila, `decisao-resposta-whatsapp`) | mecânica de eventos | → S1/PC-2; aval fica no 11 |
-| `14_administracao.md` PC-6/PC-7 (integrações) | inventário | fica; PC-6 daqui aponta |
+| `15_administracao.md` PC-6/PC-7 (integrações) | inventário | fica; PC-6 daqui aponta |
 | `09_obras_instalacao.md` (ART, Evolução) | avisos via gi-avisos | regra do canal → S2/PC-2; negócio fica no 9 |
 | `02`, `04`, `06`, `07` (`wa.me`, e-mail por tela) | atalhos manuais, envios | ficam nos módulos (S1.1 e S6.1 apontam) |
 | `docs/eventos/vphub-instalador.md` | manual da fila e da Central para os avisos do instalador (15/10) | **virou ponteiro** (01/11/2026, decisão do Gelson), sem os telefones; o plano dele nunca foi ligado (A23) |
@@ -530,6 +530,8 @@ Nada foi apagado. Por decisão do Gelson (01/11/2026), **a troca das origens por
 | `README.md`, `docs/CONTEXTO_workflow_setores_vpclick.md`, `.claude/agents/*`, relatórios antigos | menções conceituais ou obsoletas | ficam (histórico); `CONTEXTO_workflow_setores_vpclick.md` **tem um segredo** (A18) |
 
 ## PC-12 Benefícios trocados com os módulos
+
+- **Recebido de Quadros de Comando (04/11/2026, texto em `14_quadros_comando.md` PC-12, Art. 49):** (a) o Omie repete a linha do item com **quantidade 0** — somar por código e ignorar o zero antes de contar linhas ou unidades; (b) **metro e peça nunca se somam** — total por unidade de medida; (c) a caixa de uma tabela longa deve ter a **altura da janela**, para a barra de rolagem lateral ficar à vista; (d) função de banco nova se testa **numa transação que se desfaz**, incluindo um usuário ativo **sem** a alçada (a recusa por "sem sessão" não prova a trava de alçada); (e) a **observação do item** do pedido do Omie (`pcp_pedido_itens.obs_item`) guarda o que a proposta mostra dentro do item. **Conferido** (04/11/2026).
 **Doados (a acrescentar nos módulos no PR de ponteiros, Art. 49):** (1) a regra prática "como escrever um aviso que chega certo" (PC-2) para todo módulo que cria alerta; (2) "todo alerta dirigido vira WhatsApp" para os módulos 1, 9, 11, 12 e 13; (3) "o Copiloto da VPS não lê `vp_copiloto_docs`" para os módulos 4, 5, 6, 8 e 10. **Recebidos:** do 1 (regras de `alertas`), do 11 (aval e assinaturas), do 14 (inventário e segurança).
 
 ---
@@ -600,7 +602,7 @@ Nenhum foi corrigido aqui (Art. 45). **Cada achado tem uma issue** no repositór
 - **D4 — feriados:** as regras do gi-avisos dizem "leitura do hub desligada"; está ligada desde 24/10/2026.
 - **D5 — montador:** as regras exigem `externo:true`; o código usa "sem e-mail + com telefone" e só o papel "Contratado".
 - **D6 — quem aprova o aval:** `docs/eventos/vphub-instalador.md` e o comentário de `decisao-resposta-whatsapp` dizem Diego; módulo 11 e banco dizem Juliana.
-- **D7 — `whatsapp-notify`:** `14_administracao.md` PC-7 a lista como integração em produção; ela não tinha chamador e foi **removida em 01/11/2026**.
+- **D7 — `whatsapp-notify`:** `15_administracao.md` PC-7 a lista como integração em produção; ela não tinha chamador e foi **removida em 01/11/2026**.
 
 ## Fatos do rascunho corrigidos
 | Rascunho dizia | O código e o banco mostram (01/11/2026) |
@@ -618,6 +620,6 @@ Nenhum foi corrigido aqui (Art. 45). **Cada achado tem uma issue** no repositór
 
 **Histórico deste documento**
 - 01/11/2026: rascunho `serviços.md` criado pelo Claude do repositório (raiz).
-- 01/11/2026: movido para `docs/modulos/15_servicos.md` por ordem do Gelson e escrito pelo Claude da VPS, com conferência do código da VPS, do banco do hub e do vpsistema e dos documentos do repositório. Status: em aprovação.
+- 01/11/2026: movido para `docs/modulos/16_servicos.md` por ordem do Gelson e escrito pelo Claude da VPS, com conferência do código da VPS, do banco do hub e do vpsistema e dos documentos do repositório. Status: em aprovação.
 - 01/11/2026: aprovado pelo Gelson (status REAL); removidas `whatsapp-notify` e `vp-copiloto`; ponteiros e doações no PR seguinte.
 - 02/11/2026: fechamento da parte documental: 28 issues de achados e de trabalho operacional (#1312–#1339) ligadas ao quadro; decisões de 02/11; correções "010 privado" e "A16 confirmado".

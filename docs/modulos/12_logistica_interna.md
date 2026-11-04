@@ -140,6 +140,8 @@ Criada em 03/10/2026 junto com a Emissão de NF; selo de itens vindos da Separa�
 
 ## 12.3 Separação
 
+> **Atualização de 04/11/2026:** saiu o botão **Quadro de Comando** dos itens "Na operação" (a separação de pedido de quadro vive em `14_quadros_comando.md`, 14.2 e 14.3). Corrimão, Corte e Expedição seguem como estão. **Conferido** (código).
+
 ### 12.3.1 O que é
 A fila dos pedidos de venda do Omie em **etapa 20** que o almoxarifado precisa separar, com a mesma regra do **celular**, mais o **painel de TV** público. **Conferido** em `separacao.jsx` e `separacao-tv.jsx`.
 
@@ -291,7 +293,9 @@ Aba na URL (`useRouteTab`) e item na URL (`useRotaItem`/`useRotaId`) em todas as
 Seções do `CLAUDE.md` que tratam do módulo e agora têm destino aqui (substituição por ponteiro depende da confirmação do Gelson, Art. 13): PCP — Almoxarifado/Reposição/Necessidade/alertas/Ajustes (parte de estoque), "Estoque — organização, menu Fabricação, carga única e sincronizador único" (fases 1–6), "Separação no hub", "Etiquetas (fases 1–4, rolo, prateleira, ZT230, Expedição como imagem, chicote)", "PCP › Pedidos para Produzir" (fila → **13**), "Fabricação Corrimão/Corte" (→ **13**). Specs: `docs/superpowers/specs/2026-10-17-modulo-etiquetas-design.md` (Etiquetas, mantida como histórico) e `2026-10-26-separacao-distribuicao/` (Separação, histórico). **Histórico fica onde está; nada foi apagado.**
 
 ## PC-12 Benefícios trocados com os outros módulos
+
+- **Recebido de Quadros de Comando (04/11/2026, texto em `14_quadros_comando.md` PC-12, Art. 49):** (a) o Omie repete a linha do item com **quantidade 0** — somar por código e ignorar o zero antes de contar linhas ou unidades; (b) **metro e peça nunca se somam** — total por unidade de medida; (c) a caixa de uma tabela longa deve ter a **altura da janela**, para a barra de rolagem lateral ficar à vista; (d) função de banco nova se testa **numa transação que se desfaz**, incluindo um usuário ativo **sem** a alçada (a recusa por "sem sessão" não prova a trava de alçada); (e) a **observação do item** do pedido do Omie (`pcp_pedido_itens.obs_item`) guarda o que a proposta mostra dentro do item. **Conferido** (04/11/2026).
 **Recebidos:** de Parceiros & Instaladores — status gravado precisa de recálculo; portão de aprovação falha fechado; dado pessoal fora do repositório. **Doados** (texto nos documentos de 1 a 11, linha "Recebido de Logística Interna"): ver cada módulo.
 - **Recebido de Fabricação (01/11/2026, texto em `13_fabricacao.md` PC-12):** a OP-mãe concluída (13.1) libera a Emissão de NF e a Expedição; o PCP gera OP a partir da Necessidade (12.1) e o item "Na operação" da Separação vira OP de Corrimão/Corte (13.9/13.10). **Conferido** no código.
-- **Recebido de Administração (01/11/2026, texto em `14_administracao.md` PC-12):** o log de auditoria (`vp_logs`) usado por todas as telas é legível e gravável pela chave pública (14.1.8); logs de ajuste de estoque e de despacho não são prova sem essa ressalva. **Conferido.**
-- **Recebido de Serviços (01/11/2026, texto em `15_servicos.md` PC-2):** todo alerta com destinatário também vira WhatsApp pelo gi-avisos; para chegar certo, título curto com o essencial na frente, sem "teste", sem R$ no título e com o dia da semana por extenso, a obra ou o código do contrato quando houver vários no mesmo dia (o agrupamento de 24 h apaga números). **Conferido** no código do gi-avisos.
+- **Recebido de Administração (01/11/2026, texto em `15_administracao.md` PC-12):** o log de auditoria (`vp_logs`) usado por todas as telas é legível e gravável pela chave pública (14.1.8); logs de ajuste de estoque e de despacho não são prova sem essa ressalva. **Conferido.**
+- **Recebido de Serviços (01/11/2026, texto em `16_servicos.md` PC-2):** todo alerta com destinatário também vira WhatsApp pelo gi-avisos; para chegar certo, título curto com o essencial na frente, sem "teste", sem R$ no título e com o dia da semana por extenso, a obra ou o código do contrato quando houver vários no mesmo dia (o agrupamento de 24 h apaga números). **Conferido** no código do gi-avisos.

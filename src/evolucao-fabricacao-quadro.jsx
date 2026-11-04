@@ -616,8 +616,8 @@ function EvolucaoFabricacaoQuadroPage({ setRoute, setSubsel }) {
       <style>{FQ_CSS}</style>
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule" />Fabricação · Evolução da Fabricação</div>
-          <h1 className="page-head__title">Evolução da Fabricação</h1>
+          <div className="page-head__eyebrow"><span className="vp-rule" />Quadros de Comando · Fabricação QC</div>
+          <h1 className="page-head__title">Fabricação QC</h1>
           <p className="page-head__sub">Acompanhe, OP a OP, as 6 etapas da fabricação do quadro de comando — gere o link pro operador flegar de fora e veja as ocorrências que pausam a produção.</p>
         </div>
       </div>

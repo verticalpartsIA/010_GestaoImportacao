@@ -97,10 +97,26 @@
     }
 
     // Em localhost sem token → criar flag de desenvolvimento
-    if (isLocalhost && !ssoToken && !hasTabFlag) {
-      sessionStorage.setItem('vpprd_sso_ok', '1');
-      const devUser = { nome: 'Desenvolvimento', email: 'dev@localhost', iniciais: 'DV', id: 'dev-local' };
-      saveUser(devUser);
+    // 04/11/2026: dois usuários de desenvolvimento, escolhidos por /?dev=admin ou /?dev=pleno (só em localhost).
+    //  - admin (padrão): passa em tudo, como o nível Administrador.
+    //  - pleno: usuário comum (não-admin) com TODAS as alçadas — ver PropostaStore.temCapacidade.
+    // O e-mail segue 'dev@localhost' de propósito: outros arquivos o reconhecem (fluxo-pendentes não processa a fila real).
+    if (isLocalhost && !ssoToken) {
+      let atual = null;
+      try { atual = JSON.parse(sessionStorage.getItem('vpprd_user') || 'null'); } catch (e) {}
+      const simulaReal = hasTabFlag && atual && atual.id !== 'dev-local'; // usuário real simulado à mão: não mexer
+      if (!simulaReal) {
+        const pedido = params.get('dev');
+        const perfil = (pedido === 'admin' || pedido === 'pleno') ? pedido : ((atual && atual.devPerfil) || 'admin');
+        // Navegador automatizado (testes e2e) sem ?dev=: mantém o dev comum de antes, sem alçadas nem perfil de admin.
+        const automatizado = !pedido && !(atual && atual.devPerfil) && !!navigator.webdriver;
+        sessionStorage.setItem('vpprd_sso_ok', '1');
+        saveUser(automatizado
+          ? { nome: 'Desenvolvimento', email: 'dev@localhost', iniciais: 'DV', id: 'dev-local', devPerfil: 'nenhum' }
+          : perfil === 'pleno'
+            ? { nome: 'Dev Pleno', email: 'dev@localhost', iniciais: 'DP', id: 'dev-local', devPerfil: 'pleno' }
+            : { nome: 'Dev Admin', email: 'dev@localhost', iniciais: 'DA', id: 'dev-local', devPerfil: 'admin' });
+      }
     }
 
     // Restaura usuário já capturado nesta aba (reloads)

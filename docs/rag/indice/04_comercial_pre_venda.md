@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/04_comercial_pre_venda.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `746db79`)
-- **Palavras:** 16783 · **blocos:** 315 · **seções com selo próprio:** 47 de 85
-- **Origem do selo dos blocos:** próprio 86 · da seção 139 · da seção-pai 0 · do cabeçalho 65 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
-- **Selo efetivo dos blocos:** Conferido 185 · Herdado 89 · Não verificado 16
+- **Palavras:** 16993 · **blocos:** 318 · **seções com selo próprio:** 49 de 85
+- **Origem do selo dos blocos:** próprio 89 · da seção 139 · da seção-pai 13 · do cabeçalho 52 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
+- **Selo efetivo dos blocos:** Conferido 188 · Herdado 89 · Não verificado 16
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -16,18 +16,18 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | Como esta numeração funciona | `docs/modulos/04_comercial_pre_venda.md#como-esta-numeração-funciona` | 2 | meta | 3 | m3 |
 | Índice | `docs/modulos/04_comercial_pre_venda.md#índice` | 2 | meta | 2 | m2 |
 | Glossário (módulo Comercial \| Pré-venda) | `docs/modulos/04_comercial_pre_venda.md#glossário-módulo-comercial--pré-venda` | 2 | meta | 16 | m16 |
-| 4.1 Formulários | `docs/modulos/04_comercial_pre_venda.md#41-formulários` | 2 | — | 0 | — |
+| 4.1 Formulários | `docs/modulos/04_comercial_pre_venda.md#41-formulários` | 2 | Conferido (uniforme) | 1 | b1 |
 | 4.1.1 O que é | `docs/modulos/04_comercial_pre_venda.md#411-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 4.1.2 Rota e arquivos | `docs/modulos/04_comercial_pre_venda.md#412-rota-e-arquivos` | 3 | Conferido (uniforme) | 6 | b2 s4 |
 | 4.1.3 Perfil e acesso | `docs/modulos/04_comercial_pre_venda.md#413-perfil-e-acesso` | 3 | Conferido (uniforme) | 6 | b1 s5 |
 | 4.1.4 O que a tela mostra | `docs/modulos/04_comercial_pre_venda.md#414-o-que-a-tela-mostra` | 3 | Conferido (uniforme) | 11 | b1 s10 |
 | 4.1.5 Botões e controles | `docs/modulos/04_comercial_pre_venda.md#415-botões-e-controles` | 3 | Conferido (uniforme) | 9 | b1 s8 |
 | 4.1.6 Comportamento | `docs/modulos/04_comercial_pre_venda.md#416-comportamento` | 3 | Herdado (misto (vale o mais fraco)) | 21 | b5 s16 |
-| 4.1.7 Dados — o que lê e o que grava | `docs/modulos/04_comercial_pre_venda.md#417-dados--o-que-lê-e-o-que-grava` | 3 | — | 5 | c5 |
+| 4.1.7 Dados — o que lê e o que grava | `docs/modulos/04_comercial_pre_venda.md#417-dados--o-que-lê-e-o-que-grava` | 3 | — | 5 | p5 |
 | 4.1.8 Regras e armadilhas | `docs/modulos/04_comercial_pre_venda.md#418-regras-e-armadilhas` | 3 | Herdado (misto (vale o mais fraco)) | 12 | b3 s9 |
 | 4.1.9 Testes | `docs/modulos/04_comercial_pre_venda.md#419-testes` | 3 | Herdado (misto (vale o mais fraco)) | 2 | b1 s1 |
 | 4.1.10 Pendências e decisões | `docs/modulos/04_comercial_pre_venda.md#4110-pendências-e-decisões` | 3 | Não verificado (misto (vale o mais fraco)) | 14 | b8 s6 |
-| 4.1.11 Histórico | `docs/modulos/04_comercial_pre_venda.md#4111-histórico` | 3 | — | 3 | c3 |
+| 4.1.11 Histórico | `docs/modulos/04_comercial_pre_venda.md#4111-histórico` | 3 | — | 3 | p3 |
 | 4.2 Controle de Cotações | `docs/modulos/04_comercial_pre_venda.md#42-controle-de-cotações` | 2 | — | 0 | — |
 | 4.2.1 O que é | `docs/modulos/04_comercial_pre_venda.md#421-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 4.2.2 Rota e arquivos | `docs/modulos/04_comercial_pre_venda.md#422-rota-e-arquivos` | 3 | Conferido (uniforme) | 2 | b1 s1 |
@@ -52,18 +52,18 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 4.3.9 Testes | `docs/modulos/04_comercial_pre_venda.md#439-testes` | 3 | — | 1 | c1 |
 | 4.3.10 Pendências e decisões | `docs/modulos/04_comercial_pre_venda.md#4310-pendências-e-decisões` | 3 | Herdado (misto (vale o mais fraco)) | 8 | b2 s6 |
 | 4.3.11 Histórico | `docs/modulos/04_comercial_pre_venda.md#4311-histórico` | 3 | — | 1 | c1 |
-| 4.4 Cotação Quadro de Comando | `docs/modulos/04_comercial_pre_venda.md#44-cotação-quadro-de-comando` | 2 | — | 0 | — |
+| 4.4 Cotação Quadro de Comando | `docs/modulos/04_comercial_pre_venda.md#44-cotação-quadro-de-comando` | 2 | Conferido (uniforme) | 1 | b1 |
 | 4.4.1 O que é | `docs/modulos/04_comercial_pre_venda.md#441-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 4.4.2 Rota e arquivos | `docs/modulos/04_comercial_pre_venda.md#442-rota-e-arquivos` | 3 | Conferido (uniforme) | 1 | b1 |
 | 4.4.3 Perfil e acesso | `docs/modulos/04_comercial_pre_venda.md#443-perfil-e-acesso` | 3 | Conferido (uniforme) | 1 | b1 |
 | 4.4.4 O que a tela mostra | `docs/modulos/04_comercial_pre_venda.md#444-o-que-a-tela-mostra` | 3 | Conferido (uniforme) | 1 | b1 |
 | 4.4.5 Botões e controles | `docs/modulos/04_comercial_pre_venda.md#445-botões-e-controles` | 3 | Conferido (uniforme) | 1 | b1 |
-| 4.4.6 Comportamento | `docs/modulos/04_comercial_pre_venda.md#446-comportamento` | 3 | — | 1 | c1 |
-| 4.4.7 Dados | `docs/modulos/04_comercial_pre_venda.md#447-dados` | 3 | — | 1 | c1 |
-| 4.4.8 Regras e armadilhas | `docs/modulos/04_comercial_pre_venda.md#448-regras-e-armadilhas` | 3 | — | 1 | c1 |
-| 4.4.9 Testes | `docs/modulos/04_comercial_pre_venda.md#449-testes` | 3 | — | 1 | c1 |
+| 4.4.6 Comportamento | `docs/modulos/04_comercial_pre_venda.md#446-comportamento` | 3 | — | 1 | p1 |
+| 4.4.7 Dados | `docs/modulos/04_comercial_pre_venda.md#447-dados` | 3 | — | 1 | p1 |
+| 4.4.8 Regras e armadilhas | `docs/modulos/04_comercial_pre_venda.md#448-regras-e-armadilhas` | 3 | — | 1 | p1 |
+| 4.4.9 Testes | `docs/modulos/04_comercial_pre_venda.md#449-testes` | 3 | — | 1 | p1 |
 | 4.4.10 Pendências e decisões | `docs/modulos/04_comercial_pre_venda.md#4410-pendências-e-decisões` | 3 | Conferido (uniforme) | 4 | b1 s3 |
-| 4.4.11 Histórico | `docs/modulos/04_comercial_pre_venda.md#4411-histórico` | 3 | — | 1 | c1 |
+| 4.4.11 Histórico | `docs/modulos/04_comercial_pre_venda.md#4411-histórico` | 3 | — | 1 | p1 |
 | 4.5 Propostas | `docs/modulos/04_comercial_pre_venda.md#45-propostas` | 2 | — | 0 | — |
 | 4.5.1 O que é | `docs/modulos/04_comercial_pre_venda.md#451-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 4.5.2 Rota e arquivos | `docs/modulos/04_comercial_pre_venda.md#452-rota-e-arquivos` | 3 | Conferido (uniforme) | 2 | b1 s1 |
@@ -99,5 +99,5 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-9 Navegação, cache e testes | `docs/modulos/04_comercial_pre_venda.md#pc-9-navegação-cache-e-testes` | 2 | Conferido (uniforme) | 4 | b1 s3 |
 | PC-10 Menu "?" e tutoriais | `docs/modulos/04_comercial_pre_venda.md#pc-10-menu--e-tutoriais` | 2 | Herdado (misto (vale o mais fraco)) | 5 | b2 s3 |
 | PC-11 Documentos soltos e destino do que foi concatenado | `docs/modulos/04_comercial_pre_venda.md#pc-11-documentos-soltos-e-destino-do-que-foi-concatenado` | 2 | — | 2 | c2 |
-| PC-12 Benefícios trocados com os outros módulos | `docs/modulos/04_comercial_pre_venda.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 2 | Não verificado (misto (vale o mais fraco)) | 15 | b9 s6 |
+| PC-12 Benefícios trocados com os outros módulos | `docs/modulos/04_comercial_pre_venda.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 2 | Não verificado (misto (vale o mais fraco)) | 16 | b10 s6 |
 | Fluxograma das ligações do módulo | `docs/modulos/04_comercial_pre_venda.md#fluxograma-das-ligações-do-módulo` | 4 | — | 0 | — |

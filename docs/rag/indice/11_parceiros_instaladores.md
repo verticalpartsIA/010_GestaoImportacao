@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/11_parceiros_instaladores.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 01/11/2026 (origin/main `e53dfa8`)
-- **Palavras:** 8241 · **blocos:** 171 · **seções com selo próprio:** 48 de 73
-- **Origem do selo dos blocos:** próprio 87 · da seção 31 · da seção-pai 0 · do cabeçalho 29 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 24
-- **Selo efetivo dos blocos:** Conferido 120 · Herdado 20 · Não verificado 7
+- **Palavras:** 8365 · **blocos:** 172 · **seções com selo próprio:** 48 de 73
+- **Origem do selo dos blocos:** próprio 88 · da seção 31 · da seção-pai 0 · do cabeçalho 29 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 24
+- **Selo efetivo dos blocos:** Conferido 121 · Herdado 20 · Não verificado 7
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -88,4 +88,4 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-9 Navegação, cache e testes | `docs/modulos/11_parceiros_instaladores.md#pc-9-navegação-cache-e-testes` | 3 | — | 1 | c1 |
 | PC-10 Menu "?" e tutoriais | `docs/modulos/11_parceiros_instaladores.md#pc-10-menu--e-tutoriais` | 3 | Conferido (uniforme) | 1 | b1 |
 | PC-11 Documentos soltos e destino do que foi concatenado | `docs/modulos/11_parceiros_instaladores.md#pc-11-documentos-soltos-e-destino-do-que-foi-concatenado` | 3 | — | 2 | c2 |
-| PC-12 Benefícios trocados com os outros módulos | `docs/modulos/11_parceiros_instaladores.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 3 | Não verificado (misto (vale o mais fraco)) | 6 | b5 s1 |
+| PC-12 Benefícios trocados com os outros módulos | `docs/modulos/11_parceiros_instaladores.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 3 | Não verificado (misto (vale o mais fraco)) | 7 | b6 s1 |

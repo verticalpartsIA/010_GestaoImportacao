@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/03_cadastros_mestres.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `980586c`)
-- **Palavras:** 10067 · **blocos:** 229 · **seções com selo próprio:** 25 de 45
-- **Origem do selo dos blocos:** próprio 49 · da seção 114 · da seção-pai 0 · do cabeçalho 42 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 24
-- **Selo efetivo dos blocos:** Conferido 168 · Herdado 20 · Não verificado 17
+- **Palavras:** 10191 · **blocos:** 229 · **seções com selo próprio:** 25 de 45
+- **Origem do selo dos blocos:** próprio 50 · da seção 113 · da seção-pai 0 · do cabeçalho 42 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 24
+- **Selo efetivo dos blocos:** Conferido 169 · Herdado 20 · Não verificado 16
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -52,7 +52,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-9 Navegação, cache e testes | `docs/modulos/03_cadastros_mestres.md#pc-9-navegação-cache-e-testes` | 3 | — | 2 | c2 |
 | PC-10 Menu "?" e tutoriais | `docs/modulos/03_cadastros_mestres.md#pc-10-menu--e-tutoriais` | 3 | Conferido (uniforme) | 3 | b1 s2 |
 | PC-11 Documentos soltos e destino do que foi concatenado | `docs/modulos/03_cadastros_mestres.md#pc-11-documentos-soltos-e-destino-do-que-foi-concatenado` | 3 | — | 9 | c9 |
-| PC-12 Benefícios trocados com os outros módulos | `docs/modulos/03_cadastros_mestres.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 3 | Não verificado (misto (vale o mais fraco)) | 19 | b9 s10 |
+| PC-12 Benefícios trocados com os outros módulos | `docs/modulos/03_cadastros_mestres.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 3 | Não verificado (misto (vale o mais fraco)) | 19 | b10 s9 |
 | 1) Mapa do site em Mermaid flowchart TD | `docs/modulos/03_cadastros_mestres.md#1-mapa-do-site-em-mermaid-flowchart-td` | 3 | — | 0 | — |
 | 2) Wireframe da home e de uma página interna em texto/ASCII | `docs/modulos/03_cadastros_mestres.md#2-wireframe-da-home-e-de-uma-página-interna-em-textoascii` | 3 | — | 0 | — |
 | 3) Storyboard de 5–8 telas da jornada principal | `docs/modulos/03_cadastros_mestres.md#3-storyboard-de-58-telas-da-jornada-principal` | 3 | — | 7 | c7 |
