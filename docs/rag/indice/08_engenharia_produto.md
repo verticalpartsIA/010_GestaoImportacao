@@ -5,7 +5,7 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/08_engenharia_produto.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 01/11/2026 (origin/main `4653a17`)
-- **Palavras:** 9934 · **blocos:** 211 · **seções com selo próprio:** 43 de 74
+- **Palavras:** 10009 · **blocos:** 211 · **seções com selo próprio:** 43 de 74
 - **Origem do selo dos blocos:** próprio 81 · da seção 64 · da seção-pai 0 · do cabeçalho 43 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 23
 - **Selo efetivo dos blocos:** Conferido 163 · Herdado 23 · Não verificado 2
 
