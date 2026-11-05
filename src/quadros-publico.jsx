@@ -173,7 +173,7 @@ const cartao = { background: '#fff', border: `1px solid ${COR.borda}`, borderRad
 const campoBusca = { width: 'calc(100% - 24px)', boxSizing: 'border-box', margin: '10px 12px', padding: '12px 14px', fontSize: 16, border: `1px solid ${COR.borda}`, borderRadius: 10, fontFamily: 'inherit' };
 const botao = { background: COR.amarelo, border: 0, borderRadius: 10, padding: '12px 16px', fontWeight: 700, fontSize: 15, fontFamily: 'inherit' };
 
-const TITULOS = { pedidos: ['Pedidos com Quadro de Comando', 'Acompanhamento (somente leitura)'], separacao: ['Separação dos pedidos', 'Marque "Peguei" em cada item'], separacao_fab: ['Separação FAB QC', 'Cabos do kit e componentes do quadro'] };
+const TITULOS = { pedidos: ['Acompanhe a Fabricação de Quadros', 'Somente leitura · atualiza sozinho'], separacao: ['Separação dos pedidos', 'Marque "Peguei" em cada item'], separacao_fab: ['Separação FAB QC', 'Cabos do kit e componentes do quadro'] };
 
 function Pagina() {
   const { tipo, token } = lerUrl();
