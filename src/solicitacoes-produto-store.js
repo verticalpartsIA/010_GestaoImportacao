@@ -151,21 +151,29 @@ window.SolicitacoesProdutoStore = (() => {
     }
   }
 
-  /* Chamado na edição da Ficha Técnica: avisa UMA pessoa da Importação para conferir o NCM e publicar no Omie. */
-  async function avisarImportacao(solicitacao, email, nomeProduto) {
+  /* Chamado na edição da Ficha Técnica: avisa UMA pessoa da Importação para conferir o NCM e publicar no Omie.
+     `solicitacao` pode ser nula (ficha criada direto na Ficha Técnica): o aviso sai igual, só não há linha do tempo.
+     `ficha` = { id, codigoProduto } da própria ficha (usada no link e no texto quando não há solicitação). */
+  async function avisarImportacao(solicitacao, email, nomeProduto, ficha) {
     const alvo = TL().pessoa(TL().IMPORTACAO, email);
     if (!alvo) throw new Error('Escolha Andreia, Beatriz ou Bianca.');
+    const f = ficha || {};
+    const fichaId = (solicitacao && solicitacao.ficha_tecnica_id) || f.id || null;
+    if (!solicitacao && !fichaId) throw new Error('Salve a ficha antes de avisar a Importação.');
+    const ref = solicitacao ? solicitacao.numero_solicitacao : (f.codigoProduto || 'ficha sem solicitação');
     const ok = await _avisar([alvo.email], {
-      idBase: `sol-ficha-${solicitacao.numero_solicitacao}-${Date.now().toString(36)}`,
-      title: `${TL().resumo(nomeProduto || solicitacao.descricao_inicial, 40)} — ficha pronta: conferir NCM e publicar`,
-      sub: [`${solicitacao.numero_solicitacao}`, solicitacao.categoria_sku, solicitacao.cliente_nome].filter(Boolean).join(' · '),
-      rota: solicitacao.ficha_tecnica_id ? `/engenharia/ficha-tecnica/${solicitacao.ficha_tecnica_id}` : '/engenharia/ficha-tecnica',
+      idBase: `sol-ficha-${solicitacao ? solicitacao.numero_solicitacao : String(fichaId).slice(0, 8)}-${Date.now().toString(36)}`,
+      title: `${TL().resumo(nomeProduto || (solicitacao && solicitacao.descricao_inicial) || ref, 40)} — ficha pronta: conferir NCM e publicar`,
+      sub: solicitacao
+        ? [`${solicitacao.numero_solicitacao}`, solicitacao.categoria_sku, solicitacao.cliente_nome].filter(Boolean).join(' · ')
+        : [ref, 'ficha criada direto na Ficha Técnica'].filter(Boolean).join(' · '),
+      rota: fichaId ? `/engenharia/ficha-tecnica/${fichaId}` : '/engenharia/ficha-tecnica',
     });
     if (!ok) throw new Error('Não consegui enviar o aviso para ' + alvo.nome + '.');
-    await _registrarEvento(solicitacao.id, 'aviso_importacao', { alvo });
+    if (solicitacao) await _registrarEvento(solicitacao.id, 'aviso_importacao', { alvo });
     if (window.VPLog) window.VPLog.registrar({
-      modulo: 'Solicitações de Produto', acao: 'Avisou a Importação para conferir NCM e publicar',
-      alvo: solicitacao.numero_solicitacao, alvo_id: solicitacao.id, detalhe: { avisado: alvo.email },
+      modulo: solicitacao ? 'Solicitações de Produto' : 'Ficha Técnica', acao: 'Avisou a Importação para conferir NCM e publicar',
+      alvo: ref, alvo_id: solicitacao ? solicitacao.id : fichaId, detalhe: { avisado: alvo.email, ficha_id: fichaId },
     });
     return alvo;
   }

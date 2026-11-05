@@ -122,3 +122,28 @@ test('detalhe: Voltar do navegador sai do detalhe e a aba Informações limpa a 
   await expect(page.getByText('+ NOVA SOLICITAÇÃO')).toBeVisible();
   expect(erros).toEqual([]);
 });
+
+test('ficha: "Avisar Importação…" aparece em ficha salva e não publicada, mesmo sem solicitação de origem', async ({ page }) => {
+  const erros = coletarErros(page);
+  const ID = 'af37beee-a496-400b-8b72-e04d66efba0b';
+  await page.addInitScript(() => {
+    sessionStorage.setItem('vpprd_sso_ok', '1');
+    sessionStorage.setItem('vpprd_user', JSON.stringify({ nome: 'Eng Teste', email: 'eng@verticalparts.com.br', iniciais: 'ET', id: 't' }));
+  });
+  await page.route('**/*.supabase.co/rest/v1/**', async (route) => {
+    const req = route.request();
+    const caminho = new URL(req.url()).pathname.replace('/rest/v1/', '');
+    const objeto = (req.headers()['accept'] || '').includes('vnd.pgrst.object');
+    const json = (status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    if (caminho === 'fichas_tecnicas' && req.method() === 'GET') {
+      const ficha = { id: ID, identificacao: { nomeProduto: 'Chave de Fim de Curso', codigoProduto: 'VPB-207' }, omie_publicado_em: null };
+      return objeto ? json(200, ficha) : json(200, [ficha]);
+    }
+    if (caminho === 'solicitacoes_produto' && req.method() === 'GET') return objeto ? json(406, { code: 'PGRST116', message: '0 rows' }) : json(200, []);
+    return route.fallback();
+  });
+  await page.goto('/engenharia/ficha-tecnica/' + ID);
+  await expect(page.locator('select.ft-aviso-imp')).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole('button', { name: /Chat da solicitação/ })).toHaveCount(0);
+  expect(erros).toEqual([]);
+});

@@ -565,13 +565,13 @@ function FtGenerator({ initial, onSaved, onCancel, setRoute, setSubsel }) {
     return () => { vivo = false; };
   }, [fichaIdAtual]);
   const avisarImportacao = async (email) => {
-    if (!email || !solOrigem || avisandoImp) return;
+    if (!email || !fichaIdAtual || avisandoImp) return;
     const alvo = window.SolProdTimeline.pessoa(window.SolProdTimeline.IMPORTACAO, email);
     if (!alvo) return;
     if (!confirm('Avisar ' + alvo.nome + ' por WhatsApp para conferir o NCM e publicar esta ficha no Omie?\n\nSalve a ficha antes, se ainda tiver alterações.')) return;
     setAvisandoImp(true);
     try {
-      await window.SolicitacoesProdutoStore.avisarImportacao(solOrigem, email, state.identificacao.nomeProduto);
+      await window.SolicitacoesProdutoStore.avisarImportacao(solOrigem, email, state.identificacao.nomeProduto, { id: fichaIdAtual, codigoProduto: state.identificacao.codigoProduto });
       window.toast?.('✅ ' + alvo.nome + ' foi avisado(a).', 'success');
     } catch (e) {
       window.toast?.(e.message || String(e), 'error');
@@ -799,7 +799,7 @@ function FtGenerator({ initial, onSaved, onCancel, setRoute, setSubsel }) {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
           {state.omie_publicado_em ? 'Republicar no Omie' : 'Publicar no Omie'}
         </button>
-        {solOrigem && !state.omie_publicado_em && (
+        {fichaIdAtual && !state.omie_publicado_em && (
           <select className="ft-aviso-imp" value="" disabled={avisandoImp}
             onChange={(e) => avisarImportacao(e.target.value)}
             title="Terminou a ficha? Escolha quem da Importação deve conferir o NCM e publicar no Omie">
