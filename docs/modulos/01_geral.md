@@ -806,6 +806,12 @@ Esta tabela lista os 6 jobs **das telas de Geral**. Em 31/10/2026 o banco tinha 
   - **Decisão de segurança precisa de conferência periódica:** D4 (só um bucket público) não se cumpriu; 4 buckets são públicos. Registrar decisão não é cumpri-la.
   - **Função em produção sem pasta no repositório** (`conferir-clientes-omie`) viola o Art. 23; conferir `list_edge_functions` × `supabase/functions` antes de tratar o repositório como a fonte.
 
+- **Sidebar: busca de telas (Ctrl/⌘ K), interruptores Vidro/Escuro e contador de Notificações (05/11/2026). Selo: Conferido em 05/11/2026 (código lido, testes `sidebar-busca-calc.test.js` e `e2e/sidebar-busca.spec.js` passando, telas abertas num Chromium real).**
+  - **Busca de TELAS, não de registros:** a paleta (`sidebar-busca.jsx`, regra pura em `sidebar-busca-calc.js`) lista só as telas que a pessoa vê, porque recebe a mesma filtragem que desenha o menu (`filterVisible` + `grupoVisivel`); filtra por nome da tela e do módulo, sem acento. É diferente da busca do cabeçalho (leads, projetos, contratos). Escolher uma tela usa `setRoute` (Art. 22). Esconder na interface não é segurança (Art. 25).
+  - **Interruptores opcionais, por navegador:** `vp_sidebar_vidro` (painel flutuante com desfoque) e `vp_tema_escuro`, aplicados em `<html data-vp-vidro / data-vp-escuro>`; padrão = visual de sempre. **O tema escuro cobre só a sidebar e o cabeçalho; as telas internas seguem claras** (escurecer `.main` deixaria títulos ilegíveis: há cerca de 2.100 cores fixas em CSS/JSX). Tema escuro do hub inteiro é projeto à parte. Estilos em `styles/sidebar-busca.css`.
+  - **Contador de Notificações na sidebar** usa o mesmo hook leve do sino (`NotificacoesLidasStore.useNaoLidas`), sem consulta nova. Inbox não ganhou contador (sem contagem leve conhecida: Não verificado).
+  - **Não feito:** painel deslizante no celular (hoje a sidebar vira ícones abaixo de 1024 px); busca por palavras-chave além do nome.
+
 ### PC-10 Menu "?" (Ajuda, Treinamento, Enviar feedback)
 *(Migrado do CLAUDE.md em 31/10/2026; arquivos conferidos agora, regras vindas do CLAUDE.md.)*
 - Círculo "?" no canto superior direito de **todas as telas** (`AjudaSuporte` em `src/ajuda-suporte.jsx`, desenhado pelo `Header` de `shell.jsx`). Dica nativa "Suporte". Itens: **Ajuda** (texto da tela em `HELP_TOPICS[rota]`, mais perguntas frequentes), **Treinamento** (abre o tutorial da tela; sem tutorial na lista `TUTORIAIS`, fica apagado "Em breve") e **Enviar feedback**.

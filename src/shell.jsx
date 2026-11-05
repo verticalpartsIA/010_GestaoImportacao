@@ -195,6 +195,32 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
      plugado no nav. Sidebar já re-renderiza a cada navegação (recebe
      `route`), reaproveita isso pra recalcular ao sair de /decisoes. */
   const [pendentesDecisoes, setPendentesDecisoes] = React.useState(0);
+  /* Contador de Notificações: o mesmo hook leve do sino do cabeçalho (sem consulta nova). */
+  const naoLidasNotif = window.NotificacoesLidasStore && window.NotificacoesLidasStore.useNaoLidas ? window.NotificacoesLidasStore.useNaoLidas() : 0;
+  /* Busca de telas (Ctrl/⌘ K) e interruptores opcionais Vidro/Escuro (05/11/2026) — guardados por navegador;
+     padrão = visual de sempre. Aplicados em <html data-vp-vidro / data-vp-escuro> (ver styles/sidebar-busca.css). */
+  const [buscaAberta, setBuscaAberta] = React.useState(false);
+  const lerFlag = (k) => { try { return localStorage.getItem(k) === "1"; } catch { return false; } };
+  const [vidro, setVidro] = React.useState(() => lerFlag("vp_sidebar_vidro"));
+  const [escuro, setEscuro] = React.useState(() => lerFlag("vp_tema_escuro"));
+  React.useEffect(() => {
+    document.documentElement.dataset.vpVidro = vidro ? "1" : "0";
+    try { localStorage.setItem("vp_sidebar_vidro", vidro ? "1" : "0"); } catch {}
+  }, [vidro]);
+  React.useEffect(() => {
+    document.documentElement.dataset.vpEscuro = escuro ? "1" : "0";
+    try { localStorage.setItem("vp_tema_escuro", escuro ? "1" : "0"); } catch {}
+  }, [escuro]);
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && String(e.key).toLowerCase() === "k") {
+        e.preventDefault();
+        setBuscaAberta(true);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
   React.useEffect(() => {
     const atualizar = () => window.DecisoesStore?.listarPendentesParaMim().then((l) => setPendentesDecisoes(l.length)).catch(() => {});
     atualizar();
@@ -242,6 +268,8 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
   }, []);
   const version = window.__VP_VERSION;
   const versionLabel = version && formatBuildTime(version.buildTime);
+  /* Lista da busca = a MESMA filtragem que desenha o menu (perfil + alocação): não mostra tela que a pessoa não vê. */
+  const gruposBusca = NAV_GROUPS.filter((g) => grupoVisivel(g)).map((g) => ({ label: g.label, items: g.items.filter(filterVisible) }));
   return (
     <aside className="sidebar">
       <div className="sidebar__brand">
@@ -252,6 +280,13 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
       <button className="sidebar__collapse" onClick={onToggle} aria-label="Toggle sidebar">
         {collapsed ? <Icon.chevRight size={12}/> : <Icon.chevLeft size={12}/>}
       </button>
+      <button type="button" className="sidebar__busca" onClick={() => setBuscaAberta(true)}
+        aria-label="Pesquisar telas (Ctrl K)" data-tooltip="Pesquisar telas (Ctrl K)">
+        <Icon.search size={15}/><span>Pesquisar telas…</span><kbd>Ctrl K</kbd>
+      </button>
+      {window.SidebarBusca ? <window.SidebarBusca aberto={buscaAberta} grupos={gruposBusca}
+        onFechar={() => setBuscaAberta(false)}
+        onEscolher={(r) => { setBuscaAberta(false); setRoute(r.id); }}/> : null}
       <div className="sidebar__scroll">
         {NAV_GROUPS.filter((group) => grupoVisivel(group)).map((group) => {
           const items = group.items.filter(filterVisible);
@@ -323,8 +358,8 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
                     data-tooltip={item.label}>
                     <span className="nav-item__icon">{ItemIcon}</span>
                     <span className="nav-item__label">{item.label}</span>
-                    {(item.id === 'decisoes' ? pendentesDecisoes : item.badge)
-                      ? <span className="nav-item__badge">{item.id === 'decisoes' ? pendentesDecisoes : item.badge}</span> : null}
+                    {(item.id === 'decisoes' ? pendentesDecisoes : item.id === 'notificacoes' ? naoLidasNotif : item.badge)
+                      ? <span className="nav-item__badge">{item.id === 'decisoes' ? pendentesDecisoes : item.id === 'notificacoes' ? (naoLidasNotif > 99 ? '99+' : naoLidasNotif) : item.badge}</span> : null}
                   </button>
                 );
               })}
@@ -334,6 +369,16 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
         })}
       </div>
       <div className="sidebar__foot">
+        <div className="sidebar__tgls">
+          <button type="button" className="sidebar__tgl" role="switch" aria-checked={vidro}
+            onClick={() => setVidro((v) => !v)} title="Painel flutuante com efeito de vidro">
+            <span>Modo vidro</span><span className="sidebar__tgl-sw"/>
+          </button>
+          <button type="button" className="sidebar__tgl" role="switch" aria-checked={escuro}
+            onClick={() => setEscuro((v) => !v)} title="Escurece a sidebar e o cabeçalho (as telas internas seguem claras)">
+            <span>Tema escuro</span><span className="sidebar__tgl-sw"/>
+          </button>
+        </div>
         <div className="sidebar__user">
           {window.AvatarColaborador
             ? <window.AvatarColaborador src={(window.__VP_USER || {}).avatarUrl} nome={(window.__VP_USER || {}).nome || (ROLE_MAP[role] || {}).name}/>
