@@ -39,6 +39,34 @@ function QpBarra({ info, vazio, titulo }) {
   );
 }
 
+// Botão "🔗 Link público": mostra o link secreto da página pública deste tipo (pedidos | separacao | separacao_fab), com Copiar e Trocar.
+// Quem só vê (alçada "ver") obtém o link já criado; criar/trocar exige "editar". Trocar invalida o link antigo (ex.: celular perdido).
+function QcLinkPublico({ tipo }) {
+  const sb = window.__VP_SB && window.__VP_SB.sb;
+  const [url, setUrl] = React.useState(null);
+  const [erro, setErro] = React.useState(null);
+  const [ocupado, setOcupado] = React.useState(false);
+  const abrir = async (renovar) => {
+    if (renovar && !window.confirm('Trocar o link? O link atual deixa de funcionar para quem o recebeu.')) return;
+    setOcupado(true); setErro(null);
+    try { setUrl(await window.QuadrosPedidosStore.linkPublico(sb, tipo, renovar)); }
+    catch (e) { setErro(((e && e.message) || String(e)).replace(/^.*link QC: /, '')); }
+    setOcupado(false);
+  };
+  const copiar = async () => { try { await navigator.clipboard.writeText(url); window.toast?.('Link copiado.'); } catch (e) { window.prompt('Copie o link:', url); } };
+  if (!url) return (<span><button className="btn" onClick={() => abrir(false)} disabled={ocupado} title="Mostra o link público desta tela (sem login)">🔗 Link público</button>{erro ? <div style={{ fontSize: 11, color: 'var(--vp-danger)', maxWidth: 260 }}>{erro}</div> : null}</span>);
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+      <input readOnly value={url} onFocus={(e) => e.target.select()} style={{ width: 260, fontSize: 11 }} />
+      <button className="btn" onClick={copiar}>Copiar</button>
+      <button className="btn" onClick={() => abrir(true)} disabled={ocupado} title="Gera um link novo; o atual deixa de funcionar">Trocar</button>
+      <button className="btn" onClick={() => setUrl(null)}>×</button>
+      {erro ? <div style={{ fontSize: 11, color: 'var(--vp-danger)' }}>{erro}</div> : null}
+    </div>
+  );
+}
+window.QcLinkPublico = QcLinkPublico;
+
 function QuadrosPedidosPage() {
   const ord = window.useOrdenacao();
   const sb = window.__VP_SB && window.__VP_SB.sb;
@@ -86,7 +114,8 @@ function QuadrosPedidosPage() {
           <h1 className="page-head__title">Pedidos com Quadro de Comando</h1>
           <p className="page-head__sub">Pedidos do Omie com quadro de comando (etapa 20) e tudo o que está na Evolução da Fabricação. O número é o do Omie. As barras vão de 0 a 100%.</p>
         </div>
-        <div className="page-head__r qc-no-print">
+        <div className="page-head__r qc-no-print" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <QcLinkPublico tipo="pedidos" />
           <button className="btn" onClick={() => window.print()} disabled={!linhas} title="Abre a impressão desta lista">🖨 Imprimir</button>
         </div>
       </div>

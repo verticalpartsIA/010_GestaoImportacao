@@ -11,8 +11,9 @@
 (function () {
   'use strict';
 
-  async function carregar(sb) {
-    const C = window.QuadrosPedidosCalc, FQ = window.FabricacaoQuadroStore, FC = window.FabricacaoQuadroCalc;
+  // Lê do banco TUDO o que a montagem precisa, em formato de dados brutos (o mesmo que a função pública qc_publico_dados devolve).
+  async function buscarDados(sb) {
+    const FQ = window.FabricacaoQuadroStore;
     // 1) quais códigos são quadro de comando
     const v = await sb.from('pcp_quadro_variante').select('codigo_produto');
     if (v.error) throw v.error;
@@ -33,14 +34,11 @@
     }
 
     // 3) andamento de cada OP de quadro (o mesmo cálculo da Evolução da Fabricação)
-    const [chk, st] = await Promise.all([
+    const [checklist, st] = await Promise.all([
       FQ.listarItens(),
       ops.length ? sb.from('fabricacao_quadro_status').select('*, fabricacao_quadro_itens(id, texto, ordem, peso)').in('ordem_id', ops.map((x) => x.id)) : Promise.resolve({ data: [] }),
     ]);
     if (st.error) throw st.error;
-    const statusPorOp = {};
-    (st.data || []).forEach((s) => { (statusPorOp[s.ordem_id] = statusPorOp[s.ordem_id] || []).push(s); });
-    const pctDaOp = (op) => FC.resumoProgresso(FC.mergeStatusComItens(chk, statusPorOp[op.id] || [])).pct;
 
     // 4) pedidos do Omie que têm item de quadro (quantos quadros cada um tem)
     let itensQuadro = [];
@@ -49,14 +47,13 @@
       if (it.error) throw it.error;
       itensQuadro = it.data || [];
     }
-    const qtdQuadros = {};
-    itensQuadro.forEach((x) => { qtdQuadros[String(x.codigo_pedido)] = (qtdQuadros[String(x.codigo_pedido)] || 0) + Math.max(1, Math.round(Number(x.quantidade) || 1)); });
 
     // 5) cabeçalho e itens dos pedidos (da união das duas fontes)
-    const chaveOp = (op) => C.chaveDaOp(op, maePedido[op.ordem_mae_id]);
-    const idsOps = new Set(ops.map(chaveOp).filter((k) => !k.startsWith('op:')));
-    const ids = Array.from(new Set([...Object.keys(qtdQuadros), ...idsOps]));
-    const ped = {}, itensPorPedido = {};
+    const C = window.QuadrosPedidosCalc;
+    const qtdIds = Array.from(new Set(itensQuadro.map((x) => String(x.codigo_pedido))));
+    const idsOps = new Set(ops.map((op) => C.chaveDaOp(op, maePedido[op.ordem_mae_id])).filter((k) => !k.startsWith('op:')));
+    const ids = Array.from(new Set([...qtdIds, ...idsOps]));
+    let pedidos = [], itens = [];
     if (ids.length) {
       const [p, ip] = await Promise.all([
         sb.from('pcp_pedidos')
@@ -66,9 +63,48 @@
       ]);
       if (p.error) throw p.error;
       if (ip.error) throw ip.error;
-      (p.data || []).forEach((x) => { ped[String(x.codigo_pedido)] = x; });
-      (ip.data || []).forEach((x) => { (itensPorPedido[String(x.codigo_pedido)] = itensPorPedido[String(x.codigo_pedido)] || []).push(x); });
+      pedidos = p.data || []; itens = ip.data || [];
     }
+
+    // 6) estoque físico dos itens com código de estoque (a linha de componente "<ITEM>#n" não tem). Falha ao ler NÃO derruba a tela:
+    //    as linhas ficam com estoque desconhecido (null) e `estoqueErro` diz por quê (a tela mostra "—" e avisa).
+    const codigos = new Set();
+    itens.forEach((i) => { if (i.codigo && !String(i.codigo).includes('#')) codigos.add(String(i.codigo)); });
+    const fisico = {};
+    let estoqueErro = null;
+    try {
+      const lista = Array.from(codigos);
+      for (let k = 0; k < lista.length; k += 150) {
+        const parte = lista.slice(k, k + 150);
+        const a = await sb.from('importacao_varejo_estoque').select('codigo, fisico').in('codigo', parte);
+        if (a.error) throw a.error;
+        (a.data || []).forEach((x) => { fisico[String(x.codigo).toUpperCase()] = Number(x.fisico) || 0; });
+        const faltam = parte.filter((c) => fisico[c.toUpperCase()] === undefined);
+        if (faltam.length) {
+          const b = await sb.from('pcp_estoque').select('codigo, quantidade, local_estoque').in('codigo', faltam);
+          if (b.error) throw b.error;
+          (b.data || []).forEach((x) => { const c = String(x.codigo).toUpperCase(); fisico[c] = (fisico[c] || 0) + (Number(x.quantidade) || 0); });
+        }
+      }
+    } catch (e) { estoqueErro = (e && e.message) || String(e); }
+    return { codigosQuadro, ops, maePedido, status: st.data || [], checklist, itensQuadro, pedidos, itens, fisico, estoqueErro };
+  }
+
+  async function carregar(sb) { return montar(await buscarDados(sb)); }
+
+  // Monta as linhas (uma por pedido) a partir dos dados brutos — mesma função para a tela interna e para os links públicos.
+  function montar(d) {
+    const C = window.QuadrosPedidosCalc, FC = window.FabricacaoQuadroCalc;
+    const { codigosQuadro, ops, maePedido, checklist: chk, itensQuadro } = d;
+    const statusPorOp = {};
+    (d.status || []).forEach((s) => { (statusPorOp[s.ordem_id] = statusPorOp[s.ordem_id] || []).push(s); });
+    const pctDaOp = (op) => FC.resumoProgresso(FC.mergeStatusComItens(chk, statusPorOp[op.id] || [])).pct;
+    const qtdQuadros = {};
+    (itensQuadro || []).forEach((x) => { qtdQuadros[String(x.codigo_pedido)] = (qtdQuadros[String(x.codigo_pedido)] || 0) + Math.max(1, Math.round(Number(x.quantidade) || 1)); });
+    const chaveOp = (op) => C.chaveDaOp(op, maePedido[op.ordem_mae_id]);
+    const ped = {}, itensPorPedido = {};
+    (d.pedidos || []).forEach((x) => { ped[String(x.codigo_pedido)] = x; });
+    (d.itens || []).forEach((x) => { (itensPorPedido[String(x.codigo_pedido)] = itensPorPedido[String(x.codigo_pedido)] || []).push(x); });
 
     // 6) uma linha por pedido
     const porChave = new Map();
@@ -101,27 +137,7 @@
       };
     }).sort((a, b) => String(a.prazo || '9999').localeCompare(String(b.prazo || '9999')));
 
-    // 7) estoque físico dos itens com código de estoque (a linha de componente "<ITEM>#n" não tem). Falha ao ler NÃO derruba a tela:
-    //    as linhas ficam com estoque desconhecido (null) e `estoqueErro` diz por quê (a tela mostra "—" e avisa).
-    const codigos = new Set();
-    linhasFinais.forEach((r) => { [...r.itensSeparar, ...r.itensKit].forEach((i) => { if (i.codigo && !String(i.codigo).includes('#')) codigos.add(String(i.codigo)); }); });
-    const fisico = {};
-    let estoqueErro = null;
-    try {
-      const lista = Array.from(codigos);
-      for (let k = 0; k < lista.length; k += 150) {
-        const parte = lista.slice(k, k + 150);
-        const a = await sb.from('importacao_varejo_estoque').select('codigo, fisico').in('codigo', parte);
-        if (a.error) throw a.error;
-        (a.data || []).forEach((x) => { fisico[String(x.codigo).toUpperCase()] = Number(x.fisico) || 0; });
-        const faltam = parte.filter((c) => fisico[c.toUpperCase()] === undefined);
-        if (faltam.length) {
-          const b = await sb.from('pcp_estoque').select('codigo, quantidade, local_estoque').in('codigo', faltam);
-          if (b.error) throw b.error;
-          (b.data || []).forEach((x) => { const c = String(x.codigo).toUpperCase(); fisico[c] = (fisico[c] || 0) + (Number(x.quantidade) || 0); });
-        }
-      }
-    } catch (e) { estoqueErro = (e && e.message) || String(e); }
+    const fisico = d.fisico || {}, estoqueErro = d.estoqueErro || null;
     const estoqueDe = (i) => (estoqueErro || String(i.codigo).includes('#') ? null : (fisico[String(i.codigo).toUpperCase()] ?? null));
     const comEstoque = (i) => ({ ...i, estoque: estoqueDe(i), falta: C.calcularFalta(i.quantidade, estoqueDe(i)) });
     return linhasFinais.map((r) => ({ ...r, itensSeparar: r.itensSeparar.map(comEstoque), itensKit: r.itensKit.map(comEstoque), itensComponentes: r.itensComponentes.map(comEstoque), estoqueErro }));
@@ -166,5 +182,12 @@
     return data;
   }
 
-  window.QuadrosPedidosStore = { carregar, listarPegos, marcar, chavePeguei, listarPrevisoes, gravarPrevisao };
+  /* Links públicos (migration 20261105100000): o token é secreto; quem tem alçada ver obtém, quem tem editar cria/renova. */
+  async function linkPublico(sb, tipo, renovar) {
+    const { data, error } = await sb.rpc('qc_publico_link_obter', { p_tipo: tipo, p_renovar: !!renovar });
+    if (error) throw error;
+    return `${window.location.origin}/quadros-publico/${tipo}/${data}`;
+  }
+
+  window.QuadrosPedidosStore = { carregar, buscarDados, montar, listarPegos, marcar, chavePeguei, listarPrevisoes, gravarPrevisao, linkPublico };
 })();

@@ -178,7 +178,8 @@ function QcSeparacaoTela({ rota, eyebrow, titulo, sub, campo, vazio, soComItens 
           <h1 className="page-head__title">{titulo}</h1>
           <p className="page-head__sub">{sub}</p>
         </div>
-        <div className="page-head__r qc-no-print">
+        <div className="page-head__r qc-no-print" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <window.QcLinkPublico tipo={campo === 'itensFab' ? 'separacao_fab' : 'separacao'} />
           <button className="btn" onClick={imprimir} disabled={!linhas} title="Abre a impressão com todos os pedidos expandidos">🖨 Imprimir</button>
         </div>
       </div>
