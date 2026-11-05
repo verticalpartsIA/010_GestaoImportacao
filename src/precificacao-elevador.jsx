@@ -374,6 +374,16 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
      pzId agora pode nascer do subsel (id de precificacoes_elevador vindo
      do deep-link), não só do clique manual na lista. */
   const [pzId, setPzId] = React.useState(subsel && typeof subsel === 'string' ? subsel : null);
+  /* 05/11 — o id aberto é de elevador ('elevador') ou de escada/esteira ('escest'); null = ainda resolvendo (deep-link). */
+  const [tipoPz, setTipoPz] = React.useState(null);
+  React.useEffect(() => {
+    if (!pzId) { setTipoPz(null); return; }
+    if (tipoPz) return;
+    let vivo = true;
+    (window.PrecificacaoEscEstStore ? window.PrecificacaoEscEstStore.existe(pzId) : Promise.resolve(false))
+      .then((ee) => { if (vivo) setTipoPz(ee ? 'escest' : 'elevador'); });
+    return () => { vivo = false; };
+  }, [pzId, tipoPz]);
 
   const carregar = React.useCallback(() => {
     window.PrecificacaoElevadorStore.listarPendentes().then(setPendentes).catch(() => setPendentes([]));
@@ -390,14 +400,19 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
   React.useEffect(() => {
     const novo = subsel && typeof subsel === 'string' ? subsel : null;
     if (novo === pzIdRef.current) return;
+    setTipoPz(null);
     setPzId(novo);
     if (!novo) carregar();
   }, [subsel]);
 
   const abrir = async (item) => {
-    if (item.precificacaoId) { setPzId(item.precificacaoId); setSubsel?.(item.precificacaoId); return; }
+    const escEst = window.PrecificacaoEscEstCalc && window.PrecificacaoEscEstCalc.ehEscEst(item.categoria);
+    if (item.precificacaoId) { setTipoPz(escEst ? 'escest' : 'elevador'); setPzId(item.precificacaoId); setSubsel?.(item.precificacaoId); return; }
     try {
-      const pz = await window.PrecificacaoElevadorStore.criar(item.formularioElevadorId, item.cotacaoFornecedorId);
+      const pz = escEst
+        ? await window.PrecificacaoEscEstStore.criar(item.formularioElevadorId, item.cotacaoFornecedorId, item.categoria)
+        : await window.PrecificacaoElevadorStore.criar(item.formularioElevadorId, item.cotacaoFornecedorId);
+      setTipoPz(escEst ? 'escest' : 'elevador');
       setPzId(pz.id);
       setSubsel?.(pz.id);
     } catch (e) {
@@ -405,8 +420,10 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
     }
   };
 
+  if (pzId && !tipoPz) return <div className="page fade-in"><p className="muted">Carregando…</p></div>;
   if (pzId) {
-    return <PrecificacaoElevadorDetalhe id={pzId} onVoltar={() => {
+    const Detalhe = tipoPz === 'escest' ? window.PZEEDetalhe : PrecificacaoElevadorDetalhe;
+    return <Detalhe id={pzId} onVoltar={() => {
       setPzId(null);
       /* O App preserva o id da URL quando o subsel vira null na mesma rota (p/
          rotas que usam o 2º segmento como aba) — então limpa a URL antes,
@@ -459,7 +476,7 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
                    fornecedor: item.revisao é a revisão REAL deste documento
                    (nunca sintetizada — ver listarPendentes()), então não há
                    risco de colidir com outro documento real da família. */}
-                <td className="mono">{item.numeroCotacao != null ? window.MasterIdEngine.etapaId('cotacao', item.numeroCotacao, item.revisao) : '—'}</td>
+                <td className="mono">{item.numeroCotacao != null ? window.MasterIdEngine.etapaId('cotacao', item.numeroCotacao, item.revisao) : '—'}{item.categoria === 'escada_rolante' ? <span className="muted small"> · Escada</span> : item.categoria === 'esteira_rolante' ? <span className="muted small"> · Esteira</span> : null}</td>
                 <td>{item.clienteNome || '—'}</td>
                 <td>{item.direto ? <span className="small" title="Preço combinado por fora — sem Cotação a Fornecedor">Direto (sem fornecedor)</span> : <>{item.fornecedor}{item.numeroDocumentoFornecedor ? <span className="muted small mono"> · {item.numeroDocumentoFornecedor}</span> : null}{item.substituidaPor ? <span className="small" style={{ color: 'var(--vp-danger)', fontWeight: 700 }} title={`O fornecedor recebeu uma revisão mais nova (${item.substituidaPor}). Precifique a revisão mais nova.`}> · substituída por {item.substituidaPor}</span> : null}</>}</td>
                 <td>{item.respondedAt ? new Date(item.respondedAt).toLocaleDateString('pt-BR') : '—'}</td>

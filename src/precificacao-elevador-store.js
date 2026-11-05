@@ -486,7 +486,7 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { data: cots, error } = await c.from('cotacoes_elevador_fornecedor')
       .select('id, numero_documento, revisao, fornecedor, formulario_elevador_id, status, responded_at, categoria_produto')
-      .in('status', ['respondido', 'em_analise', 'aprovada']).eq('categoria_produto', 'elevador').order('responded_at', { ascending: false });
+      .in('status', ['respondido', 'em_analise', 'aprovada']).in('categoria_produto', ['elevador', 'escada_rolante', 'esteira_rolante']).order('responded_at', { ascending: false });
     if (error) throw error;
 
     /* "Direto pra Precificação" (pedido do usuário, 19/08): preço já veio
@@ -502,6 +502,14 @@
       ? await c.from('formularios_elevador').select('id, numero_cotacao, cliente_id, clientes(razao_social, cnpj)').in('id', formularioIds)
       : { data: [] };
     const { data: precificacoes } = await c.from('precificacoes_elevador').select('id, cotacao_fornecedor_id, formulario_elevador_id, status');
+    /* 05/11 (cotação 1009) — escada/esteira também entram na fila, mas a precificação
+       delas mora em tabela própria (sem motor: preço de venda lançado à mão). */
+    let pzEscEst = [];
+    try {
+      const r = await c.from('precificacoes_escada_esteira').select('id, cotacao_fornecedor_id, formulario_elevador_id, categoria, status');
+      if (!r.error) pzEscEst = r.data || [];
+    } catch (e) { /* tabela ausente: tudo "não iniciada" */ }
+    const pzEscEstPorCotacao = {}; (pzEscEst || []).forEach((p) => { if (p.cotacao_fornecedor_id) pzEscEstPorCotacao[p.cotacao_fornecedor_id] = p; });
     const formPorId = {}; (forms || []).forEach((f) => { formPorId[f.id] = f; });
     const pzPorCotacao = {}; (precificacoes || []).forEach((p) => { if (p.cotacao_fornecedor_id) pzPorCotacao[p.cotacao_fornecedor_id] = p; });
     const pzPorFormulario = {}; (precificacoes || []).forEach((p) => { if (!p.cotacao_fornecedor_id) pzPorFormulario[p.formulario_elevador_id] = p; });
@@ -549,8 +557,10 @@
 
     const daCotacao = (cots || []).map((cot) => {
       const form = formPorId[cot.formulario_elevador_id] || {};
-      const pz = pzPorCotacao[cot.id];
+      const ehEscEst = cot.categoria_produto === 'escada_rolante' || cot.categoria_produto === 'esteira_rolante';
+      const pz = ehEscEst ? pzEscEstPorCotacao[cot.id] : pzPorCotacao[cot.id];
       return {
+        categoria: cot.categoria_produto || 'elevador',
         substituidaPor: criadoEm[cot.id] ? substituidaPor(cot, criadoEm[cot.id]) : null,
         cotacaoFornecedorId: cot.id, numeroDocumentoFornecedor: rotuloComLetra(cot), fornecedor: cot.fornecedor,
         /* 23/10 (pedido do usuário) — a letra desta LINHA (a revisão real

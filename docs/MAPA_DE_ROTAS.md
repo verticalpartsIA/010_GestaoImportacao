@@ -199,7 +199,8 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | (CardContratoInstalador em dossier-obra.jsx) | Abrir no Jurídico → | `contrato-instalador` | `/juridico/contrato-instalador` | `dossier-obra.jsx:600` |
 | (CVDetalhe em cotacoes-varejo.jsx) | (acionado por um handler — ver o código) | `cadastro-fornecedores` | `/cadastros/cadastro-fornecedores` | `cotacoes-varejo.jsx:637` |
 | (CVLista em cotacoes-varejo.jsx) | Ir para Importação Varejo | `compras` | `/logistica/compras` | `cotacoes-varejo.jsx:51` |
-| (DetalheView em solicitacoes-produto.jsx) | (acionado por um handler — ver o código) | `ficha-tecnica` | `/engenharia/ficha-tecnica` | `solicitacoes-produto.jsx:891` |
+| (DetalheView em solicitacoes-produto.jsx) | (acionado por um handler — ver o código) | `ficha-tecnica` | `/engenharia/ficha-tecnica` | `solicitacoes-produto.jsx:955` |
+| (FtGenerator em ficha-tecnica.jsx) | (acionado por um handler — ver o código) | `solicitacoes-produto` | `/engenharia/solicitacoes-produto` | `ficha-tecnica.jsx:552` |
 | (irParaContratoInstalador em pagamentos-instalador.jsx) | (acionado por um handler — ver o código) | `contrato-instalador` | `/juridico/contrato-instalador` | `pagamentos-instalador.jsx:22` |
 | (LeadDetailView em comercial.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `comercial.jsx:1205` |
 | (LeadDetailView em comercial.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `comercial.jsx:1221` |
@@ -286,7 +287,7 @@ São abas de formulário/modal, filtros, modos de visualização e passos de ass
 | `logistica.jsx:1927` | EmailInbox | `modoCompose` | `'responder'` | `inbox` |
 | `ncm-catalogo.jsx:574` | NcmKanbanPage | `view` | `"kanban"` | `ncm-kanban` |
 | `pi.jsx:451` | PIForm | `tab` | `'id'` | `pi-importacao` |
-| `precificacao-elevador.jsx:484` | ModalAcrescentarEquipamento | `modo` | `grupos.length ? 'identico' : '` | (modal/componente interno) |
+| `precificacao-elevador.jsx:501` | ModalAcrescentarEquipamento | `modo` | `grupos.length ? 'identico' : '` | (modal/componente interno) |
 | `precificacao-memoria.jsx:46` | PZMemoriaCalculo | `aba` | `'resumo'` | (modal/componente interno) |
 | `precificacao.jsx:20` | PrecificacaoPage | `modo` | `'elevador'` | `precificacao` |
 | `proposta-form.jsx:1296` | S_Conteudo | `aba` | `null` | (modal/componente interno) |
