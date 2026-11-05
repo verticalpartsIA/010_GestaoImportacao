@@ -66,6 +66,14 @@
        Com precificacaoId, essa heurística some de propósito: o chamador
        mandou qual é, e a cotação do fornecedor vem só do vínculo DELA
        (nunca do "melhor" entre as cotações da família inteira). */
+    /* Escada/esteira têm tabela própria (preço de venda lançado pelo Financeiro).
+       Falha de leitura não derruba a herança: o valor só fica em branco. */
+    let precificacoesEscEst = [];
+    try {
+      const r = await c.from('precificacoes_escada_esteira').select('*').eq('numero_cotacao', numero);
+      if (!r.error) precificacoesEscEst = r.data || [];
+    } catch (e) { /* sem tabela/permissão: segue sem preço */ }
+
     const lista = cotacoes || [];
     const listaPz = precificacoes || [];
     const precificacao = precificacaoId
@@ -87,6 +95,7 @@
       unidades: unidades || [],
       cotacao,
       precificacao,
+      precificacoesEscEst,
     };
   }
 
@@ -522,7 +531,9 @@
      planilhas técnicas); a proposta usa SELECTS com listas fixas (OPTIONS em
      proposta-form.jsx). Por isso cada valor é normalizado para a opção
      equivalente — texto que não casa com nenhuma opção ficaria em branco no
-     select. Não há Precificação própria de escada/esteira: sem valores. */
+     select. O preço vem da Precificação de escada/esteira (preço de venda
+     lançado à mão pelo Financeiro, tabela precificacoes_escada_esteira);
+     sem ela finalizada, valorUnit fica em branco. */
   const ESC_OPTS = {
     escada: {
       empreendimento: ['Comercial', 'Supermercado', 'Shopping', 'Hospital', 'Aeroporto'],
@@ -570,6 +581,12 @@
         : { ...base, desnivelComp: _mm(e.desnivel_vertical || e.comprimento_total), largPallet: _opt(e.largura_palete, O.largura) };
     });
     const qtd = especificacoes.reduce((s, x) => s + (Number(x.qtd) || 0), 0);
+    /* Preço de venda lançado na Precificação de escada/esteira (só a finalizada). */
+    const calc = (typeof window !== 'undefined') && window.PrecificacaoEscEstCalc;
+    if (calc) {
+      const pz = calc.escolherParaProposta(fontes.precificacoesEscEst, calc.categoriaDoTipo(tipo));
+      if (pz) especificacoes.splice(0, especificacoes.length, ...calc.aplicarPrecosNaProposta(especificacoes, pz));
+    }
     return {
       especificacoes,
       valores: { equipamento: tipo === 'escada' ? 'Escada Rolante' : 'Esteira Rolante', quantidade: String(qtd) },
