@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/16_servicos.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 01/11/2026 (origin/main `ae64ebf`)
-- **Palavras:** 11765 · **blocos:** 259 · **seções com selo próprio:** 77 de 90
-- **Origem do selo dos blocos:** próprio 131 · da seção 68 · da seção-pai 0 · do cabeçalho 29 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 31
-- **Selo efetivo dos blocos:** Conferido 172 · Herdado 43 · Não verificado 13
+- **Palavras:** 12378 · **blocos:** 264 · **seções com selo próprio:** 77 de 90
+- **Origem do selo dos blocos:** próprio 137 · da seção 67 · da seção-pai 0 · do cabeçalho 29 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 31
+- **Selo efetivo dos blocos:** Conferido 176 · Herdado 40 · Não verificado 17
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -42,16 +42,16 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | S2.11 Histórico | `docs/modulos/16_servicos.md#s211-histórico` | 3 | Conferido (uniforme) | 1 | b1 |
 | S3 Copiloto VP | `docs/modulos/16_servicos.md#s3-copiloto-vp` | 2 | — | 0 | — |
 | S3.1 O que é | `docs/modulos/16_servicos.md#s31-o-que-é` | 3 | Conferido (uniforme) | 4 | b2 s2 |
-| S3.2 Onde está | `docs/modulos/16_servicos.md#s32-onde-está` | 3 | Conferido (uniforme) | 3 | b3 |
+| S3.2 Onde está | `docs/modulos/16_servicos.md#s32-onde-está` | 3 | Conferido (uniforme) | 4 | b4 |
 | S3.3 Quem usa | `docs/modulos/16_servicos.md#s33-quem-usa` | 3 | Conferido (uniforme) | 1 | b1 |
 | S3.4 Como entra e sai | `docs/modulos/16_servicos.md#s34-como-entra-e-sai` | 3 | Conferido (uniforme) | 3 | b3 |
-| S3.5 Regras e janelas | `docs/modulos/16_servicos.md#s35-regras-e-janelas` | 3 | Herdado (misto (vale o mais fraco)) | 5 | b5 |
+| S3.5 Regras e janelas | `docs/modulos/16_servicos.md#s35-regras-e-janelas` | 3 | Não verificado (misto (vale o mais fraco)) | 6 | b6 |
 | S3.6 Dados | `docs/modulos/16_servicos.md#s36-dados` | 3 | Conferido (uniforme) | 1 | b1 |
-| S3.7 Segurança | `docs/modulos/16_servicos.md#s37-segurança` | 3 | Herdado (misto (vale o mais fraco)) | 3 | b3 |
-| S3.8 Falhas e como se percebe | `docs/modulos/16_servicos.md#s38-falhas-e-como-se-percebe` | 3 | Conferido (uniforme) | 2 | b2 |
+| S3.7 Segurança | `docs/modulos/16_servicos.md#s37-segurança` | 3 | Herdado (misto (vale o mais fraco)) | 4 | b4 |
+| S3.8 Falhas e como se percebe | `docs/modulos/16_servicos.md#s38-falhas-e-como-se-percebe` | 3 | Conferido (uniforme) | 3 | b3 |
 | S3.9 Testes | `docs/modulos/16_servicos.md#s39-testes` | 3 | Herdado (uniforme) | 1 | b1 |
-| S3.10 Pendências e achados | `docs/modulos/16_servicos.md#s310-pendências-e-achados` | 3 | Herdado (uniforme) | 4 | b1 s3 |
-| S3.11 Histórico | `docs/modulos/16_servicos.md#s311-histórico` | 3 | Herdado (uniforme) | 1 | b1 |
+| S3.10 Pendências e achados | `docs/modulos/16_servicos.md#s310-pendências-e-achados` | 3 | Não verificado (misto (vale o mais fraco)) | 5 | b3 s2 |
+| S3.11 Histórico | `docs/modulos/16_servicos.md#s311-histórico` | 3 | Herdado (misto (vale o mais fraco)) | 1 | b1 |
 | S4 Telegram | `docs/modulos/16_servicos.md#s4-telegram` | 2 | — | 0 | — |
 | S4.1 O que é | `docs/modulos/16_servicos.md#s41-o-que-é` | 3 | Conferido (uniforme) | 5 | b2 s3 |
 | S4.2 Onde está | `docs/modulos/16_servicos.md#s42-onde-está` | 3 | Conferido (uniforme) | 1 | b1 |
