@@ -242,6 +242,7 @@ Lê (só leitura) o banco do hub pelo papel `copiloto_leitura` e o Omie pela fer
 
 ### S3.8 Falhas e como se percebe
 `GET /saude`; `journalctl -u copiloto-claude`; `perguntas.log`. Fila cheia responde 429 (no `/perguntar` a pergunta é contada mesmo assim, achado A10). **Conferido.**
+- **Bolinha responde "Failed to authenticate: OAuth session expired and could not be refreshed":** o login do Claude na VPS (`/root/.claude/.credentials.json`; o serviço roda como root com `HOME=/root`) ficou **sem refresh token e sem `expiresAt`**, então não se renova. O serviço segue ativo e `/perguntar` não grava o erro no `perguntas.log`: o sinal é uma sequência de respostas com `custo_usd: 0` e 2 a 4 segundos (última resposta boa em 04/11/2026 20:52 UTC). Conferido só pelos campos do arquivo, nenhum token foi lido. **Conferido** (05/11/2026, só leitura). Ver achado A-OAuth.
 
 ### S3.9 Testes
 Sem teste automatizado. Validações registradas: classificação NCM e "Preencher a ficha" testadas por chamada real (26/10/2026). **Herdado** (memória da sessão). Cenário: **Dado** um usuário logado que já fez 20 perguntas na última hora, **quando** pergunta de novo, **então** recebe o aviso de limite.
@@ -249,10 +250,11 @@ Sem teste automatizado. Validações registradas: classificação NCM e "Preench
 ### S3.10 Pendências e achados
 - **Achado, sem correção (A10):** em `/perguntar`, a fila cheia devolve 429 sem devolver a cota (o `/ncm` devolve); a cota vive só em memória.
 - `vp-copiloto` **removida em 01/11/2026**. **Decisão do Gelson (02/11/2026), opção "a":** o Copiloto da VPS passa a ler `vp_copiloto_docs` (só a linha `rota:<rota>` da tela aberta). Pronto e testado na VPS, **não publicado** ([#1334](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1334)). Até a publicação, vale a divergência D1.
+- **Achado (A-OAuth, 05/11/2026), aberto:** o login OAuth do Claude na VPS expira sem renovar e derruba a bolinha, a Ficha Técnica e o WhatsApp do Copiloto. Correção (exige pessoa, é interativa): refazer o login como root (`claude /login` ou `claude setup-token`), reiniciar `copiloto-claude` e testar na bolinha; avaliar token de longa duração. Melhoria: gravar o erro no `perguntas.log` e mostrar o estado do login em `GET /saude` ([#1364](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1364)).
 - Pendente desde 25/10/2026: um modo da VPS **sem memória** para a descrição com IA não apagar a conversa da bolinha. **Herdado.**
 
 ### S3.11 Histórico
-Bolinha passou da Edge Function para a VPS em 11/10/2026; pesquisador na internet em 25/10; NCM/DUIMP na VPS e "Preencher a ficha" em 26/10/2026. **Herdado** (specs e memória).
+Bolinha passou da Edge Function para a VPS em 11/10/2026; pesquisador na internet em 25/10; NCM/DUIMP na VPS e "Preencher a ficha" em 26/10/2026. **Herdado** (specs e memória). 05/11/2026: bolinha fora do ar por login OAuth expirado na VPS; diagnosticado sem alterar nada ([#1364](https://github.com/verticalpartsIA/010_GestaoImportacao/issues/1364)).
 
 ---
 
