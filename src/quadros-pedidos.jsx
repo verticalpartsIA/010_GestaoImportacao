@@ -64,15 +64,13 @@ function QuadrosPedidosPage() {
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
   }, [carregar]);
 
-  React.useEffect(() => {
-    const ajustar = () => {
-      const el = caixaRef.current;
-      if (el) setAlturaCaixa(Math.max(260, Math.floor(window.innerHeight - el.getBoundingClientRect().top - 20)));
-    };
-    ajustar();
-    window.addEventListener('resize', ajustar);
-    return () => window.removeEventListener('resize', ajustar);
-  }, [linhas]);
+  // Recalcula a cada renderização (avisos que surgem depois da carga empurram a caixa para baixo da janela) e ao redimensionar.
+  const ajustarCaixa = () => {
+    const el = caixaRef.current;
+    if (el) { const h = Math.max(260, Math.floor(window.innerHeight - el.getBoundingClientRect().top - 20)); setAlturaCaixa((a) => (a === h ? a : h)); }
+  };
+  React.useEffect(ajustarCaixa);
+  React.useEffect(() => { window.addEventListener('resize', ajustarCaixa); return () => window.removeEventListener('resize', ajustarCaixa); }, []);
 
   const lista = linhas ? ord.aplicar(linhas, {
     pedido: (r) => (r.numero ? Number(r.numero) : null), cliente: (r) => r.cliente, vendedor: (r) => r.vendedor,
@@ -88,7 +86,11 @@ function QuadrosPedidosPage() {
           <h1 className="page-head__title">Pedidos com Quadro de Comando</h1>
           <p className="page-head__sub">Pedidos do Omie com quadro de comando (etapa 20) e tudo o que está na Evolução da Fabricação. O número é o do Omie. As barras vão de 0 a 100%.</p>
         </div>
+        <div className="page-head__r qc-no-print">
+          <button className="btn" onClick={() => window.print()} disabled={!linhas} title="Abre a impressão desta lista">🖨 Imprimir</button>
+        </div>
       </div>
+      <div className="qc-print-only" style={{ fontSize: 11, marginBottom: 6 }}>Impresso em {new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}{(window.__VP_USER || {}).nome ? ` por ${(window.__VP_USER || {}).nome}` : ''}</div>
       {erro ? <div className="card" style={{ padding: 16, color: 'var(--vp-danger)' }}>Não foi possível carregar os pedidos: {erro}</div> : null}
       {!erro && !linhas ? <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div> : null}
       {linhas ? (
@@ -96,7 +98,7 @@ function QuadrosPedidosPage() {
           <div style={{ fontSize: 13, color: 'var(--fg3)', marginBottom: 8 }}>
             {linhas.length} linha(s)
           </div>
-          <div ref={caixaRef} className="card table-wrap pcp-rolagem" style={{ overflow: 'auto', maxHeight: alturaCaixa || undefined }}>
+          <div ref={caixaRef} className="card table-wrap pcp-rolagem qc-caixa" style={{ overflow: 'auto', maxHeight: alturaCaixa || undefined }}>
             <table className="t pcp-grid">
               <thead><tr>
                 {ord.th('pedido', 'Nº do pedido')}{ord.th('cliente', 'Cliente')}{ord.th('vendedor', 'Vendedor')}

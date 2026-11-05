@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/14_quadros_comando.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 04/11/2026 (origin/main `43baa55`)
-- **Palavras:** 5402 · **blocos:** 118 · **seções com selo próprio:** 51 de 60
-- **Origem do selo dos blocos:** próprio 59 · da seção 26 · da seção-pai 0 · do cabeçalho 13 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 20
-- **Selo efetivo dos blocos:** Conferido 87 · Herdado 8 · Não verificado 3
+- **Palavras:** 5927 · **blocos:** 122 · **seções com selo próprio:** 51 de 60
+- **Origem do selo dos blocos:** próprio 60 · da seção 27 · da seção-pai 0 · do cabeçalho 15 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 20
+- **Selo efetivo dos blocos:** Conferido 91 · Herdado 8 · Não verificado 3
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -36,9 +36,9 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 14.2.5 Botões e controles | `docs/modulos/14_quadros_comando.md#1425-botões-e-controles` | 3 | Conferido (uniforme) | 1 | b1 |
 | 14.2.6 Comportamento | `docs/modulos/14_quadros_comando.md#1426-comportamento` | 3 | Conferido (uniforme) | 1 | b1 |
 | 14.2.7 Dados | `docs/modulos/14_quadros_comando.md#1427-dados` | 3 | Conferido (uniforme) | 1 | b1 |
-| 14.2.8 Regras e armadilhas | `docs/modulos/14_quadros_comando.md#1428-regras-e-armadilhas` | 3 | Conferido (uniforme) | 4 | b2 s2 |
+| 14.2.8 Regras e armadilhas | `docs/modulos/14_quadros_comando.md#1428-regras-e-armadilhas` | 3 | Conferido (uniforme) | 6 | b3 s3 |
 | 14.2.9 Testes | `docs/modulos/14_quadros_comando.md#1429-testes` | 3 | — | 1 | c1 |
-| 14.2.10 Pendências e decisões | `docs/modulos/14_quadros_comando.md#14210-pendências-e-decisões` | 3 | — | 3 | c3 |
+| 14.2.10 Pendências e decisões | `docs/modulos/14_quadros_comando.md#14210-pendências-e-decisões` | 3 | — | 5 | c5 |
 | 14.2.11 Histórico | `docs/modulos/14_quadros_comando.md#14211-histórico` | 3 | Conferido (uniforme) | 1 | b1 |
 | 14.3 Separação FAB QC | `docs/modulos/14_quadros_comando.md#143-separação-fab-qc` | 2 | — | 0 | — |
 | 14.3.1 O que é | `docs/modulos/14_quadros_comando.md#1431-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
