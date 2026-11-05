@@ -2,15 +2,19 @@
    O botão "Imprimir" abre a impressão do navegador; aqui sai o que não é conteúdo (menu, topo, botões, bolha do assistente) e a caixa
    rolável vira página corrida. Em A4 deitado, com as colunas completas. */
 .qc-print-only { display: none; }
+/* @page precisa ficar FORA do @media (dentro dele o Chrome ignora e imprime em retrato). */
+@page { size: A4 landscape; margin: 8mm; }
 @media print {
-  @page { size: A4 landscape; margin: 10mm; }
   .sidebar, .header, .toast-viewport, .vpc-bubble, .qc-no-print { display: none !important; }
   .app { display: block !important; }
   .main { margin: 0 !important; padding: 0 !important; width: 100% !important; }
   .qc-print-only { display: block !important; }
-  .qc-caixa { max-height: none !important; overflow: visible !important; box-shadow: none !important; border: 0 !important; }
+  .qc-caixa, .qc-caixa.table-wrap, .table-wrap { max-height: none !important; overflow: visible !important; box-shadow: none !important; border: 0 !important; width: 100% !important; max-width: 100% !important; }
+  .page, .main, .app { max-width: 100% !important; overflow: visible !important; }
+  table.t { table-layout: auto !important; min-width: 0 !important; }
+  table.t th, table.t td { min-width: 0 !important; white-space: normal !important; word-break: break-word; }
   .qc-sub { background: #fff !important; }
-  table.t { width: 100% !important; font-size: 10px !important; }
+  table.t { width: 100% !important; font-size: 9px !important; }
   table.t th, table.t td { padding: 3px 5px !important; }
   tr { break-inside: avoid; }
   thead { display: table-header-group; }

@@ -322,6 +322,14 @@ app.get('/separacao-tv/:token', (_req, res) => {
   res.sendFile(path.join(__dirname, 'separacao-tv.html'));
 });
 
+/* ---------- Quadros de Comando — links públicos (gestores e separação pelo celular) ----------
+   /quadros-publico/<tipo>/<token> → entrega quadros-publico.html (tipo: pedidos | separacao | separacao_fab).
+   O token é lido no client (RPC qc_publico_dados). Sem SSO. */
+app.get('/quadros-publico/:tipo/:token', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'quadros-publico.html'));
+});
+
 /* ---------- Execução de vistoria pelo técnico (Vistorias de Obras, Fase 3) ----------
    /vistoria/<token> → entrega vistoria-execucao.html. O token é lido no
    client (vistorias_atividades.token). Sem SSO — link enviado direto
@@ -407,7 +415,7 @@ const NO_CACHE_EXT = ['.html', '.js', '.jsx', '.css', '.json'];
    as pastas do front (src/styles/assets) e os módulos do SPA (mesmos slugs de
    MODULE_SLUG em src/router.js). Todo o resto responde 404. */
 const PUBLIC_ROOT_FILES = new Set([
-  'index.html', 'index-print.html', 'assinar.html', 'cotacao.html', 'cotacao-elevador-fornecedor.html', 'cotacao-varejo.html', 'separacao-tv.html',
+  'index.html', 'index-print.html', 'assinar.html', 'cotacao.html', 'cotacao-elevador-fornecedor.html', 'cotacao-varejo.html', 'separacao-tv.html', 'quadros-publico.html',
   'diario-obra.html', 'fabricacao-quadro.html', 'fabricacao-oficina.html', 'formulario-cliente.html', 'status-obra.html', 'termo-entrega.html',
   'vistoria-execucao.html', 'formulario-quadro-comando-publico.html', 'recibo-instalador.html', 'colors_and_type.css', 'favicon.ico',
 ]);

@@ -56,6 +56,7 @@ const PAGINAS_PUBLICAS = [
   { url: '/cotacao-elevador-fornecedor/e2e-token', root: '#cef-root' },
   { url: '/cotacao-varejo/e2e-token', root: '#cv-root' },
   { url: '/separacao-tv/e2e-token', root: '#st-root' },
+  { url: '/quadros-publico/pedidos/e2e-token', root: '#qp-root' },
   { url: '/vistoria/e2e-token', root: '#ve-root' },
   { url: '/status-obra/e2e-token', root: '#so-root' },
   { url: '/status-obra-interno/e2e-token', root: '#so-root' }, // modo interno (equipe): outro caminho no status-obra-app.jsx
