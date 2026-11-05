@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/01_geral.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `fd5cf97`)
-- **Palavras:** 23089 · **blocos:** 498 · **seções com selo próprio:** 9 de 74
-- **Origem do selo dos blocos:** próprio 26 · da seção 85 · da seção-pai 0 · do cabeçalho 343 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 44
-- **Selo efetivo dos blocos:** Conferido 412 · Herdado 0 · Não verificado 42
+- **Palavras:** 23299 · **blocos:** 499 · **seções com selo próprio:** 9 de 74
+- **Origem do selo dos blocos:** próprio 27 · da seção 85 · da seção-pai 0 · do cabeçalho 343 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 44
+- **Selo efetivo dos blocos:** Conferido 412 · Herdado 0 · Não verificado 43
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -86,7 +86,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-6 Identidade, alçadas e segurança | `docs/modulos/01_geral.md#pc-6-identidade-alçadas-e-segurança` | 3 | — | 5 | c5 |
 | PC-7 Jobs agendados do Geral | `docs/modulos/01_geral.md#pc-7-jobs-agendados-do-geral` | 3 | — | 3 | c3 |
 | PC-8 Tabelas comuns | `docs/modulos/01_geral.md#pc-8-tabelas-comuns` | 3 | — | 1 | c1 |
-| PC-9 Padrões de navegação, cache e testes | `docs/modulos/01_geral.md#pc-9-padrões-de-navegação-cache-e-testes` | 3 | Conferido (selo explícito da seção) | 21 | b14 s7 |
+| PC-9 Padrões de navegação, cache e testes | `docs/modulos/01_geral.md#pc-9-padrões-de-navegação-cache-e-testes` | 3 | Conferido (selo explícito da seção) | 22 | b15 s7 |
 | PC-10 Menu "?" (Ajuda, Treinamento, Enviar feedback) | `docs/modulos/01_geral.md#pc-10-menu--ajuda-treinamento-enviar-feedback` | 3 | — | 8 | c8 |
 | PC-11 Documentos soltos e pendências comuns | `docs/modulos/01_geral.md#pc-11-documentos-soltos-e-pendências-comuns` | 3 | Conferido (uniforme) | 6 | b1 s5 |
 | PC-12 Governança: departamentos, auditoria e lacunas | `docs/modulos/01_geral.md#pc-12-governança-departamentos-auditoria-e-lacunas` | 3 | — | 6 | c6 |
