@@ -786,6 +786,36 @@
     } catch (e) { return false; }
   }
 
+  /* 06/11/2026 — pedido de AUMENTO de valor atendido pelo Financeiro (Gelson: "para aumentar a proposta fica
+     destravada"). Depois do "Herdar Dados" o preço novo precisa ir ao banco mesmo com a proposta travada
+     (enviada/aprovada), mas SÓ isso: esta função grava apenas o bloco `<eq>.valores` e o estado do pedido
+     (aumentoPendente/aumentoLog) por cima do que já está no banco — nenhum outro campo muda, o status não
+     muda e nada é destravado. Só funciona se o banco ainda tem um pedido de aumento ABERTO nesta proposta
+     e para quem pode pedir (dono ou Líder). Fora disso o salvar normal continua barrado pela trava. */
+  async function salvarValoresPorAumento({ data, eq, editId, valorTotal }) {
+    const c = sb(); if (!c) return { erro: 'Sem conexão com o sistema.' };
+    if (!editId || !data) return { erro: 'Proposta não identificada.' };
+    try {
+      if (!(await podeOcultarEquipamento(editId))) return { erro: 'Só o dono da proposta ou o Líder pode aplicar o novo valor.' };
+      const { data: row, error } = await c.from('propostas').select('status, data_json').eq('id', editId).maybeSingle();
+      if (error || !row) return { erro: 'Não encontrei a proposta.' };
+      const dj = row.data_json || {};
+      const itensDb = (dj[eq] && dj[eq].valores && dj[eq].valores.itens) || [];
+      const temPedidoAberto = !!dj.aumentoPendente || itensDb.some((it) => it && it.aumentoPendente);
+      if (!temPedidoAberto) return { erro: 'Não há pedido de aumento aberto nesta proposta.' };
+      const v = (data[eq] && data[eq].valores) || {};
+      const campos = ['itens', 'parcelas', 'formaTipo', 'qtdParcelas', 'forma', 'opcao90', 'escolhaEntrega'];
+      const novosValores = { ...((dj[eq] && dj[eq].valores) || {}) };
+      campos.forEach((k) => { if (k in v) novosValores[k] = v[k]; });
+      const novoDj = { ...dj, [eq]: { ...(dj[eq] || {}), valores: novosValores },
+        aumentoPendente: data.aumentoPendente || null, aumentoLog: data.aumentoLog || dj.aumentoLog };
+      const { error: e2 } = await c.from('propostas').update({ data_json: novoDj, valor_total: valorTotal, atualizado_em: new Date().toISOString() }).eq('id', editId);
+      if (e2) return { erro: e2.message };
+      try { window.VPLog?.registrar({ modulo: 'Propostas', acao: 'Aplicou o novo valor do Financeiro (pedido de aumento)', alvo: 'Proposta', alvo_id: editId, detalhe: { status: row.status, valor_total: valorTotal } }); } catch (_) {}
+      return { ok: true };
+    } catch (e) { return { erro: e.message || String(e) }; }
+  }
+
   /* Excluir — pedido do usuário 19/08, fase de muito teste no ar: precisa
      de um jeito rápido de limpar propostas de teste. Gate pela mesma
      alçada 'excluir' (módulo 'propostas'), não hardcoded — quem não tem
@@ -1003,7 +1033,7 @@
     publicar, conteudoVigente, conteudoRenderizavel, resolverEq, normalizarEq,
     markSent, markViewed, markSigned, refuse, solicitarRevisao, decidirRevisao,
     executarEfeitosAssinatura,
-    salvar,
+    salvar, salvarValoresPorAumento,
     resolverEscopoVisibilidade, resetEscopoVisibilidadeCache,
     resolverPerfilAtual, temCapacidade, podeConcederAlcadas, resetAlcadasCache,
     listarAlcadas, concederAlcada, destravar, excluir, podeOcultarEquipamento,

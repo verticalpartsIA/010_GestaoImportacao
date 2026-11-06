@@ -584,7 +584,16 @@
         respondedAt: form.envio_direto_precificacao_em, precificacaoId: null, precificacaoStatus: null,
         statusCotacao: null, direto: true,
       }));
-    return [...diretosResultado, ...daCotacao];
+    /* 06/11/2026 — "Alterar valor" da Proposta: cotação com pedido de aumento aberto ganha a marca
+       `revisaoValor` (lista de pedidos) para o Financeiro ver na fila. Só leitura; falha não derruba a fila. */
+    let pedidosAumento = {};
+    try {
+      if (window.PropostaAumentoStore) {
+        const nums = [...diretosResultado, ...daCotacao].map((r) => r.numeroCotacao).filter((n) => n != null);
+        pedidosAumento = await window.PropostaAumentoStore.pendentesPorCotacao(nums);
+      }
+    } catch (e) { console.warn('[PrecificacaoElevadorStore] pedidos de aumento indisponíveis', e); }
+    return [...diretosResultado, ...daCotacao].map((r) => ({ ...r, revisaoValor: (r.numeroCotacao != null && pedidosAumento[String(r.numeroCotacao)]) || null }));
   }
 
   /* ---------- Monta o snapshot inicial (modelos, quantidade, VMLE) a partir do
@@ -927,6 +936,8 @@
     /* 10/10/2026 — o método da planilha do Financeiro é o ÚNICO método de formação de preço; precificação antiga
        (markup sobre o custo / margem sobre a venda) é convertida ao calcular de novo. */
     await salvar(id, { resultado, resultado_v2: resultadoV2, resultado_v2_expresso: resultadoV2Expresso, difal, parametros_fiscais_snapshot: snapshotIcms, modo_formacao_preco: 'planilha', status: 'calculado' });
+    /* 06/11/2026 — pedido de aumento de valor da Proposta: se o preço mudou, avisa quem pediu (best-effort, não espera). */
+    try { if (window.PropostaAumentoStore) window.PropostaAumentoStore.aoSalvarPrecificacao(formulario.numero_cotacao); } catch (_) { /* aviso nunca impede o cálculo */ }
     return { resultado, resultadoV2, resultadoV2Expresso, difal };
   }
 

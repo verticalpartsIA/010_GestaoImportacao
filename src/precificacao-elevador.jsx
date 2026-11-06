@@ -481,7 +481,14 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
                 <td>{item.direto ? <span className="small" title="Preço combinado por fora — sem Cotação a Fornecedor">Direto (sem fornecedor)</span> : <>{item.fornecedor}{item.numeroDocumentoFornecedor ? <span className="muted small mono"> · {item.numeroDocumentoFornecedor}</span> : null}{item.substituidaPor ? <span className="small" style={{ color: 'var(--vp-danger)', fontWeight: 700 }} title={`O fornecedor recebeu uma revisão mais nova (${item.substituidaPor}). Precifique a revisão mais nova.`}> · substituída por {item.substituidaPor}</span> : null}</>}</td>
                 <td>{item.respondedAt ? new Date(item.respondedAt).toLocaleDateString('pt-BR') : '—'}</td>
                 <td>{item.direto ? <span className="muted small">—</span> : <StatusBadge status={window.CotacaoElevadorFornecedorStore.statusGroupLabel(item.statusCotacao)}/>}</td>
-                <td>{item.precificacaoStatus ? <StatusBadge status={item.precificacaoStatus === 'finalizado' ? 'Aprovada' : item.precificacaoStatus === 'calculado' ? 'Em análise' : 'Recebida'}/> : <span className="muted small">Não iniciada</span>}</td>
+                <td>{item.precificacaoStatus ? <StatusBadge status={item.precificacaoStatus === 'finalizado' ? 'Aprovada' : item.precificacaoStatus === 'calculado' ? 'Em análise' : 'Recebida'}/> : <span className="muted small">Não iniciada</span>}
+                  {/* 06/11/2026 — "Alterar valor" da Proposta: o Comercial pediu um valor maior; o Financeiro ajusta aqui. */}
+                  {item.revisaoValor && item.revisaoValor.length > 0 && (() => {
+                    const A = window.PropostaAumento;
+                    const dica = item.revisaoValor.map((p) => `${p.nivel === 'proposta' ? 'Valor total' : p.itemId}: de ${A.brl(p.pedido.valorAtual)} para ${A.brl(p.pedido.valorPedido)}${p.pedido.motivo ? ' — ' + p.pedido.motivo : ''}`).join('\n');
+                    return <div><span className="pe-tag" style={{ background: 'var(--vp-warning-tint, #f8eed7)', marginTop: 4, display: 'inline-block' }} title={dica}>Revisão de valor pedida ({item.revisaoValor.length})</span></div>;
+                  })()}
+                </td>
                 <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
               </tr>
             ))}
