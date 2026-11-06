@@ -101,6 +101,10 @@
       }
     });
 
+    if (d.precoDefasado) {
+      add('preco-defasado', 'atencao', 'valores', 'Preço diferente da Precificação', `A Precificação está em ${brl(d.precoDefasado.total)} e a proposta mostra ${brl(d.precoDefasado.anterior)}. A proposta já foi vista pelo cliente e só muda quando o Comercial pede.`);
+    }
+
     /* ---- estado da proposta ---- */
     if (ctx.temContrato) {
       add('contrato-existe', 'atencao', 'valores', 'Já existe contrato desta proposta', 'Se o valor ou o conteúdo mudou, o Jurídico precisa refazer o contrato.');

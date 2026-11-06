@@ -228,10 +228,10 @@ function S_Proposta({ d, set, herdar, herdando, heranca }) {
           <input className="pe-input" inputMode="numeric" placeholder="ex.: 902"
             value={d.numeroCotacao || ""}
             onChange={(e) => set("numeroCotacao", e.target.value.replace(/\D/g, ""))}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); herdar && herdar({ atualizar: true }); } }}/>
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); herdar && herdar(); } }}/>
           <button type="button" className="pe-heranca__btn"
             disabled={herdando || !String(d.numeroCotacao || "").trim()}
-            onClick={() => herdar && herdar({ atualizar: true })}>
+            onClick={() => herdar && herdar()}>
             {herdando ? "Buscando…" : "Herdar dados"}
           </button>
         </div>
@@ -1177,6 +1177,13 @@ As parcelas serão recalculadas.`;
 
   return (
     <>
+      {d.precoDefasado && (
+        <div className="small" style={{ margin: "0 0 12px", padding: "8px 10px", background: "var(--vp-warning-tint, #f8eed7)", borderRadius: 6 }}>
+          <b>⚠ Preço diferente da Precificação.</b> A Precificação desta cotação agora está em <b>R$ {formatBR(Number(d.precoDefasado.total) || 0)}</b> e esta
+          proposta mostra <b>R$ {formatBR(Number(d.precoDefasado.anterior) || 0)}</b>. Ela já foi vista pelo cliente e <b>não muda sozinha</b>: só muda quando o
+          Comercial pede ("Alterar valor da proposta").
+        </div>
+      )}
       {temItens && AUM && podeOcultar && (
         <div className="pe-acab-cat" style={{ marginBottom: 12 }}>
           <div className="row gap-2" style={{ alignItems: "center", flexWrap: "wrap" }}>

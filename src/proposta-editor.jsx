@@ -864,11 +864,8 @@ function PropostaEditor({ setRoute, subsel }) {
   const [heranca, setHeranca] = React.useState(null);
 
   const herdar = React.useCallback(async (opts) => {
-    /* `atualizar` só vem do CLIQUE no botão (nunca da herança automática ao abrir):
-       a Precificação foi recalculada depois da 1ª herança e o merge só preenche
-       campo vazio, então o preço novo nunca entrava ("clico em Herdar e o valor
-       não muda"). No clique explícito os VALORES passam a seguir a Precificação. */
-    const atualizar = !!(opts && opts.atualizar === true);
+    /* O merge só completa campo vazio e NUNCA sobrescreve o que a proposta já tem; preço novo não vem daqui (REGRA de
+       06/11/2026: a proposta herda o preço sozinha quando a Precificação é calculada). */
     const num = String(data.numeroCotacao || '').trim();
     if (!num) return;
     if (!window.PropostaHeranca) {
@@ -895,48 +892,9 @@ function PropostaEditor({ setRoute, subsel }) {
           const bloco = window.PropostaHeranca.montarBlocoEscadaEsteira(r.fontes, eq);
           if (bloco) prefill[eq] = bloco;
         }
-        /* Atualiza os preços: troca itens/parcelas/forma de pagamento/opção 90d pelos da
-           Precificação atual. Só pede confirmação se algo vai mudar de verdade. */
-        let valoresNovos = null;
-        let atendidosHerdar = [];
-        let propostaAtendida = null;
-        if (atualizar && eq === 'elevador' && prefill.elevador && prefill.elevador.valores
-            && Array.isArray(prefill.elevador.valores.itens) && prefill.elevador.valores.itens.length) {
-          const v = prefill.elevador.valores;
-          const atuais = (data.elevador && data.elevador.valores) || {};
-          const mudou = JSON.stringify(atuais.itens || []) !== JSON.stringify(v.itens)
-            || JSON.stringify(atuais.parcelas || []) !== JSON.stringify(v.parcelas || []);
-          if (!mudou) {
-            window.toast?.('Os valores já estão iguais aos da Precificação.', 'info');
-          } else if (confirm('A Precificação desta cotação tem valores diferentes dos da proposta.\n\n'
-              + 'Atualizar equipamentos, valores e parcelas com os da Precificação?\n'
-              + '(Descontos e parcelas ajustados na mão serão substituídos.)')) {
-            /* Pedido de aumento (06/11/2026): os itens novos nascem sem histórico; leva o histórico dos antigos e
-               fecha o pedido cujo preço mudou na Precificação (o aviso de volta sai depois de gravar o estado). */
-            let itensNovos = v.itens;
-            const AUM = window.PropostaAumento;
-            const porEmail = ((window.__VP_USER || {}).email || '').trim().toLowerCase();
-            if (AUM) {
-              const mig = AUM.migrarAposHerdar(atuais.itens, v.itens, porEmail);
-              itensNovos = mig.itens;
-              atendidosHerdar = mig.atendidos;
-              if (data.aumentoPendente) {
-                const ocultosIds = new Set((atuais.ocultos || []));
-                const totalNovo = itensNovos.filter((it) => !ocultosIds.has(it.id))
-                  .reduce((s, it) => s + AUM.parseNum(it.valorUnit) * (Number(it.quantidade) || 1), 0);
-                const rp = AUM.atender(data, totalNovo, porEmail);
-                if (rp.atendido) {
-                  propostaAtendida = { aumentoPendente: rp.alvo.aumentoPendente, aumentoLog: rp.alvo.aumentoLog };
-                  atendidosHerdar = [...atendidosHerdar, { id: 'proposta', valorAnterior: data.aumentoPendente.valorAtual, valorPedido: rp.valorPedido, valorNovo: rp.valorNovo }];
-                }
-              }
-            }
-            valoresNovos = {
-              itens: itensNovos, parcelas: v.parcelas, formaTipo: v.formaTipo,
-              qtdParcelas: v.qtdParcelas, forma: v.forma, opcao90: v.opcao90 || null, escolhaEntrega: null,
-            };
-          }
-        }
+        /* REGRA (Gelson, 06/11/2026): o preço NÃO vem mais do "Herdar dados". Reprecificou, a proposta herda sozinha
+           (ao calcular a Precificação e ao abrir esta tela — ver `sincronizarPrecoAoAbrir` abaixo). Aqui o merge só
+           completa o que está vazio (inclusive os valores de uma proposta que acabou de nascer). */
         setData((d) => {
           /* A lista padrão de escada/esteira nasce com 1 unidade em branco, e o
              merge só preenche lista vazia: sem esvaziá-la a herança não entrava. */
@@ -955,31 +913,8 @@ function PropostaEditor({ setRoute, subsel }) {
             pf = { ...pf, elevador: restoElev };
           }
           const merged = deepMergeHeranca(base, pf);
-          if (valoresNovos) {
-            merged.elevador = { ...merged.elevador, valores: { ...(merged.elevador.valores || {}), ...valoresNovos } };
-          }
-          if (propostaAtendida) Object.assign(merged, propostaAtendida);
           return merged;
         });
-        /* Pedido atendido: o novo preço entrou na proposta (em memória — vai ao banco no "Salvar", que em proposta
-           travada ainda exige o destrave). Avisa a volta (+ Jurídico se houver contrato). */
-        /* Proposta travada: o preço novo vai ao banco já (só os valores + o fechamento do pedido), sem destravar. */
-        if (valoresNovos && atendidosHerdar.length && recordId && travada && window.PropostaStore.salvarValoresPorAumento) {
-          const valoresFinais = { ...((data.elevador && data.elevador.valores) || {}), ...valoresNovos };
-          const dadosFinais = { ...data, ...(propostaAtendida || {}), elevador: { ...data.elevador, valores: valoresFinais } };
-          window.PropostaStore.salvarValoresPorAumento({
-            data: dadosFinais, eq: 'elevador', editId: recordId, valorTotal: calcularValorTotal(dadosFinais, 'elevador'),
-          }).then((res) => {
-            if (res && res.erro) window.toast?.('Não foi possível gravar o novo valor: ' + res.erro, 'error');
-            else window.toast?.('Novo valor do Financeiro gravado na proposta (proposta continua travada).', 'success');
-          });
-        }
-        if (valoresNovos && atendidosHerdar.length && recordId && window.PropostaAumentoStore) {
-          window.PropostaAumentoStore.avisarAtendimento({
-            propostaId: recordId, atendidos: atendidosHerdar,
-            cliente: data.cliente && data.cliente.nome, numeroCotacao: num,
-          });
-        }
         setHeranca({ tipo: 'ok', texto: 'Herdado de: ' + window.PropostaHeranca.resumoFontes(r.fontes) });
         window.toast?.(`✓ Dados herdados da cotação ${num}`, 'success');
       }
@@ -988,7 +923,7 @@ function PropostaEditor({ setRoute, subsel }) {
     } finally {
       setHerdando(false);
     }
-  }, [data.numeroCotacao, data.elevador, data.aumentoPendente, data.cliente, recordId, travada, eq]);
+  }, [data.numeroCotacao, data.elevador, eq]);
 
   /* Auto-herda uma vez ao abrir — pedido do usuário 19/08: "conforme os
      inputs forem acontecendo a proposta vai se auto preenchendo". Uma
@@ -1004,6 +939,28 @@ function PropostaEditor({ setRoute, subsel }) {
     autoHerdadoRef.current = true;
     herdar();
   }, [loadingExisting, data.numeroCotacao, herdar]);
+
+  /* REGRA (Gelson, 06/11/2026): reprecificou, a proposta herda. Ao abrir uma proposta de elevador já salva, confere com a
+     Precificação: rascunho recebe o preço novo (em memória e no banco); proposta que o cliente já viu NÃO muda sozinha
+     (só se o Comercial pediu o aumento) e fica marcada "Preço diferente da Precificação". */
+  const syncPrecoRef = React.useRef(false);
+  React.useEffect(() => {
+    if (syncPrecoRef.current || loadingExisting || !recordId || eq !== 'elevador' || !data.numeroCotacao) return;
+    if (!window.PropostaAumentoStore || !window.PropostaAumentoStore.sincronizarPreco) return;
+    syncPrecoRef.current = true;
+    const num = window.MasterIdEngine && window.MasterIdEngine.parseNumeroCotacao ? window.MasterIdEngine.parseNumeroCotacao(data.numeroCotacao) : data.numeroCotacao;
+    window.PropostaAumentoStore.sincronizarPreco(num, recordId).then((r) => {
+      const feita = (r.atualizadas || [])[0];
+      const marcada = (r.marcadas || [])[0];
+      if (feita) {
+        setData((d) => ({ ...d, precoDefasado: null, ...(feita.propostaAtendida || {}), elevador: { ...d.elevador, valores: { ...(d.elevador.valores || {}), ...feita.valores } } }));
+        const rs = (n) => 'R$ ' + (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        window.toast?.(`Preço atualizado pela Precificação: ${rs(feita.resultado.totalAnterior)} → ${rs(feita.resultado.total)}`, 'info');
+      } else if (marcada) {
+        setData((d) => ({ ...d, precoDefasado: { total: marcada.total, anterior: marcada.anterior, em: new Date().toISOString() } }));
+      }
+    }).catch(() => {});
+  }, [loadingExisting, recordId, eq, data.numeroCotacao]);
 
   /* ---- Salvar PDF / Imprimir ----
      Era html2canvas + jsPDF: capturava cada seção como FOTO e colava no
