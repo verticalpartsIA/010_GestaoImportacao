@@ -467,3 +467,61 @@ test('criar(): sem revisão na cotação do fornecedor (original), número sai i
   const pz = await criar('FORM-1', 'COT-ORIGINAL');
   assert.equal(pz.numero_documento, 'VPPC-0990');
 });
+
+/* ---------- Containers por ID-TAG (06/11/2026): o Financeiro cita o ID-TAG + quantidade ---------- */
+const PZS = window.PrecificacaoElevadorStore;
+const CUSTOS_TAG = [
+  { id_tag: 'CONT-001', tipo: '20HC (High Cube)', porto: 'Santos', ativo: true, preco_rs: 24138.45, capatazia_rs: 1877.3, gri_rs: 0, taxa_porto_rs: null },
+  { id_tag: 'CONT-002', tipo: '40HC (High Cube)', porto: 'Santos', ativo: true, preco_rs: 26820.5, capatazia_rs: 1877.3, gri_rs: 0, taxa_porto_rs: 1341 },
+  { id_tag: 'CONT-003', tipo: '40HC (High Cube)', porto: 'Itajaí', ativo: true, preco_rs: 27900, capatazia_rs: 1600, gri_rs: 100, taxa_porto_rs: 900 },
+  { id_tag: 'CONT-004', tipo: 'Tank (Cisterna)', porto: 'Santos', ativo: true, preco_rs: 50000, capatazia_rs: 0, gri_rs: 0, taxa_porto_rs: 0 },
+];
+
+test('isoDoTipoCustos — nome do cadastro vira o código ISO que o Embarque lê; sem equivalente vira "Outro"', () => {
+  assert.equal(PZS.isoDoTipoCustos('40HC (High Cube)'), "40'HC");
+  assert.equal(PZS.isoDoTipoCustos('20GP (Padrão)'), "20'DV");
+  assert.equal(PZS.isoDoTipoCustos('Tank (Cisterna)'), 'Outro');
+  assert.equal(PZS.isoDoTipoCustos(undefined), 'Outro');
+});
+
+test('aplicarIdTagNaLinha — puxa tipo ISO, porto e os 4 valores; mantém a quantidade; não muta a linha', () => {
+  const linha = { tipo_tamanho: '', quantidade: 3, preco_rs: 0 };
+  const out = PZS.aplicarIdTagNaLinha(linha, CUSTOS_TAG[2]);
+  assert.deepEqual(out, { tipo_tamanho: "40'HC", quantidade: 3, id_tag: 'CONT-003', porto: 'Itajaí', preco_rs: 27900, capatazia_rs: 1600, gri_rs: 100, taxa_porto_rs: 900 });
+  assert.deepEqual(linha, { tipo_tamanho: '', quantidade: 3, preco_rs: 0 });
+  // mesmo tamanho em outro porto traz os valores do OUTRO ID-TAG (não "a primeira linha do tipo")
+  assert.equal(PZS.aplicarIdTagNaLinha(linha, CUSTOS_TAG[1]).porto, 'Santos');
+  assert.equal(PZS.aplicarIdTagNaLinha(linha, CUSTOS_TAG[1]).taxa_porto_rs, 1341);
+  // valor ausente no cadastro vira 0 (taxa vazia não entra na conta)
+  assert.equal(PZS.aplicarIdTagNaLinha(linha, CUSTOS_TAG[0]).taxa_porto_rs, 0);
+  // tipo sem equivalente ISO fica 'Outro'
+  assert.equal(PZS.aplicarIdTagNaLinha(linha, CUSTOS_TAG[3]).tipo_tamanho, 'Outro');
+});
+
+test('enriquecerContainersComCusto — linha com ID-TAG não é reaplicada por tipo (nem preenchida quando o valor é 0)', () => {
+  const linha = { id_tag: 'CONT-001', tipo_tamanho: "20'HC", quantidade: 1, preco_rs: 0, capatazia_rs: 0 };
+  const [out] = PZS.enriquecerContainersComCusto([linha], [{ tipo: '20HC (High Cube)', ativo: true, preco_rs: 99999, capatazia_rs: 500 }]);
+  assert.equal(out.preco_rs, 0);
+  assert.equal(out.capatazia_rs, 0);
+  // linha SEM ID-TAG segue a regra de sempre (regra blindada)
+  const [sem] = PZS.enriquecerContainersComCusto([{ tipo_tamanho: "20'HC", quantidade: 1, preco_rs: 0 }], [{ tipo: '20HC (High Cube)', ativo: true, preco_rs: 99999 }]);
+  assert.equal(sem.preco_rs, 99999);
+});
+
+test('divergenciasContainerComCadastro — linha com ID-TAG compara com a PRÓPRIA linha do cadastro, inclusive a taxa de porto', () => {
+  const linha = { id_tag: 'CONT-003', tipo_tamanho: "40'HC", quantidade: 1, preco_rs: 27900, capatazia_rs: 1600, gri_rs: 100, taxa_porto_rs: 1000 };
+  const div = PZS.divergenciasContainerComCadastro([linha], CUSTOS_TAG);
+  assert.equal(div.length, 1);
+  assert.equal(div[0].campo, 'taxa_porto_rs');
+  assert.equal(div[0].cadastro, 900);
+  // igual ao cadastro: sem aviso. (Compararia com CONT-002 se fosse "o primeiro 40'HC".)
+  assert.deepEqual(PZS.divergenciasContainerComCadastro([{ ...linha, taxa_porto_rs: 900 }], CUSTOS_TAG), []);
+});
+
+test('linhaTemValorDiferenteDoIdTag — só valor > 0 que difere pede confirmação; vazio ou igual não', () => {
+  const alvo = CUSTOS_TAG[2];
+  assert.equal(PZS.linhaTemValorDiferenteDoIdTag({ preco_rs: 0, capatazia_rs: 0 }, alvo), false);
+  assert.equal(PZS.linhaTemValorDiferenteDoIdTag({ preco_rs: 27900, capatazia_rs: 1600, gri_rs: 100, taxa_porto_rs: 900 }, alvo), false);
+  assert.equal(PZS.linhaTemValorDiferenteDoIdTag({ preco_rs: 26820.5 }, alvo), true);
+  assert.equal(PZS.linhaTemValorDiferenteDoIdTag({ taxa_porto_rs: 5 }, CUSTOS_TAG[0]), true);
+});

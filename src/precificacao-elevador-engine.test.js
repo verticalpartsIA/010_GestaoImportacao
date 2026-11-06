@@ -343,6 +343,41 @@ test('Método da planilha — containers do cadastro (R$) viram US$ no frete e e
   assert.ok(com.importacao.afrmm > sem.importacao.afrmm, 'e entra no AFRMM');
 });
 
+test('Método da planilha — taxa de porto (06/11/2026): entra no CIF como a capatazia; taxa vazia não muda o preço', () => {
+  const base = { ...GOLDEN_963, freteSeguroCapataziaUsd: 0 };
+  const ct = { tipo_tamanho: "40'HC", quantidade: 2, preco_rs: 35000, capatazia_rs: 1500, gri_rs: 500 };
+  const semTaxa = E.calcularV2({ ...base, containers: [ct] });
+  const taxaVazia = E.calcularV2({ ...base, containers: [{ ...ct, taxa_porto_rs: null }] });
+  closeTo(taxaVazia.precificacao.precoVendaProposta, semTaxa.precificacao.precoVendaProposta, 1e-9, 'taxa vazia não muda nada');
+  closeTo(taxaVazia.planilha.containersRs, semTaxa.planilha.containersRs, 1e-9, 'nem o total dos containers');
+
+  const comTaxa = E.calcularV2({ ...base, containers: [{ ...ct, taxa_porto_rs: 800 }] });
+  closeTo(comTaxa.planilha.containersRs, 2 * 37800, 0.001, 'containers em R$ passam a incluir 2 × 800 de taxa de porto');
+  closeTo(comTaxa.planilha.taxaPortoRs, 1600, 0.001, 'taxa de porto isolada para exibição');
+  closeTo(comTaxa.planilha.containersUsd, 75600 / 5.5, 0.001, 'em US$, no frete');
+  assert.ok(comTaxa.importacao.vmldRs > semTaxa.importacao.vmldRs, 'a taxa aumenta a base (VMLD) — como a capatazia');
+  assert.ok(comTaxa.importacao.ii > semTaxa.importacao.ii, 'paga II');
+  closeTo(comTaxa.importacao.afrmm - semTaxa.importacao.afrmm, 0.08 * 1600, 0.01, 'e entra no AFRMM (8%)');
+  assert.ok(comTaxa.precificacao.precoVendaProposta > semTaxa.precificacao.precoVendaProposta, 'e encarece o preço de venda');
+
+  // container compartilhado (card 120d com 1 equipamento): a taxa acompanha o rateio, como container/capatazia/GRI
+  const metade = E.calcularV2({ ...base, containers: [{ ...ct, taxa_porto_rs: 800 }], containerRateioDivisor: 2 });
+  closeTo(metade.planilha.taxaPortoRs, 800, 0.001, 'taxa dividida pelo rateio');
+});
+
+test('calcular — taxa de porto soma como despesa operacional, entra na base do AFRMM e acompanha o rateio', () => {
+  const sem = E.calcular(inputsBase);
+  const containers = [{ tipo_tamanho: "40'HC", quantidade: 2, preco_rs: 1000, capatazia_rs: 250, gri_rs: 150, taxa_porto_rs: 300 }];
+  const com = E.calcular({ ...inputsBase, containers });
+  closeTo(com.importacao.taxaPortoRs, 600, 0.01, 'taxaPortoRs deveria ser 2×300');
+  closeTo(com.importacao.despesasExtrasTotal - sem.importacao.despesasExtrasTotal, 2 * (1000 + 250 + 150 + 300), 0.01, 'container + capatazia + GRI + taxa entram nas despesas operacionais');
+  closeTo(com.importacao.afrmm - sem.importacao.afrmm, 0.08 * 2 * 1700, 0.01, 'AFRMM = 8% × (1000 + 250 + 150 + 300) × 2');
+  const metade = E.calcular({ ...inputsBase, containers, containerRateioDivisor: 2 });
+  closeTo(metade.importacao.taxaPortoRs, 300, 0.01, 'taxa dividida pelo rateio');
+  const semTaxa = E.calcular({ ...inputsBase, containers: [{ ...containers[0], taxa_porto_rs: undefined }] });
+  closeTo(semTaxa.importacao.taxaPortoRs, 0, 1e-9, 'taxa ausente conta zero');
+});
+
 test('Modos antigos (markup_sobre_custo / margem_sobre_venda) continuam intactos', () => {
   const m = E.calcularV2({ ...GOLDEN_963, modoFormacaoPreco: 'markup_sobre_custo', markUpPct: 0.4 });
   assert.equal(m.versaoMotor, '2.0.0');

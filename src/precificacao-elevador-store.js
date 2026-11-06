@@ -69,6 +69,9 @@
      de uma precificação já existente/recarregada). */
   function enriquecerContainersComCusto(containers, custosContainers) {
     return (containers || []).map((ct) => {
+      // Linha com ID-TAG (06/11/2026): os valores vieram do cadastro quando o ID-TAG foi escolhido
+      // (aplicarIdTagNaLinha) e não são reaplicados por tipo ao abrir a tela.
+      if (ct && ct.id_tag) return ct;
       const custo = buscarContainerCustoPorIso(ct.tipo_tamanho, custosContainers);
       if (!custo) return ct;
       const out = { ...ct };
@@ -89,15 +92,51 @@
   function divergenciasContainerComCadastro(containers, custosContainers) {
     const out = [];
     (containers || []).forEach((ct, i) => {
-      const custo = buscarContainerCustoPorIso(ct.tipo_tamanho, custosContainers);
+      const custo = ct && ct.id_tag
+        ? (custosContainers || []).find((c) => c.id_tag === ct.id_tag) || null
+        : buscarContainerCustoPorIso(ct.tipo_tamanho, custosContainers);
       if (!custo) return;
-      [['preco_rs', 'preço do container'], ['capatazia_rs', 'capatazia'], ['gri_rs', 'GRI']].forEach(([campo, rotulo]) => {
+      [['preco_rs', 'preço do container'], ['capatazia_rs', 'capatazia'], ['gri_rs', 'GRI'], ['taxa_porto_rs', 'taxa de porto']].forEach(([campo, rotulo]) => {
         const atual = Number(ct[campo]) || 0;
         const cadastro = Number(custo[campo]) || 0;
         if (atual > 0 && cadastro > 0 && Math.abs(atual - cadastro) > 0.01) out.push({ indice: i, campo, rotulo, atual, cadastro });
       });
     });
     return out;
+  }
+
+  /* ID-TAG do container (06/11/2026): na Precificação o Financeiro cita o ID-TAG (CONT-001…) + a
+     quantidade e os valores do cadastro de Containers vêm sozinhos. Só precificações NOVAS (ou linhas
+     em que alguém escolhe o ID-TAG) herdam; precificação salva guarda o snapshot. */
+
+  // Tipo ISO a partir do nome do cadastro ("40HC (High Cube)" → "40'HC"). Sem equivalente → 'Outro'
+  // (o Embarque lê só os códigos ISO; ver o comentário do mapa acima).
+  function isoDoTipoCustos(tipoCustos) {
+    const par = Object.entries(CONTAINER_ISO_PARA_CUSTOS).find(([, nome]) => nome === tipoCustos);
+    return par ? par[0] : 'Outro';
+  }
+
+  // Aplica à linha da Precificação os valores da linha do cadastro escolhida pelo ID-TAG. Mantém a
+  // quantidade. Devolve uma linha nova (não muta). Valor ausente no cadastro vira 0.
+  function aplicarIdTagNaLinha(linha, custo) {
+    const n = (v) => Number(v) || 0;
+    return {
+      ...linha,
+      id_tag: custo.id_tag,
+      porto: custo.porto || '',
+      tipo_tamanho: isoDoTipoCustos(custo.tipo),
+      preco_rs: n(custo.preco_rs),
+      capatazia_rs: n(custo.capatazia_rs),
+      gri_rs: n(custo.gri_rs),
+      taxa_porto_rs: n(custo.taxa_porto_rs),
+    };
+  }
+
+  // A linha tem valor digitado/herdado que DIFERE do que o ID-TAG escolhido traria? (a tela pede
+  // confirmação antes de substituir.) Valor zero/vazio da linha não conta.
+  function linhaTemValorDiferenteDoIdTag(linha, custo) {
+    return ['preco_rs', 'capatazia_rs', 'gri_rs', 'taxa_porto_rs']
+      .some((k) => Number(linha[k]) > 0 && Math.abs(Number(linha[k]) - (Number(custo[k]) || 0)) > 0.01);
   }
 
   /* ============================================================
@@ -1185,6 +1224,7 @@
     listarPendentes, criar, obter, salvar, calcularEsalvar,
     camposObrigatoriosFaltando, aprovar, criarPropostaAutomatica, ressincronizarDoFornecedor,
     parseContainerNo, buscarContainerCustoPorIso, enriquecerContainersComCusto, divergenciasContainerComCadastro,
+    isoDoTipoCustos, aplicarIdTagNaLinha, linhaTemValorDiferenteDoIdTag,
     classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, atualizarMaoDeObra, renumerarPorParadas, montarBaseInputs,
     acrescentarEquipamento, removerEquipamento, restaurarEquipamentoMO,
   };
