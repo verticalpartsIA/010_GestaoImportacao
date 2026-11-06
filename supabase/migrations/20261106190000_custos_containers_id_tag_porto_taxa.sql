@@ -2,9 +2,11 @@
    Containers (Atualização de Custos): ID-TAG do container, Porto e Taxa de porto
    (06/11/2026, pedido do Gelson; spec em docs/modulos/05_financeiro_precos.md 5.1.10 item 10)
 
-   🔒 NÃO APLICAR sem o "Confirmo" do Gelson para esta mudança (trava da
-   Atualização de Custos, 13/10/2026; Art. 14 da Constituição). Esta migration
-   só foi ESCRITA; testada num Postgres descartável, nunca no banco de produção.
+   🔒 APLICADA em produção em 06/11/2026, com o "Confirmo" do Gelson para esta
+   mudança (trava da Atualização de Custos, 13/10/2026; Art. 14 da Constituição),
+   depois de testada num Postgres descartável. Registrada no histórico do
+   Supabase como `custos_containers_id_tag_porto_taxa`. Este arquivo é a cópia
+   versionada (o texto aplicado é o mesmo, sem este bloco de comentário).
 
    O que faz:
    1. Colunas novas em custos_containers:
