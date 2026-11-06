@@ -5,8 +5,8 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/05_financeiro_precos.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `980586c`)
-- **Palavras:** 15896 · **blocos:** 305 · **seções com selo próprio:** 50 de 72
-- **Origem do selo dos blocos:** próprio 71 · da seção 145 · da seção-pai 0 · do cabeçalho 57 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 32
+- **Palavras:** 16255 · **blocos:** 305 · **seções com selo próprio:** 50 de 72
+- **Origem do selo dos blocos:** próprio 72 · da seção 144 · da seção-pai 0 · do cabeçalho 57 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 32
 - **Selo efetivo dos blocos:** Conferido 215 · Herdado 25 · Não verificado 33
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
@@ -20,7 +20,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 5.1.1 O que é | `docs/modulos/05_financeiro_precos.md#511-o-que-é` | 3 | Herdado (misto (vale o mais fraco)) | 3 | b2 s1 |
 | 5.1.2 Rota e arquivos | `docs/modulos/05_financeiro_precos.md#512-rota-e-arquivos` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 5.1.3 Perfil e acesso | `docs/modulos/05_financeiro_precos.md#513-perfil-e-acesso` | 3 | Herdado (misto (vale o mais fraco)) | 3 | b3 |
-| 5.1.4 O que a tela mostra | `docs/modulos/05_financeiro_precos.md#514-o-que-a-tela-mostra` | 3 | Conferido (uniforme) | 7 | b1 s6 |
+| 5.1.4 O que a tela mostra | `docs/modulos/05_financeiro_precos.md#514-o-que-a-tela-mostra` | 3 | Conferido (uniforme) | 7 | b2 s5 |
 | 5.1.5 Botões e controles | `docs/modulos/05_financeiro_precos.md#515-botões-e-controles` | 3 | — | 1 | c1 |
 | 5.1.6 Comportamento | `docs/modulos/05_financeiro_precos.md#516-comportamento` | 3 | Conferido (uniforme) | 8 | b1 s7 |
 | 5.1.7 Dados — o que lê e o que grava | `docs/modulos/05_financeiro_precos.md#517-dados--o-que-lê-e-o-que-grava` | 3 | Herdado (misto (vale o mais fraco)) | 1 | b1 |

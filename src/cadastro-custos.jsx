@@ -277,8 +277,8 @@ function CCEscadaEsteiraTab() {
    "Recalcular" ao lado, pra reaplicar o câmbio de hoje numa linha que já
    tinha USD/R$ preenchidos antes desta feature existir. */
 /* AFRMM (13/10/2026): Adicional ao Frete para Renovação da Marinha Mercante — sempre 8% de
-   Preço + Capatazia + GRI. Só exibição (automático, não gravado). */
-const CC_AFRMM_PCT = 0.08;
+   Preço + Capatazia + GRI (+ Taxa de porto, 06/11/2026). Só exibição (automático, não gravado);
+   a conta mora em CadastroCustosStore.afrmmDoContainer (com teste). */
 const fmtUsdCC = (v) => 'US$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtBrlCC = (v) => 'R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -360,14 +360,31 @@ function CCContainersTab() {
     }
   };
 
-  /* tipo é NOT NULL UNIQUE no banco — nasce com um placeholder óbvio e
-     único (timestamp) pra não colidir; o Financeiro renomeia na hora. */
+  /* Taxa de porto (06/11/2026): mesma mecânica da Capatazia/GRI — USD recalcula o R$ pelo câmbio
+     de hoje num único save; R$ continua editável. Vazia não entra na soma do AFRMM. */
+  const salvarTaxaPortoUsd = async (row, usd) => {
+    setSaving(row.id);
+    try {
+      const patch = { ...row, taxa_porto_usd: usd };
+      if (cambioHoje && usd) patch.taxa_porto_rs = Math.round(usd * cambioHoje.valor * 100) / 100;
+      await window.CadastroCustosStore.salvarContainer(patch);
+      await reload();
+    } catch (e) {
+      window.toast?.('Erro ao salvar: ' + e.message, 'error');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  /* O mesmo tipo pode repetir em portos diferentes (06/11/2026): `tipo` não é mais único; quem
+     identifica a linha é o ID-TAG (CONT-001…), gerado pelo banco. A linha nasce com um nome-padrão
+     e o Financeiro preenche tipo, porto e valores. */
   const adicionarContainer = async () => {
     setAdicionando(true);
     try {
-      await window.CadastroCustosStore.salvarContainer({ tipo: `Novo container ${Date.now()}`, ativo: true });
+      await window.CadastroCustosStore.salvarContainer({ tipo: 'Novo container', ativo: true });
       await reload();
-      window.toast?.('Container adicionado — renomeie o tipo e preencha os dados.', 'success');
+      window.toast?.('Container adicionado — preencha o tipo, o porto e os valores.', 'success');
     } catch (e) {
       window.toast?.('Erro ao adicionar container: ' + e.message, 'error');
     } finally {
@@ -376,9 +393,15 @@ function CCContainersTab() {
   };
 
   const removerContainer = async (row) => {
-    if (!window.confirm(`Remover o container "${row.tipo}"?`)) return;
     setRemovendo(row.id);
     try {
+      /* ID-TAG já citado numa Precificação nunca é excluído (o banco também barra). */
+      const emUso = await window.CadastroCustosStore.containerEmUso(row.id_tag);
+      if (emUso > 0) {
+        window.toast?.(`O container ${row.id_tag} já foi usado em ${emUso} precificação(ões) e não pode ser excluído. Altere os valores (valem só para propostas novas).`, 'error');
+        return;
+      }
+      if (!window.confirm(`Remover o container ${row.id_tag} "${row.tipo}"?`)) return;
       await window.CadastroCustosStore.removerContainer(row.id);
       await reload();
     } catch (e) {
@@ -391,26 +414,34 @@ function CCContainersTab() {
   if (rows === null) return <div className="muted small" style={{ padding: '24px 0' }}>Carregando…</div>;
 
   return (
-    <Card title="Containers" sub="Specs ISO de referência + dados comerciais, preenchidos a cada cotação nova — todos os campos são editáveis, inclusive o tipo"
+    <Card title="Containers" sub="Specs ISO de referência + dados comerciais, preenchidos a cada cotação nova — todos os campos são editáveis, inclusive o tipo, exceto o ID-TAG (gerado pelo banco)"
       action={<Button variant="primary" size="sm" icon="plus" onClick={adicionarContainer} disabled={adicionando}>{adicionando ? 'Adicionando…' : '+ Adicionar container'}</Button>}>
       <div className="table-wrap">
         <table className="t">
           <thead><tr>
             {/* Larguras mínimas (13/10/2026): o valor digitado tem que caber inteiro na célula — antes as colunas
                 encolhiam e cortavam "6000.00", "1.827,77", "20HC (High Cube)" etc. */}
-            <th style={{ minWidth: 180 }}>Tipo</th><th style={{ minWidth: 90 }}>Compr. (m)</th><th style={{ minWidth: 140 }}>Altura</th><th style={{ minWidth: 90 }}>Capac. (m³)</th>
+            <th style={{ minWidth: 110 }} title="Identificador do container (CONT-001…). Gerado pelo banco; a Precificação cita o ID-TAG + quantidade. Não muda e não é reaproveitado.">ID-TAG</th>
+            <th style={{ minWidth: 180 }}>Tipo</th>
+            <th style={{ minWidth: 150 }} title="Porto de chegada do container (texto livre).">Porto</th>
+            <th style={{ minWidth: 90 }}>Compr. (m)</th><th style={{ minWidth: 140 }}>Altura</th><th style={{ minWidth: 90 }}>Capac. (m³)</th>
             <th className="text-right" style={{ minWidth: 135 }}>Preço (USD)</th><th className="text-right" style={{ minWidth: 175 }}>Preço (R$)</th>
             <th className="text-right" style={{ minWidth: 135 }}>Capatazia (USD)</th><th className="text-right" style={{ minWidth: 165 }}>Capatazia (R$)</th>
             <th className="text-right" style={{ minWidth: 135 }}>GRI (USD)</th><th className="text-right" style={{ minWidth: 165 }}>GRI (R$)</th>
-            <th className="text-right" style={{ minWidth: 135 }} title="Adicional ao Frete para Renovação da Marinha Mercante: sempre 8% de Preço + Capatazia + GRI. Calculado automaticamente.">AFRMM (USD)</th>
-            <th className="text-right" style={{ minWidth: 150 }} title="8% de Preço + Capatazia + GRI em R$. Calculado automaticamente.">AFRMM (R$)</th>
+            <th className="text-right" style={{ minWidth: 135 }} title="Taxa do porto, por container. Distinta da capatazia. Soma-se aos demais valores (Despesa Operacional); vazia, não entra na soma.">Taxa de porto (USD)</th>
+            <th className="text-right" style={{ minWidth: 165 }}>Taxa de porto (R$)</th>
+            <th className="text-right" style={{ minWidth: 135 }} title="Adicional ao Frete para Renovação da Marinha Mercante: sempre 8% de Preço + Capatazia + GRI + Taxa de porto (a taxa vazia não entra). Calculado automaticamente.">AFRMM (USD)</th>
+            <th className="text-right" style={{ minWidth: 150 }} title="8% de Preço + Capatazia + GRI + Taxa de porto em R$ (a taxa vazia não entra). Calculado automaticamente.">AFRMM (R$)</th>
             <th style={{ minWidth: 150 }}>Data cotação</th><th style={{ minWidth: 150 }}>Fornecedor</th><th style={{ minWidth: 220 }}>Observações</th><th></th>
           </tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} style={{ opacity: saving === r.id || removendo === r.id ? .5 : 1 }}>
+                <td className="mono" style={{ background: 'var(--bg-subtle, #f3f4f6)', fontWeight: 600, whiteSpace: 'nowrap' }}>{r.id_tag || '—'}</td>
                 <td><input className="input" style={{ width: '100%' }} defaultValue={r.tipo || ''}
                   onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== (r.tipo || '')) salvarCampo(r, 'tipo', v); }}/></td>
+                <td><input className="input" style={{ width: '100%' }} defaultValue={r.porto || ''}
+                  onBlur={(e) => { const v = e.target.value.trim(); if (v !== (r.porto || '')) salvarCampo(r, 'porto', v || null); }}/></td>
                 <td><CCInputNum value={r.comprimento_m} width={80} onBlurSave={(v) => salvarCampo(r, 'comprimento_m', v)}/></td>
                 <td><input className="input" style={{ width: '100%' }} defaultValue={r.altura_desc || ''}
                   onBlur={(e) => { if (e.target.value !== (r.altura_desc || '')) salvarCampo(r, 'altura_desc', e.target.value || null); }}/></td>
@@ -452,12 +483,26 @@ function CCContainersTab() {
                     </div>
                   )}
                 </td>
-                {/* AFRMM (13/10/2026): automático, sempre 8% de Preço + Capatazia + GRI — não é editável nem gravado. */}
+                {/* Taxa de porto (06/11/2026): mesma mecânica da Capatazia/GRI. Vazia não entra na soma. */}
+                <td className="text-right"><PZCurrencyInput moeda="USD" value={r.taxa_porto_usd} onChange={(v) => salvarTaxaPortoUsd(r, v)}/></td>
+                <td className="text-right">
+                  <PZCurrencyInput moeda="BRL" value={r.taxa_porto_rs} onChange={(v) => salvarCampo(r, 'taxa_porto_rs', v)}/>
+                  {cambioHoje && r.taxa_porto_usd > 0 && (
+                    <div className="small" style={{ marginTop: 4, color: 'var(--fg3)', whiteSpace: 'nowrap' }}>
+                      <Button variant="ghost" size="sm" disabled={saving === r.id}
+                        onClick={() => salvarCampo(r, 'taxa_porto_rs', Math.round(Number(r.taxa_porto_usd) * cambioHoje.valor * 100) / 100)}>
+                        Recalcular
+                      </Button>
+                    </div>
+                  )}
+                </td>
+                {/* AFRMM (13/10/2026; com a taxa de porto em 06/11/2026): automático, sempre 8% de Preço + Capatazia + GRI
+                    + Taxa de porto (vazia não entra) — não é editável nem gravado. Conta em CadastroCustosStore.afrmmDoContainer. */}
                 <td className="text-right mono" style={{ background: 'var(--bg-subtle, #f3f4f6)' }}>
-                  {fmtUsdCC(CC_AFRMM_PCT * ((Number(r.preco_usd) || 0) + (Number(r.capatazia_usd) || 0) + (Number(r.gri_usd) || 0)))}
+                  {fmtUsdCC(window.CadastroCustosStore.afrmmDoContainer(r).usd)}
                 </td>
                 <td className="text-right mono" style={{ background: 'var(--bg-subtle, #f3f4f6)' }}>
-                  {fmtBrlCC(CC_AFRMM_PCT * ((Number(r.preco_rs) || 0) + (Number(r.capatazia_rs) || 0) + (Number(r.gri_rs) || 0)))}
+                  {fmtBrlCC(window.CadastroCustosStore.afrmmDoContainer(r).rs)}
                 </td>
                 <td>
                   <input className="input" type="date" style={{ width: '100%' }} value={r.data_cotacao || ''}
