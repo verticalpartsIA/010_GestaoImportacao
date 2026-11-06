@@ -848,6 +848,8 @@ function PropostaEditor({ setRoute, subsel }) {
         /* Atualiza os preços: troca itens/parcelas/forma de pagamento/opção 90d pelos da
            Precificação atual. Só pede confirmação se algo vai mudar de verdade. */
         let valoresNovos = null;
+        let atendidosHerdar = [];
+        let propostaAtendida = null;
         if (atualizar && eq === 'elevador' && prefill.elevador && prefill.elevador.valores
             && Array.isArray(prefill.elevador.valores.itens) && prefill.elevador.valores.itens.length) {
           const v = prefill.elevador.valores;
@@ -859,8 +861,28 @@ function PropostaEditor({ setRoute, subsel }) {
           } else if (confirm('A Precificação desta cotação tem valores diferentes dos da proposta.\n\n'
               + 'Atualizar equipamentos, valores e parcelas com os da Precificação?\n'
               + '(Descontos e parcelas ajustados na mão serão substituídos.)')) {
+            /* Pedido de aumento (06/11/2026): os itens novos nascem sem histórico; leva o histórico dos antigos e
+               fecha o pedido cujo preço mudou na Precificação (o aviso de volta sai depois de gravar o estado). */
+            let itensNovos = v.itens;
+            const AUM = window.PropostaAumento;
+            const porEmail = ((window.__VP_USER || {}).email || '').trim().toLowerCase();
+            if (AUM) {
+              const mig = AUM.migrarAposHerdar(atuais.itens, v.itens, porEmail);
+              itensNovos = mig.itens;
+              atendidosHerdar = mig.atendidos;
+              if (data.aumentoPendente) {
+                const ocultosIds = new Set((atuais.ocultos || []));
+                const totalNovo = itensNovos.filter((it) => !ocultosIds.has(it.id))
+                  .reduce((s, it) => s + AUM.parseNum(it.valorUnit) * (Number(it.quantidade) || 1), 0);
+                const rp = AUM.atender(data, totalNovo, porEmail);
+                if (rp.atendido) {
+                  propostaAtendida = { aumentoPendente: rp.alvo.aumentoPendente, aumentoLog: rp.alvo.aumentoLog };
+                  atendidosHerdar = [...atendidosHerdar, { id: 'proposta', valorAnterior: data.aumentoPendente.valorAtual, valorPedido: rp.valorPedido, valorNovo: rp.valorNovo }];
+                }
+              }
+            }
             valoresNovos = {
-              itens: v.itens, parcelas: v.parcelas, formaTipo: v.formaTipo,
+              itens: itensNovos, parcelas: v.parcelas, formaTipo: v.formaTipo,
               qtdParcelas: v.qtdParcelas, forma: v.forma, opcao90: v.opcao90 || null, escolhaEntrega: null,
             };
           }
@@ -886,8 +908,28 @@ function PropostaEditor({ setRoute, subsel }) {
           if (valoresNovos) {
             merged.elevador = { ...merged.elevador, valores: { ...(merged.elevador.valores || {}), ...valoresNovos } };
           }
+          if (propostaAtendida) Object.assign(merged, propostaAtendida);
           return merged;
         });
+        /* Pedido atendido: o novo preço entrou na proposta (em memória — vai ao banco no "Salvar", que em proposta
+           travada ainda exige o destrave). Avisa a volta (+ Jurídico se houver contrato). */
+        /* Proposta travada: o preço novo vai ao banco já (só os valores + o fechamento do pedido), sem destravar. */
+        if (valoresNovos && atendidosHerdar.length && recordId && travada && window.PropostaStore.salvarValoresPorAumento) {
+          const valoresFinais = { ...((data.elevador && data.elevador.valores) || {}), ...valoresNovos };
+          const dadosFinais = { ...data, ...(propostaAtendida || {}), elevador: { ...data.elevador, valores: valoresFinais } };
+          window.PropostaStore.salvarValoresPorAumento({
+            data: dadosFinais, eq: 'elevador', editId: recordId, valorTotal: calcularValorTotal(dadosFinais, 'elevador'),
+          }).then((res) => {
+            if (res && res.erro) window.toast?.('Não foi possível gravar o novo valor: ' + res.erro, 'error');
+            else window.toast?.('Novo valor do Financeiro gravado na proposta (proposta continua travada).', 'success');
+          });
+        }
+        if (valoresNovos && atendidosHerdar.length && recordId && window.PropostaAumentoStore) {
+          window.PropostaAumentoStore.avisarAtendimento({
+            propostaId: recordId, atendidos: atendidosHerdar,
+            cliente: data.cliente && data.cliente.nome, numeroCotacao: num,
+          });
+        }
         setHeranca({ tipo: 'ok', texto: 'Herdado de: ' + window.PropostaHeranca.resumoFontes(r.fontes) });
         window.toast?.(`✓ Dados herdados da cotação ${num}`, 'success');
       }
@@ -896,7 +938,7 @@ function PropostaEditor({ setRoute, subsel }) {
     } finally {
       setHerdando(false);
     }
-  }, [data.numeroCotacao, data.elevador, eq]);
+  }, [data.numeroCotacao, data.elevador, data.aumentoPendente, data.cliente, recordId, travada, eq]);
 
   /* Auto-herda uma vez ao abrir — pedido do usuário 19/08: "conforme os
      inputs forem acontecendo a proposta vai se auto preenchendo". Uma
