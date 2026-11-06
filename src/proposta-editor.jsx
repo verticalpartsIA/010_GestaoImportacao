@@ -409,6 +409,56 @@ function PEChip({ label, value, mono, destaque }) {
 /* Envio por assinatura digital — mesmo padrão do Contrato Instalador/Venda
    (link público /assinar/:token, WhatsApp ou E-mail). Reaproveita FEField/
    FEInput (formulario-elevador.jsx, já global) pra não duplicar estilo. */
+/* Resultado da "Conferir proposta": lista de achados (checagens exatas), com "O que falta para enviar" e atalho para
+   a seção. Só leitura — nada aqui altera a proposta; o envio continua com o gate de sempre (4.5.10 item 13). */
+function ConferenciaModal({ achados, onClose, onIr }) {
+  const C = window.PropostaConferir;
+  const resumo = C.resumo(achados);
+  const falta = C.faltaParaEnviar(achados);
+  const COR = { impede: "#b00020", atencao: "#9a6a00", sugestao: "var(--fg3)" };
+  const ROT = { impede: "Grave", atencao: "Atenção", sugestao: "Sugestão" };
+  const [soFalta, setSoFalta] = React.useState(false);
+  const lista = soFalta ? falta : achados;
+  return (
+    <Modal title="Conferir proposta" onClose={onClose} width={620}
+      footer={<Button variant="primary" onClick={onClose}>Fechar</Button>}>
+      <div className="stack" style={{ gap: 12 }}>
+        {achados.length === 0 ? (
+          <div style={{ padding: "10px 12px", background: "var(--vp-gray-50)", borderRadius: 6 }}>
+            <b>✓ Nada fora do lugar nas checagens exatas.</b>
+            <div className="small muted" style={{ marginTop: 4 }}>Conferido por código: cliente, vendedor, texto, valores, parcelas e pedidos abertos.</div>
+          </div>
+        ) : (
+          <>
+            <div className="small muted">
+              {resumo.impede > 0 && <b style={{ color: COR.impede }}>{resumo.impede} grave{resumo.impede > 1 ? "s" : ""}</b>}
+              {resumo.impede > 0 && " · "}{resumo.atencao} atenção · {resumo.sugestao} sugest{resumo.sugestao === 1 ? "ão" : "ões"}.
+              {" "}A conferência só aponta: não bloqueia o envio nem altera a proposta.
+            </div>
+            <label className="small" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input type="checkbox" checked={soFalta} onChange={(e) => setSoFalta(e.target.checked)}/>
+              Mostrar só "O que falta para enviar" ({falta.length})
+            </label>
+            <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 8 }}>
+              {lista.map((a) => (
+                <li key={a.id} style={{ padding: "8px 10px", border: "1px solid var(--border, #ddd)", borderRadius: 6 }}>
+                  <div className="row gap-2" style={{ alignItems: "baseline", flexWrap: "wrap" }}>
+                    <b style={{ color: COR[a.gravidade] }}>{ROT[a.gravidade]}</b>
+                    <span>{a.titulo}</span>
+                    <button type="button" className="pe-acab-addfield" style={{ marginTop: 0, marginLeft: "auto" }} onClick={() => onIr(a.secao)}>Ir para a seção</button>
+                  </div>
+                  <div className="small muted" style={{ marginTop: 2 }}>{a.detalhe}</div>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        <div className="small muted">Conferido por código. A leitura por IA (Bolinha) vem em uma próxima fase.</div>
+      </div>
+    </Modal>
+  );
+}
+
 function PropostaSendModal({ record, onClose, onSent }) {
   const [telefone, setTelefone] = React.useState(record.cliente?.telefone || '');
   const [email, setEmail] = React.useState(record.cliente?.email || '');
@@ -1056,6 +1106,22 @@ function PropostaEditor({ setRoute, subsel }) {
   const partialCount = fills.filter(f => f.kind === "partial").length;
   const completePct = Math.round((filledCount + partialCount * 0.5) / sections.length * 100);
 
+  /* "Conferir proposta" (06/11/2026): checagens EXATAS em código, sem IA; só lê e aponta (4.5.10 item 13). */
+  const [conferindo, setConferindo] = React.useState(false);
+  const [conferencia, setConferencia] = React.useState(null);
+  const conferirAgora = async () => {
+    setConferindo(true);
+    try {
+      let temContrato = false;
+      if (recordId && window.PropostaAumentoStore && window.PropostaAumentoStore.temContrato) {
+        try { temContrato = await window.PropostaAumentoStore.temContrato(recordId); } catch (_) { temContrato = false; }
+      }
+      const achados = window.PropostaConferir.conferir(data, eq, { travada, temContrato });
+      setConferencia({ achados, em: Date.now() });
+      try { window.VPLog?.registrar({ modulo: "Propostas", acao: "Conferiu a proposta (checagens exatas)", alvo: "Proposta", alvo_id: recordId || null, detalhe: window.PropostaConferir.resumo(achados) }); } catch (_) {}
+    } finally { setConferindo(false); }
+  };
+
   const jump = (sid) => {
     setActiveSection(sid);
     if (collapsed[sid]) setCollapsed((c) => ({ ...c, [sid]: false }));
@@ -1152,6 +1218,11 @@ function PropostaEditor({ setRoute, subsel }) {
               onClick={publicar}>
               {publicando ? "Publicando…" : (meta?.publicado_em ? "Republicar" : "Publicar")}
             </Button>
+            {window.PropostaConferir && (
+              <Button variant="outline" size="sm" icon="check" disabled={conferindo}
+                title="Aponta o que está fora do lugar antes de enviar. Só lê: não altera nada."
+                onClick={conferirAgora}>{conferindo ? "Conferindo…" : "Conferir"}</Button>
+            )}
             <Button variant="outline" size="sm" icon="download" onClick={() => setPdfOverlay(true)}>Gerar PDF</Button>
             <Button variant="secondary" size="sm" icon="check" disabled={travada}
               title={travada ? "Proposta travada — peça destrave" : undefined}
@@ -1317,6 +1388,10 @@ function PropostaEditor({ setRoute, subsel }) {
         {showPreview && <PEPreview data={data} eq={eq}/>}
       </div>
 
+      {conferencia && (
+        <ConferenciaModal achados={conferencia.achados} onClose={() => setConferencia(null)}
+          onIr={(sid) => { setConferencia(null); jump(sid); }}/>
+      )}
       {sendModal && (
         <PropostaSendModal record={sendModal} onClose={() => setSendModal(null)}
           onSent={() => window.toast?.('✓ Proposta enviada — o cliente já pode ler e assinar pelo link.', 'success')}/>

@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/01_geral.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `fd5cf97`)
-- **Palavras:** 23299 · **blocos:** 499 · **seções com selo próprio:** 9 de 74
-- **Origem do selo dos blocos:** próprio 27 · da seção 85 · da seção-pai 0 · do cabeçalho 343 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 44
-- **Selo efetivo dos blocos:** Conferido 412 · Herdado 0 · Não verificado 43
+- **Palavras:** 23909 · **blocos:** 507 · **seções com selo próprio:** 10 de 75
+- **Origem do selo dos blocos:** próprio 30 · da seção 90 · da seção-pai 0 · do cabeçalho 343 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 44
+- **Selo efetivo dos blocos:** Conferido 414 · Herdado 0 · Não verificado 49
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -90,3 +90,4 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-10 Menu "?" (Ajuda, Treinamento, Enviar feedback) | `docs/modulos/01_geral.md#pc-10-menu--ajuda-treinamento-enviar-feedback` | 3 | — | 8 | c8 |
 | PC-11 Documentos soltos e pendências comuns | `docs/modulos/01_geral.md#pc-11-documentos-soltos-e-pendências-comuns` | 3 | Conferido (uniforme) | 6 | b1 s5 |
 | PC-12 Governança: departamentos, auditoria e lacunas | `docs/modulos/01_geral.md#pc-12-governança-departamentos-auditoria-e-lacunas` | 3 | — | 6 | c6 |
+| PC-13 A Bolinha como secretária: convite, cadeia entre módulos e dependências (SPECIFY, 06/11/2026, pedido do Gelson; ainda NÃO implementado — selo: Não verificado) | `docs/modulos/01_geral.md#pc-13-a-bolinha-como-secretária-convite-cadeia-entre-módulos-e-dependências-specify-06112026-pedido-do-gelson-ainda-não-implementado--selo-não-verificado` | 3 | Não verificado (selo no título) | 8 | b3 s5 |
