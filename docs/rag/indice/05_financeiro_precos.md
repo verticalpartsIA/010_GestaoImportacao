@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/05_financeiro_precos.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `980586c`)
-- **Palavras:** 14739 · **blocos:** 302 · **seções com selo próprio:** 50 de 72
-- **Origem do selo dos blocos:** próprio 68 · da seção 145 · da seção-pai 0 · do cabeçalho 57 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 32
-- **Selo efetivo dos blocos:** Conferido 222 · Herdado 17 · Não verificado 31
+- **Palavras:** 15237 · **blocos:** 304 · **seções com selo próprio:** 50 de 72
+- **Origem do selo dos blocos:** próprio 70 · da seção 145 · da seção-pai 0 · do cabeçalho 57 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 32
+- **Selo efetivo dos blocos:** Conferido 222 · Herdado 17 · Não verificado 33
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -34,7 +34,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 5.2.3 Perfil e acesso | `docs/modulos/05_financeiro_precos.md#523-perfil-e-acesso` | 3 | Conferido (uniforme) | 2 | b2 |
 | 5.2.4 O que a tela mostra | `docs/modulos/05_financeiro_precos.md#524-o-que-a-tela-mostra` | 3 | — | 13 | c13 |
 | 5.2.5 Botões e controles | `docs/modulos/05_financeiro_precos.md#525-botões-e-controles` | 3 | — | 1 | c1 |
-| 5.2.6 Comportamento | `docs/modulos/05_financeiro_precos.md#526-comportamento` | 3 | Não verificado (misto (vale o mais fraco)) | 14 | b2 s12 |
+| 5.2.6 Comportamento | `docs/modulos/05_financeiro_precos.md#526-comportamento` | 3 | Não verificado (misto (vale o mais fraco)) | 16 | b4 s12 |
 | 5.2.7 Dados — o que lê e o que grava | `docs/modulos/05_financeiro_precos.md#527-dados--o-que-lê-e-o-que-grava` | 3 | Conferido (uniforme) | 1 | b1 |
 | 5.2.8 Regras e armadilhas | `docs/modulos/05_financeiro_precos.md#528-regras-e-armadilhas` | 3 | — | 11 | c11 |
 | 5.2.9 Testes | `docs/modulos/05_financeiro_precos.md#529-testes` | 3 | Conferido (uniforme) | 7 | b1 s6 |

@@ -60,9 +60,14 @@ function PZField({ label, children, span, faltando, obrigatorio, aviso }) {
    equipamentos diferentes têm preços diferentes — a soma sozinha esconde isso.
    Calcula na hora a partir do preço do card, então vale também para
    precificações salvas antes do motor devolver o rateio. */
-function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res, onAplicar }) {
+function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res, onAplicar, ajustes, onAjuste }) {
   const E = window.PrecificacaoElevadorEngine;
-  const rateio = E && E.ratearPorModelo ? E.ratearPorModelo(modelos, precoTotal) : [];
+  const AJ = window.PrecificacaoAjustes;
+  /* 06/11/2026 — coluna "Alterar valor": `precoTotal` já inclui os ajustes do último cálculo; o rateio (e a coluna
+     VLR Proposta) é sempre do preço BASE, e o ajuste de cada equipamento entra por cima. */
+  const ajustesSalvos = res && res.ajustes ? Number(res.ajustes.total) || 0 : 0;
+  const rateio = E && E.ratearPorModelo ? E.ratearPorModelo(modelos, (Number(precoTotal) || 0) - ajustesSalvos) : [];
+  const ajNum = (k) => { const v = ajustes ? ajustes[k] : null; return v === undefined || v === null || v === '' ? 0 : (Number(v) || 0); };
   const linhas = [];
   rateio.forEach((m, i) => {
     const fisicos = (moLookup || [])
@@ -71,10 +76,10 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
     // Usa sempre o código da linha física (mo_lookup): com a numeração corrida 1..N o
     // código da Unidade do Formulário pode ser outro equipamento (inclusive com 1 só).
     if (fisicos.length && fisicos.length === m.quantidade) {
-      fisicos.forEach((f) => linhas.push({ chave: `${m.unidadeId || i}-${f.identificador}`, id: f.identificador, valor: m.valorUnitarioRs, mo: Number(f.valorRs) || 0, keyCeo: `${m.unidadeId}:${f.equipamentoIndice || 1}` }));
+      fisicos.forEach((f) => linhas.push({ chave: `${m.unidadeId || i}-${f.identificador}`, id: f.identificador, base: m.valorUnitarioRs, valor: m.valorUnitarioRs + ajNum(`${m.unidadeId}:${f.equipamentoIndice || 1}`), mo: Number(f.valorRs) || 0, keyCeo: `${m.unidadeId}:${f.equipamentoIndice || 1}` }));
     } else {
       linhas.push({
-        chave: m.unidadeId || String(i), id: m.identificador || `Equipamento ${i + 1}`, valor: m.valorUnitarioRs,
+        chave: m.unidadeId || String(i), id: m.identificador || `Equipamento ${i + 1}`, base: m.valorUnitarioRs, valor: m.valorUnitarioRs + ajNum(`${m.unidadeId || i}:1`),
         extra: m.quantidade > 1 ? `cada · × ${m.quantidade}` : '', mo: 0, keyCeo: `${m.unidadeId || i}:1`,
       });
     }
@@ -117,6 +122,9 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
   const novoTotal = totalCalc - descontoTotal;
   const lucroNovo = lucroTotal - calcs.reduce((s, x) => s + x.difLucro, 0);
   const alav = algumCeo && res && E && E.alavancaParaPreco ? E.alavancaParaPreco(res, novoTotal) : null;
+  const somaAjustes = linhas.reduce((s, l) => s + ajNum(l.keyCeo), 0);
+  const alavAjuste = onAjuste && somaAjustes !== 0 && res && E && E.alavancaParaPreco ? E.alavancaParaPreco(res, totalCalc) : null;
+  const ajusteComCeo = linhas.some((l) => ajNum(l.keyCeo) !== 0 && valCeo(l) != null);
   const aplicarTodos = () => {
     const v = Number(String(todos).replace(/\./g, '').replace(',', '.')) || 0;
     if (!(v > 0)) return;
@@ -140,6 +148,7 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
         <table className="pl-grid">
           <thead><tr>
             <th>Equipamento</th><th>VLR Proposta</th>
+            {onAjuste && <th title="Diferença em R$ (pode ser negativa) somada ao VLR Proposta do equipamento; os outros equipamentos não mudam. O mark-up se recalcula para fechar no novo total (depois, clique em Calcular).">Alterar valor</th>}
             {comCeo && <th title="Lucro LÍQUIDO do equipamento (o que sobra depois de pagar mercadoria, frete, despesas, impostos, comissões e DIFAL) = (lucro total + soma da mão de obra) × (VLR Proposta do equipamento ÷ preço total) − mão de obra do equipamento. A soma de todos fecha no lucro total.">Lucro líquido por Equip.</th>}
             {comCeo && <th>Lucro líquido desejado (CEO)</th>}
             {comCeo && <th>Desconto no preço</th>}
@@ -151,7 +160,13 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
               return (
                 <tr key={l.chave}>
                   <td className="mono" style={{ fontSize: 13 }}>{l.id}{l.extra ? <span className="muted"> ({l.extra})</span> : null}</td>
-                  <td className="pl-calc-cell cell-money" style={{ fontSize: 14 }}>{fmtBRL2(l.valor)}</td>
+                  <td className="pl-calc-cell cell-money" style={{ fontSize: 14 }}>{fmtBRL2(l.base != null ? l.base : l.valor)}</td>
+                  {onAjuste && (
+                    <td className="pl-edit-cell" style={{ minWidth: 150 }}>
+                      <PZCurrencyInput moeda="BRL" value={ajNum(l.keyCeo) || ''} onChange={(v) => onAjuste({ [l.keyCeo]: (v === '' || v === 0) ? null : v })}/>
+                      {ajNum(l.keyCeo) !== 0 && <div className="small muted" style={{ marginTop: 2 }}>= {fmtBRL2(l.valor)}</div>}
+                    </td>
+                  )}
                   {comCeo && <td className="pl-calc-cell mono">{fmtBRL2(c.lucro)}</td>}
                   {comCeo && (
                     <td className="pl-edit-cell" style={{ minWidth: 150 }}>
@@ -159,13 +174,14 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
                     </td>
                   )}
                   {comCeo && <td className="pl-calc-cell mono" style={{ color: c.c == null ? undefined : c.desconto > 0 ? '#b91c1c' : '#15803d' }}>{c.c == null ? '—' : c.desconto > 0 ? `−${fmtBRL2(c.desconto)}` : c.desconto < 0 ? `+${fmtBRL2(-c.desconto)}` : fmtBRL2(0)}</td>}
-                  {comCeo && <td className="pl-calc-cell cell-money" style={{ fontWeight: c.c == null ? 400 : 700 }}>{c.c == null ? '—' : fmtBRL2(c.novoPreco)}</td>}
+                  {comCeo && <td className="pl-calc-cell cell-money" style={{ fontWeight: c.c == null ? (ajNum(l.keyCeo) !== 0 ? 700 : 400) : 700 }}>{c.c == null ? (ajNum(l.keyCeo) !== 0 ? fmtBRL2(l.valor) : '—') : fmtBRL2(c.novoPreco)}</td>}
                 </tr>
               );
             })}
             <tr className="pl-total">
               <td>TOTAL ({linhas.length})</td>
-              <td className="pl-calc-cell">{fmtBRL2(totalCalc)}</td>
+              <td className="pl-calc-cell">{fmtBRL2(totalCalc - somaAjustes)}</td>
+              {onAjuste && <td className="pl-calc-cell">{somaAjustes !== 0 ? dinheiroSinal(somaAjustes) : '—'}</td>}
               {comCeo && <td className="pl-calc-cell">{fmtBRL2(lucroTotal)}</td>}
               {comCeo && <td className="pl-calc-cell">{algumCeo ? fmtBRL2(lucroNovo) : '—'}</td>}
               {comCeo && <td className="pl-calc-cell">{algumCeo ? (descontoTotal > 0 ? `−${fmtBRL2(descontoTotal)}` : descontoTotal < 0 ? `+${fmtBRL2(-descontoTotal)}` : fmtBRL2(0)) : '—'}</td>}
@@ -174,6 +190,19 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
           </tbody>
         </table>
       </div>
+      {ajusteComCeo && (
+        <div className="pl-note" style={{ marginTop: 8, color: '#991b1b' }}>
+          ⚠ Há equipamento com "Alterar valor" e com "Lucro líquido desejado (CEO)" ao mesmo tempo. Use um só em cada equipamento.
+        </div>
+      )}
+      {somaAjustes !== 0 && (
+        <div className="pl-note" style={{ marginTop: 8 }}>
+          Com as diferenças digitadas o total da cotação passa a <b>{fmtBRL2(totalCalc)}</b> ({dinheiroSinal(somaAjustes)}).
+          {alavAjuste && alavAjuste.valido
+            ? <> O mark-up que fecha nesse total é <b>{fmtPct2(alavAjuste.valor)}</b> (o campo MARK-UP continua com o que foi digitado). Clique em <b>Calcular</b>: impostos, comissões e DIFAL recalculam sobre o novo total.</>
+            : (alavAjuste ? <span style={{ color: '#991b1b' }}> ⚠ Esse total fica abaixo do custo + impostos: o cálculo não consegue chegar nele.</span> : null)}
+        </div>
+      )}
       {algumCeo && (
         <div className="pl-note" style={{ marginTop: 8 }}>
           Com o líquido que o CEO quer, o preço da proposta passa de <b>{fmtBRL2(totalCalc)}</b> para <b>{fmtBRL2(novoTotal)}</b> ({dinheiroSinal(-descontoTotal)}) e o lucro total fica em <b style={{ color: lucroNovo < 0 ? '#b91c1c' : undefined }}>{fmtBRL2(lucroNovo)}</b> ({fmtPct2(novoTotal > 0 ? lucroNovo / novoTotal : 0)}).
@@ -862,6 +891,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
     modo_formacao_preco: 'planilha', margem_desejada_pct: pz.margem_desejada_pct,
     contingencia_valor: pz.contingencia_valor, outros_custos_nao_recuperaveis_rs: pz.outros_custos_nao_recuperaveis_rs,
     valores_sugeridos_ceo: pz.valores_sugeridos_ceo || {},
+    ajustes_valor: pz.ajustes_valor || {},
   });
 
   const salvar = async () => {
@@ -1042,6 +1072,11 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
         </div>
       )}
 
+      {window.PZRevisaoValor && (
+        <window.PZRevisaoValor numeroCotacao={pz.numero_cotacao} res={resultadoV2} pz={pz}
+          onAplicar={(campo, valor) => { set(campo)(valor); window.toast?.('Mark-up preenchido — clique em Calcular para refazer o preço.', 'info'); }}
+          onAplicarColuna={(patch) => { setPz((p) => ({ ...p, ajustes_valor: { ...(p.ajustes_valor || {}), ...patch } })); window.toast?.('Pedidos aplicados na coluna "Alterar valor" — confira e clique em Calcular.', 'info'); }}/>
+      )}
       <Card title="Unidades desta cotação" sub="herdado do Formulário de Elevadores + resposta do fornecedor"
         action={pz.cotacao_fornecedor_id && (
           <Button variant="outline" size="sm" icon="refresh" onClick={ressincronizarDoFornecedor} disabled={ressincronizando}>
@@ -1543,6 +1578,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
               <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 15 }}>{fmtBRL2(resultadoV2.custoEconomicoCompleto)}</div></div>
               <PZPrecoPorEquipamento modelos={pz.modelos} moLookup={pz.mo_lookup} precoTotal={resultadoV2.precificacao.precoVendaProposta}
                   ceo={pz.valores_sugeridos_ceo || {}} res={resultadoV2}
+                  ajustes={pz.ajustes_valor || {}}
+                  onAjuste={(patch) => setPz((p) => { const novo = { ...(p.ajustes_valor || {}) }; Object.keys(patch).forEach((k) => { if (patch[k] == null) delete novo[k]; else novo[k] = patch[k]; }); return { ...p, ajustes_valor: novo }; })}
                   onCeo={(patch) => setPz((p) => { const novo = { ...(p.valores_sugeridos_ceo || {}) }; Object.keys(patch).forEach((k) => { if (patch[k] == null) delete novo[k]; else novo[k] = patch[k]; }); return { ...p, valores_sugeridos_ceo: novo }; })}
                   onAplicar={(campo, valor) => { set(campo)(valor); window.toast?.('Alavanca ajustada — clique em Calcular para refazer o preço.', 'info'); }}/>
               <div><span className="up-eyebrow muted">{quantidadeEquipamentos > 1 ? 'Total da cotação — soma dos equipamentos acima' : 'Preço de venda total'}</span><div className="cell-money" style={{ fontSize: 20, fontWeight: 800 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta)}</div></div>

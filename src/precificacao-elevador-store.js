@@ -916,6 +916,39 @@
     }
     resultado = window.PrecificacaoElevadorEngine.calcular({ ...baseInputs, difalCustoRs });
 
+    /* 06/11/2026 — coluna "Alterar valor" (Gelson): diferenças em R$ por equipamento digitadas pelo Financeiro.
+       Total = preço base (no mark-up digitado) + soma das diferenças. O MARK-UP EFETIVO que fecha nesse total vem da
+       conta inversa do motor (alavancaParaPreco) e o V2 roda de novo com ele, então impostos, comissões e DIFAL
+       recalculam sobre o novo total. Os modelos ficam no rateio do preço BASE: a Proposta soma a diferença de cada
+       equipamento por cima (os outros equipamentos não mudam). O mark-up digitado NÃO é sobrescrito. */
+    const AJ = window.PrecificacaoAjustes;
+    const ajustes = AJ ? AJ.normalizar(pz.ajustes_valor) : {};
+    if (AJ && Object.keys(ajustes).length) {
+      const E = window.PrecificacaoElevadorEngine;
+      const precoBase = resultadoV2.precificacao.precoVendaProposta;
+      const modelosBase = E.ratearPorModelo(baseInputs.modelos, precoBase);
+      const alvo = AJ.totalComAjustes(precoBase, ajustes);
+      const al = E.alavancaParaPreco(resultadoV2, alvo);
+      if (!al || !al.valido) throw new Error('Os ajustes de valor levam o preço a um ponto que o cálculo não alcança (abaixo do custo + impostos). Revise a coluna "Alterar valor".');
+      const rodar = (mk) => {
+        let r = E.calcularV2({ ...baseInputs, difalCustoRs, ...v2Extras, markUpPct: mk });
+        let bd = valorOperacaoDifal;
+        for (let it = 0; it < 30; it++) {
+          const eq = r.precificacao.precoVendaProduto;
+          if (!(eq > 0) || Math.abs(eq - bd) < 0.005) break;
+          bd = eq;
+          difal = calcularDifal(bd);
+          difalCustoRs = difal.responsavel_recolhimento === 'emitente_verticalparts' ? difal.valor_difal : 0;
+          r = E.calcularV2({ ...baseInputs, difalCustoRs, ...v2Extras, markUpPct: mk });
+        }
+        return r;
+      };
+      resultadoV2 = rodar(al.valor);
+      resultado = E.calcular({ ...baseInputs, difalCustoRs });
+      resultadoV2.modelos = modelosBase;
+      resultadoV2.ajustes = { porEquipamento: ajustes, total: AJ.soma(ajustes), precoBase, markUpBase: Number(pz.mark_up_pct) || 0, markUpEfetivo: al.valor };
+    }
+
     /* Duas modalidades de entrega (issue "Precificação real"): 90 dias
        (container exclusivo, frete mais caro) × 120 dias (container
        compartilhado, o frete_seguro_capatazia_usd de sempre). Só o frete
