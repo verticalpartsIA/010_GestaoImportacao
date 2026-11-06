@@ -264,5 +264,11 @@
     } catch (e) { console.warn('[PropostaAumentoStore] avisos de atendimento falharam', e); }
   }
 
-  window.PropostaAumentoStore = { solicitar, cancelar, avisarAtendimento, pode, pendentesPorCotacao, aoSalvarPrecificacao };
+  /* Existe contrato desta proposta (fora de "em preenchimento")? Usado também pela "Conferir proposta". */
+  async function temContratoDaProposta(propostaId) {
+    const c = sb(); if (!c || !propostaId) return false;
+    return temContrato(c, propostaId);
+  }
+
+  window.PropostaAumentoStore = { solicitar, cancelar, avisarAtendimento, pode, pendentesPorCotacao, aoSalvarPrecificacao, temContrato: temContratoDaProposta };
 }());

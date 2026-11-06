@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/04_comercial_pre_venda.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `746db79`)
-- **Palavras:** 17767 · **blocos:** 321 · **seções com selo próprio:** 49 de 85
-- **Origem do selo dos blocos:** próprio 90 · da seção 141 · da seção-pai 13 · do cabeçalho 52 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
-- **Selo efetivo dos blocos:** Conferido 188 · Herdado 81 · Não verificado 27
+- **Palavras:** 19519 · **blocos:** 322 · **seções com selo próprio:** 49 de 85
+- **Origem do selo dos blocos:** próprio 91 · da seção 141 · da seção-pai 13 · do cabeçalho 52 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
+- **Selo efetivo dos blocos:** Conferido 188 · Herdado 74 · Não verificado 35
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -74,7 +74,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 4.5.7 Dados — o que lê e o que grava | `docs/modulos/04_comercial_pre_venda.md#457-dados--o-que-lê-e-o-que-grava` | 3 | — | 3 | c3 |
 | 4.5.8 Regras e armadilhas | `docs/modulos/04_comercial_pre_venda.md#458-regras-e-armadilhas` | 3 | Herdado (misto (vale o mais fraco)) | 11 | b6 s5 |
 | 4.5.9 Testes | `docs/modulos/04_comercial_pre_venda.md#459-testes` | 3 | — | 7 | c7 |
-| 4.5.10 Pendências e decisões | `docs/modulos/04_comercial_pre_venda.md#4510-pendências-e-decisões` | 3 | Herdado (misto (vale o mais fraco)) | 12 | b5 s7 |
+| 4.5.10 Pendências e decisões | `docs/modulos/04_comercial_pre_venda.md#4510-pendências-e-decisões` | 3 | Não verificado (misto (vale o mais fraco)) | 13 | b6 s7 |
 | 4.5.11 Histórico | `docs/modulos/04_comercial_pre_venda.md#4511-histórico` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 4.6 Contratos Social | `docs/modulos/04_comercial_pre_venda.md#46-contratos-social` | 2 | — | 0 | — |
 | 4.6.1 O que é | `docs/modulos/04_comercial_pre_venda.md#461-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
