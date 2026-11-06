@@ -216,7 +216,7 @@ function PERepAdd({ label, onAdd }) {
    Each receives `data`, `setField(path, value)`, plus helpers
    ============================================================ */
 
-function S_Proposta({ d, set, herdar, herdando, heranca }) {
+function S_Proposta({ d, set, herdar, herdando, heranca, recordId }) {
   return (
     <div className="pe-grid cols-3">
       {/* Porta de entrada do pipeline: com o Nº da Cotação a proposta puxa
@@ -239,7 +239,11 @@ function S_Proposta({ d, set, herdar, herdando, heranca }) {
       </PEField>
 
       <PEField label="Nº da Proposta" required>
-        <PETextInput value={d.numero} onChange={(v) => set("numero", v)} placeholder="VP-2025-000"/>
+        {/* REGRA (06/11/2026): o Nº da proposta é o da cotação (VPPR-<Nº>[-letra]) e não se digita nem se troca depois de
+            criada. Proposta salva ou ligada a uma cotação: campo travado. */}
+        <PETextInput value={d.numero} onChange={(v) => set("numero", v)} placeholder="VP-2025-000"
+          disabled={!!recordId || !!String(d.numeroCotacao || "").trim()}
+          title={(recordId || String(d.numeroCotacao || "").trim()) ? "O número da proposta vem da cotação e não muda depois de criado" : undefined}/>
       </PEField>
       <PEField label="Linha de Data">
         <PETextInput value={d.dataLinha} onChange={(v) => set("dataLinha", v)} placeholder="Guarulhos, 26 de Novembro de 2025"/>

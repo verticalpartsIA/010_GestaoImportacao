@@ -695,6 +695,8 @@ function PropostaEditor({ setRoute, subsel }) {
        proposta pelo número e a trava de proposta enviada não valia na mesma tela. */
     const row = await window.PropostaStore.salvar({ data, eq, editId: editId || recordId, valorTotal: calcularValorTotal(data, eq) });
     if (row?.id) setRecordId(row.id);
+    /* o Nº da proposta é o da cotação e não muda depois de criado: acompanha o que ficou gravado */
+    if (row?.numero_documento && row.numero_documento !== data.numero) setData((d) => ({ ...d, numero: row.numero_documento }));
     return row;
   }, [data, eq, editId, recordId]);
 
@@ -1392,7 +1394,7 @@ function PropostaEditor({ setRoute, subsel }) {
 function renderSection(sid, eq, data, set, extras) {
   extras = extras || {};
   switch (sid) {
-    case "proposta": return <S_Proposta d={data} set={set} herdar={extras.herdar} herdando={extras.herdando} heranca={extras.heranca}/>;
+    case "proposta": return <S_Proposta d={data} set={set} herdar={extras.herdar} herdando={extras.herdando} heranca={extras.heranca} recordId={extras.recordId}/>;
     case "cliente": return <S_Cliente d={data} set={set}/>;
     case "obra": return <S_Obra d={data} set={set}/>;
     case "texto": return <S_TextoProposta d={data} set={set} eq={eq}/>;
