@@ -695,7 +695,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
       // carrega, pros containers que ainda não têm preço nenhum — nunca
       // sobrescreve um valor já digitado (mesma regra de sempre).
       // 01/10/2026: a capatazia herda do cadastro com a mesma regra (só se ainda vazia).
-      if ((norm.containers || []).some((c) => !(Number(c.preco_rs) > 0) || !(Number(c.capatazia_rs) > 0) || !(Number(c.gri_rs) > 0))) {
+      if ((norm.containers || []).some((c) => !c.id_tag && (!(Number(c.preco_rs) > 0) || !(Number(c.capatazia_rs) > 0) || !(Number(c.gri_rs) > 0)))) {
         const custos = await window.CadastroCustosStore?.listarContainers();
         norm.containers = window.PrecificacaoElevadorStore.enriquecerContainersComCusto(norm.containers, custos);
       }
@@ -863,10 +863,46 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
     arr[i] = linha;
     return { ...p, containers: arr };
   });
+  /* ID-TAG do container (06/11/2026): o Financeiro escolhe o ID-TAG (CONT-001…) + a quantidade e os valores
+     do cadastro de Containers (preço, capatazia, GRI, taxa de porto, porto, tipo ISO) vêm para a linha.
+     Se a linha já tem valor digitado que difere do ID-TAG, pergunta antes de substituir. "Sem ID-TAG" volta
+     ao modo manual (mantém os valores e tira o vínculo). Só vale para precificação nova ou para a linha em
+     que alguém escolhe o ID-TAG: o que está salvo é snapshot. */
+  const escolherIdTag = (i, idTag) => {
+    const S = window.PrecificacaoElevadorStore;
+    const atual = (pz.containers || [])[i] || {};
+    if (!idTag) {
+      setPz((p) => {
+        const arr = [...(p.containers || [])];
+        const { id_tag: _t, porto: _p, ...resto } = arr[i] || {};
+        arr[i] = resto;
+        return { ...p, containers: arr };
+      });
+      return;
+    }
+    const custo = (custosContainers || []).find((c) => c.id_tag === idTag);
+    if (!custo) return;
+    if (S.linhaTemValorDiferenteDoIdTag(atual, custo)
+      && !window.confirm(`Substituir os valores desta linha pelos do ${custo.id_tag} (${custo.tipo} · ${custo.porto || 'sem porto'})?`)) return;
+    setPz((p) => {
+      const arr = [...(p.containers || [])];
+      arr[i] = S.aplicarIdTagNaLinha(arr[i] || {}, custo);
+      return { ...p, containers: arr };
+    });
+  };
+  // Opções do seletor: containers ativos do cadastro; a linha já salva com um ID-TAG o mantém visível.
+  const opcoesIdTag = (ct) => {
+    const lista = (custosContainers || []).filter((c) => c.id_tag && c.ativo !== false);
+    if (ct && ct.id_tag && !lista.some((c) => c.id_tag === ct.id_tag)) {
+      lista.push({ id_tag: ct.id_tag, tipo: ct.tipo_tamanho || '', porto: ct.porto || '' });
+    }
+    return lista;
+  };
   const removeContainer = (i) => setPz((p) => ({ ...p, containers: (p.containers || []).filter((_, idx) => idx !== i) }));
   const containersTotalRs = (pz.containers || []).reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.preco_rs) || 0), 0);
   const capataziaTotalRs = (pz.containers || []).reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.capatazia_rs) || 0), 0);
   const griTotalRs = (pz.containers || []).reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.gri_rs) || 0), 0);
+  const taxaPortoTotalRs = (pz.containers || []).reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.taxa_porto_rs) || 0), 0);
   // Aviso (não bloqueia) quando container/capatazia divergem do cadastro de Containers.
   const divergenciasContainer = window.PrecificacaoElevadorStore.divergenciasContainerComCadastro(pz.containers, custosContainers);
 
@@ -1306,13 +1342,13 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
         <div className="grid-3" style={{ gap: 12 }}>
           <PZField label="VMLE (USD)" obrigatorio faltando={f('vmle_usd')}><PZCurrencyInput moeda="USD" value={pz.vmle_usd} onChange={set('vmle_usd')}/></PZField>
           <PZField label="Seguro (USD)"><PZCurrencyInput moeda="USD" value={pz.seguro_usd} onChange={set('seguro_usd')}/></PZField>
-          {/* 01/10/2026 — container e capatazia vêm do cadastro (Despesa Operacional); este
+          {/* 01/10/2026 — container, capatazia, GRI e taxa de porto vêm do cadastro (entram no frete/CIF); este
               campo só aparece quando já há um frete internacional lançado (informado pelo
               fornecedor na cotação, ou precificação antiga) pra poder ser conferido/zerado. */}
           {Number(pz.frete_seguro_capatazia_usd) > 0 && (
             <PZField label="Frete internacional informado (USD)">
               <PZCurrencyInput moeda="USD" value={pz.frete_seguro_capatazia_usd} onChange={set('frete_seguro_capatazia_usd')}/>
-              <div className="small muted" style={{ marginTop: 4 }}>Container e capatazia vêm do cadastro de Containers — não some aqui de novo. Zere se este valor já os incluía.</div>
+              <div className="small muted" style={{ marginTop: 4 }}>Container, capatazia, GRI e taxa de porto vêm do cadastro de Containers — não some aqui de novo. Zere se este valor já os incluía.</div>
             </PZField>
           )}
           <PZField label="Siscomex (R$)"><PZCurrencyInput moeda="BRL" value={pz.siscomex_rs} onChange={set('siscomex_rs')}/></PZField>
@@ -1334,7 +1370,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
 
         <div style={{ marginTop: 20 }}>
           <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>
-            Containers <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— tipo/quantidade vêm da resposta do fornecedor; preço e capatazia herdados do cadastro de Containers (Atualização de Custos) — Despesa Operacional</span>
+            Containers <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— escolha o ID-TAG e a quantidade: preço, capatazia, GRI e taxa de porto vêm do cadastro de Containers (Atualização de Custos). Entram no frete (CIF) e pagam os impostos de importação. Linha sem ID-TAG (a que vem da resposta do fornecedor) herda por tipo, como antes.</span>
           </div>
           {divergenciasContainer.length > 0 && (
             <div style={{ fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', padding: '8px 12px', marginBottom: 8, borderRadius: 6 }}>
@@ -1344,26 +1380,39 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
           <div className="stack" style={{ gap: 8 }}>
             {(pz.containers || []).length > 0 && (
               <div className="row gap-2 up-eyebrow muted" style={{ fontSize: 11 }}>
-                <div style={{ width: 140 }}>Tipo</div>
-                <div style={{ width: 100 }}>Qtd</div>
-                <div style={{ width: 160 }}>Preço do container (R$)</div>
-                <div style={{ width: 160 }}>Capatazia (R$)</div>
-                <div style={{ width: 160 }}>GRI (R$)</div>
+                <div style={{ width: 250 }}>ID-TAG</div>
+                <div style={{ width: 90 }}>Tipo</div>
+                <div style={{ width: 70 }}>Qtd</div>
+                <div style={{ width: 135 }}>Preço do container (R$)</div>
+                <div style={{ width: 135 }}>Capatazia (R$)</div>
+                <div style={{ width: 135 }}>GRI (R$)</div>
+                <div style={{ width: 135 }}>Taxa de porto (R$)</div>
               </div>
             )}
             {(pz.containers || []).map((ct, i) => (
               <div key={i} className="row gap-2">
-                <div style={{ width: 140 }}><PZSelect value={ct.tipo_tamanho} onChange={setContainer(i, 'tipo_tamanho')} options={PZ_CONTAINER_TIPOS} placeholder="Tamanho"/></div>
-                <input className="input" style={{ width: 100 }} type="number" value={ct.quantidade ?? 1} onChange={(e) => setContainer(i, 'quantidade')(Number(e.target.value) || 0)} placeholder="Qtd"/>
-                <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={ct.preco_rs} onChange={setContainer(i, 'preco_rs')}/></div>
-                <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={ct.capatazia_rs} onChange={setContainer(i, 'capatazia_rs')}/></div>
-                <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={ct.gri_rs} onChange={setContainer(i, 'gri_rs')}/></div>
+                <div style={{ width: 250 }}>
+                  <select className="input" value={ct.id_tag ?? ''} onChange={(e) => escolherIdTag(i, e.target.value)} title="ID-TAG do container (Cadastros › Atualização de Custos › Containers)">
+                    <option value="">Sem ID-TAG (manual)</option>
+                    {opcoesIdTag(ct).map((c) => <option key={c.id_tag} value={c.id_tag} title={`${c.tipo}${c.porto ? ` · ${c.porto}` : ''}`}>{c.id_tag} · {String(c.tipo || '').split(' (')[0]}{c.porto ? ` · ${c.porto}` : ''}</option>)}
+                  </select>
+                </div>
+                <div style={{ width: 90 }}>
+                  {ct.id_tag
+                    ? <div className="input mono" style={{ opacity: .75 }} title="Vem do ID-TAG">{ct.tipo_tamanho || '—'}</div>
+                    : <PZSelect value={ct.tipo_tamanho} onChange={setContainer(i, 'tipo_tamanho')} options={PZ_CONTAINER_TIPOS} placeholder="Tamanho"/>}
+                </div>
+                <input className="input" style={{ width: 70 }} type="number" value={ct.quantidade ?? 1} onChange={(e) => setContainer(i, 'quantidade')(Number(e.target.value) || 0)} placeholder="Qtd"/>
+                <div style={{ width: 135 }}><PZCurrencyInput moeda="BRL" value={ct.preco_rs} onChange={setContainer(i, 'preco_rs')}/></div>
+                <div style={{ width: 135 }}><PZCurrencyInput moeda="BRL" value={ct.capatazia_rs} onChange={setContainer(i, 'capatazia_rs')}/></div>
+                <div style={{ width: 135 }}><PZCurrencyInput moeda="BRL" value={ct.gri_rs} onChange={setContainer(i, 'gri_rs')}/></div>
+                <div style={{ width: 135 }}><PZCurrencyInput moeda="BRL" value={ct.taxa_porto_rs} onChange={setContainer(i, 'taxa_porto_rs')}/></div>
                 <Button variant="ghost" size="sm" icon="trash" onClick={() => removeContainer(i)}/>
               </div>
             ))}
           </div>
           <Button variant="outline" size="sm" icon="plus" style={{ marginTop: 8 }} onClick={addContainer}>+ Adicionar container</Button>
-          {(pz.containers || []).length > 0 && <div className="small muted" style={{ marginTop: 8 }}>Subtotal Containers: <b>{fmtBRL2(containersTotalRs)}</b> · Capatazia: <b>{fmtBRL2(capataziaTotalRs)}</b> · GRI: <b>{fmtBRL2(griTotalRs)}</b></div>}
+          {(pz.containers || []).length > 0 && <div className="small muted" style={{ marginTop: 8 }}>Subtotal Containers: <b>{fmtBRL2(containersTotalRs)}</b> · Capatazia: <b>{fmtBRL2(capataziaTotalRs)}</b> · GRI: <b>{fmtBRL2(griTotalRs)}</b> · Taxa de porto: <b>{fmtBRL2(taxaPortoTotalRs)}</b></div>}
         </div>
       </Card>
 
@@ -1464,11 +1513,11 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
           ? (Number(impImportacao.ii) || 0) + (Number(impImportacao.ipi) || 0) + (Number(impImportacao.pis) || 0)
             + (Number(impImportacao.cofins) || 0) + (Number(impImportacao.icms) || 0)
           : null;
-        /* AFRMM (13/10/2026): 8% do frete marítimo (container + capatazia + GRI), já calculado
+        /* AFRMM (13/10/2026): 8% do frete marítimo (container + capatazia + GRI + taxa de porto), já calculado
            pelo motor — aqui só aparece no resumo. Como o imposto, só depois de "Calcular". */
         const afrmmRs = impImportacao && impImportacao.afrmm != null ? Number(impImportacao.afrmm) || 0 : null;
         const somaRs = custosEquipamentosRs + custosFreteRs + moRs + custosOperacionaisRs + freteInternoRs
-          + despesasImportacaoRs + armazenagemRs + containersTotalRs + capataziaTotalRs + griTotalRs + (afrmmRs || 0) + despesasExtrasRs + contingenciaOutrosRs
+          + despesasImportacaoRs + armazenagemRs + containersTotalRs + capataziaTotalRs + griTotalRs + taxaPortoTotalRs + (afrmmRs || 0) + despesasExtrasRs + contingenciaOutrosRs
           + (custosImpostoRs || 0);
         const linha = (label, valor) => (
           <div className="row sb" style={{ padding: '4px 0' }}>
@@ -1489,7 +1538,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
               {linha('Containers', containersTotalRs)}
               {linha('Capatazia', capataziaTotalRs)}
               {linha('GRI', griTotalRs)}
-              {linha('AFRMM (8% de Containers + Capatazia + GRI)', afrmmRs)}
+              {linha('Taxa de porto', taxaPortoTotalRs)}
+              {linha('AFRMM (8% de Containers + Capatazia + GRI + Taxa de porto)', afrmmRs)}
               {linha('Despesas Extras (itens avulsos)', despesasExtrasRs)}
               {linha('Contingência e Outros custos não recuperáveis', contingenciaOutrosRs)}
               {linha('Custos Imposto', custosImpostoRs)}
@@ -1564,7 +1614,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
       <Card title="Formação do Preço" sub="método da planilha do Financeiro" style={{ marginTop: 16 }}>
         <div className="pl-note">
           <b>Preço = custo da nota (já sem os créditos) ÷ (1 − impostos da venda − MARK-UP).</b> O MARK-UP é uma margem sobre o
-          <b> preço de venda</b> (ex.: 53% na cotação 963). O frete internacional, o container, a capatazia e a GRI entram no valor CIF
+          <b> preço de venda</b> (ex.: 53% na cotação 963). O frete internacional, o container, a capatazia, a GRI e a taxa de porto entram no valor CIF
           e pagam II, PIS, COFINS, ICMS e AFRMM. Despachante, ad-valorem, frete interno, armazenagem e instalação só abatem do <b>lucro</b>, depois do preço.
           Contingência e outros custos não recuperáveis vêm do card "Despesas Extras". Veja o passo a passo na "Memória de cálculo" abaixo.
         </div>

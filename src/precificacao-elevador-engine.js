@@ -51,8 +51,11 @@
     // GRI (General Rate Increase) — sobretaxa do frete marítimo, vem do cadastro de Containers
     // (01/10/2026), mesma mecânica da capatazia: despesa operacional, dividida no rateio.
     const K13c_griRs = containers.reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.gri_rs) || 0), 0) / rateio;
-    // AFRMM = 8% do frete marítimo: frete informado (USD) + container + capatazia + GRI (R$).
-    const D11_afrmmRs = (D8_freteSeguroCapataziaUsd * D12_txCambial + K13_containersRs + K13b_capataziaRs + K13c_griRs) * 0.08;
+    // Taxa de porto (06/11/2026): taxa do porto de chegada, por container (cadastro de Containers, por ID-TAG).
+    // Mesmo tratamento da capatazia/GRI: dividida no rateio e dentro da base do AFRMM. Vazia conta zero.
+    const K13d_taxaPortoRs = containers.reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.taxa_porto_rs) || 0), 0) / rateio;
+    // AFRMM = 8% do frete marítimo: frete informado (USD) + container + capatazia + GRI + taxa de porto (R$).
+    const D11_afrmmRs = (D8_freteSeguroCapataziaUsd * D12_txCambial + K13_containersRs + K13b_capataziaRs + K13c_griRs + K13d_taxaPortoRs) * 0.08;
 
     // ---------- Despesas extras (K6:K12) ----------
     const itensInstalacao = Array.isArray(inputs.itensInstalacaoMontagem) ? inputs.itensInstalacaoMontagem : [];
@@ -77,7 +80,7 @@
     const S23_vmldRs = S20_vmleRs + S21_seguroRs + S22_freteRs;
 
     const K7_adValoremRs = S23_vmldRs * 0.001; // Ad-Valorem = VMLD * 0,1%
-    const K12_despesasExtrasTotalRs = K6_despachanteRs + K7_adValoremRs + K8_demurrageRs + K9_freteInternoRs + K10_armazenagemRs + K11_instalacaoMontagemRs + K13_containersRs + K13b_capataziaRs + K13c_griRs + K14_despesasExtrasItensRs;
+    const K12_despesasExtrasTotalRs = K6_despachanteRs + K7_adValoremRs + K8_demurrageRs + K9_freteInternoRs + K10_armazenagemRs + K11_instalacaoMontagemRs + K13_containersRs + K13b_capataziaRs + K13c_griRs + K13d_taxaPortoRs + K14_despesasExtrasItensRs;
 
     // ---------- Cascata de impostos na importação (M24:S30) ----------
     const M24_bcII = S23_vmldRs;
@@ -196,7 +199,7 @@
         totalNotaFiscal: U31_totalNotaFiscal, despesasInstalacaoMontagem: U32_despesasInstalacaoMontagem,
         totalDesembolso: U33_totalDesembolso, creditos: U34_creditos,
         custoTotalMercadorias: U35_custoTotalMercadorias, custoPorEquipamento: U36_custoPorEquipamento,
-        afrmm: D11_afrmmRs, adValorem: K7_adValoremRs, despesasExtrasTotal: K12_despesasExtrasTotalRs, containersRs: K13_containersRs, capataziaRs: K13b_capataziaRs, griRs: K13c_griRs,
+        afrmm: D11_afrmmRs, adValorem: K7_adValoremRs, despesasExtrasTotal: K12_despesasExtrasTotalRs, containersRs: K13_containersRs, capataziaRs: K13b_capataziaRs, griRs: K13c_griRs, taxaPortoRs: K13d_taxaPortoRs,
         itensDespesasExtrasRs: K14_despesasExtrasItensRs,
       },
       modelos: modelosComRateio,
@@ -328,7 +331,7 @@
      interno, armazenagem, instalação…) só entram no LUCRO, depois do preço.
      A cascata é a do V1 (que reproduz a planilha ao centavo — ver o teste
      "golden 963"). Diferença de insumo em relação ao V2: na planilha o frete
-     internacional (container + capatazia + GRI) está DENTRO do valor CIF
+     internacional (container + capatazia + GRI + taxa de porto) está DENTRO do valor CIF
      (célula D8, em US$) e portanto entra na base de II/PIS/COFINS/ICMS e
      do AFRMM; aqui os containers do cadastro (R$) são convertidos para US$ pelo
      câmbio da cotação e somados ao frete informado. Contingência e outros
@@ -339,7 +342,9 @@
     const tx = Number(inputs.txCambial) || 0;
     const containers = Array.isArray(inputs.containers) ? inputs.containers : [];
     const rateio = Math.max(Number(inputs.containerRateioDivisor) || 1, 1);
-    const containersRs = containers.reduce((s, c) => s + (Number(c.quantidade) || 0) * ((Number(c.preco_rs) || 0) + (Number(c.capatazia_rs) || 0) + (Number(c.gri_rs) || 0)), 0) / rateio;
+    // Taxa de porto (06/11/2026) soma junto: entra no CIF como a capatazia e o GRI (paga II/PIS/COFINS/ICMS/AFRMM).
+    const containersRs = containers.reduce((s, c) => s + (Number(c.quantidade) || 0) * ((Number(c.preco_rs) || 0) + (Number(c.capatazia_rs) || 0) + (Number(c.gri_rs) || 0) + (Number(c.taxa_porto_rs) || 0)), 0) / rateio;
+    const taxaPortoRs = containers.reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.taxa_porto_rs) || 0), 0) / rateio;
     const containersUsd = tx > 0 ? containersRs / tx : 0;
     const freteSeguroCapataziaUsd = (Number(inputs.freteSeguroCapataziaUsd) || 0) + containersUsd;
     const v1 = calcular({ ...inputs, freteSeguroCapataziaUsd, containers: [], containerRateioDivisor: 1 });
@@ -365,7 +370,7 @@
         despesasOperacionais: v1.importacao.despesasInstalacaoMontagem,
         contingenciaValor, outrosCustosNaoRecuperaveisRs,
       },
-      planilha: { containersRs, containersUsd, freteSeguroCapataziaUsdNaBase: freteSeguroCapataziaUsd },
+      planilha: { containersRs, containersUsd, taxaPortoRs, freteSeguroCapataziaUsdNaBase: freteSeguroCapataziaUsd },
       importacao: v1.importacao,
       precificacao: {
         ...pv,
