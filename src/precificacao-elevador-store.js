@@ -849,8 +849,42 @@
   }
 
   /* ---------- Calcula (2 passadas por causa do DIFAL — ver nota abaixo) e salva ---------- */
+  /* ---------- Alçadas de Calcular e Aprovar (07/11/2026, pendência 4 de 5.2.10) ----------
+     Duas ações novas no módulo `precificacao`: `calcular` e `aprovar`. Quem concede é o vpsistema.com/administracao
+     (o hub só lê `alcadas_capacidade`); Administrador sempre passa (PropostaStore.temCapacidade).
+     REGRA DE TRANSIÇÃO (para ninguém perder o acesso no deploy): enquanto NINGUÉM tiver a ação concedida, a conferência
+     fica DESLIGADA (todos que abrem a tela fazem tudo, como antes); assim que alguém recebe a ação, ela passa a valer
+     para todos. Falha ao consultar a alçada = recusa (nunca libera por erro, Art. 9). A trava é do front (o banco segue
+     aberto até a #571): é organização, não segurança. */
+  const ACOES_ALCADA = { calcular: 'Calcular a precificação', aprovar: 'Aprovar a precificação' };
+  function avaliarAlcada({ temAlcada, existeConcessao }) {
+    if (!existeConcessao) return { pode: true, ativa: false };
+    return { pode: !!temAlcada, ativa: true };
+  }
+  async function conferirAlcada(acao) {
+    const rotulo = ACOES_ALCADA[acao] || acao;
+    const falha = (motivo) => ({ pode: false, ativa: true, erro: true, motivo });
+    try {
+      const c = sb(); const PS = window.PropostaStore;
+      if (!c || !PS || typeof PS.temCapacidade !== 'function') return falha('Não foi possível conferir a alçada agora. Tente de novo.');
+      const { data, error } = await c.from('alcadas_capacidade').select('id').eq('modulo', 'precificacao').eq('capacidade', acao).limit(1);
+      if (error) return falha('Não foi possível conferir a alçada agora. Tente de novo.');
+      const temAlcada = await PS.temCapacidade('precificacao', acao);
+      const r = avaliarAlcada({ temAlcada, existeConcessao: (data || []).length > 0 });
+      return r.pode ? r : { ...r, motivo: `Você não tem a alçada "${rotulo}" na Precificação. Peça em vpsistema.com/administracao.` };
+    } catch (e) {
+      return falha('Não foi possível conferir a alçada agora. Tente de novo.');
+    }
+  }
+  async function exigirAlcada(acao) {
+    const r = await conferirAlcada(acao);
+    if (!r.pode) { const err = new Error(r.motivo); err.semAlcada = true; throw err; }
+    return r;
+  }
+
   async function calcularEsalvar(id) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    await exigirAlcada('calcular');
     const pz = await obter(id);
     const { data: formulario, error: e1 } = await c.from('formularios_elevador').select('*').eq('id', pz.formulario_elevador_id).single();
     if (e1) throw e1;
@@ -1056,6 +1090,7 @@
 
   async function aprovar(id, { forcarAbaixoMinima } = {}) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    await exigirAlcada('aprovar');
     const pz = await obter(id);
     if (!pz.resultado) throw new Error('Calcule a precificação antes de aprovar.');
     const faltando = camposObrigatoriosFaltando(pz);
@@ -1241,7 +1276,7 @@
     listarPendentes, criar, obter, salvar, calcularEsalvar,
     camposObrigatoriosFaltando, aprovar, criarPropostaAutomatica, ressincronizarDoFornecedor,
     parseContainerNo, buscarContainerCustoPorIso, enriquecerContainersComCusto, divergenciasContainerComCadastro,
-    isoDoTipoCustos, aplicarIdTagNaLinha, linhaTemValorDiferenteDoIdTag, difalPendente, MOTIVO_DIFAL_PENDENTE,
+    isoDoTipoCustos, aplicarIdTagNaLinha, linhaTemValorDiferenteDoIdTag, difalPendente, MOTIVO_DIFAL_PENDENTE, avaliarAlcada, conferirAlcada, exigirAlcada,
     classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, atualizarMaoDeObra, renumerarPorParadas, montarBaseInputs,
     acrescentarEquipamento, removerEquipamento, restaurarEquipamentoMO,
   };

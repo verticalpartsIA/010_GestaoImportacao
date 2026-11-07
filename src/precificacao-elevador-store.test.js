@@ -545,6 +545,22 @@ test('difalPendente — só "falta informar se o cliente é contribuinte" é pen
   assert.equal(difalPendente('x'), false);
 });
 
+/* Fake com a tabela das alçadas (select().eq().eq().limit()) e a da precificação (select().eq().single(), update().eq()). */
+function makeFakeSbAlcada(row, { concessoes = [], erroAlcada = null } = {}) {
+  return {
+    from(tabela) {
+      if (tabela === 'alcadas_capacidade') {
+        return { select() { const q = { eq() { return q; }, limit: async () => ({ data: erroAlcada ? null : concessoes, error: erroAlcada }) }; return q; } };
+      }
+      return {
+        select() { return { eq() { return { single: async () => ({ data: row, error: null }) }; } }; },
+        update(patch) { return { eq: async () => { Object.assign(row, patch); return { error: null }; } }; },
+      };
+    },
+  };
+}
+const comAlcada = (temCapacidade) => { window.PropostaStore = { temCapacidade: async () => temCapacidade }; };
+
 function linhaParaAprovar(difal, margemMinima) {
   return {
     id: 'pz-dif', status: 'calculado', numero_documento: 'VPPC-0001', numero_cotacao: 1,
@@ -559,7 +575,7 @@ function linhaParaAprovar(difal, margemMinima) {
 test('aprovar — DIFAL pendente recusa, com marca própria, e NÃO grava nada (nem com "aprovar mesmo assim")', async () => {
   const row = linhaParaAprovar({ mensagem: 'Informe se o cliente é Contribuinte de ICMS para determinar o responsável pelo recolhimento do DIFAL.', contribuinte_icms: null }, 0.15);
   const antigoSb = window.__VP_SB;
-  window.__VP_SB = { sb: makeFakeSb(row) };
+  window.__VP_SB = { sb: makeFakeSbAlcada(row) }; comAlcada(true);
   try {
     await assert.rejects(() => window.PrecificacaoElevadorStore.aprovar('pz-dif', { forcarAbaixoMinima: true }),
       (e) => e.difalPendente === true && /Contribuinte de ICMS/.test(e.message));
@@ -572,10 +588,60 @@ test('aprovar — com o contribuinte informado o DIFAL deixa de bloquear (segue 
   // margem mínima acima da margem do resultado: se o DIFAL não bloqueasse, o erro seria o da margem (e não o do DIFAL)
   const row = linhaParaAprovar({ mensagem: 'DIFAL de R$ 1,00 é responsabilidade da VerticalParts.', contribuinte_icms: false }, 0.9);
   const antigoSb = window.__VP_SB;
-  window.__VP_SB = { sb: makeFakeSb(row) };
+  window.__VP_SB = { sb: makeFakeSbAlcada(row) }; comAlcada(true);
   try {
     await assert.rejects(() => window.PrecificacaoElevadorStore.aprovar('pz-dif'),
       (e) => e.margemAbaixoMinima === true && !e.difalPendente);
     assert.equal(row.status, 'calculado');
   } finally { window.__VP_SB = antigoSb; }
+});
+
+/* ---------- Alçadas de Calcular e Aprovar (07/11/2026; pendência 4 de 5.2.10) ---------- */
+test('avaliarAlcada — sem nenhuma concessão a conferência fica desligada; com concessão vale a alçada da pessoa', () => {
+  const { avaliarAlcada } = window.PrecificacaoElevadorStore;
+  assert.deepEqual(avaliarAlcada({ temAlcada: false, existeConcessao: false }), { pode: true, ativa: false });
+  assert.deepEqual(avaliarAlcada({ temAlcada: true, existeConcessao: false }), { pode: true, ativa: false });
+  assert.deepEqual(avaliarAlcada({ temAlcada: true, existeConcessao: true }), { pode: true, ativa: true });
+  assert.deepEqual(avaliarAlcada({ temAlcada: false, existeConcessao: true }), { pode: false, ativa: true });
+});
+
+test('conferirAlcada — desligada, concedida, negada e falhas (nunca libera por erro)', async () => {
+  const { conferirAlcada } = window.PrecificacaoElevadorStore;
+  const antigoSb = window.__VP_SB; const antigoPS = window.PropostaStore;
+  try {
+    window.__VP_SB = { sb: makeFakeSbAlcada({}, { concessoes: [] }) }; comAlcada(false);
+    assert.deepEqual(await conferirAlcada('aprovar'), { pode: true, ativa: false }, 'ninguém tem a alçada: segue como antes');
+
+    window.__VP_SB = { sb: makeFakeSbAlcada({}, { concessoes: [{ id: 'x' }] }) }; comAlcada(true);
+    assert.deepEqual(await conferirAlcada('aprovar'), { pode: true, ativa: true });
+
+    comAlcada(false);
+    const negada = await conferirAlcada('calcular');
+    assert.equal(negada.pode, false);
+    assert.match(negada.motivo, /Calcular a precificação/);
+    assert.match(negada.motivo, /vpsistema\.com\/administracao/);
+
+    window.__VP_SB = { sb: makeFakeSbAlcada({}, { erroAlcada: { message: 'rls' } }) }; comAlcada(true);
+    const erro = await conferirAlcada('aprovar');
+    assert.equal(erro.pode, false); assert.equal(erro.erro, true);
+
+    window.__VP_SB = { sb: makeFakeSbAlcada({}, { concessoes: [{ id: 'x' }] }) }; window.PropostaStore = undefined;
+    assert.equal((await conferirAlcada('aprovar')).pode, false, 'sem PropostaStore: recusa');
+  } finally { window.__VP_SB = antigoSb; window.PropostaStore = antigoPS; }
+});
+
+test('aprovar e calcularEsalvar — sem a alçada (ativa) recusam com marca própria e NÃO gravam nada', async () => {
+  const S = window.PrecificacaoElevadorStore;
+  const row = linhaParaAprovar({ mensagem: 'ok', contribuinte_icms: false }, 0.15);
+  const antigoSb = window.__VP_SB; const antigoPS = window.PropostaStore;
+  try {
+    window.__VP_SB = { sb: makeFakeSbAlcada(row, { concessoes: [{ id: 'x' }] }) }; comAlcada(false);
+    await assert.rejects(() => S.aprovar('pz-dif'), (e) => e.semAlcada === true && /Aprovar a precificação/.test(e.message));
+    await assert.rejects(() => S.calcularEsalvar('pz-dif'), (e) => e.semAlcada === true && /Calcular a precificação/.test(e.message));
+    assert.equal(row.status, 'calculado', 'nada foi gravado');
+    assert.equal(row.aprovado_em, undefined);
+    // com a alçada, segue para as demais conferências (aqui: a margem, de propósito acima do resultado)
+    row.parametros_fiscais_snapshot = { margem_minima_pct: 0.9 }; comAlcada(true);
+    await assert.rejects(() => S.aprovar('pz-dif'), (e) => e.margemAbaixoMinima === true && !e.semAlcada);
+  } finally { window.__VP_SB = antigoSb; window.PropostaStore = antigoPS; }
 });

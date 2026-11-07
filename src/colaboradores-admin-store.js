@@ -192,7 +192,11 @@
     ]},
     { grupo: 'ADM/ Financeiro', itens: [
       { modulo: 'cotacoes-fornecedor', label: 'Cotações a Fornecedor' },
-      { modulo: 'precificacao', label: 'Precificação' },
+      { modulo: 'precificacao', label: 'Precificação', capacidades: [
+        ...ACOES_PADRAO,
+        { chave: 'calcular', label: 'Calcular a precificação' },
+        { chave: 'aprovar', label: 'Aprovar a precificação (cria a Proposta)' },
+      ]},
       { modulo: 'aval-financeiro', label: 'Aval Financeiro' },
       { modulo: 'emissao-nf', label: 'Emissão de NF' },
     ]},
