@@ -1042,12 +1042,29 @@
     return faltando;
   }
 
+  /* DIFAL pendente (07/11/2026, spec de 15/10/2026 e pendência 3 de 5.2.10): o cadastro do cliente não diz se ele é
+     Contribuinte de ICMS, então o DIFAL não pôde ser calculado (mensagem do DifalEngine "Informe se o cliente é
+     Contribuinte de ICMS…"). Enquanto estiver assim, NÃO se aprova a precificação (e, como a Proposta nasce ao aprovar,
+     nem se gera a Proposta). Outros avisos do DIFAL (UF ausente, UF sem linha na tabela, revenda com cliente não
+     contribuinte) continuam só avisos. Função pura, usada pelo aprovar() e pela tela. */
+  const MOTIVO_DIFAL_PENDENTE = 'DIFAL pendente: o cadastro do cliente não informa se ele é Contribuinte de ICMS. Devolva ao Vendas para completar o cadastro e clique em Calcular antes de aprovar.';
+  function difalPendente(difal) {
+    if (!difal || typeof difal !== 'object') return false;
+    if (difal.contribuinte_icms === true || difal.contribuinte_icms === false) return false;
+    return /^Informe se o cliente/.test(difal.mensagem || '');
+  }
+
   async function aprovar(id, { forcarAbaixoMinima } = {}) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const pz = await obter(id);
     if (!pz.resultado) throw new Error('Calcule a precificação antes de aprovar.');
     const faltando = camposObrigatoriosFaltando(pz);
     if (faltando.length) throw new Error(`Campos obrigatórios sem valor: ${faltando.join(', ')}.`);
+    if (difalPendente(pz.difal)) {
+      const err = new Error(MOTIVO_DIFAL_PENDENTE);
+      err.difalPendente = true; // bloqueio absoluto: "aprovar mesmo assim" (margem) não vale aqui
+      throw err;
+    }
     const margemMinima = Number((pz.parametros_fiscais_snapshot || {}).margem_minima_pct) || 0;
     // Motor oficial desde 29/08 é o V2 (custo econômico completo) — o V1
     // deixava markup positivo conviver com margem real negativa (issue
@@ -1224,7 +1241,7 @@
     listarPendentes, criar, obter, salvar, calcularEsalvar,
     camposObrigatoriosFaltando, aprovar, criarPropostaAutomatica, ressincronizarDoFornecedor,
     parseContainerNo, buscarContainerCustoPorIso, enriquecerContainersComCusto, divergenciasContainerComCadastro,
-    isoDoTipoCustos, aplicarIdTagNaLinha, linhaTemValorDiferenteDoIdTag,
+    isoDoTipoCustos, aplicarIdTagNaLinha, linhaTemValorDiferenteDoIdTag, difalPendente, MOTIVO_DIFAL_PENDENTE,
     classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, atualizarMaoDeObra, renumerarPorParadas, montarBaseInputs,
     acrescentarEquipamento, removerEquipamento, restaurarEquipamentoMO,
   };

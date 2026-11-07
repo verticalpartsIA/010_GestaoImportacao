@@ -1035,6 +1035,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const margemOficialPct = pz.resultado_v2 && pz.resultado_v2.precificacao ? pz.resultado_v2.precificacao.margemEfetivaPct : (resultado ? resultado.margemFinalPct : null);
   const margemAbaixoMinima = margemOficialPct != null && margemOficialPct < margemMinima;
   const aprovado = pz.status === 'finalizado';
+  // DIFAL pendente (07/11/2026): cadastro do cliente sem "Contribuinte de ICMS" => não aprova (nem gera a Proposta).
+  const difalPendente = window.PrecificacaoElevadorStore.difalPendente(pz.difal);
 
   const aprovar = async (forcar) => {
     setAprovando(true);
@@ -1086,7 +1088,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
           <Button variant="outline" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar rascunho'}</Button>
           <Button variant="primary" icon="calculator" onClick={calcular} disabled={calculando}>{calculando ? 'Calculando…' : 'Calcular'}</Button>
           {resultado && !aprovado && (
-            <Button variant="outline" icon="check" onClick={() => aprovar(false)} disabled={aprovando}>{aprovando ? 'Aprovando…' : 'Aprovar precificação'}</Button>
+            <Button variant="outline" icon="check" onClick={() => aprovar(false)} disabled={aprovando || difalPendente} title={difalPendente ? window.PrecificacaoElevadorStore.MOTIVO_DIFAL_PENDENTE : undefined}>{aprovando ? 'Aprovando…' : 'Aprovar precificação'}</Button>
           )}
           {aprovado && (
             <span className="badge" style={{ background: 'var(--vp-success)', color: '#fff', display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>
@@ -1105,6 +1107,17 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
             : markUpForaFaixa
             ? `Mark-up de ${fmtPct2(pz.mark_up_pct)} é implausível — isso zera o preço de venda calculado. Confira o valor.`
             : `O preço de venda calculado (${fmtBRL2(resultadoV2.precificacao.precoVendaProposta)}) está muito acima do custo esperado do FOB (${fmtBRL2(fobBrlEsperado)}). Confira câmbio, mark-up e percentuais.`}
+        </div>
+      )}
+
+      {difalPendente && !aprovado && (
+        <div style={{ margin: '0 0 16px', padding: '12px 16px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 6, color: '#991b1b', fontSize: 13 }}>
+          <b>⚠ DIFAL pendente — não é possível aprovar nem gerar a Proposta.</b>{' '}
+          O cadastro do cliente não informa se ele é <b>Contribuinte de ICMS</b>, então o DIFAL não pôde ser calculado.
+          Devolva ao Vendas para completar o cadastro e clique em <b>Calcular</b> de novo.
+          <div style={{ marginTop: 8 }}>
+            <Button variant="outline" size="sm" icon="refresh" onClick={devolverAoVendas}>Devolver ao Vendas para completar o cadastro</Button>
+          </div>
         </div>
       )}
 
