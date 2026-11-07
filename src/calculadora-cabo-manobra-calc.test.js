@@ -43,3 +43,11 @@ test('total exatamente inteiro não ganha metro a mais', () => {
   const r = C.calcular({ ...C.PADRAO });
   assert.ok(r.comprar >= r.total && r.comprar - r.total < 1);
 });
+
+test('curso já somado (cursoM) dispensa paradas e piso a piso — é como o BOM do quadro chama', () => {
+  const r = C.calcular({ tipo: 'MRL', cursoM: 27, profundidadePoco: 1.5, overhead: 4.5, margemMrl: 2 });
+  assert.equal(r.ok, true);
+  perto(r.total, 44.82);
+  assert.equal(r.comprar, 45);
+  assert.equal(C.calcular({ tipo: 'MRL', cursoM: 27, profundidadePoco: 0.1, overhead: 4.5 }).ok, false);
+});

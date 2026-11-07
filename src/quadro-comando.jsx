@@ -629,12 +629,7 @@ function QcGeometriaSecao({ geometria, intervalos, config, onGeom, onIntervalos,
         </div>
       </Card>
 
-      <Card title="Cabo de manobra — comprimento" sub="Comprimento = soma dos pisos + seio + subida até a caixa de inspeção (3 m) + pontas + saída do quadro até a caixa (10 m, fixo), mais a distância do quadro até a descida da laje quando há casa de máquinas (campo acima). Deixe em branco para usar o padrão.">
-        <div className="grid-3" style={{ gap: 12 }}>
-          <QcField label="Seio / volta do cabo (mm) — padrão 3000"><QcInput type="number" value={geometria.seio_cabo_mm} disabled={disabled} onChange={(v) => set({ seio_cabo_mm: v })}/></QcField>
-          <QcField label="Pontas — soma das duas (mm) — padrão 4000"><QcInput type="number" value={geometria.folga_mm} disabled={disabled} onChange={(v) => set({ folga_mm: v })}/></QcField>
-        </div>
-      </Card>
+      <Card title="Cabo de manobra — comprimento" sub="Calculado pela Calculadora de Cabos: soma dos intervalos + última altura (K) + seio (da profundidade do poço, P) + cabine (6,5 m) + margem de 2 m sem casa de máquinas (ou a distância quadro → entrada da caixa, acima, com casa de máquinas). Arredondado para cima, em metros. Sem P e K preenchidos (ou marcados como padrão comercial) o comprimento não é liberado." />
     </>
   );
 }
