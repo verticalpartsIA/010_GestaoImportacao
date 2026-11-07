@@ -525,3 +525,57 @@ test('linhaTemValorDiferenteDoIdTag — só valor > 0 que difere pede confirmaç
   assert.equal(PZS.linhaTemValorDiferenteDoIdTag({ preco_rs: 26820.5 }, alvo), true);
   assert.equal(PZS.linhaTemValorDiferenteDoIdTag({ taxa_porto_rs: 5 }, CUSTOS_TAG[0]), true);
 });
+
+/* ---------- DIFAL pendente barra a aprovação (07/11/2026; spec de 15/10/2026, pendência 3 de 5.2.10) ---------- */
+test('difalPendente — só "falta informar se o cliente é contribuinte" é pendência; os outros avisos não bloqueiam', () => {
+  const { difalPendente } = window.PrecificacaoElevadorStore;
+  const MSG = 'Informe se o cliente é Contribuinte de ICMS para determinar o responsável pelo recolhimento do DIFAL.';
+  assert.equal(difalPendente({ mensagem: MSG, contribuinte_icms: null }), true);
+  assert.equal(difalPendente({ mensagem: MSG }), true);
+  // contribuinte informado (sim ou não): não é pendência
+  assert.equal(difalPendente({ mensagem: MSG, contribuinte_icms: true }), false);
+  assert.equal(difalPendente({ mensagem: MSG, contribuinte_icms: false }), false);
+  // outros avisos do motor continuam só avisos
+  assert.equal(difalPendente({ mensagem: 'Informe a UF de entrega ou o UF do endereço do cliente para calcular o DIFAL.', contribuinte_icms: null }), false);
+  assert.equal(difalPendente({ mensagem: 'Estado de destino (XX) não encontrado na tabela de referência do DIFAL.', contribuinte_icms: null }), false);
+  assert.equal(difalPendente({ mensagem: 'Venda para comercialização (revenda) — tributada normalmente, sem incidência de DIFAL.', contribuinte_icms: null, alerta: 'Atenção: Não Contribuintes…' }), false);
+  // sem DIFAL calculado (nunca calculou) ou lixo: não decide nada aqui (o aprovar já exige "Calcule antes")
+  assert.equal(difalPendente(null), false);
+  assert.equal(difalPendente(undefined), false);
+  assert.equal(difalPendente('x'), false);
+});
+
+function linhaParaAprovar(difal, margemMinima) {
+  return {
+    id: 'pz-dif', status: 'calculado', numero_documento: 'VPPC-0001', numero_cotacao: 1,
+    vmle_usd: 1000, tx_cambial: 5, modelos: [{ unidadeId: 'u1', quantidade: 1 }],
+    itens_instalacao_montagem: [{ descricao: 'ART', valor: 100 }], comissao_vendedor_pct: 0.02, comissao_consultoria_pct: 0,
+    parametros_fiscais_snapshot: { margem_minima_pct: margemMinima },
+    resultado: { precificacao: { margemFinalPct: 0.3 } }, resultado_v2: { precificacao: { margemEfetivaPct: 0.3 } },
+    difal,
+  };
+}
+
+test('aprovar — DIFAL pendente recusa, com marca própria, e NÃO grava nada (nem com "aprovar mesmo assim")', async () => {
+  const row = linhaParaAprovar({ mensagem: 'Informe se o cliente é Contribuinte de ICMS para determinar o responsável pelo recolhimento do DIFAL.', contribuinte_icms: null }, 0.15);
+  const antigoSb = window.__VP_SB;
+  window.__VP_SB = { sb: makeFakeSb(row) };
+  try {
+    await assert.rejects(() => window.PrecificacaoElevadorStore.aprovar('pz-dif', { forcarAbaixoMinima: true }),
+      (e) => e.difalPendente === true && /Contribuinte de ICMS/.test(e.message));
+    assert.equal(row.status, 'calculado', 'a precificação continua não aprovada');
+    assert.equal(row.aprovado_em, undefined);
+  } finally { window.__VP_SB = antigoSb; }
+});
+
+test('aprovar — com o contribuinte informado o DIFAL deixa de bloquear (segue para as demais conferências)', async () => {
+  // margem mínima acima da margem do resultado: se o DIFAL não bloqueasse, o erro seria o da margem (e não o do DIFAL)
+  const row = linhaParaAprovar({ mensagem: 'DIFAL de R$ 1,00 é responsabilidade da VerticalParts.', contribuinte_icms: false }, 0.9);
+  const antigoSb = window.__VP_SB;
+  window.__VP_SB = { sb: makeFakeSb(row) };
+  try {
+    await assert.rejects(() => window.PrecificacaoElevadorStore.aprovar('pz-dif'),
+      (e) => e.margemAbaixoMinima === true && !e.difalPendente);
+    assert.equal(row.status, 'calculado');
+  } finally { window.__VP_SB = antigoSb; }
+});
