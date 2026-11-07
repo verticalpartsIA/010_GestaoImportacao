@@ -40,7 +40,7 @@
     'art', 'cronograma', 'databook', 'handover', 'repositorio-documentos',
     'rh-homologacao',
     'almoxarifado', 'carga-maquina', 'montagem-produto', 'evolucao-fabricacao', 'fabricacao-corrimao', 'fabricacao-corte', 'simulacao-producao', 'pcp', 'relatorios-pcp', 'expedicao', 'separacao', 'etiquetas', 'emissao-nf',
-    'quadros-pedidos', 'quadros-separacao', 'quadros-separacao-fab',
+    'quadros-pedidos', 'quadros-separacao', 'quadros-separacao-fab', 'quadros-calculadora-cabos',
     'logs', 'configuracoes', 'comissoes', 'pagamentos-instalador',
   ];
   const KNOWN_ROUTES_SET = new Set(KNOWN_ROUTES);

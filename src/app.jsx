@@ -31,6 +31,7 @@ const ROUTE_TITLE = {
   "quadros-pedidos": "Quadros de Comando · Pedidos",
   "quadros-separacao": "Quadros de Comando · Separação PV QC",
   "quadros-separacao-fab": "Quadros de Comando · Separação FAB QC",
+  "quadros-calculadora-cabos": "Quadros de Comando · Calculadora de Cabos",
   "simulacao-producao": "Simulação",
   "relatorios-pcp": "Relatórios do PCP",
   expedicao: "Expedição",
@@ -434,6 +435,7 @@ function App() {
       case "quadros-pedidos": return <window.QuadrosPedidosPage/>;
       case "quadros-separacao": return <window.QuadrosSeparacaoPage/>;
       case "quadros-separacao-fab": return <window.QuadrosSeparacaoFabPage/>;
+      case "quadros-calculadora-cabos": return <window.CalculadoraCabosPage/>;
       case "pcp": return <window.PCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "pi-importacao": return <window.PIPage/>;
       case "rfq-importacao": return <window.RFQPage/>;

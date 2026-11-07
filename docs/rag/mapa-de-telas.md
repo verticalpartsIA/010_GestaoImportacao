@@ -1,6 +1,6 @@
 <!-- GERADO por scripts/gerar-rag.js — não edite à mão. Rode: npm run rag -->
 
-**85 telas; 79 citam rota; 2 citam rota que não está em `KNOWN_ROUTES`.**
+**86 telas; 80 citam rota; 2 citam rota que não está em `KNOWN_ROUTES`.**
 
 # Mapa de telas (módulo → tela → rota)
 
@@ -85,6 +85,7 @@
 | `14_quadros_comando.md` | 14.2 Separação PV QC | `quadros-separacao` | `/quadros-de-comando/quadros-separacao` | sim | `docs/modulos/14_quadros_comando.md#142-separação-pv-qc` |
 | `14_quadros_comando.md` | 14.3 Separação FAB QC | `quadros-separacao-fab` | `/quadros-de-comando/quadros-separacao-fab` | sim | `docs/modulos/14_quadros_comando.md#143-separação-fab-qc` |
 | `14_quadros_comando.md` | 14.4 Fabricação QC | `evolucao-fabricacao` | `/quadros-de-comando/evolucao-fabricacao` | sim | `docs/modulos/14_quadros_comando.md#144-fabricação-qc` |
+| `14_quadros_comando.md` | 14.5 Calculadora de Cabos | `quadros-calculadora-cabos` | `/quadros-de-comando/quadros-calculadora-cabos/mrl` | sim | `docs/modulos/14_quadros_comando.md#145-calculadora-de-cabos` |
 | `15_administracao.md` | 15.1 Logs de Atividade | `logs` | `/admin/logs` | sim | `docs/modulos/15_administracao.md#151-logs-de-atividade` |
 | `15_administracao.md` | 15.2 Configurações do Sistema | `configuracoes` | `/admin/configuracoes` | sim | `docs/modulos/15_administracao.md#152-configurações-do-sistema` |
 | `16_servicos.md` | S1 WhatsApp (canal Evolution) |  |  | — | `docs/modulos/16_servicos.md#s1-whatsapp-canal-evolution` |
