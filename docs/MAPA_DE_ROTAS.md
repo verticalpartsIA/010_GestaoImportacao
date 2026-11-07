@@ -14,7 +14,7 @@
 - O 1º segmento (**módulo**) vem do `BREADCRUMB_MAP` do `shell.jsx` via `MODULE_SLUG` do `router.js`; só o 2º segmento (a rota) decide o que abre.
 - A **aba padrão** deixa a URL limpa (sem o último segmento). Aba inválida na URL cai na padrão.
 - Abas entram na URL com `window.useRouteTab(rota, padrão, [válidas], comId?)` (em `router.js`).
-- Rotas no roteador: **90** · itens de menu: **75** · telas com abas na URL: **17**.
+- Rotas no roteador: **91** · itens de menu: **76** · telas com abas na URL: **18**.
 
 ## Verificações automáticas
 
@@ -159,6 +159,7 @@
 | Separação PV QC | `quadros-separacao` | `/quadros-de-comando/quadros-separacao` | — | — |
 | Separação FAB QC | `quadros-separacao-fab` | `/quadros-de-comando/quadros-separacao-fab` | — | — |
 | Fabricação QC | `evolucao-fabricacao` | `/quadros-de-comando/evolucao-fabricacao` | — | — |
+| Calculadora de Cabos | `quadros-calculadora-cabos` | `/quadros-de-comando/quadros-calculadora-cabos[/<aba>]` | **mrl**, mr | — |
 
 ### Administração
 
@@ -195,7 +196,7 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 |---|---|---|---|---|
 | (? em central-documentos.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `central-documentos.jsx:84` |
 | (? em central-documentos.jsx) | (acionado por um handler — ver o código) | `rh-homologacao` | `/rh/rh-homologacao` | `central-documentos.jsx:86` |
-| (App em app.jsx) | (acionado por um handler — ver o código) | `dashboard` | `/geral/dashboard` | `app.jsx:350` |
+| (App em app.jsx) | (acionado por um handler — ver o código) | `dashboard` | `/geral/dashboard` | `app.jsx:351` |
 | (CardContratoInstalador em dossier-obra.jsx) | Abrir no Jurídico → | `contrato-instalador` | `/juridico/contrato-instalador` | `dossier-obra.jsx:600` |
 | (CVDetalhe em cotacoes-varejo.jsx) | (acionado por um handler — ver o código) | `cadastro-fornecedores` | `/cadastros/cadastro-fornecedores` | `cotacoes-varejo.jsx:637` |
 | (CVLista em cotacoes-varejo.jsx) | Ir para Importação Varejo | `compras` | `/logistica/compras` | `cotacoes-varejo.jsx:51` |
@@ -260,7 +261,7 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | ncm-detail | Voltar para Solicitações NCM | `ncm-kanban` | `/engenharia/ncm-kanban` | `ncm-catalogo.jsx:748` |
 | ncm-kanban | (acionado por um handler — ver o código) | `ncm-detail` | `/engenharia/ncm-detail` | `ncm-catalogo.jsx:664` |
 | ncm-kanban | (acionado por um handler — ver o código) | `ncm-detail` | `/engenharia/ncm-detail` | `ncm-catalogo.jsx:712` |
-| proposta-editor | (acionado por um handler — ver o código) | `propostas` | `/comercial/propostas` | `proposta-editor.jsx:1055` |
+| proposta-editor | (acionado por um handler — ver o código) | `propostas` | `/comercial/propostas` | `proposta-editor.jsx:1122` |
 | propostas | (acionado por um handler — ver o código) | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:596` |
 | propostas | (acionado por um handler — ver o código) | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:685` |
 | propostas | (acionado por um handler — ver o código) | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:686` |
@@ -287,10 +288,10 @@ São abas de formulário/modal, filtros, modos de visualização e passos de ass
 | `logistica.jsx:1927` | EmailInbox | `modoCompose` | `'responder'` | `inbox` |
 | `ncm-catalogo.jsx:574` | NcmKanbanPage | `view` | `"kanban"` | `ncm-kanban` |
 | `pi.jsx:451` | PIForm | `tab` | `'id'` | `pi-importacao` |
-| `precificacao-elevador.jsx:501` | ModalAcrescentarEquipamento | `modo` | `grupos.length ? 'identico' : '` | (modal/componente interno) |
+| `precificacao-elevador.jsx:537` | ModalAcrescentarEquipamento | `modo` | `grupos.length ? 'identico' : '` | (modal/componente interno) |
 | `precificacao-memoria.jsx:46` | PZMemoriaCalculo | `aba` | `'resumo'` | (modal/componente interno) |
 | `precificacao.jsx:20` | PrecificacaoPage | `modo` | `'elevador'` | `precificacao` |
-| `proposta-form.jsx:1296` | S_Conteudo | `aba` | `null` | (modal/componente interno) |
+| `proposta-form.jsx:1455` | S_Conteudo | `aba` | `null` | (modal/componente interno) |
 | `recibo-instalador-app.jsx:62` | ReciboApp | `modo` | `'assinar'` | (modal/componente interno) |
 | `rfq.jsx:22` | RFQForm | `modoGlobal` | `!!(initialData && initialData.` | `rfq-importacao` |
 | `solicitacoes-produto.jsx:16` | SolicitacoesProdutoPage | `view` | `solicitacaoId ? 'detalhe' : 'l` | `solicitacoes-produto` |

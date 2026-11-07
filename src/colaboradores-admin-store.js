@@ -280,6 +280,7 @@
       { modulo: 'quadros-pedidos', label: 'Quadros de Comando — Pedidos' },
       { modulo: 'quadros-separacao', label: 'Quadros de Comando — Separação PV QC' },
       { modulo: 'quadros-separacao-fab', label: 'Quadros de Comando — Separação FAB QC (a gravação do Peguei usa a alçada da Separação PV QC)' },
+      { modulo: 'quadros-calculadora-cabos', label: 'Quadros de Comando — Calculadora de Cabos (só cálculo na tela, não grava nada)' },
       /* Etiquetas (endereço, item…). Spec: docs/superpowers/specs/2026-10-17-modulo-etiquetas-design.md. As chaves são as que o SQL confere
          (migration 20261017160000: política de etiqueta_impressoes). Só quem tem 'imprimir' imprime; 'reimprimir' é outra alçada e exige motivo. */
       { modulo: 'etiquetas', label: 'Etiquetas (endereço, item, palete…)', capacidades: [
@@ -338,7 +339,7 @@
     /* Fabricação saiu de Logística Interna (17/10/2026). Logística Interna mantém a lista completa de propósito: quem já tinha o grupo alocado não perde nada. */
     /* Matérias-Primas e Produtos passaram a morar aqui no menu (18/10/2026); continuam também em Cadastros Mestres acima, para ninguém perder a alçada já concedida. */
     'Fabricação': ['pcp', 'carga-maquina', 'cadastro-materias-primas', 'cadastro-produtos', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'relatorios-pcp', 'fabricacao-corrimao', 'fabricacao-corte'],
-    'Quadros de Comando': ['quadros-pedidos', 'quadros-separacao', 'quadros-separacao-fab'],
+    'Quadros de Comando': ['quadros-pedidos', 'quadros-separacao', 'quadros-separacao-fab', 'quadros-calculadora-cabos'],
     'Administração': ['logs'],
   };
 

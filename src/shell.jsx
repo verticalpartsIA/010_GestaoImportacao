@@ -162,6 +162,7 @@ const NAV_GROUPS = [
     /* 04/11/2026: a antiga "Evolução da Fabricação" (grupo Fabricação) mudou para cá com o nome "Fabricação QC". O id da rota continua
        evolucao-fabricacao, então links antigos (/logistica/evolucao-fabricacao) seguem abrindo. */
     { id: "evolucao-fabricacao", label: "Fabricação QC", icon: "history" },
+    { id: "quadros-calculadora-cabos", label: "Calculadora de Cabos", icon: "bolt" },
   ]},
   { label: "Administração", items: [
     { id: "logs", label: "Logs de Atividade", icon: "history", restrict: ["admin"] },
@@ -468,6 +469,7 @@ const BREADCRUMB_MAP = {
   "quadros-pedidos": { module: "Quadros de Comando", page: "Pedidos com Quadro", icon: "layers" },
   "quadros-separacao": { module: "Quadros de Comando", page: "Separação PV QC", icon: "package" },
   "quadros-separacao-fab": { module: "Quadros de Comando", page: "Separação FAB QC", icon: "package" },
+  "quadros-calculadora-cabos": { module: "Quadros de Comando", page: "Calculadora de Cabos", icon: "bolt" },
   "simulacao-producao": { module: "Logística", page: "Simulação", icon: "history" },
   "relatorios-pcp": { module: "Logística", page: "Relatórios", icon: "fileText" },
   expedicao: { module: "Logística", page: "Expedição", icon: "truck" },

@@ -18,7 +18,7 @@
 
 ## Índice
 14. **Quadros de Comando**
-   14.1 Pedidos com Quadro · 14.2 Separação PV QC · 14.3 Separação FAB QC · 14.4 Fabricação QC
+   14.1 Pedidos com Quadro · 14.2 Separação PV QC · 14.3 Separação FAB QC · 14.4 Fabricação QC · 14.5 Calculadora de Cabos
    &nbsp;&nbsp;&nbsp;Cada tela tem os temas: x.1 O que é · x.2 Rota e arquivos · x.3 Perfil e acesso · x.4 O que a tela mostra · x.5 Botões e controles · x.6 Comportamento · x.7 Dados (lê/grava) · x.8 Regras e armadilhas · x.9 Testes · x.10 Pendências e decisões · x.11 Histórico
    Parte comum de Quadros de Comando (sem número de tela)
    &nbsp;&nbsp;&nbsp;PC-1 Mapa de ligações e fios desligados · PC-2 Do Omie à fábrica: o que é um "quadro" · PC-3 Rotas, páginas públicas e arquivos · PC-4 Regras de negócio que atravessam as telas · PC-5 Quem faz o quê (alçadas) · PC-6 Identidade e segurança · PC-7 Rotinas, funções e crons · PC-8 Tabelas · PC-9 Navegação, cache e testes · PC-10 Menu "?" e tutoriais · PC-11 Documentos soltos e destino do que foi concatenado · PC-12 Benefícios trocados com os outros módulos
@@ -34,6 +34,7 @@ Termos gerais (alçada, soft-delete, evento de fluxo) estão em `01_geral.md`; *
 - **Item de separação:** a linha do pedido que o almoxarifado separa: tudo o que **não** é quadro, cabo do kit, matéria-prima (VPMP) nem serviço (VPSVC). Inclui botões, placa de display, botão de chamada, encoder e a **máquina de tração**.
 - **Peguei:** a marca de que a pessoa pegou o item (`qc_separacao_itens`), com quem e quando; o histórico fica em `qc_separacao_hist`.
 - **OP de quadro:** linha de `pcp_ordens` com `frente = 'quadro'`; é o que a Fabricação QC acompanha.
+- **MRL / MR:** elevador **sem** casa de máquinas (MRL) ou **com** casa de máquinas (MR); muda a última parcela da conta do cabo de manobra (14.5).
 
 ---
 
@@ -219,6 +220,46 @@ Igual a 13.8. **Herdado.** O percentual de cada cartão é o que a coluna **Fabr
 ### 14.4.11 Histórico
 Criada em 19/10/2026 como Evolução da Fabricação (13.8); movida e renomeada em 04/11/2026. **Herdado/Conferido.**
 
+## 14.5 Calculadora de Cabos
+
+### 14.5.1 O que é
+Calculadora do **comprimento do cabo de manobra** do elevador, trazida pelo Gelson em 06/11/2026 (arquivo `CalculadoraCaboManobra.html`) e instalada no hub com o visual do sistema. **Só cálculo na tela: não lê nem grava nada no banco.** **Conferido** (código e tela aberta em 06/11/2026).
+
+**Fora do escopo:** gravar o resultado em OP, pedido ou BOM; outros cabos (cabo de aço, cinta): o nome "Calculadora de Cabos" deixa o lugar para eles, hoje só existe o cabo de manobra; ligar a conta ao BOM do quadro (ver 14.5.10).
+
+### 14.5.2 Rota e arquivos
+Rota `quadros-calculadora-cabos`; URL `/quadros-de-comando/quadros-calculadora-cabos/mrl` ou `/mr` (o tipo de elevador mora na URL: recarregar e compartilhar o link mantém a escolha; `mrl` é o padrão). Tela `calculadora-cabos.jsx` (`CalculadoraCabosPage`); conta pura em `calculadora-cabo-manobra-calc.js` (`window.CaboManobraCalc`), com teste em `calculadora-cabo-manobra-calc.test.js` (5). Menu, título e caminho em `shell.jsx` e `app.jsx`; rota em `router.js`. **Conferido.**
+
+### 14.5.3 Perfil e acesso
+Como as outras telas do grupo: quem vê "Quadros de Comando" no menu abre a tela. Módulo `quadros-calculadora-cabos` no catálogo de alçadas, só para constar; **a tela não grava, então não há ação que exija alçada**. **Conferido** (código).
+
+### 14.5.4 O que a tela mostra
+À esquerda, os campos: tipo de elevador (MRL / com casa de máquinas), paradas (padrão 9), piso a piso em metros (3,0), profundidade do poço P (1,5), overhead K (4,5) e, conforme o tipo, margem de travessia MRL (2,0) **ou** distância do quadro ao furo da laje (4,0). À direita, o resultado: curso total, seio, percurso na cabine, parcela do tipo, **comprimento total** e **comprar (arredondado)**. Embaixo dos campos, as constantes fixas. **Conferido** (padrão MRL: 41,82 m → comprar 42 m; MR: 43,82 m → 44 m).
+
+### 14.5.5 Botões e controles
+Dois botões de tipo de elevador (trocam a URL) e os campos numéricos. Sem botão de salvar nem de imprimir. **Conferido.**
+
+### 14.5.6 Comportamento
+O resultado muda **enquanto se digita**. Erro de entrada aparece **no lugar do resultado**, nunca como número: menos de 2 paradas, ou poço de 15 cm ou menos. **Conferido** (teste de unidade).
+
+### 14.5.7 Dados
+Nenhum (não lê nem grava tabela). **Conferido.**
+
+### 14.5.8 Regras e armadilhas
+- **Conta (portada sem mudar do HTML original):** curso = (paradas − 1) × piso a piso; seio = 2 × (P − 0,15) + π × (P − 0,15) / 2; percurso na cabine = 1,50 + 3,00 + 2,00; total = curso + K + seio + cabine + (MRL: margem | MR: distância ao furo); comprar = total arredondado **para cima**, em metros inteiros. Constantes fixas no código: cabine 1,50 × 3,00 m, sobra do topo 2,00 m, folga do seio no fundo 15 cm. **Conferido.**
+- **Esta conta NÃO é a do cabo de manobra do BOM do quadro** (`montarTrechoCaboManobra`, 4.1, calibrada num cabo real: 10 paradas × 3 m = 47 m). Para o mesmo caso (10 paradas, piso 3 m, MRL, valores padrão) esta calculadora dá **44,8 m → 45 m**. **Achado, sem correção:** as duas contas coexistem até o Gelson decidir qual vale. **Conferido** (cálculo).
+
+### 14.5.9 Testes
+`calculadora-cabo-manobra-calc.test.js`: padrão MRL confere com a planilha original; MR troca a margem pela distância ao furo; aceita texto dos campos; valida paradas e poço; arredondamento para cima. Cenário: **Dado** 9 paradas, 3 m, poço 1,5, K 4,5 e margem 2, **quando** se calcula, **então** o total é 41,82 m e a compra é 42 m. A rota entra no teste de fumaça sozinha. **Conferido** (suíte 1070/1070 em 06/11/2026; tela aberta no navegador, MRL e MR).
+
+### 14.5.10 Pendências e decisões
+- **Decidir qual conta de cabo de manobra vale** (esta ou a do BOM, 14.5.8) e, se for esta, ligá-la ao BOM do quadro.
+- Outros cabos (aço, cinta) nesta calculadora: não pedido.
+- Tutorial: não existe (Art. 46); ajuda do "?" não criada.
+
+### 14.5.11 Histórico
+Criada em 06/11/2026 a pedido do Gelson. **Conferido.**
+
 ---
 
 # Parte comum de Quadros de Comando
@@ -239,7 +280,7 @@ Hoje existem **dois** registros que se chamam "quadro", e é essa a ambiguidade 
 **Desenho-alvo (Herdado da conversa de 04/11/2026, ainda não construído):** o pedido com quadro chega à etapa 20 → o módulo cria as OPs de quadro (uma por quadro físico) → a Separação PV QC e FAB QC e a Fabricação QC se alimentam → as Etiquetas leem daqui.
 
 ## PC-3 Rotas, páginas públicas e arquivos
-Rotas: `/quadros-de-comando/quadros-pedidos`, `/quadros-de-comando/quadros-separacao[/<pedido>]`, `/quadros-de-comando/quadros-separacao-fab[/<pedido>]`, `/quadros-de-comando/evolucao-fabricacao`. Páginas públicas: `fabricacao-quadro.html` (14.4) e **`quadros-publico.html`** (05/11/2026, pedido do Gelson), uma só página em `/quadros-publico/<tipo>/<token>`: `pedidos` (gestores: status da fabricação e da separação, **só leitura**), `separacao` (separador, pelo celular, marca **Peguei** na Separação PV QC) e `separacao_fab` (idem na Separação FAB QC). Cada tipo tem **um link secreto** (64 caracteres), criado e **trocável** pelo botão "🔗 Link público" das três telas internas (ver exige a alçada `quadros-separacao.ver`; criar/trocar, `editar`); trocar invalida o link antigo. No celular o separador **digita o nome** (guardado no aparelho) e cada "Peguei" fica gravado como `link: <nome>`; o link **não** grava estoque real, previsão nem observações (decisão do Gelson). A página usa os **mesmos cálculos** da tela interna (`QuadrosPedidosStore.montar`), então os números batem. Arquivos: `quadros-publico.html`, `quadros-publico.jsx`; rota em `server.js`; entrada em `PAGINAS_PUBLICAS` do e2e. **Conferido** (código e página abrindo com token falso; a leitura e o "Peguei" por link **dependem da migration `20261105100000`, ainda não aplicada**). Arquivos do módulo: `quadros-pedidos.jsx`, `quadros-pedidos-store.js`, `quadros-pedidos-calc.js` (+ `quadros-pedidos-calc.test.js`), `quadros-separacao.jsx`, `evolucao-fabricacao-quadro.jsx`, `fabricacao-quadro-store.js`, `fabricacao-quadro-calc.js`, `fabricacao-quadro-app.jsx`. Compartilhados que mudaram: `shell.jsx` (menu, apelido do grupo), `router.js` (`KNOWN_ROUTES`), `app.jsx`, `colaboradores-admin-store.js` (alçadas), `server.js` (`SPA_MODULES` ganhou `quadros-de-comando`). **Conferido.**
+Rotas: `/quadros-de-comando/quadros-calculadora-cabos[/mrl|/mr]` (14.5), `/quadros-de-comando/quadros-pedidos`, `/quadros-de-comando/quadros-separacao[/<pedido>]`, `/quadros-de-comando/quadros-separacao-fab[/<pedido>]`, `/quadros-de-comando/evolucao-fabricacao`. Páginas públicas: `fabricacao-quadro.html` (14.4) e **`quadros-publico.html`** (05/11/2026, pedido do Gelson), uma só página em `/quadros-publico/<tipo>/<token>`: `pedidos` (gestores: status da fabricação e da separação, **só leitura**), `separacao` (separador, pelo celular, marca **Peguei** na Separação PV QC) e `separacao_fab` (idem na Separação FAB QC). Cada tipo tem **um link secreto** (64 caracteres), criado e **trocável** pelo botão "🔗 Link público" das três telas internas (ver exige a alçada `quadros-separacao.ver`; criar/trocar, `editar`); trocar invalida o link antigo. No celular o separador **digita o nome** (guardado no aparelho) e cada "Peguei" fica gravado como `link: <nome>`; o link **não** grava estoque real, previsão nem observações (decisão do Gelson). A página usa os **mesmos cálculos** da tela interna (`QuadrosPedidosStore.montar`), então os números batem. Arquivos: `quadros-publico.html`, `quadros-publico.jsx`; rota em `server.js`; entrada em `PAGINAS_PUBLICAS` do e2e. **Conferido** (código e página abrindo com token falso; a leitura e o "Peguei" por link **dependem da migration `20261105100000`, ainda não aplicada**). Arquivos do módulo: `quadros-pedidos.jsx`, `quadros-pedidos-store.js`, `quadros-pedidos-calc.js` (+ `quadros-pedidos-calc.test.js`), `quadros-separacao.jsx`, `evolucao-fabricacao-quadro.jsx`, `fabricacao-quadro-store.js`, `fabricacao-quadro-calc.js`, `fabricacao-quadro-app.jsx`. Compartilhados que mudaram: `shell.jsx` (menu, apelido do grupo), `router.js` (`KNOWN_ROUTES`), `app.jsx`, `colaboradores-admin-store.js` (alçadas), `server.js` (`SPA_MODULES` ganhou `quadros-de-comando`). **Conferido.**
 
 ## PC-4 Regras de negócio que atravessam as telas
 - **Classificação de cada linha do pedido** (`QuadrosPedidosCalc.classificarItem`): **quadro** (código de variante ou produto da OP de quadro do pedido), **materia_prima** (código `VPMP…`), **servico** (código `VPSVC…`), **cabo** (descrição começa com "Cabo": vai com o quadro) e **separacao** (o resto). **Conferido.**
