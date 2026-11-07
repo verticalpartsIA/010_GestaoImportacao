@@ -667,6 +667,17 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const [calculando, setCalculando] = React.useState(false);
   const [salvando, setSalvando] = React.useState(false);
   const [aprovando, setAprovando] = React.useState(false);
+  /* Alçadas de Calcular e Aprovar (07/11/2026): conferidas ao abrir; enquanto carrega (null) os botões ficam como
+     estão e o store recusa de qualquer jeito. Conferência desligada até alguém receber a alçada (ver o store).
+     Hooks ficam ANTES do `if (!pz) return` (ordem de hooks). */
+  const [alcada, setAlcada] = React.useState(null);
+  React.useEffect(() => {
+    let vivo = true;
+    const S = window.PrecificacaoElevadorStore;
+    Promise.all([S.conferirAlcada('calcular'), S.conferirAlcada('aprovar')])
+      .then(([c, a]) => { if (vivo) setAlcada({ calcular: c, aprovar: a }); }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
   const [mostrarParametros, setMostrarParametros] = React.useState(false);
   const [mostrarObrigatorios, setMostrarObrigatorios] = React.useState(false); // células obrigatórias acendem depois de uma tentativa de Calcular
   const [ressincronizando, setRessincronizando] = React.useState(false);
@@ -986,6 +997,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
     if (!validarAntesDeCalcular()) return;
     setCalculando(true);
     try {
+      await window.PrecificacaoElevadorStore.exigirAlcada('calcular'); // antes de salvar: sem alçada não grava nada
       await window.PrecificacaoElevadorStore.salvar(pz.id, payloadSalvar());
       await window.PrecificacaoElevadorStore.calcularEsalvar(pz.id);
       await carregar();
@@ -1035,6 +1047,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const margemOficialPct = pz.resultado_v2 && pz.resultado_v2.precificacao ? pz.resultado_v2.precificacao.margemEfetivaPct : (resultado ? resultado.margemFinalPct : null);
   const margemAbaixoMinima = margemOficialPct != null && margemOficialPct < margemMinima;
   const aprovado = pz.status === 'finalizado';
+  const semAlcadaCalcular = !!alcada && !alcada.calcular.pode;
+  const semAlcadaAprovar = !!alcada && !alcada.aprovar.pode;
   // DIFAL pendente (07/11/2026): cadastro do cliente sem "Contribuinte de ICMS" => não aprova (nem gera a Proposta).
   const difalPendente = window.PrecificacaoElevadorStore.difalPendente(pz.difal);
 
@@ -1086,9 +1100,9 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
         <div className="page-head__r">
           <Button variant="ghost" icon="chevLeft" onClick={onVoltar}>Voltar</Button>
           <Button variant="outline" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar rascunho'}</Button>
-          <Button variant="primary" icon="calculator" onClick={calcular} disabled={calculando}>{calculando ? 'Calculando…' : 'Calcular'}</Button>
+          <Button variant="primary" icon="calculator" onClick={calcular} disabled={calculando || semAlcadaCalcular} title={semAlcadaCalcular ? alcada.calcular.motivo : undefined}>{calculando ? 'Calculando…' : 'Calcular'}</Button>
           {resultado && !aprovado && (
-            <Button variant="outline" icon="check" onClick={() => aprovar(false)} disabled={aprovando || difalPendente} title={difalPendente ? window.PrecificacaoElevadorStore.MOTIVO_DIFAL_PENDENTE : undefined}>{aprovando ? 'Aprovando…' : 'Aprovar precificação'}</Button>
+            <Button variant="outline" icon="check" onClick={() => aprovar(false)} disabled={aprovando || difalPendente || semAlcadaAprovar} title={difalPendente ? window.PrecificacaoElevadorStore.MOTIVO_DIFAL_PENDENTE : (semAlcadaAprovar ? alcada.aprovar.motivo : undefined)}>{aprovando ? 'Aprovando…' : 'Aprovar precificação'}</Button>
           )}
           {aprovado && (
             <span className="badge" style={{ background: 'var(--vp-success)', color: '#fff', display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>
