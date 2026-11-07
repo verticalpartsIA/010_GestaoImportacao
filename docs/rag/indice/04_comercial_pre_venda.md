@@ -5,7 +5,7 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/04_comercial_pre_venda.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `746db79`)
-- **Palavras:** 20117 · **blocos:** 324 · **seções com selo próprio:** 49 de 85
+- **Palavras:** 20194 · **blocos:** 324 · **seções com selo próprio:** 49 de 85
 - **Origem do selo dos blocos:** próprio 93 · da seção 141 · da seção-pai 13 · do cabeçalho 52 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
 - **Selo efetivo dos blocos:** Conferido 188 · Herdado 74 · Não verificado 37
 

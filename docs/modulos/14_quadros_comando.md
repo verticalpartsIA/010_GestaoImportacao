@@ -225,10 +225,10 @@ Criada em 19/10/2026 como Evolução da Fabricação (13.8); movida e renomeada 
 ### 14.5.1 O que é
 Calculadora do **comprimento do cabo de manobra** do elevador, trazida pelo Gelson em 06/11/2026 (arquivo `CalculadoraCaboManobra.html`) e instalada no hub com o visual do sistema. **Só cálculo na tela: não lê nem grava nada no banco.** **Conferido** (código e tela aberta em 06/11/2026).
 
-**Fora do escopo:** gravar o resultado em OP, pedido ou BOM; outros cabos (cabo de aço, cinta): o nome "Calculadora de Cabos" deixa o lugar para eles, hoje só existe o cabo de manobra; ligar a conta ao BOM do quadro (ver 14.5.10).
+**Fora do escopo:** gravar o resultado em OP, pedido ou BOM; outros cabos (cabo de aço, cinta): o nome "Calculadora de Cabos" deixa o lugar para eles, hoje só existe o cabo de manobra; outros usos além do cabo de manobra do BOM (ver 14.5.8).
 
 ### 14.5.2 Rota e arquivos
-Rota `quadros-calculadora-cabos`; URL `/quadros-de-comando/quadros-calculadora-cabos/mrl` ou `/mr` (o tipo de elevador mora na URL: recarregar e compartilhar o link mantém a escolha; `mrl` é o padrão). Tela `calculadora-cabos.jsx` (`CalculadoraCabosPage`); conta pura em `calculadora-cabo-manobra-calc.js` (`window.CaboManobraCalc`), com teste em `calculadora-cabo-manobra-calc.test.js` (5). Menu, título e caminho em `shell.jsx` e `app.jsx`; rota em `router.js`. **Conferido.**
+Rota `quadros-calculadora-cabos`; URL `/quadros-de-comando/quadros-calculadora-cabos/mrl` ou `/mr` (o tipo de elevador mora na URL: recarregar e compartilhar o link mantém a escolha; `mrl` é o padrão). Tela `calculadora-cabos.jsx` (`CalculadoraCabosPage`); conta pura em `calculadora-cabo-manobra-calc.js` (`window.CaboManobraCalc`), com teste em `calculadora-cabo-manobra-calc.test.js` (6). Menu, título e caminho em `shell.jsx` e `app.jsx`; rota em `router.js`. **Conferido.**
 
 ### 14.5.3 Perfil e acesso
 Como as outras telas do grupo: quem vê "Quadros de Comando" no menu abre a tela. Módulo `quadros-calculadora-cabos` no catálogo de alçadas, só para constar; **a tela não grava, então não há ação que exija alçada**. **Conferido** (código).
@@ -247,13 +247,14 @@ Nenhum (não lê nem grava tabela). **Conferido.**
 
 ### 14.5.8 Regras e armadilhas
 - **Conta (portada sem mudar do HTML original):** curso = (paradas − 1) × piso a piso; seio = 2 × (P − 0,15) + π × (P − 0,15) / 2; percurso na cabine = 1,50 + 3,00 + 2,00; total = curso + K + seio + cabine + (MRL: margem | MR: distância ao furo); comprar = total arredondado **para cima**, em metros inteiros. Constantes fixas no código: cabine 1,50 × 3,00 m, sobra do topo 2,00 m, folga do seio no fundo 15 cm. **Conferido.**
-- **Esta conta NÃO é a do cabo de manobra do BOM do quadro** (`montarTrechoCaboManobra`, 4.1, calibrada num cabo real: 10 paradas × 3 m = 47 m). Para o mesmo caso (10 paradas, piso 3 m, MRL, valores padrão) esta calculadora dá **44,8 m → 45 m**. **Achado, sem correção:** as duas contas coexistem até o Gelson decidir qual vale. **Conferido** (cálculo).
+- **Esta é a conta do cabo de manobra do BOM do quadro (decisão do Gelson, 06/11/2026).** `montarTrechoCaboManobra` (4.1, item 13) chama `calcular()` com o **curso já somado dos intervalos reais** (`cursoM`), P = `poco_mm`, K = `ultima_altura_mm` (só medidos, ou o padrão 1500/4500 mm se marcado "estimado"; senão o trecho fica `pendente_engenharia`), margem MRL de 2 m (sem campo próprio) ou a distância quadro → entrada da caixa (com casa de máquinas). O corte do BOM é o total **arredondado para cima em metros** (o "comprar" da calculadora). Substitui a regra anterior (calibrada em 47 m para 10 paradas × 3 m; agora 45 m). **Conferido** (código e testes).
+- **BOMs já gerados não mudam sozinhos:** só ao clicar de novo em "Gerar BOM + lista de corte". Os campos `seio_cabo_mm` e `folga_mm` seguem no banco, **sem uso**. **Conferido.**
 
 ### 14.5.9 Testes
 `calculadora-cabo-manobra-calc.test.js`: padrão MRL confere com a planilha original; MR troca a margem pela distância ao furo; aceita texto dos campos; valida paradas e poço; arredondamento para cima. Cenário: **Dado** 9 paradas, 3 m, poço 1,5, K 4,5 e margem 2, **quando** se calcula, **então** o total é 41,82 m e a compra é 42 m. A rota entra no teste de fumaça sozinha. **Conferido** (suíte 1070/1070 em 06/11/2026; tela aberta no navegador, MRL e MR).
 
 ### 14.5.10 Pendências e decisões
-- **Decidir qual conta de cabo de manobra vale** (esta ou a do BOM, 14.5.8) e, se for esta, ligá-la ao BOM do quadro.
+- **Decidido em 06/11/2026:** vale a conta da calculadora e ela alimenta o BOM (14.5.8). **Pendente:** conferir com a Engenharia se 45 m (e não os 47 m do cabo real de 10 paradas) serve, e se a margem MRL de 2 m deve virar campo do quadro.
 - Outros cabos (aço, cinta) nesta calculadora: não pedido.
 - Tutorial: não existe (Art. 46); ajuda do "?" não criada.
 

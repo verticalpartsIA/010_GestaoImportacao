@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/14_quadros_comando.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 04/11/2026 (origin/main `43baa55`)
-- **Palavras:** 6922 · **blocos:** 138 · **seções com selo próprio:** 61 de 72
-- **Origem do selo dos blocos:** próprio 71 · da seção 28 · da seção-pai 0 · do cabeçalho 18 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 21
-- **Selo efetivo dos blocos:** Conferido 105 · Herdado 8 · Não verificado 4
+- **Palavras:** 7025 · **blocos:** 139 · **seções com selo próprio:** 61 de 72
+- **Origem do selo dos blocos:** próprio 72 · da seção 28 · da seção-pai 0 · do cabeçalho 18 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 21
+- **Selo efetivo dos blocos:** Conferido 106 · Herdado 8 · Não verificado 4
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -72,7 +72,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 14.5.5 Botões e controles | `docs/modulos/14_quadros_comando.md#1455-botões-e-controles` | 3 | Conferido (uniforme) | 1 | b1 |
 | 14.5.6 Comportamento | `docs/modulos/14_quadros_comando.md#1456-comportamento` | 3 | Conferido (uniforme) | 1 | b1 |
 | 14.5.7 Dados | `docs/modulos/14_quadros_comando.md#1457-dados` | 3 | Conferido (uniforme) | 1 | b1 |
-| 14.5.8 Regras e armadilhas | `docs/modulos/14_quadros_comando.md#1458-regras-e-armadilhas` | 3 | Conferido (uniforme) | 2 | b2 |
+| 14.5.8 Regras e armadilhas | `docs/modulos/14_quadros_comando.md#1458-regras-e-armadilhas` | 3 | Conferido (uniforme) | 3 | b3 |
 | 14.5.9 Testes | `docs/modulos/14_quadros_comando.md#1459-testes` | 3 | Conferido (uniforme) | 1 | b1 |
 | 14.5.10 Pendências e decisões | `docs/modulos/14_quadros_comando.md#14510-pendências-e-decisões` | 3 | — | 3 | c3 |
 | 14.5.11 Histórico | `docs/modulos/14_quadros_comando.md#14511-histórico` | 3 | Conferido (uniforme) | 1 | b1 |

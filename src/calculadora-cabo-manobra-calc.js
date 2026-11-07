@@ -6,8 +6,9 @@
    - nada é arredondado antes da hora: a compra é o total arredondado para cima, em metros inteiros.
    Conta: curso (paradas-1 × piso a piso) + overhead K + seio (descida + meia circunferência + subida) + percurso na cabine
    (largura + altura + sobra do topo) + (MRL: margem de travessia | MR: distância do quadro ao furo da laje).
-   ATENÇÃO: NÃO é a mesma conta do cabo de manobra do BOM do quadro (quadro-comando-bom-engine.js, montarTrechoCaboManobra,
-   calibrada num cabo real: 10 paradas × 3 m = 47 m). Esta dá 45 m para o mesmo caso. Duas contas coexistem até o Gelson decidir qual vale.
+   DECISÃO DO GELSON (06/11/2026): esta é a conta que vale. O BOM do quadro (quadro-comando-bom-engine.js, montarTrechoCaboManobra) chama
+   calcular() com o curso já somado dos intervalos reais (cursoM), no lugar de paradas × piso a piso. Antes o BOM usava outra conta
+   (calibrada em 10 paradas × 3 m = 47 m); para o mesmo caso esta dá 45 m.
    ============================================================ */
 (function () {
   'use strict';
@@ -33,10 +34,11 @@
     const margemMrl = num(e.margemMrl);
     const distanciaMr = num(e.distanciaMr);
 
-    if (paradas < 2) return { ok: false, erro: 'A quantidade de paradas deve ser no mínimo 2.' };
+    const temCurso = e.cursoM != null && e.cursoM !== '';   // curso já somado (intervalos reais do BOM); dispensa paradas × piso
+    if (!temCurso && paradas < 2) return { ok: false, erro: 'A quantidade de paradas deve ser no mínimo 2.' };
     if (poco <= FOLGA_SEIO_FUNDO_M) return { ok: false, erro: 'A profundidade do poço deve ser maior que a folga do chão (15 cm).' };
 
-    const curso = (paradas - 1) * pisoAPiso;
+    const curso = temCurso ? num(e.cursoM) : (paradas - 1) * pisoAPiso;
     const alturaSeio = poco - FOLGA_SEIO_FUNDO_M;
     const curva = (Math.PI * alturaSeio) / 2;            // meia circunferência, raio = alturaSeio / 2
     const seio = 2 * alturaSeio + curva;                 // desce + curva + sobe

@@ -564,7 +564,7 @@ URLs ainda em `/logistica/...` (e `/cadastros/...` para Matérias-Primas e Produ
 - **Custo efetivo:** Omie → compras → manual (12.1.6). **Herdado.**
 - **Quadro:** a lista de materiais vem da estrutura do produto no Omie; a lista fixa antiga só vale se a variante não tem produto no Omie. **Herdado.**
 - **Todo cabo e chicote é feito na VerticalParts** (nada vem pronto do fornecedor): o BOM do quadro tem um chicote nosso para cada conector. **Herdado.**
-- **Comprimento do cabo de manobra** calibrado num cabo real (10 paradas × 3 m = 47 m; os 10 m do quadro até a caixa são regra fixa). **Herdado.**
+- **Comprimento do cabo de manobra:** desde 06/11/2026 vale a conta da Calculadora de Cabos (14.5; 10 paradas × 3 m = 45 m); a regra calibrada em 47 m deixou de valer (ver 4.1, item 13). **Conferido.**
 
 ## PC-5 Quem faz o quê (alçadas, custo, hora-homem)
 Resumo **Conferido** (contagens de pessoas, 01/11/2026): `pcp` ver 11/criar 7/editar 7/apontar_hh 7/ver_hh 3; `mes` ver 9/editar 7; `mes-cadastros` ver 7; `carga-maquina` ver 6; `cadastro-materias-primas` ver 8; `cadastro-produtos` ver 28; `montagem-produto` ver 10; `simulacao-producao` ver 6; `relatorios-pcp` ver 8; `fabricacao-corrimao` e `fabricacao-corte` ver 2; `lista-fios` ver 5/editar 4; `evolucao-fabricacao` **sem linhas**. **Custo de material** só com `almoxarifado.ver_custo`; sem ela o dado nem é pedido ao banco. **Hora-homem:** valor só pela função `pcp-hh`, ação `custos`, para `pcp.ver_hh`; tabelas `pcp_hh_*` de valor com RLS sem política. Administrador passa sempre.
