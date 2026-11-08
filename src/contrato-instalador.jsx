@@ -2292,8 +2292,11 @@ function CIDashboard() {
 
   _ciUE(() => {
     window.CIStore.sweepExpired().then(refresh);
-    const t = setInterval(refresh, 15000);
-    return () => clearInterval(t);
+    /* pausa com a aba oculta; ao voltar para a aba atualiza na hora. */
+    const t = setInterval(() => { if (!document.hidden) refresh(); }, 15000);
+    const vis = () => { if (!document.hidden) refresh(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
   }, []);
 
   const [editRec, setEditRec] = _ciUS(null);

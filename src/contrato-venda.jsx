@@ -1497,8 +1497,11 @@ function CVDashboard({ onCriarDeProposta, onContinuarRascunho }) {
 
   _cvUE(() => {
     window.CVStore.sweepExpired().then(refresh);
-    const t = setInterval(refresh, 5000);
-    return () => clearInterval(t);
+    /* 5 s -> 30 s e pausa com a aba oculta; ao voltar para a aba atualiza na hora. */
+    const t = setInterval(() => { if (!document.hidden) refresh(); }, 30000);
+    const vis = () => { if (!document.hidden) refresh(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
   }, []);
 
   const drawerRec = drawerId ? contracts.find(c => c.id === drawerId) : null;

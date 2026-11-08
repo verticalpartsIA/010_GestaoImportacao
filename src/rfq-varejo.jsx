@@ -59,7 +59,7 @@ function RVTratativa({ lote, convite, itens, respostas, editavel }) {
   }, [convite.id]);
   React.useEffect(() => {
     carregar();
-    const t = setInterval(carregar, 60000);
+    const t = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
     const vis = () => { if (!document.hidden) carregar(); };
     document.addEventListener('visibilitychange', vis);
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
@@ -227,7 +227,13 @@ function RFQVarejoDetalhe({ loteId, onVoltar }) {
   const carregar = React.useCallback(() => {
     C.obterLote(loteId).then((d) => { if (!d) setErro('Lote não encontrado.'); else setDados(d); }).catch((e) => setErro(e.message || String(e)));
   }, [loteId]);
-  React.useEffect(() => { carregar(); const t = setInterval(carregar, 60000); return () => clearInterval(t); }, [carregar]);
+  React.useEffect(() => {
+    carregar();
+    const t = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
+    const vis = () => { if (!document.hidden) carregar(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
+  }, [carregar]);
 
   if (erro) return <div className="page fade-in"><div className="alert danger"><div><div className="alert__title">Não foi possível abrir o lote</div><div className="alert__sub">{erro}</div></div></div><Button variant="outline" onClick={onVoltar}>← RFQ</Button></div>;
   if (!dados) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
