@@ -339,13 +339,19 @@ function feNovaUnidade(identificador, tipoEquipamento) {
    `chave` liga o campo à lista de faltantes que vem do contexto (cabeçalho ou equipamento); só acende depois que o
    usuário tenta salvar/enviar (ctx.mostrar). Estilo em styles/planilha.css (.pl-faltando). */
 const FEFaltandoCtx = React.createContext({ mostrar: false, falta: () => false });
+/* 07/11/2026 (auditoria de acessibilidade, WCAG 1.3.1/4.1.2): o <label> do FEField é irmão do campo, não o envolve nem
+   tem htmlFor, então leitor de tela anunciava "campo de edição" sem nome. O FEField publica o id do seu rótulo neste
+   contexto e FEInput/FESelect/FEFornecedorInput/FETextarea o usam em aria-labelledby (vários campos podem apontar para
+   o mesmo rótulo sem repetir id). Campo fora de um FEField não recebe nada, como antes. */
+const FERotuloCtx = React.createContext(undefined);
 function FEField({ label, children, span, chave, aviso }) {
   const ctx = React.useContext(FEFaltandoCtx);
+  const rotuloId = React.useId();
   const faltando = !!chave && ctx.mostrar && ctx.falta(chave);
   return (
     <div className={'stack' + (faltando ? ' pl-faltando' : '')} style={{ gap: 4, gridColumn: span ? `span ${span}` : undefined }}>
-      <label className="up-eyebrow muted">{label}</label>
-      {children}
+      <label id={rotuloId} className="up-eyebrow muted">{label}</label>
+      <FERotuloCtx.Provider value={rotuloId}>{children}</FERotuloCtx.Provider>
       {faltando && <div className="pl-faltando__msg">{aviso || 'Campo obrigatório — preencha para enviar.'}</div>}
     </div>
   );
@@ -374,11 +380,17 @@ function feFaltandoUnidade(u) {
   return FE_UNID_OBRIG.filter(([k]) => !u[k]).map(([k, nome]) => ({ chave: k, nome }));
 }
 function FEInput({ value, onChange, placeholder, type = 'text', disabled, onBlur }) {
-  return <input className="input" type={type} value={value ?? ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} placeholder={placeholder} disabled={disabled}/>;
+  const rotuloId = React.useContext(FERotuloCtx);
+  return <input className="input" type={type} value={value ?? ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} placeholder={placeholder} disabled={disabled} aria-labelledby={rotuloId}/>;
+}
+function FETextarea({ value, onChange, rows = 2 }) {
+  const rotuloId = React.useContext(FERotuloCtx);
+  return <textarea className="input" rows={rows} value={value || ''} onChange={(e) => onChange(e.target.value)} aria-labelledby={rotuloId}/>;
 }
 function FESelect({ value, onChange, options, placeholder, disabled }) {
+  const rotuloId = React.useContext(FERotuloCtx);
   return (
-    <select className="input" value={value ?? ''} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
+    <select className="input" value={value ?? ''} onChange={(e) => onChange(e.target.value)} disabled={disabled} aria-labelledby={rotuloId}>
       <option value="">{placeholder || '— escolha —'}</option>
       {options.map((o) => typeof o === 'string'
         ? <option key={o} value={o}>{o}</option>
@@ -396,10 +408,11 @@ function FESelect({ value, onChange, options, placeholder, disabled }) {
    lista, não inventar um nome novo. */
 function FEFornecedorInput({ value, onChange, fornecedores, disabled }) {
   const listId = React.useId();
+  const rotuloId = React.useContext(FERotuloCtx);
   return (
     <>
       <input className="input" list={listId} value={value ?? ''} onChange={(e) => onChange(e.target.value)}
-        placeholder="Digite pra filtrar (ex.: G)" disabled={disabled}/>
+        placeholder="Digite pra filtrar (ex.: G)" disabled={disabled} aria-labelledby={rotuloId}/>
       <datalist id={listId}>
         {/* `fornecedores` mistura string (RFQ configurado) e { value, label }
             (ainda não configurado — ver fornecedoresOptions). Usar o objeto
@@ -807,7 +820,7 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
                 <FECheck label="Câmera na cabine" checked={unidade.camera} onChange={set('camera')}/>
                 <FECheck label="Anúncio de voz" checked={unidade.anuncio_voz} onChange={set('anuncio_voz')}/>
               </div>
-              <FEField label="Exigências especiais" span="3"><textarea className="input" rows={2} value={unidade.exigencias_especiais || ''} onChange={(e) => set('exigencias_especiais')(e.target.value)}/></FEField>
+              <FEField label="Exigências especiais" span="3"><FETextarea value={unidade.exigencias_especiais} onChange={(v) => set('exigencias_especiais')(v)}/></FEField>
             </div>
           </div>
           </React.Fragment>
@@ -2004,7 +2017,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, tip
               )}
             </div>
           </div>
-          <FEField label="Observações"><textarea className="input" rows={2} value={header.observacoes || ''} onChange={(e) => setH('observacoes')(e.target.value)}/></FEField>
+          <FEField label="Observações"><FETextarea value={header.observacoes} onChange={(v) => setH('observacoes')(v)}/></FEField>
         </div>
       </Card>
       </fieldset>
