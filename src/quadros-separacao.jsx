@@ -112,7 +112,7 @@ function QcSeparacaoTela({ rota, eyebrow, titulo, sub, campo, vazio, soComItens 
   }, [sb]);
   React.useEffect(() => { carregar(); }, [carregar]);
   React.useEffect(() => {
-    const t = setInterval(carregar, 60000);
+    const t = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
     const vis = () => { if (document.visibilityState === 'visible') carregar(); };
     document.addEventListener('visibilitychange', vis);
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };

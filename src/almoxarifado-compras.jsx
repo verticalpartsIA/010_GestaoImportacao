@@ -62,7 +62,7 @@ async function pcLerTudo(montar) {
 // Recarrega sozinho (a cada minuto e ao voltar para a aba do navegador).
 function usePcAtualizar(fn) {
   React.useEffect(() => {
-    const t = setInterval(fn, 60000);
+    const t = setInterval(() => { if (!document.hidden) fn(); }, 60000);
     const v = () => { if (document.visibilityState === 'visible') fn(); };
     document.addEventListener('visibilitychange', v);
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', v); };

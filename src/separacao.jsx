@@ -149,7 +149,13 @@ function SepDetalhe({ codigo, caps, voltar, onMudou, embutido }) {
     catch (e) { setErro(e.message); }
     try { setDestinos(await window.FabricacaoOficinaStore.listarDestinos(codigo)); } catch (e) { /* o "onde está" é complemento: se falhar, a tela segue */ }
   }, [codigo]);
-  React.useEffect(() => { setD(null); carregar(); const t = setInterval(carregar, 30000); return () => clearInterval(t); }, [carregar]);
+  React.useEffect(() => {
+    setD(null); carregar();
+    const t = setInterval(() => { if (!document.hidden) carregar(); }, 30000);
+    const vis = () => { if (!document.hidden) carregar(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
+  }, [carregar]);
 
   async function agir(acao, args, ok, log) {
     setOcupado(true);
@@ -337,7 +343,13 @@ function SepPedidosAba({ caps, irTv }) {
   const carregar = React.useCallback(async () => {
     try { setDados(await sepChamar('fila')); setErro(null); } catch (e) { setErro(e.message); }
   }, []);
-  React.useEffect(() => { carregar(); const t = setInterval(carregar, 30000); return () => clearInterval(t); }, [carregar]);
+  React.useEffect(() => {
+    carregar();
+    const t = setInterval(() => { if (!document.hidden) carregar(); }, 30000);
+    const vis = () => { if (!document.hidden) carregar(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
+  }, [carregar]);
 
   async function copiarLinkTv() {
     const { data, error } = await SEP_SB().rpc('separacao_tv_listar');

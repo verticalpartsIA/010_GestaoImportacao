@@ -144,8 +144,10 @@ function EFCotacaoCard({ idx, cot, emb, isEdit, onChange, onRemove, onVencedor, 
     let vivo = true;
     const carregar = () => S.respostasFrete(cot.id).then((r) => { if (vivo) setRespostas(r); });
     carregar();
-    const iv = setInterval(carregar, 60000);
-    return () => { vivo = false; clearInterval(iv); };
+    const iv = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
+    const vis = () => { if (!document.hidden) carregar(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { vivo = false; clearInterval(iv); document.removeEventListener('visibilitychange', vis); };
   }, [cot.id, isEdit]);
 
   const anexar = async (files) => {

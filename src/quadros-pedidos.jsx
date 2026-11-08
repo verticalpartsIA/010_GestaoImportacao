@@ -86,7 +86,7 @@ function QuadrosPedidosPage() {
   React.useEffect(() => { carregar(); }, [carregar]);
   // Atualiza sozinha (a cada minuto e ao voltar para a aba), como as outras telas que leem pcp_pedidos.
   React.useEffect(() => {
-    const t = setInterval(carregar, 60000);
+    const t = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
     const vis = () => { if (document.visibilityState === 'visible') carregar(); };
     document.addEventListener('visibilitychange', vis);
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
