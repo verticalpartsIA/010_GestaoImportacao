@@ -56,13 +56,13 @@
 - **Etapa opcional:** etapa que não conta como pendência (hoje o score e o aval de venda do Financeiro).
 - **Cemitério / Fechar com motivo:** proposta parada além de 10 dias sem resposta do cliente vira `revisao_necessaria`; só uma pessoa a encerra, com motivo escrito.
 - **Gatilho avulso:** gatilho cadastrado à mão, sem Nº de cotação (`origem` diferente de `automatico`). Hoje não existe nenhum.
-- **Caixa compartilhada:** a caixa `suporte@vpsistema.com`; o sistema lê por IMAP e envia por SMTP. Todos os e-mails passam por `emails_projeto`; quem pode ver cada um depende de dono, atribuição e alçadas (1.5.3).
+- **Caixa compartilhada:** desde 09/11/2026 a caixa principal é `hub@verticalparts.com.br` (o sistema lê e envia pela Microsoft Graph); a antiga `suporte@vpsistema.com` continua só recebendo, por IMAP, até ser desligada (detalhe em `16_servicos.md` S6). Todos os e-mails passam por `emails_projeto`; quem pode ver cada um depende de dono, atribuição e alçadas (1.5.3).
 - **Dono / Responsável:** dono = login de quem enviou (ou dono do e-mail respondido, ou da cotação); responsável atual = a pessoa a quem o e-mail foi **atribuído**, senão o dono. O autor original nunca muda.
 - **Vínculo (certo / provável):** ligação do e-mail a uma cotação. **Certo** = pelo Message-ID/In-Reply-To da mensagem original; **provável** = pelo Nº da cotação escrito no assunto. Sem vínculo, o e-mail é "órfão".
 - **Triagem (robô):** classificação por regras no banco (assunto, departamento, urgência, "pede resposta"); só sugere, não age. Confiança de regra, não calibrada.
 - **Conversa (thread):** mensagens juntadas por cabeçalho (ou assunto + ponta externa); a lista mostra uma linha por conversa.
 - **Arquivar / Suspender / Spam / Marcador:** organização estilo Gmail. Arquivar, suspender e estrela são **por pessoa**; spam é **compartilhado**; marcador é pessoal ou da equipe.
-- **Excluir (e-mail):** é soft-delete (ver acima): só tira o e-mail da lista do sistema (`excluido_em`); ele continua na caixa real e nunca é apagado do IMAP.
+- **Excluir (e-mail):** é soft-delete (ver acima): só tira o e-mail da lista do sistema (`excluido_em`); ele continua na caixa real e nunca é apagado dela (nem do `hub@` nem do IMAP do `suporte@`).
 
 ---
 
@@ -531,12 +531,12 @@ Achados, **sem correção**:
 
 ## 1.5 Inbox 🔒
 
-> **Área blindada** (regra permanente do CLAUDE.md, 23/09/2026): quem for "mexer, melhorar, simplificar, remover ou refazer" qualquer parte do sistema de e-mail **para antes de editar**, informa o que já existe e funciona (resumo abaixo) e só segue com confirmação explícita do Gelson. Vale para `logistica.jsx` (`EmailInbox`, `EmailBody`, `EmailNovoModal`), as Edge Functions `send-email`, `read-inbox`, `sign-email-anexos` e `suggest-email-reply`, a tabela `emails_projeto`, o vínculo por Nº de cotação, o cron `read-inbox-poll` e `formulario-elevador.jsx` (RFQ ao fornecedor). **Nunca apagar e-mail da caixa real `suporte@vpsistema.com` (IMAP); só listar para o Gelson apagar à mão.**
+> **Área blindada** (regra permanente do CLAUDE.md, 23/09/2026): quem for "mexer, melhorar, simplificar, remover ou refazer" qualquer parte do sistema de e-mail **para antes de editar**, informa o que já existe e funciona (resumo abaixo) e só segue com confirmação explícita do Gelson. Vale para `logistica.jsx` (`EmailInbox`, `EmailBody`, `EmailNovoModal`), as Edge Functions `send-email`, `read-inbox`, `sign-email-anexos` e `suggest-email-reply`, a tabela `emails_projeto`, o vínculo por Nº de cotação, o cron `read-inbox-poll` e `formulario-elevador.jsx` (RFQ ao fornecedor). **Nunca apagar e-mail da caixa real `suporte@vpsistema.com` (IMAP); só listar para o Gelson apagar à mão.** *(Nota de 09/11/2026: a mesma proibição vale para a caixa `hub@verticalparts.com.br`; o texto da lei no `CLAUDE.md` ainda cita só o `suporte@` e não foi alterado — Art. 13.)*
 >
 > **Canal de e-mail** (funções `send-email`, `read-inbox`, `sign-email-anexos` e `suggest-email-reply`, travas, crons e os avisos que nascem do e-mail): descrito em `docs/modulos/16_servicos.md` S6 (01/11/2026). A **tela** e a **lei** continuam aqui.
 
 ### 1.5.1 O que é
-A caixa de e-mail compartilhada da empresa (`suporte@vpsistema.com`) dentro do sistema: chegam as respostas de fornecedores e clientes, e saem as cotações, propostas, contratos, tratativas e pedidos enviados pelas outras telas. Funciona como um Gmail de equipe: pastas, marcadores, conversas, pesquisa avançada, janela de escrever, mais camadas de equipe (dono, atribuição, vínculo a cotação, triagem por regras, "pedir decisão" e "extrair preço"). **Lê** a caixa por IMAP (`read-inbox`) e **envia** por SMTP (`send-email`); tudo passa por `emails_projeto`.
+A caixa de e-mail compartilhada da empresa (`hub@verticalparts.com.br`; o `suporte@vpsistema.com` antigo segue só recebendo) dentro do sistema: chegam as respostas de fornecedores e clientes, e saem as cotações, propostas, contratos, tratativas e pedidos enviados pelas outras telas. Funciona como um Gmail de equipe: pastas, marcadores, conversas, pesquisa avançada, janela de escrever, mais camadas de equipe (dono, atribuição, vínculo a cotação, triagem por regras, "pedir decisão" e "extrair preço"). **Lê** as caixas (`read-inbox`: Graph no `hub@`, IMAP no `suporte@`) e **envia** pela Microsoft Graph (`send-email`); tudo passa por `emails_projeto`.
 Em 31/10/2026 havia **133 e-mails** em `emails_projeto`: 55 de entrada e 78 de saída; 22 excluídos (só da lista), nenhum em spam, 30 sem dono. Vínculo: 2 certos, 24 prováveis e 107 sem vínculo. Por origem: cotação a fornecedor 33, cotação de varejo 16, cotação de frete 9, contrato de venda 7, projeto de instalação 2, proposta 1, respostas/avulsos 4 e 61 sem referência.
 
 ### 1.5.2 Rota e arquivos
@@ -571,8 +571,8 @@ Em 31/10/2026 havia **133 e-mails** em `emails_projeto`: 55 de entrada e 78 de s
 - Carregar mais enviados (+50).
 
 ### 1.5.6 Comportamento
-- **Entrada:** o cron `read-inbox-poll` (a cada 10 min, timeout de 20 s) lê as 25 mais recentes e grava em `emails_projeto`; só e-mail novo ou ainda sem linha é inserido (upsert por `imap_uid`). A tela atualiza ao abrir, ao clicar Atualizar e, quando entra e-mail de entrada, por Realtime (assinatura em `emails_projeto`, INSERT `direcao=entrada`) que só rechama o `carregar()`.
-- **Saída:** `send-email` valida (formato, máx. 10 destinatários, allowlist, limite de taxa, `cc`), envia por SMTP e **registra todo envio** em `emails_projeto` (dono pelo login); assunto acentuado longo perde os acentos e o corpo vai em Base64 (ver 1.5.8). Falha em RFQ, Proposta, Contrato ou Tratativa cai para `mailto:` com aviso, e **o "enviado" só é gravado depois de `ok:true`**.
+- **Entrada:** o cron `read-inbox-poll` (a cada 10 min, timeout de 20 s) lê as 25 mais recentes e grava em `emails_projeto`; só e-mail novo ou ainda sem linha é inserido (upsert por `imap_uid`; no `hub@` a chave é `g:<id da Microsoft>`). A tela atualiza ao abrir, ao clicar Atualizar e, quando entra e-mail de entrada, por Realtime (assinatura em `emails_projeto`, INSERT `direcao=entrada`) que só rechama o `carregar()`.
+- **Saída:** `send-email` valida (formato, máx. 10 destinatários, allowlist, limite de taxa, `cc`), envia pela Microsoft Graph (remetente `hub@`, com a assinatura corporativa; o corpo gravado é o original) e **registra todo envio** em `emails_projeto` (dono pelo login); a regra do assunto acentuado longo e do corpo em Base64 valeu no SMTP, até 09/11/2026 (ver 1.5.8). Falha em RFQ, Proposta, Contrato ou Tratativa cai para `mailto:` com aviso, e **o "enviado" só é gravado depois de `ok:true`**.
 - **Vínculo:** pelo Message-ID/In-Reply-To (`certo`, herda `referencia_id/tipo`) ou pelo Nº da cotação no assunto (`provavel`, só se ainda não tem vínculo certo). Contrato/Proposta sem Nº de cotação ainda vinculam pelo Message-ID e `referencia_id`.
 - **Triagem:** ao inserir e-mail de entrada, o gatilho `trg_emails_projeto_classificar` grava assunto, departamento, urgência, "pede resposta" e a confiança. **O limite fica na tela, não no banco:** `LIMITE_SILENCIOSO = 0.75` em `inbox-triagem-calc.js` (`politica`) agrupa como "automático oculto" só o e-mail automático com confiança ≥ 0,75 (nunca apaga).
 - **Avisos:** `trg_alertas_inbox_resposta` cria aviso quando chega resposta vinculada (ao vendedor, se for tratativa/cotação a fornecedor; senão global, abrindo o Inbox); `trg_alertas_inbox_triagem` avisa prioridade alta/reclamação sem cotação; `inbox-alerta-sem-resposta` (a cada 15 min, seg–sex, 08–18h de Brasília) avisa e-mail que pede resposta há 2 horas úteis (nível 2 às 4 h, com o chefe); `inbox-acordar-adiados` (a cada 10 min) devolve e-mail suspenso à caixa e avisa.
@@ -622,7 +622,7 @@ Em 31/10/2026 havia **133 e-mails** em `emails_projeto`: 55 de entrada e 78 de s
 
 ### 1.5.10 Pendências e decisões
 Achados, **sem correção** (todos registrados por sessões anteriores, nada novo foi alterado):
-1. **Reputação de envio:** e-mails de teste caíram no Spam (domínio e IP compartilhado da Hostinger com pouco volume). DKIM/SPF/DMARC existem e estão propagados. Só o uso ao longo do tempo ou um provedor transacional resolve; fora de escopo.
+1. **Reputação de envio:** e-mails de teste caíram no Spam (domínio e IP compartilhado da Hostinger com pouco volume; **histórico do SMTP antigo** — desde 09/11/2026 o envio sai pela Microsoft e isso não foi reavaliado: **Não verificado**). DKIM/SPF/DMARC existem e estão propagados. Só o uso ao longo do tempo ou um provedor transacional resolve; fora de escopo.
 2. **Segurança dos dados:** a leitura é aberta à chave pública e `read-inbox` devolve a caixa inteira (#571); a visibilidade por dono é organização na tela.
 3. **Sem dono:** 30 e-mails ficaram sem dono (11 de entrada na carga inicial e os demais sem vínculo); só quem tem `triagem` os vê.
 4. **Segue pendente por decisão:** a "Fase 4" de rascunhos, tarefas e agendamento de envio do roteiro Gmail, e a importação de outras pastas IMAP além da INBOX (a caixa tem poucas mensagens).

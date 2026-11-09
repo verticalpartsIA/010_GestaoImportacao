@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/01_geral.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `fd5cf97`)
-- **Palavras:** 24323 · **blocos:** 509 · **seções com selo próprio:** 11 de 75
-- **Origem do selo dos blocos:** próprio 32 · da seção 99 · da seção-pai 0 · do cabeçalho 334 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 44
-- **Selo efetivo dos blocos:** Conferido 416 · Herdado 0 · Não verificado 49
+- **Palavras:** 24432 · **blocos:** 509 · **seções com selo próprio:** 12 de 75
+- **Origem do selo dos blocos:** próprio 33 · da seção 108 · da seção-pai 0 · do cabeçalho 324 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 44
+- **Selo efetivo dos blocos:** Conferido 406 · Herdado 0 · Não verificado 59
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -75,7 +75,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 1.5.7 Dados — o que lê e o que grava | `docs/modulos/01_geral.md#157-dados--o-que-lê-e-o-que-grava` | 3 | — | 5 | c5 |
 | 1.5.8 Regras e armadilhas | `docs/modulos/01_geral.md#158-regras-e-armadilhas` | 3 | — | 25 | c25 |
 | 1.5.9 Testes | `docs/modulos/01_geral.md#159-testes` | 3 | — | 2 | c2 |
-| 1.5.10 Pendências e decisões | `docs/modulos/01_geral.md#1510-pendências-e-decisões` | 3 | — | 10 | c10 |
+| 1.5.10 Pendências e decisões | `docs/modulos/01_geral.md#1510-pendências-e-decisões` | 3 | Não verificado (uniforme) | 10 | b1 s9 |
 | 1.5.11 Histórico (só o que ainda ensina) | `docs/modulos/01_geral.md#1511-histórico-só-o-que-ainda-ensina` | 3 | — | 9 | c9 |
 | Parte comum do Geral | `docs/modulos/01_geral.md#parte-comum-do-geral` | 2 | — | 1 | c1 |
 | PC-1 Mapa de ligações entre as 5 telas | `docs/modulos/01_geral.md#pc-1-mapa-de-ligações-entre-as-5-telas` | 3 | — | 2 | c2 |
