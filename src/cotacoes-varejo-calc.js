@@ -85,5 +85,22 @@
     return { porConvite, totalBRL: totalValido ? totalBRL : null };
   }
 
-  window.CotacoesVarejoCalc = { faixasOrdenadas, faixasForaDeOrdem, precoNaQuantidade, melhorConvite, paraReais, resumoItem, consolidarPorFornecedor };
+  /* Cesta (lote aberto): só lote em rascunho aceita produto; depois do 1º envio ao fornecedor ele fecha. */
+  function loteAceitaItens(lote) { return !!lote && lote.status === 'rascunho'; }
+
+  /* Separa o que entra no lote do que é ignorado (já está no lote ou repetido na própria seleção). Código em MAIÚSCULAS.
+     A 1ª ocorrência vale; a quantidade que já estava no lote nunca é sobrescrita. */
+  function itensParaAdicionar(selecionados, itensDoLote) {
+    const ja = new Set((itensDoLote || []).map((i) => String(i.codigo || '').trim().toUpperCase()));
+    const vistos = new Set(); const novos = []; const ignorados = [];
+    (selecionados || []).forEach((i) => {
+      const cod = String((i && i.codigo) || '').trim().toUpperCase();
+      if (!cod || vistos.has(cod)) return;
+      vistos.add(cod);
+      if (ja.has(cod)) ignorados.push(cod); else novos.push({ ...i, codigo: cod });
+    });
+    return { novos, ignorados };
+  }
+
+  window.CotacoesVarejoCalc = { loteAceitaItens, itensParaAdicionar, faixasOrdenadas,faixasForaDeOrdem, precoNaQuantidade, melhorConvite, paraReais, resumoItem, consolidarPorFornecedor };
 }());

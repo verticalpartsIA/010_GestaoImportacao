@@ -86,6 +86,27 @@
     return lote;
   }
 
+  /* Adiciona produtos a um lote que ainda está em rascunho (cesta). Itens já presentes são ignorados, sem mexer na quantidade.
+     Limite conhecido: a checagem do status não é atômica; se outro comprador enviar o lote no mesmo instante, o item entra num lote fechado. */
+  async function adicionarItens(loteId, itens) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const C = window.CotacoesVarejoCalc;
+    const { data: lote, error: e0 } = await c.from('iv_cotacao_lotes').select('id, numero, status').eq('id', loteId).single();
+    if (e0) throw e0;
+    if (!C.loteAceitaItens(lote)) throw new Error('O lote ' + lote.numero + ' já foi enviado aos fornecedores e não aceita mais produtos.');
+    const { data: atuais, error: e1 } = await c.from('iv_cotacao_itens').select('codigo, ordem').eq('lote_id', loteId).is('removido_em', null);
+    if (e1) throw e1;
+    const { novos, ignorados } = C.itensParaAdicionar((itens || []).filter((i) => i && i.codigo && Number(i.quantidade) >= 0), atuais || []);
+    if (novos.length) {
+      const base = (atuais || []).reduce((m, r) => Math.max(m, Number(r.ordem) || 0), -1) + 1;
+      const linhas = novos.map((i, idx) => ({ lote_id: loteId, codigo: i.codigo, descricao: i.descricao || null, unidade: i.unidade || null, quantidade_pedida: Number(i.quantidade), ordem: base + idx }));
+      const ins = await c.from('iv_cotacao_itens').insert(linhas);
+      if (ins.error) throw ins.error;
+      if (window.VPLog) window.VPLog.registrar({ modulo: 'Cotações de Varejo', acao: 'Adicionou produtos ao lote', alvo: lote.numero, alvo_id: loteId, detalhe: { adicionados: novos.length, ignorados: ignorados.length } });
+    }
+    return { lote, adicionados: novos.length, ignorados };
+  }
+
   async function atualizarLote(id, campos) {
     const c = sb(); const { error } = await c.from('iv_cotacao_lotes').update({ ...campos, updated_at: new Date().toISOString() }).eq('id', id);
     if (error) throw error;
@@ -534,7 +555,7 @@
 
   window.CotacoesVarejoStore = {
     MAX_FOTOS_MANUAIS, adicionarFotoManual, removerFotoManual, convitesEmCotacao, registrarRespostaPorEmail,
-    portalUrl, codigosEmCotacao, listarLotes, obterLote, criarLote, atualizarLote, atualizarItem, removerItem, cancelarLote,
+    portalUrl, codigosEmCotacao, listarLotes, obterLote, criarLote, adicionarItens, atualizarLote, atualizarItem, removerItem, cancelarLote,
     obterDescricao, descricoesGuardadas, salvarDescricao, montarObsVP, aplicarDescricoesGuardadas, sugerirDescricaoIA, NPS_CRITERIOS, avaliarFornecedor, npsDosFornecedores, avaliacoesDoFornecedor, registrarCambioDia, fixarCambioCotacao, fornecedoresCadastrados, convidarFornecedor, removerConvite, substituirConvite, atualizarConvite, marcarEnviado, novaRodada,
     textoConvite, enviarPorEmail, whatsAppHref, salvarDecisoes, aprovarLote, fotosDoBanco, enviarFoto, resolverFotos,
   };

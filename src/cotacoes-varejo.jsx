@@ -467,7 +467,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     window.toast?.('Informe a quantidade de ' + semQtd.length + ' produto(s) antes de pedir a cotação (' + semQtd.slice(0, 3).map((i) => i.codigo).join(', ') + (semQtd.length > 3 ? '…' : '') + '). O fornecedor precisa saber quanto queremos.', 'warning');
     return true;
   };
-  const enviarEmail = async (cv) => {
+  const enviarEmailDireto = async (cv) => {
     if (travaQtd() || !ccOk()) return;
     try {
       const r = await S.enviarPorEmail(lote, cv, { cc });
@@ -477,7 +477,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
       await carregar();
     } catch (e) { window.toast?.('Erro ao enviar: ' + (e.message || e), 'error'); }
   };
-  const enviarTodosEmail = async () => {
+  const enviarTodosEmailDireto = async () => {
     if (travaQtd() || !ccOk()) return;
     setEnviandoTodos(true);
     let ok = 0, falha = 0;
@@ -489,19 +489,33 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
       await carregar();
     } finally { setEnviandoTodos(false); }
   };
-  const copiarLink = async (cv) => {
+  const copiarLinkDireto = async (cv) => {
     if (travaQtd()) return;
     const link = S.portalUrl(cv.token);
     try { await navigator.clipboard.writeText(link); window.toast?.('Link copiado.', 'success'); } catch (e) { window.prompt('Copie o link:', link); }
     try { await S.marcarEnviado({ ...cv, lote_id: lote.id }, 'link'); await carregar(); } catch (e) {}
   };
-  const zap = async (cv) => {
+  const zapDireto = async (cv) => {
     if (travaQtd()) return;
     const f = forn.find((x) => x.id === cv.fornecedor_id); const tel = f && f.telefone;
     if (!tel) { window.toast?.('Sem telefone no cadastro deste fornecedor.', 'warning'); return; }
     window.open(S.whatsAppHref(tel, lote, cv), '_blank');
     try { await S.marcarEnviado({ ...cv, lote_id: lote.id }, 'whatsapp', tel); await carregar(); } catch (e) {}
   };
+  /* Lote em rascunho = ainda aceita produtos. O 1º envio (e-mail, WhatsApp ou "Copiar link", que também registra envio) fecha o lote, então pergunta antes. */
+  const fecharAntes = (acao, validar) => {
+    if (validar && validar()) return;
+    if (lote.status !== 'rascunho') return acao();
+    setConfirmar({
+      titulo: 'Enviar a cotação e fechar o lote', rotulo: 'Enviar e fechar o lote',
+      texto: 'Ao enviar a cotação aos fornecedores, o lote ' + lote.numero + ' fecha e não aceita mais produtos. Quer mesmo fechar o lote agora?',
+      acao: async () => { await acao(); },
+    });
+  };
+  const enviarEmail = (cv) => fecharAntes(() => enviarEmailDireto(cv), () => (semQtd.length > 0 && travaQtd()) || false);
+  const enviarTodosEmail = () => fecharAntes(() => enviarTodosEmailDireto(), () => (semQtd.length > 0 && travaQtd()) || false);
+  const copiarLink = (cv) => fecharAntes(() => copiarLinkDireto(cv), () => (semQtd.length > 0 && travaQtd()) || false);
+  const zap = (cv) => fecharAntes(() => zapDireto(cv), () => (semQtd.length > 0 && travaQtd()) || false);
   const rodada = async (cv) => { try { await S.novaRodada(cv); window.toast?.('Nova rodada aberta — reenvie o link ao fornecedor.', 'success'); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
   const tirar = (cv) => setConfirmar({
     titulo: 'Remover fornecedor do lote', rotulo: 'Remover fornecedor',
