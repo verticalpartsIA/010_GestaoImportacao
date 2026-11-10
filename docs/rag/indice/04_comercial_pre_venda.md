@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/04_comercial_pre_venda.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `746db79`)
-- **Palavras:** 20308 · **blocos:** 325 · **seções com selo próprio:** 50 de 85
-- **Origem do selo dos blocos:** próprio 94 · da seção 144 · da seção-pai 10 · do cabeçalho 52 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
-- **Selo efetivo dos blocos:** Conferido 189 · Herdado 74 · Não verificado 37
+- **Palavras:** 20342 · **blocos:** 326 · **seções com selo próprio:** 50 de 85
+- **Origem do selo dos blocos:** próprio 94 · da seção 145 · da seção-pai 10 · do cabeçalho 52 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
+- **Selo efetivo dos blocos:** Conferido 190 · Herdado 74 · Não verificado 37
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -18,7 +18,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | Glossário (módulo Comercial \| Pré-venda) | `docs/modulos/04_comercial_pre_venda.md#glossário-módulo-comercial--pré-venda` | 2 | meta | 16 | m16 |
 | 4.1 Formulários | `docs/modulos/04_comercial_pre_venda.md#41-formulários` | 2 | Conferido (uniforme) | 1 | b1 |
 | 4.1.1 O que é | `docs/modulos/04_comercial_pre_venda.md#411-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
-| 4.1.2 Rota e arquivos | `docs/modulos/04_comercial_pre_venda.md#412-rota-e-arquivos` | 3 | Conferido (uniforme) | 6 | b2 s4 |
+| 4.1.2 Rota e arquivos | `docs/modulos/04_comercial_pre_venda.md#412-rota-e-arquivos` | 3 | Conferido (uniforme) | 7 | b2 s5 |
 | 4.1.3 Perfil e acesso | `docs/modulos/04_comercial_pre_venda.md#413-perfil-e-acesso` | 3 | Conferido (uniforme) | 6 | b1 s5 |
 | 4.1.4 O que a tela mostra | `docs/modulos/04_comercial_pre_venda.md#414-o-que-a-tela-mostra` | 3 | Conferido (uniforme) | 11 | b1 s10 |
 | 4.1.5 Botões e controles | `docs/modulos/04_comercial_pre_venda.md#415-botões-e-controles` | 3 | Conferido (uniforme) | 9 | b1 s8 |
