@@ -14,6 +14,7 @@
 function frData(d) { return d ? new Date(d).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }) : '—'; }
 const FR_EDGE_URL = 'https://jxtqwzmpgofwctqajewt.functions.supabase.co/capturar-lead-quadro-comando';
 
+const NI_FR = 'Não informado';
 function frTotalLop(f) {
   const n = parseInt(f.num_paradas, 10) || 0;
   return n + (f.porta_oposta === 'sim' ? (f.porta_oposta_paradas || []).length : 0);
@@ -121,9 +122,11 @@ function FrDetalhe({ r, catalogo, onClose, podeLigar, aoMudar }) {
   const f = r.respostas_publico || {};
   const vendido = !!r.pv_omie && !r.pv_cancelado;
   const linhas = [
-    ...(r.id_tag ? [['ID_TAG', r.id_tag]] : []),
-    ...(r.pv_omie ? [['PV no Omie', r.pv_cancelado ? `${r.pv_omie} (cancelado)` : r.pv_omie]] : []),
-    ...C.montarResumo(f, catalogo, frTotalLop(f)),
+    ['§ Identificação do formulário', ''],
+    ['ID_TAG', r.id_tag || NI_FR],
+    ['PV no Omie', r.pv_omie ? (r.pv_cancelado ? `${r.pv_omie} (pedido cancelado)` : r.pv_omie) : 'Não vendido'],
+    ['Respondido em', frData(r.created_at)],
+    ...C.montarResumoCompleto(f, catalogo, frTotalLop(f)),
   ];
   const baixar = async () => {
     if (!window.QcRespostasReactPdf) { setErro('Gerador de PDF não carregou. Recarregue a página.'); return; }
@@ -147,8 +150,9 @@ function FrDetalhe({ r, catalogo, onClose, podeLigar, aoMudar }) {
           {r.lead_id ? <span className="mono"> · {r.lead_id}</span> : null}
         </div>
         <table className="t"><tbody>
-          {linhas.map((p, i) => (
-            <tr key={i}><td style={{ width: '34%', fontWeight: 500 }}>{p[0]}</td><td>{p[1]}</td></tr>
+          {linhas.map((p, i) => (String(p[0]).indexOf('§ ') === 0
+            ? <tr key={i}><td colSpan={2} style={{ background: 'var(--bg-2, #f3f3f3)', fontWeight: 700, fontSize: 12, paddingTop: 8 }}>{String(p[0]).slice(2)}</td></tr>
+            : <tr key={i}><td style={{ width: '34%', fontWeight: 500 }}>{p[0]}</td><td>{p[1]}</td></tr>
           ))}
           {f.logo_url ? <tr><td style={{ fontWeight: 500 }}>Logo enviada</td><td><a href={f.logo_url} target="_blank" rel="noopener noreferrer">Abrir arquivo</a></td></tr> : null}
         </tbody></table>

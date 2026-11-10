@@ -72,6 +72,83 @@
     return linhas.filter(([, v]) => v);
   }
 
+  /* ---------- Resumo COMPLETO (hub e PDF; 10/11/2026, pedido do Gelson) ----------
+     Tudo o que o formulário pergunta, em seções, com os trechos da fiação por extenso (a tela do cliente continua usando montarResumo) e a tabela de
+     distâncias entre pavimentos. Pergunta sem resposta aparece como "Não informado". Linha de título = rótulo "§ Nome" com valor vazio. */
+  const NI = 'Não informado';
+  const ou = (v) => (v == null || String(v).trim() === '' ? NI : String(v));
+  function mascaraDoc(v) {
+    const d = String(v || '').replace(/\D/g, '');
+    if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+    if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+    return String(v || '');
+  }
+  function metros(v) {
+    const n = parseFloat(String(v == null ? '' : v).replace(',', '.'));
+    return isFinite(n) ? n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' m' : '';
+  }
+  function montarResumoCompleto(f, catalogo, totalLop) {
+    f = f || {}; catalogo = catalogo || {};
+    const ac = f.acessorios || {};
+    const H = (t) => ['§ ' + t, ''];
+    const variante = (VARIANTES_QUADRO.find((v) => v.value === f.variante_quadro) || {}).label || '';
+    const tensaoRede = f.tensao_rede === 'outro' ? (f.tensao_rede_outro ? `${f.tensao_rede_outro} V (outro valor)` : '') : (f.tensao_rede ? `${f.tensao_rede} V` : '');
+    const freio = f.tipo_freio ? lbl(f.tipo_freio) + (f.tensao_freio ? ` — ${f.tensao_freio} V` : '') : '';
+    const lista = ACESSORIOS.filter(([k]) => ac[k]).map(([, l]) => l).join(' · ');
+    const catItem = (marcado, codigo, lst) => (codigo ? descricaoDe(lst, codigo) : (marcado ? 'Marcado, mas nenhum modelo escolhido' : 'Não solicitado'));
+    const linhas = [
+      H('Dados do cliente'),
+      ['Empresa', ou(f.empresa)], ['CNPJ', ou(mascaraDoc(f.cnpj))], ['Solicitante', ou(f.solicitante)], ['Telefone', ou(f.telefone)], ['E-mail', ou(f.email)],
+      H('Obra e quadro de comando'),
+      ['Obra / Referência', ou(f.identificacao)], ['Tipo de serviço', f.tipo_servico ? lbl(f.tipo_servico) : NI], ['Nº de paradas', ou(f.num_paradas)],
+      ['Modelo do quadro', variante || NI], ['Tensão da rede', tensaoRede || NI],
+      ['Tipo de porta', f.tipo_porta ? lbl(f.tipo_porta) : NI], ['Operador de porta', f.operador_porta ? lbl(f.operador_porta) : NI],
+      ['Tipo de freio', freio || NI], ['Acionamento', f.acionamento ? lbl(f.acionamento) : NI],
+      ...(f.acionamento === 'vf' ? [['Encoder', f.encoder ? lbl(f.encoder) : NI]] : []),
+      ['Casa de máquinas', f.casa_maquinas ? lbl(f.casa_maquinas) : NI],
+      H('Acessórios e botoeiras'),
+      ['Acessórios escolhidos', lista || 'Nenhum'],
+      ...(ac.cop ? [['COP — display', f.cop_display === 'com' ? 'Com display' : (f.cop_display === 'sem' ? 'Sem display' : NI)]] : []),
+      ...(ac.lop ? [
+        ['LOP — material', f.lop_material === 'vidro' ? 'Espelho em vidro' : (f.lop_material ? 'Aço escovado' : NI)],
+        ['LOP — botões intermediários', f.lop_botoes ? (f.lop_botoes === '1' ? '1 botão' : '2 botões (subir e descer)') : NI],
+        ['LOP — display', f.lop_display === 'com' ? 'Com display' : (f.lop_display === 'sem' ? 'Sem display' : NI)],
+        ['LOP — total de botoeiras', totalLop == null ? NI : String(totalLop)],
+        ['LOP — logo', f.logo_url || (f.logo_arquivo && f.logo_arquivo.nome) || 'Não enviada'],
+      ] : []),
+      ['Porta oposta', f.porta_oposta === 'sim' ? `Sim — andares ${(f.porta_oposta_paradas || []).join(', ') || NI}` : (f.porta_oposta === 'nao' ? 'Não' : NI)],
+      ...(ac.lip || f.ind_cor ? [['Cor do display do indicador de posição', f.ind_cor ? ({ vermelho: 'Vermelho', azul: 'Azul', branco: 'Branco' })[f.ind_cor] || f.ind_cor : NI]] : []),
+      H('Máquina de tração e portas'),
+      ['Máquina de tração', catItem(ac.maquina_tracao, f.maquina_codigo, catalogo.maquinas)],
+      ['Porta de cabina', catItem(ac.portas, f.porta_cabina_codigo, catalogo.portas_cabina)],
+      ['Porta de pavimento', catItem(ac.portas, f.porta_pavimento_codigo, catalogo.portas_pavimento)],
+      H('Fiação de poço'),
+    ];
+    if (f.fiacao_omitida) {
+      linhas.push(['Dados da fiação', 'O cliente não tinha os dados na hora: usar valores padrão']);
+    } else {
+      linhas.push(
+        ['Quadro até a entrada do poço (L1)', metros(f.f_l1) || NI],
+        ['Entrada do poço até a botoeira (UA)', metros(f.f_ua) || NI],
+        ['Contato de TRICO até a calha (TR)', metros(f.f_tr) || NI],
+        ['Botoeira até a calha (BP)', metros(f.f_bp) || NI],
+        ['Limites até a calha (LIM)', metros(f.f_lim) || NI],
+        ['PAP até a calha (FP)', metros(f.f_fp) || NI],
+      );
+      const dist = Array.isArray(f.dist) ? f.dist : [];
+      const feitas = dist.map((d, i) => [d || {}, i]).filter(([d]) => metros(d.m));
+      if (feitas.length) {
+        feitas.forEach(([d, i]) => linhas.push([`Distância entre pavimentos: do ${d.de || (i + 1)} ao ${d.ate || (i + 2)}`, metros(d.m)]));
+        if (dist.length > feitas.length) linhas.push(['Distâncias entre pavimentos', `${dist.length - feitas.length} intervalo(s) sem medida`]);
+      } else {
+        linhas.push(['Distâncias entre pavimentos', dist.length ? `${NI} (${dist.length} intervalo(s) sem medida)` : NI]);
+      }
+      linhas.push(['Observações da fiação', ou(f.obs_fiacao)]);
+    }
+    linhas.push(H('Observações'), ['Observações gerais', ou(f.observacoes)]);
+    return linhas;
+  }
+
   /* Aceita só o formato esperado ao ler do banco/editar: lista de pares de texto, tamanho limitado. */
   function normalizarResumo(lista) {
     if (!Array.isArray(lista)) return [];
@@ -86,7 +163,7 @@
     return `Quadro-de-Comando-Pedido-${n || 'sem-numero'}.pdf`;
   }
 
-  const api = { montarResumo, normalizarResumo, nomeArquivoPdf, VARIANTES_QUADRO, ACESSORIOS };
+  const api = { montarResumo, montarResumoCompleto, normalizarResumo, nomeArquivoPdf, VARIANTES_QUADRO, ACESSORIOS };
   if (typeof window !== 'undefined') window.QcRespostasCalc = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
