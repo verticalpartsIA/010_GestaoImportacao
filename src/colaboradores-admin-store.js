@@ -285,6 +285,7 @@
         ...ACOES_PADRAO,
         { chave: 'link_cliente', label: 'Gera/cancela o link do formulário do cliente e corrige as respostas' },
       ]},
+      { modulo: 'quadros-formularios-respondidos', label: 'Quadros de Comando — Formulários Respondidos (só leitura das respostas do link público)' },
       { modulo: 'quadros-separacao', label: 'Quadros de Comando — Separação PV QC' },
       { modulo: 'quadros-separacao-fab', label: 'Quadros de Comando — Separação FAB QC (a gravação do Peguei usa a alçada da Separação PV QC)' },
       { modulo: 'quadros-calculadora-cabos', label: 'Quadros de Comando — Calculadora de Cabos (só cálculo na tela, não grava nada)' },
@@ -346,7 +347,7 @@
     /* Fabricação saiu de Logística Interna (17/10/2026). Logística Interna mantém a lista completa de propósito: quem já tinha o grupo alocado não perde nada. */
     /* Matérias-Primas e Produtos passaram a morar aqui no menu (18/10/2026); continuam também em Cadastros Mestres acima, para ninguém perder a alçada já concedida. */
     'Fabricação': ['pcp', 'carga-maquina', 'cadastro-materias-primas', 'cadastro-produtos', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'relatorios-pcp', 'fabricacao-corrimao', 'fabricacao-corte'],
-    'Quadros de Comando': ['quadros-pedidos', 'quadros-separacao', 'quadros-separacao-fab', 'quadros-calculadora-cabos'],
+    'Quadros de Comando': ['quadros-pedidos', 'quadros-formularios-respondidos', 'quadros-separacao', 'quadros-separacao-fab', 'quadros-calculadora-cabos'],
     'Administração': ['logs'],
   };
 

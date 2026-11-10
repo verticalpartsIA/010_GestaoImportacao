@@ -53,7 +53,7 @@ Termos gerais (soft-delete, alerta, alçada, Nº da cotação) estão no glossá
 
 ## 4.1 Formulários
 
-> **Atualização de 04/11/2026 (Quadros de Comando, `14_quadros_comando.md`, PC-1):** o card do **Formulário do Quadro de Comando** no hub virou "Em breve" e ficou **ilhado** (sem rota para o usuário); o código, as tabelas e o **link público** continuam existindo. Será ligado dentro do Omie, criando o pedido de venda sozinho (futuro). **Conferido** (`comercial.jsx`).
+> **Atualização de 04/11/2026 (Quadros de Comando, `14_quadros_comando.md`, PC-1):** o card do **Formulário do Quadro de Comando** no hub virou "Em breve" e ficou ilhado; **em 10/11/2026 o card foi reacendido** (volta a abrir `/comercial/formulario-quadro-comando`, onde chegam e são analisadas as respostas do link público de orçamento; detalhe em 14, PC-1). **Conferido** (`comercial.jsx`).
 
 ### 4.1.1 O que é
 O ponto de partida de toda venda de equipamento: o hub **Formulários** (cartões por tipo de formulário), o **Formulário de Equipamento** (dados do cliente, da obra e de cada elevador, escada rolante ou esteira rolante), o formulário **Quadro de Comando** (levantamento do quadro de comando: fabricar interno ou comprar pronto) e as duas **páginas públicas** (o cliente preenche o formulário de equipamento pelo link; o cliente ou instalador pede orçamento de quadro). Criar o Formulário gera o **Nº da cotação** (PC-2) e dispara a linha do tempo da cotação. **Conferido** em `comercial.jsx` (hub), `formulario-elevador.jsx`, `formulario-elevador-store.js`, `quadro-comando.jsx`, `quadro-comando-store.js` e no banco, 31/10/2026.
