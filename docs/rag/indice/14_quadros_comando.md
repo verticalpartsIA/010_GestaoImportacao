@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/14_quadros_comando.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 04/11/2026 (origin/main `43baa55`)
-- **Palavras:** 7025 · **blocos:** 139 · **seções com selo próprio:** 61 de 72
-- **Origem do selo dos blocos:** próprio 72 · da seção 28 · da seção-pai 0 · do cabeçalho 18 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 21
-- **Selo efetivo dos blocos:** Conferido 106 · Herdado 8 · Não verificado 4
+- **Palavras:** 7343 · **blocos:** 141 · **seções com selo próprio:** 61 de 72
+- **Origem do selo dos blocos:** próprio 73 · da seção 28 · da seção-pai 0 · do cabeçalho 19 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 21
+- **Selo efetivo dos blocos:** Conferido 107 · Herdado 8 · Não verificado 5
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -21,12 +21,12 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 14.1.2 Rota e arquivos | `docs/modulos/14_quadros_comando.md#1412-rota-e-arquivos` | 3 | Conferido (uniforme) | 1 | b1 |
 | 14.1.3 Perfil e acesso | `docs/modulos/14_quadros_comando.md#1413-perfil-e-acesso` | 3 | Não verificado (misto (vale o mais fraco)) | 1 | b1 |
 | 14.1.4 O que a tela mostra | `docs/modulos/14_quadros_comando.md#1414-o-que-a-tela-mostra` | 3 | Conferido (uniforme) | 4 | b1 s3 |
-| 14.1.5 Botões e controles | `docs/modulos/14_quadros_comando.md#1415-botões-e-controles` | 3 | Conferido (uniforme) | 1 | b1 |
+| 14.1.5 Botões e controles | `docs/modulos/14_quadros_comando.md#1415-botões-e-controles` | 3 | Conferido (selo explícito da seção) | 2 | b2 |
 | 14.1.6 Comportamento | `docs/modulos/14_quadros_comando.md#1416-comportamento` | 3 | Conferido (uniforme) | 1 | b1 |
 | 14.1.7 Dados | `docs/modulos/14_quadros_comando.md#1417-dados` | 3 | Conferido (uniforme) | 1 | b1 |
 | 14.1.8 Regras e armadilhas | `docs/modulos/14_quadros_comando.md#1418-regras-e-armadilhas` | 3 | Conferido (uniforme) | 5 | b2 s3 |
 | 14.1.9 Testes | `docs/modulos/14_quadros_comando.md#1419-testes` | 3 | Conferido (uniforme) | 1 | b1 |
-| 14.1.10 Pendências e decisões | `docs/modulos/14_quadros_comando.md#14110-pendências-e-decisões` | 3 | — | 4 | c4 |
+| 14.1.10 Pendências e decisões | `docs/modulos/14_quadros_comando.md#14110-pendências-e-decisões` | 3 | — | 5 | c5 |
 | 14.1.11 Histórico | `docs/modulos/14_quadros_comando.md#14111-histórico` | 3 | Conferido (uniforme) | 1 | b1 |
 | 14.2 Separação PV QC | `docs/modulos/14_quadros_comando.md#142-separação-pv-qc` | 2 | — | 0 | — |
 | 14.2.1 O que é | `docs/modulos/14_quadros_comando.md#1421-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |

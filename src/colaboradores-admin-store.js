@@ -281,7 +281,10 @@
       ]},
       { modulo: 'fabricacao-corrimao', label: 'Fabricação Corrimão' },
       { modulo: 'fabricacao-corte', label: 'Fabricação Corte' },
-      { modulo: 'quadros-pedidos', label: 'Quadros de Comando — Pedidos' },
+      { modulo: 'quadros-pedidos', label: 'Quadros de Comando — Pedidos', capacidades: [
+        ...ACOES_PADRAO,
+        { chave: 'link_cliente', label: 'Gera/cancela o link do formulário do cliente e corrige as respostas' },
+      ]},
       { modulo: 'quadros-separacao', label: 'Quadros de Comando — Separação PV QC' },
       { modulo: 'quadros-separacao-fab', label: 'Quadros de Comando — Separação FAB QC (a gravação do Peguei usa a alçada da Separação PV QC)' },
       { modulo: 'quadros-calculadora-cabos', label: 'Quadros de Comando — Calculadora de Cabos (só cálculo na tela, não grava nada)' },
