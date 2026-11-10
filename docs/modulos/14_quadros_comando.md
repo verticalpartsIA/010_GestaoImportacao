@@ -11,14 +11,14 @@
 > **Já documentado em outro lugar (não se repete, aponta):** o pedido do Omie e a fila `pcp_pedidos` (13, PC-2 e 12, PC-2); o motor de BOM e o formulário técnico do quadro (4.1 e 4.4); a Separação geral do almoxarifado (12.3); a tabela de alçadas e a identidade (15, PC-2).
 
 ## Como esta numeração funciona
-- A regra de numeração (móvel, como cláusula de contrato) e os 11 temas de cada tela moram **uma vez só**, em `docs/modulos/01_geral.md`. Aqui vale a mesma: módulo = **14**; telas filhas = **14.1 a 14.4**, na ordem do menu; o conteúdo comum fica na **Parte comum**, sem número de tela.
+- A regra de numeração (móvel, como cláusula de contrato) e os 11 temas de cada tela moram **uma vez só**, em `docs/modulos/01_geral.md`. Aqui vale a mesma: módulo = **14**; telas filhas = **14.1 a 14.6**, na ordem do menu; o conteúdo comum fica na **Parte comum**, sem número de tela.
 - **Tudo o que é aba, janela ou página pública de uma tela pertence a ela.** A página pública que o operador abre (`fabricacao-quadro.html`) está no 14.4.
 - **Renumeração (04/11/2026):** Quadros de Comando entrou como o módulo **14**; Administração passou de 14 para **15** e Serviços de 15 para **16**.
 - Mudou algo? Escreva no tema certo da tela e **reescreva o Índice e o Glossário** na mesma sessão.
 
 ## Índice
 14. **Quadros de Comando**
-   14.1 Pedidos com Quadro · 14.2 Separação PV QC · 14.3 Separação FAB QC · 14.4 Fabricação QC · 14.5 Calculadora de Cabos
+   14.1 Pedidos com Quadro · 14.2 Separação PV QC · 14.3 Separação FAB QC · 14.4 Fabricação QC · 14.5 Calculadora de Cabos · 14.6 Formulários Respondidos
    &nbsp;&nbsp;&nbsp;Cada tela tem os temas: x.1 O que é · x.2 Rota e arquivos · x.3 Perfil e acesso · x.4 O que a tela mostra · x.5 Botões e controles · x.6 Comportamento · x.7 Dados (lê/grava) · x.8 Regras e armadilhas · x.9 Testes · x.10 Pendências e decisões · x.11 Histórico
    Parte comum de Quadros de Comando (sem número de tela)
    &nbsp;&nbsp;&nbsp;PC-1 Mapa de ligações e fios desligados · PC-2 Do Omie à fábrica: o que é um "quadro" · PC-3 Rotas, páginas públicas e arquivos · PC-4 Regras de negócio que atravessam as telas · PC-5 Quem faz o quê (alçadas) · PC-6 Identidade e segurança · PC-7 Rotinas, funções e crons · PC-8 Tabelas · PC-9 Navegação, cache e testes · PC-10 Menu "?" e tutoriais · PC-11 Documentos soltos e destino do que foi concatenado · PC-12 Benefícios trocados com os outros módulos
@@ -60,13 +60,13 @@ Uma linha **por pedido do Omie**, com sete colunas: **Nº do pedido**, **Cliente
 ### 14.1.5 Botões e controles
 Ordenar por coluna e **🖨 Imprimir** (abre a impressão do navegador, A4 deitado, sem menu nem botões e com a data e o nome de quem imprimiu; estilos em `styles/quadros-comando.css`; o `@page` fica **fora** do `@media print`, senão o Chrome ignora e imprime em retrato — achado de 05/11/2026) e **🔗 Link público** (14.5 a PC-3: mostra, copia ou troca o link secreto da página de acompanhamento dos gestores). Sem clique na linha. **Conferido** (código; a impressão em papel/PDF **não foi vista** nesta sessão).
 
-**📋 Formulário do cliente (10/11/2026, coluna nova, pedido do Gelson):** por pedido do Omie, **🔗 Gerar link** cria um link único do formulário público do Quadro (`formulario-quadro-comando-publico.html?t=<token>`); **Copiar link** para enviar ao cliente; quando ele responde a coluna mostra **✓ Respondido** e aparecem **Ver respostas** (janela com as linhas legíveis, **Corrigir respostas** para quem tem a alçada), **⬇ PDF** (baixa o PDF com o nº do pedido do Omie, para o Gelson **anexar à mão no Omie**) e **Cancelar** (invalida o link; permite gerar outro). Gerar, cancelar e corrigir exigem a alçada **`quadros-pedidos.link_cliente`** (Administrador sempre passa); ver exige `ver`. Um pedido tem no máximo **um link ativo**. **Nada é escrito no Omie e nenhum Lead é criado.** O PDF é gerado **na hora** das respostas gravadas (sempre reflete a correção). Limite: neste link o **arquivo da logo não segue** (fica só o nome, que aparece nas respostas; o cliente manda a imagem por e-mail/WhatsApp). **Selo: Conferido (código, `npm test`, tela aberta no navegador); Não verificado: o fluxo ponta a ponta com o banco, porque a migration `20261110100000` ainda não foi aplicada (exige "Confirmo").**
+**📋 Formulário do cliente por pedido — RETIRADO em 10/11/2026 (decisão do Gelson):** a coluna "Gerar link" por pedido vendido saiu desta tela, porque o link de orçamento do quadro **nasce antes de o quadro existir** (pré-venda), não depois da venda no Omie. As respostas dos clientes agora ficam em **14.6 Formulários Respondidos**. A tabela `qc_pedido_formularios`, as funções `public_qcf_*`/`qc_formulario_*` e o modo `?t=<token>` da página pública **continuam no banco e no código, sem tela** (nada foi apagado; apagar exige "Confirmo"). **Conferido** (código e tela).
 
 ### 14.1.6 Comportamento
 Recarrega sozinha a cada minuto e ao voltar para a aba. A caixa da tabela tem a **altura da janela** (cálculo por `getBoundingClientRect`), para a **barra de rolagem lateral ficar sempre à vista** (a altura fixa "tela − 190 px" do padrão `pcp-rolagem` deixava a barra fora da tela nesta página). A altura é **recalculada a cada renderização**: avisos que aparecem depois da carga (como o de "sem acesso") empurravam a caixa e a barra saía da janela. **Conferido** (medido: a caixa termina em 825 px numa janela de 846 px).
 
 ### 14.1.7 Dados
-**Lê e grava (formulário do cliente, 10/11/2026):** `qc_pedido_formularios` (fechada; o hub lê por `quadros-pedidos.ver` e grava só pelas funções `qc_formulario_gerar/cancelar/corrigir`; o cliente fala pelas funções públicas `public_qcf_obter/responder` com o token). Um gatilho avisa quem gerou o link quando o cliente responde (Central de Notificações). **Só lê (o resto da tela):** `pcp_quadro_variante` (5 variantes com produto; a de 30 kW/220 V ainda sem produto), `pcp_ordens` (OPs de quadro `aguardando`/`em_producao`: **18** em 04/11/2026; 25 no total), `fabricacao_quadro_status` e `fabricacao_quadro_itens` (andamento), `pcp_pedidos` e `pcp_pedido_itens`. Nenhuma gravação. **Conferido** (consultas e código).
+**Lê (o resto da tela):** `pcp_quadro_variante` (5 variantes com produto; a de 30 kW/220 V ainda sem produto), `pcp_ordens` (OPs de quadro `aguardando`/`em_producao`: **18** em 04/11/2026; 25 no total), `fabricacao_quadro_status` e `fabricacao_quadro_itens` (andamento), `pcp_pedidos` e `pcp_pedido_itens`. Nenhuma gravação. **Conferido** (consultas e código).
 
 ### 14.1.8 Regras e armadilhas
 - **Quem entra:** (a) pedido do Omie na **etapa 20**, não cancelado e fora de `so_separacao`, com **item que é quadro** (`pcp_quadro_variante`); e (b) o pedido de **toda OP de quadro ativa**, pelo `pedido_codigo` da OP ou, na Ordem de Serviço, pelo da **OP-mãe**. É por isso que aparecem o 29972 (etapa 00) e o 29537 (quadros "b", fora da tabela de variantes).
@@ -81,7 +81,7 @@ Recarrega sozinha a cada minuto e ao voltar para a aba. A caixa da tabela tem a 
 ### 14.1.10 Pendências e decisões
 - **Achado, sem correção:** o 29972 mistura dois registros do Omie (14.1.8); decidir se a tela soma os registros do mesmo número.
 - **Decidir:** a linha clicável (detalhe do pedido) e quais ações entram.
-- **Formulário do cliente:** a migration `20261110100000` precisa do "Confirmo" para ir ao banco; o link público **sem token** e a função `capturar-lead-quadro-comando` continuam criando Lead (decisão pendente, PC-1); o arquivo da logo não segue no link do pedido; falta teste e2e da página com token (Art. 33). Spec: `docs/superpowers/specs/2026-11-10-quadro-link-por-pedido-pdf.md`.
+- **Link do formulário por pedido (retirado em 10/11/2026):** a tabela `qc_pedido_formularios` e as funções ficam sem tela. **Achado, sem correção:** existe 1 link gerado antes da retirada (OS 1212, status aguardando, criado por Gelson em 10/11/2026); se o cliente abrir e responder, a resposta cai nessa tabela e **não aparece em tela nenhuma**. Decidir: cancelar esse link, ou religar uma tela "Anexar resposta" (ligar uma resposta de 14.6 a um pedido vendido e baixar o PDF com o nº do pedido do Omie). Spec antiga: `docs/superpowers/specs/2026-11-10-quadro-link-por-pedido-pdf.md`.
 - **A entrada automática do Omie** (criar as OPs de quadro quando o pedido chega à etapa 20) **não existe**: hoje é o "Gerar OPs" do PCP (13.1). **Decisões pendentes (Gelson):** uma OP por quadro físico, estrutura padrão do Omie, lista de fios aplicada na criação, rotina agendada ou gatilho.
 - A coluna Separação ganhará **status** quando for ligada à Separação (14.2/14.3).
 
@@ -264,6 +264,46 @@ Nenhum (não lê nem grava tabela). **Conferido.**
 ### 14.5.11 Histórico
 Criada em 06/11/2026 a pedido do Gelson. **Conferido.**
 
+## 14.6 Formulários Respondidos
+
+### 14.6.1 O que é
+Lista dos **clientes que responderam o link público de orçamento do quadro de comando**; ao clicar numa linha abre tudo o que ele preencheu, com botão para baixar o PDF. Pedida pelo Gelson em 10/11/2026: o link nasce na **pré-venda** (o quadro ainda não existe) e a equipe analisa a resposta para vender. **Só leitura: não grava nada e não escreve no Omie.** **Conferido** (código e tela aberta em 10/11/2026 com as 2 respostas reais).
+
+**Fora do escopo:** gerar o link (continua em Comercial › Formulários › Quadro de Comando, botão "Copiar link público (cliente)"); quadros criados pela equipe (só entram respostas de **link público**, decisão do Gelson); criar o Lead ou o cliente (regra da função `capturar-lead-quadro-comando`, PC-1); ligar a resposta a um pedido vendido do Omie e o PDF "anexado ao pedido" (pendência 14.6.10).
+
+### 14.6.2 Rota e arquivos
+Rota `quadros-formularios-respondidos`; URL `/quadros-de-comando/quadros-formularios-respondidos`; item **Formulários Respondidos** no fim do menu do módulo. Tela `formularios-respondidos.jsx` (`FormulariosRespondidosPage`); regras do texto legível em `qc-respostas-calc.js` (`montarResumo`, a mesma do PDF e do link); PDF em `pdf-bundle/qc-respostas-reactpdf.entry.js` (`npm run build:pdf:qc`). Menu/título em `shell.jsx` e `app.jsx`; rota em `router.js`; alçada em `colaboradores-admin-store.js`. **Conferido.**
+
+### 14.6.3 Perfil e acesso
+Quem vê o grupo "Quadros de Comando" no menu abre a tela. Módulo `quadros-formularios-respondidos` no catálogo de alçadas (ações padrão), **só para constar: a tela não grava**. A leitura de `quadros_comando` hoje é aberta à chave pública (Art. 25: trava de tela é organização, não segurança). **Conferido** (código).
+
+### 14.6.4 O que a tela mostra
+Uma linha por resposta: **Empresa / Cliente**, **Solicitante**, **Obra**, **Modelo do quadro**, **Situação** (etiqueta "Cliente (já no Omie)" quando `cliente_id` está preenchido, senão "Lead") e **Respondido em**. Ordem inicial: mais nova primeiro; os cabeçalhos ordenam ao clicar. Em 10/11/2026 são **2 respostas**: MOTTA ELEVADORES (13/10) e ESCAMAX (08/10), ambas clientes do Omie. **Conferido** (tela e banco).
+
+### 14.6.5 Botões e controles
+Busca (empresa, solicitante, obra ou CNPJ), filtro **Todos / Só clientes do Omie / Só leads**, **Atualizar**. Clicar na linha abre a janela com as respostas (as mesmas linhas do PDF, mais o link da logo quando o cliente enviou) e o botão **⬇ Baixar PDF**. **Conferido** (PDF gerado no navegador; arquivo `Formulario-Quadro-de-Comando-<empresa>.pdf`).
+
+### 14.6.6 Comportamento
+Atualiza sozinha a cada minuto. A descrição da máquina e das portas vem do catálogo público (ação `catalogo` da função de captura); se não carregar, a janela mostra o **código**. O PDF mostra "Formulário respondido em <data>" no cabeçalho (não há pedido do Omie ainda). **Conferido.**
+
+### 14.6.7 Dados
+Só lê `quadros_comando` (`origem_envio = 'formulario_publico'`, `excluido_em` nulo; coluna `respostas_publico`, limite de 500) e o cadastro `clientes` ligado. Nenhuma gravação; o registro de log (`vp_logs`) só acontece ao baixar o PDF. **Conferido.**
+
+### 14.6.8 Regras e armadilhas
+- **Cliente × Lead não é decidido aqui:** é a função `capturar-lead-quadro-comando` (CNPJ no Omie = cliente e **não** cria Lead; fora do Omie, sem CNPJ ou consulta falhou = Lead). A tela só mostra o resultado. **Conferido** (função lida em 10/11/2026).
+- `respostas_publico` guarda as respostas **como o cliente enviou**; o texto legível é remontado na hora por `montarResumo`, então campo novo do formulário aparece sozinho só se entrar em `qc-respostas-calc.js`. A logo vem como link (`logo_url`). **Conferido.**
+
+### 14.6.9 Testes
+A regra do texto legível tem teste (`qc-respostas-calc.test.js`); a tela **não tem** teste de unidade nem e2e, só o teste de fumaça da rota. Cenário: **Dado** a resposta da MOTTA ELEVADORES (7,5 kW/380 V), **quando** a pessoa clica na linha, **então** vê empresa, CNPJ, solicitante, modelo e demais respostas, e consegue baixar o PDF. **Conferido** (tela aberta no navegador).
+
+### 14.6.10 Pendências e decisões
+- **Decidir:** "Anexar resposta" a um pedido vendido do Omie (liga uma resposta a um pedido e baixa o PDF com o nº do pedido, para anexar à mão no Omie). Exigiria coluna ou tabela nova (migration, "Confirmo").
+- **Achado, sem correção:** 1 link por pedido (OS 1212) gerado antes da retirada continua válido e sem tela (14.1.10).
+- O CNPJ da MOTTA aparece sem máscara no resumo (como o cliente digitou). Tutorial e ajuda do "?" não criados (Art. 46).
+
+### 14.6.11 Histórico
+Criada em 10/11/2026 a pedido do Gelson. Substitui a ideia do link por pedido vendido (14.1). **Conferido** (conversa e código).
+
 ---
 
 # Parte comum de Quadros de Comando
@@ -272,7 +312,7 @@ Criada em 06/11/2026 a pedido do Gelson. **Conferido.**
 **Herda de:** o Omie (pedidos de venda e Ordens de Serviço, lidos a cada 30 minutos por `sync-pcp-pedidos` e `sync-pcp-os`; só leitura), o PCP (as OPs de quadro, 13.1). **Doa para:** as Etiquetas (12.4), que leem `quadros_comando` (Formulário ilhado) e as OPs de quadro; o número de série em `mes_ordens` **deixou de ser lido** (PC-11). **Selo:** Conferido.
 
 **Fios desligados em 04/11/2026** (decisão do Gelson; **nada foi apagado**, só saiu do caminho do usuário):
-- **Formulário do Quadro de Comando ilhado:** o card no hub Formulários virou "Em breve" e o item de menu "Cotação Quadro de Comando" saiu; as telas, as tabelas (`quadros_comando` e filhas) e o **link público** continuam existindo. Será ligado dentro do Omie e **criará o pedido de venda sozinho** (futuro). O link público e a função `capturar-lead-quadro-comando` **ainda criam lead no hub** (fio aberto, pendente de decisão).
+- **Formulário do Quadro de Comando — card reacendido em 10/11/2026 (decisão do Gelson):** em 04/11 o card virou "Em breve" e o item de menu "Cotação Quadro de Comando" saiu; em 10/11 o **card do hub Formulários voltou a abrir** `/comercial/formulario-quadro-comando` (o item de menu **não** voltou). É a tela da **pré-venda**: o cliente preenche o link público de orçamento (o orçamento nasce **antes** de o quadro existir) e a equipe analisa a resposta e vende. As tabelas (`quadros_comando` e filhas) e o link público seguem como eram. As respostas dos clientes aparecem em **14.6 Formulários Respondidos**. Futuro: ligar dentro do Omie e **criar o pedido de venda sozinho**. **Conferido** (`comercial.jsx`). O link público e a função `capturar-lead-quadro-comando` **ainda criam lead no hub** (fio aberto, pendente de decisão).
 - **MES e MES · Cadastros saíram do produto:** menu, rotas, scripts e entradas de alçada removidos; os arquivos `mes*.jsx` e as tabelas `mes_*` **ficam** até haver "Confirmo" para apagar (**1** OP, **3** execuções e **8** registros de histórico em 04/11/2026). A Fabricação QC é o acompanhamento que vale.
 - **PCP:** saiu a aba **Pedidos de Quadro** e o botão **Enviar para Pedidos de Quadro** (criava `quadros_comando` redundantes). O **Gerar OPs** do pedido **continua** (é o único jeito de criar a OP até existir a entrada automática).
 - **Separação (Logística):** saiu o botão **Quadro de Comando** dos itens "Na operação".
@@ -284,7 +324,7 @@ Hoje existem **dois** registros que se chamam "quadro", e é essa a ambiguidade 
 **Desenho-alvo (Herdado da conversa de 04/11/2026, ainda não construído):** o pedido com quadro chega à etapa 20 → o módulo cria as OPs de quadro (uma por quadro físico) → a Separação PV QC e FAB QC e a Fabricação QC se alimentam → as Etiquetas leem daqui.
 
 ## PC-3 Rotas, páginas públicas e arquivos
-Rotas: `/quadros-de-comando/quadros-calculadora-cabos[/mrl|/mr]` (14.5), `/quadros-de-comando/quadros-pedidos`, `/quadros-de-comando/quadros-separacao[/<pedido>]`, `/quadros-de-comando/quadros-separacao-fab[/<pedido>]`, `/quadros-de-comando/evolucao-fabricacao`. Páginas públicas: `fabricacao-quadro.html` (14.4) e **`quadros-publico.html`** (05/11/2026, pedido do Gelson), uma só página em `/quadros-publico/<tipo>/<token>`: `pedidos` (gestores: status da fabricação e da separação, **só leitura**), `separacao` (separador, pelo celular, marca **Peguei** na Separação PV QC) e `separacao_fab` (idem na Separação FAB QC). Cada tipo tem **um link secreto** (64 caracteres), criado e **trocável** pelo botão "🔗 Link público" das três telas internas (ver exige a alçada `quadros-separacao.ver`; criar/trocar, `editar`); trocar invalida o link antigo. No celular o separador **digita o nome** (guardado no aparelho) e cada "Peguei" fica gravado como `link: <nome>`; o link **não** grava estoque real, previsão nem observações (decisão do Gelson). A página usa os **mesmos cálculos** da tela interna (`QuadrosPedidosStore.montar`), então os números batem. Arquivos: `quadros-publico.html`, `quadros-publico.jsx`; rota em `server.js`; entrada em `PAGINAS_PUBLICAS` do e2e. **Conferido** (código e página abrindo com token falso; a leitura e o "Peguei" por link **dependem da migration `20261105100000`, ainda não aplicada**). Arquivos do módulo: `quadros-pedidos.jsx`, `quadros-pedidos-store.js`, `quadros-pedidos-calc.js` (+ `quadros-pedidos-calc.test.js`), `quadros-separacao.jsx`, `evolucao-fabricacao-quadro.jsx`, `fabricacao-quadro-store.js`, `fabricacao-quadro-calc.js`, `fabricacao-quadro-app.jsx`. Compartilhados que mudaram: `shell.jsx` (menu, apelido do grupo), `router.js` (`KNOWN_ROUTES`), `app.jsx`, `colaboradores-admin-store.js` (alçadas), `server.js` (`SPA_MODULES` ganhou `quadros-de-comando`). **Conferido.**
+Rotas: `/quadros-de-comando/quadros-calculadora-cabos[/mrl|/mr]` (14.5), `/quadros-de-comando/quadros-formularios-respondidos` (14.6), `/quadros-de-comando/quadros-pedidos`, `/quadros-de-comando/quadros-separacao[/<pedido>]`, `/quadros-de-comando/quadros-separacao-fab[/<pedido>]`, `/quadros-de-comando/evolucao-fabricacao`. Páginas públicas: `fabricacao-quadro.html` (14.4) e **`quadros-publico.html`** (05/11/2026, pedido do Gelson), uma só página em `/quadros-publico/<tipo>/<token>`: `pedidos` (gestores: status da fabricação e da separação, **só leitura**), `separacao` (separador, pelo celular, marca **Peguei** na Separação PV QC) e `separacao_fab` (idem na Separação FAB QC). Cada tipo tem **um link secreto** (64 caracteres), criado e **trocável** pelo botão "🔗 Link público" das três telas internas (ver exige a alçada `quadros-separacao.ver`; criar/trocar, `editar`); trocar invalida o link antigo. No celular o separador **digita o nome** (guardado no aparelho) e cada "Peguei" fica gravado como `link: <nome>`; o link **não** grava estoque real, previsão nem observações (decisão do Gelson). A página usa os **mesmos cálculos** da tela interna (`QuadrosPedidosStore.montar`), então os números batem. Arquivos: `quadros-publico.html`, `quadros-publico.jsx`; rota em `server.js`; entrada em `PAGINAS_PUBLICAS` do e2e. **Conferido** (código e página abrindo com token falso; a leitura e o "Peguei" por link **dependem da migration `20261105100000`, ainda não aplicada**). Arquivos do módulo: `quadros-pedidos.jsx`, `quadros-pedidos-store.js`, `quadros-pedidos-calc.js` (+ `quadros-pedidos-calc.test.js`), `quadros-separacao.jsx`, `evolucao-fabricacao-quadro.jsx`, `fabricacao-quadro-store.js`, `fabricacao-quadro-calc.js`, `fabricacao-quadro-app.jsx`. Compartilhados que mudaram: `shell.jsx` (menu, apelido do grupo), `router.js` (`KNOWN_ROUTES`), `app.jsx`, `colaboradores-admin-store.js` (alçadas), `server.js` (`SPA_MODULES` ganhou `quadros-de-comando`). **Conferido.**
 
 ## PC-4 Regras de negócio que atravessam as telas
 - **Classificação de cada linha do pedido** (`QuadrosPedidosCalc.classificarItem`): **quadro** (código de variante ou produto da OP de quadro do pedido), **materia_prima** (código `VPMP…`), **servico** (código `VPSVC…`), **cabo** (descrição começa com "Cabo": vai com o quadro) e **separacao** (o resto). **Conferido.**
@@ -295,7 +335,7 @@ Rotas: `/quadros-de-comando/quadros-calculadora-cabos[/mrl|/mr]` (14.5), `/quadr
 - **OP sem pedido de venda não entra** na lista (14.1.8). **Conferido.**
 
 ## PC-5 Quem faz o quê (alçadas)
-Catálogo (`CATALOGO_MODULOS`): `quadros-pedidos`, `quadros-separacao` e `quadros-separacao-fab`; o grupo do menu "Quadros de Comando" (`MODULOS_POR_GRUPO_SIDEBAR`) cobre os três. **Só a Separação grava e exige alçada no banco** (`quadros-separacao` ver/editar, 9 perfis em 04/11/2026). A Fabricação QC mantém `fabricacao.editar_status_quadro`. O Administrador passa em tudo. **Conferido.**
+Catálogo (`CATALOGO_MODULOS`): `quadros-pedidos`, `quadros-formularios-respondidos` (14.6, só leitura), `quadros-separacao` e `quadros-separacao-fab`; o grupo do menu "Quadros de Comando" (`MODULOS_POR_GRUPO_SIDEBAR`) cobre os três. **Só a Separação grava e exige alçada no banco** (`quadros-separacao` ver/editar, 9 perfis em 04/11/2026). A Fabricação QC mantém `fabricacao.editar_status_quadro`. O Administrador passa em tudo. **Conferido.**
 
 ## PC-6 Identidade e segurança
 `qc_separacao_itens` e `qc_separacao_hist` **nasceram fechadas** (Art. 26): RLS ligada, sem acesso para `anon` nem `authenticated`; só as funções `qc_separacao_listar` e `qc_separacao_marcar` (`SECURITY DEFINER`, executáveis só por `authenticated`, nunca por `anon`/`public`), que exigem **usuário ativo** e a **alçada**. Histórico imutável (Art. 27). **Conferido** (`pg_class`, `has_table_privilege`, `has_function_privilege`). As telas de leitura (14.1, 14.4) usam as tabelas do PCP, **abertas à chave pública** (achado de 13.1.8; Art. 25: trava de tela é organização, não segurança).
@@ -306,7 +346,7 @@ Catálogo (`CATALOGO_MODULOS`): `quadros-pedidos`, `quadros-separacao` e `quadro
 - **Nenhum cron novo** foi criado para este módulo. **Conferido** (`cron.job`).
 
 ## PC-8 Tabelas
-**Formulário do cliente por pedido (10/11/2026, migration `20261110100000`, ainda não aplicada):** `qc_pedido_formularios` (token, `codigo_pedido`/`numero_pedido` do Omie, status aguardando|respondido|cancelado, `respostas`, `resumo`; fechada; um link ativo por pedido). PDF: bundle `src/qc-respostas-reactpdf.bundle.js` (`npm run build:pdf:qc`), regra do resumo em `src/qc-respostas-calc.js`.
+**Formulário do cliente por pedido (10/11/2026, migration `20261110100000`, aplicada em produção; sem tela desde a retirada do mesmo dia, ver 14.1.10):** `qc_pedido_formularios` (token, `codigo_pedido`/`numero_pedido` do Omie, status aguardando|respondido|cancelado, `respostas`, `resumo`; fechada; um link ativo por pedido). PDF: bundle `src/qc-respostas-reactpdf.bundle.js` (`npm run build:pdf:qc`), regra do resumo em `src/qc-respostas-calc.js`.
 **Links públicos (05/11/2026, migration `20261105100000`):** `qc_publico_links` (um token por tipo; fechada) e as funções `qc_publico_link_obter` (logado, com alçada), `qc_publico_dados` e `qc_publico_peguei` (estas duas executáveis por `anon`, **só com token válido**; `qc_publico_dados` devolve o que a tela interna lê, **inclusive nome do cliente e do vendedor** — o link dá acesso a isso a quem o tiver). **Conferido** em 05/11/2026 (migration aplicada com "Confirmo"; transação desfeita): `anon` não lê a tabela nem executa `qc_publico_link_obter`/`_qc_dados_brutos`; token curto/inválido devolve nulo; link `pedidos` recusa "Peguei"; nome com 1 letra e item fora do pedido são recusados; "Peguei" e "devolver" gravam `link: <nome>` em `qc_separacao_itens`/`qc_separacao_hist` e a leitura mostra o item pego. **Não verificado:** `qc_publico_link_obter` com sessão real (alçada ver/editar) e a página aberta no celular.
 **Novas (04/11/2026):** `qc_separacao_itens`, `qc_separacao_hist`, `qc_separacao_previsao` e `qc_separacao_previsao_hist` (estas duas nas migrations `20261104140000` e `20261104150000`, aplicadas em 04/11/2026 com o "Confirmo" do Gelson; a segunda acrescenta o estoque real); coluna nova `pcp_pedido_itens.obs_item`. **Lidas:** `pcp_pedidos`, `pcp_pedido_itens`, `pcp_ordens`, `pcp_quadro_variante`, `fabricacao_quadro_*`. **Ilhadas (formulário):** `quadros_comando` e suas filhas. **Fora do produto, com dado:** `mes_*` (PC-1). **Conferido.**
 

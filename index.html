@@ -122,7 +122,7 @@
   <!-- Roteamento por URL (Fase 1 da roteirização, issue #279) — carrega
        depois do guard de SSO (mexe só na query string, nunca no pathname)
        e antes de shell.jsx/app.jsx, que o consomem. -->
-  <script src="/src/router.js?v=44"></script>
+  <script src="/src/router.js?v=45"></script>
 
   <script src="/src/notificacoes-processamento.js?v=6"></script>
   <script src="/src/notificacoes-lidas-store.js?v=3"></script>
@@ -130,7 +130,7 @@
   <!-- Administração — espelho de colaboradores (vpsistema) + alocação de
        módulos do VP Gestão. Carrega cedo pra enriquecer window.__VP_USER
        (foto + grupos alocados) assim que a identidade SSO chegar. -->
-  <script src="/src/colaboradores-admin-store.js?v=60"></script>
+  <script src="/src/colaboradores-admin-store.js?v=61"></script>
 
   <!-- Registro central de atividades (auditoria global) -->
   <script src="/src/vp-log.js?v=4"></script>
@@ -191,9 +191,9 @@
   <script type="text/vp-jsx" src="/src/toast.jsx?v=6"></script>
   <script type="text/vp-jsx" src="/src/ajuda-suporte.jsx?v=3"></script>
   <script type="text/vp-jsx" src="/src/sidebar-busca.jsx?v=1"></script>
-  <script type="text/vp-jsx" src="/src/shell.jsx?v=141"></script>
+  <script type="text/vp-jsx" src="/src/shell.jsx?v=142"></script>
   <script type="text/vp-jsx" src="/src/dashboard.jsx?v=30"></script>
-  <script type="text/vp-jsx" src="/src/comercial.jsx?v=48"></script>
+  <script type="text/vp-jsx" src="/src/comercial.jsx?v=49"></script>
   <script type="text/vp-jsx" src="/src/crm.jsx?v=3"></script>
   <script type="text/vp-jsx" src="/src/linha-do-tempo.jsx?v=5"></script>
 
@@ -300,7 +300,8 @@
   <script src="/src/quadros-pedidos-calc.js?v=7"></script>
   <script src="/src/qc-respostas-calc.js?v=1"></script>
   <script src="/src/quadros-pedidos-store.js?v=8"></script>
-  <script type="text/vp-jsx" src="/src/quadros-pedidos.jsx?v=9"></script>
+  <script type="text/vp-jsx" src="/src/quadros-pedidos.jsx?v=10"></script>
+  <script type="text/vp-jsx" src="/src/formularios-respondidos.jsx?v=1"></script>
   <script type="text/vp-jsx" src="/src/calculadora-cabos.jsx?v=2"></script>
   <script type="text/vp-jsx" src="/src/quadros-separacao.jsx?v=12"></script>
   <script src="/src/fabricacao-oficina-calc.js?v=6"></script>
@@ -385,7 +386,7 @@
   <!-- Vistorias de Obras (Instalação & Entrega) -->
   <script src="/src/vistorias-questionarios-store.js?v=18"></script>
   <script src="/src/vistoria-reactpdf.bundle.js?v=2"></script>
-  <script src="/src/qc-respostas-reactpdf.bundle.js?v=1"></script>
+  <script src="/src/qc-respostas-reactpdf.bundle.js?v=2"></script>
   <script type="text/vp-jsx" src="/src/vistorias-envio.jsx?v=22"></script>
   <script type="text/vp-jsx" src="/src/vistorias-obras.jsx?v=19"></script>
 
@@ -503,6 +504,6 @@
   <script type="text/vp-jsx" src="/src/vp-copiloto.jsx?v=11"></script>
 
   <!-- Main app last -->
-  <script type="text/vp-jsx" src="/src/app.jsx?v=121"></script>
+  <script type="text/vp-jsx" src="/src/app.jsx?v=122"></script>
 </body>
 </html>

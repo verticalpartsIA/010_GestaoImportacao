@@ -39,6 +39,7 @@ const S = StyleSheet.create({
   numLbl: { fontSize: 8, fontWeight: 700, color: '#777', textAlign: 'right' },
   numVal: { fontSize: 16, fontWeight: 700, color: NAVY, textAlign: 'right' },
   cliente: { fontSize: 9, color: '#555', textAlign: 'right', marginTop: 2 },
+  numData: { fontSize: 11, fontWeight: 700, color: NAVY, textAlign: 'right' },
   titulo: { fontSize: 13, fontWeight: 700, color: NAVY, marginBottom: 8 },
   linha: { flexDirection: 'row', borderBottom: '0.5pt solid #e5e5e5', paddingVertical: 4 },
   rotulo: { width: '34%', fontSize: 8.5, fontWeight: 600, color: '#555', paddingRight: 8 },
@@ -60,8 +61,8 @@ function montarDocumento(d) {
         h(Text, { style: S.tag, key: 't' }, 'QUADRO DE COMANDO — INFORMAÇÕES DO CLIENTE'),
       ]),
       h(View, { key: 'b' }, [
-        h(Text, { style: S.numLbl, key: 'l' }, 'PEDIDO OMIE'),
-        h(Text, { style: S.numVal, key: 'v' }, String(d.numeroPedido || '—')),
+        h(Text, { style: S.numLbl, key: 'l' }, d.numeroPedido ? 'PEDIDO OMIE' : 'FORMULÁRIO RESPONDIDO EM'),
+        h(Text, { style: d.numeroPedido ? S.numVal : S.numData, key: 'v' }, String(d.numeroPedido || d.respondidoEm || '—')),
         d.cliente ? h(Text, { style: S.cliente, key: 'c' }, String(d.cliente)) : null,
       ]),
     ]),

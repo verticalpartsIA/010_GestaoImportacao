@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/14_quadros_comando.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 04/11/2026 (origin/main `43baa55`)
-- **Palavras:** 7343 · **blocos:** 141 · **seções com selo próprio:** 61 de 72
-- **Origem do selo dos blocos:** próprio 73 · da seção 28 · da seção-pai 0 · do cabeçalho 19 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 21
-- **Selo efetivo dos blocos:** Conferido 107 · Herdado 8 · Não verificado 5
+- **Palavras:** 8028 · **blocos:** 156 · **seções com selo próprio:** 71 de 84
+- **Origem do selo dos blocos:** próprio 85 · da seção 28 · da seção-pai 0 · do cabeçalho 22 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 21
+- **Selo efetivo dos blocos:** Conferido 123 · Herdado 8 · Não verificado 4
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -21,7 +21,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 14.1.2 Rota e arquivos | `docs/modulos/14_quadros_comando.md#1412-rota-e-arquivos` | 3 | Conferido (uniforme) | 1 | b1 |
 | 14.1.3 Perfil e acesso | `docs/modulos/14_quadros_comando.md#1413-perfil-e-acesso` | 3 | Não verificado (misto (vale o mais fraco)) | 1 | b1 |
 | 14.1.4 O que a tela mostra | `docs/modulos/14_quadros_comando.md#1414-o-que-a-tela-mostra` | 3 | Conferido (uniforme) | 4 | b1 s3 |
-| 14.1.5 Botões e controles | `docs/modulos/14_quadros_comando.md#1415-botões-e-controles` | 3 | Conferido (selo explícito da seção) | 2 | b2 |
+| 14.1.5 Botões e controles | `docs/modulos/14_quadros_comando.md#1415-botões-e-controles` | 3 | Conferido (uniforme) | 2 | b2 |
 | 14.1.6 Comportamento | `docs/modulos/14_quadros_comando.md#1416-comportamento` | 3 | Conferido (uniforme) | 1 | b1 |
 | 14.1.7 Dados | `docs/modulos/14_quadros_comando.md#1417-dados` | 3 | Conferido (uniforme) | 1 | b1 |
 | 14.1.8 Regras e armadilhas | `docs/modulos/14_quadros_comando.md#1418-regras-e-armadilhas` | 3 | Conferido (uniforme) | 5 | b2 s3 |
@@ -76,7 +76,19 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 14.5.9 Testes | `docs/modulos/14_quadros_comando.md#1459-testes` | 3 | Conferido (uniforme) | 1 | b1 |
 | 14.5.10 Pendências e decisões | `docs/modulos/14_quadros_comando.md#14510-pendências-e-decisões` | 3 | — | 3 | c3 |
 | 14.5.11 Histórico | `docs/modulos/14_quadros_comando.md#14511-histórico` | 3 | Conferido (uniforme) | 1 | b1 |
-| PC-1 Mapa de ligações e fios desligados | `docs/modulos/14_quadros_comando.md#pc-1-mapa-de-ligações-e-fios-desligados` | 2 | Conferido (selo explícito da seção) | 7 | b1 s6 |
+| 14.6 Formulários Respondidos | `docs/modulos/14_quadros_comando.md#146-formulários-respondidos` | 2 | — | 0 | — |
+| 14.6.1 O que é | `docs/modulos/14_quadros_comando.md#1461-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
+| 14.6.2 Rota e arquivos | `docs/modulos/14_quadros_comando.md#1462-rota-e-arquivos` | 3 | Conferido (uniforme) | 1 | b1 |
+| 14.6.3 Perfil e acesso | `docs/modulos/14_quadros_comando.md#1463-perfil-e-acesso` | 3 | Conferido (uniforme) | 1 | b1 |
+| 14.6.4 O que a tela mostra | `docs/modulos/14_quadros_comando.md#1464-o-que-a-tela-mostra` | 3 | Conferido (uniforme) | 1 | b1 |
+| 14.6.5 Botões e controles | `docs/modulos/14_quadros_comando.md#1465-botões-e-controles` | 3 | Conferido (uniforme) | 1 | b1 |
+| 14.6.6 Comportamento | `docs/modulos/14_quadros_comando.md#1466-comportamento` | 3 | Conferido (uniforme) | 1 | b1 |
+| 14.6.7 Dados | `docs/modulos/14_quadros_comando.md#1467-dados` | 3 | Conferido (uniforme) | 1 | b1 |
+| 14.6.8 Regras e armadilhas | `docs/modulos/14_quadros_comando.md#1468-regras-e-armadilhas` | 3 | Conferido (uniforme) | 2 | b2 |
+| 14.6.9 Testes | `docs/modulos/14_quadros_comando.md#1469-testes` | 3 | Conferido (uniforme) | 1 | b1 |
+| 14.6.10 Pendências e decisões | `docs/modulos/14_quadros_comando.md#14610-pendências-e-decisões` | 3 | — | 3 | c3 |
+| 14.6.11 Histórico | `docs/modulos/14_quadros_comando.md#14611-histórico` | 3 | Conferido (uniforme) | 1 | b1 |
+| PC-1 Mapa de ligações e fios desligados | `docs/modulos/14_quadros_comando.md#pc-1-mapa-de-ligações-e-fios-desligados` | 2 | Conferido (selo explícito da seção) | 7 | b2 s5 |
 | PC-2 Do Omie à fábrica: o que é um "quadro" | `docs/modulos/14_quadros_comando.md#pc-2-do-omie-à-fábrica-o-que-é-um-quadro` | 2 | Herdado (misto (vale o mais fraco)) | 2 | b2 |
 | PC-3 Rotas, páginas públicas e arquivos | `docs/modulos/14_quadros_comando.md#pc-3-rotas-páginas-públicas-e-arquivos` | 2 | Conferido (uniforme) | 1 | b1 |
 | PC-4 Regras de negócio que atravessam as telas | `docs/modulos/14_quadros_comando.md#pc-4-regras-de-negócio-que-atravessam-as-telas` | 2 | Conferido (uniforme) | 6 | b4 s2 |
