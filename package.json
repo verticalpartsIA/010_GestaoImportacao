@@ -30,7 +30,7 @@
   "devDependencies": {
     "@playwright/test": "1.56.1",
     "@react-pdf/renderer": "^4.6.1",
-    "@vitejs/plugin-react": "^6.1.0",
+    "@vitejs/plugin-react": "^6.1.2",
     "cross-env": "^10.1.0",
     "eslint": "^9.39.5",
     "vite": "^8.2.2"
