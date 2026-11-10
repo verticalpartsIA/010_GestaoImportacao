@@ -483,7 +483,17 @@
     return data;
   }
 
+  /* "Buscar no Omie": consulta o produto no Omie (só leitura) e, se estiver cadastrado e ativo, passa a fazer parte da lista. */
+  async function buscarProdutoNoOmie(codigo) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.functions.invoke('buscar-produto-importacao-varejo', { body: { codigo } });
+    if (error) throw new Error((window.extrairErroFuncao && window.extrairErroFuncao(error)) || error.message || 'Falha ao buscar no Omie.');
+    if (data && data.error) throw new Error(data.error);
+    if (data && data.adicionado && window.VPLog) window.VPLog.registrar({ modulo: 'Importação Varejo', acao: 'Incluiu produto buscando no Omie', alvo: data.produto.codigo, detalhe: { origemMercadoria: data.produto.origemMercadoria } });
+    return data || { encontrado: false };
+  }
+
   window.ImportacaoVarejoStore = {
-    carregar, aplicarContagem, salvarContagem, salvarRevisao, CONTAGEM_VALIDADE_DIAS, salvarLoteConfig, lancarComprado, listarCompradoAberto, atualizarPrevisaoComprado, excluirComprado, enviarRequisicaoOmie, previsaoPadrao, dispararSyncManual, dispararSyncEstoqueManual,
+    buscarProdutoNoOmie, carregar, aplicarContagem, salvarContagem, salvarRevisao, CONTAGEM_VALIDADE_DIAS, salvarLoteConfig, lancarComprado, listarCompradoAberto, atualizarPrevisaoComprado, excluirComprado, enviarRequisicaoOmie, previsaoPadrao, dispararSyncManual, dispararSyncEstoqueManual,
   };
 }());
