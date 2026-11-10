@@ -660,6 +660,27 @@ function ImportacaoVarejoPage({ setRoute }) {
   }, { estoqueFisico: 0, estoqueDisponivel: 0, estoqueReservado: 0, pendente: 0, sugestaoCompra: 0, sugAteMax: 0, comprado: 0, caminho: 0, valorAPagar: 0, itensSemPreco: 0 });
   const totais = React.useMemo(() => calcularTotais(filtrados), [filtrados]);
 
+  /* "Buscar no Omie": produto que não está na lista é consultado no Omie; se existir e estiver ativo, passa a morar aqui. */
+  const [codigoOmie, setCodigoOmie] = React.useState('');
+  const [buscandoOmie, setBuscandoOmie] = React.useState(false);
+  const buscarNoOmie = async () => {
+    const cod = codigoOmie.trim();
+    if (!cod || buscandoOmie) return;
+    setBuscandoOmie(true);
+    try {
+      const r = await window.ImportacaoVarejoStore.buscarProdutoNoOmie(cod);
+      if (!r.encontrado) { window.toast?.('Produto não cadastrado no Omie!', 'error'); return; }
+      if (r.inativo) { window.toast?.('O produto ' + r.codigo + ' está inativo no Omie, por isso não entra na lista.', 'warning'); return; }
+      if (r.jaNaLista) { setBusca(r.codigo); setCodigoOmie(''); window.toast?.('O produto ' + r.codigo + ' já está na lista.', 'info'); return; }
+      setCodigoOmie('');
+      try { await window.ImportacaoVarejoStore.dispararSyncEstoqueManual(); } catch (e) { console.warn('[ImportacaoVarejo] estoque do produto novo fica pra próxima sincronização', e); }
+      await carregar();
+      setBusca(r.produto.codigo);
+      window.toast?.('Produto ' + r.produto.codigo + ' incluído na lista. O giro/Curva dele entra na próxima sincronização de catálogo/giro.', 'success');
+    } catch (e) { window.toast?.('Erro ao buscar no Omie: ' + e.message, 'error'); }
+    finally { setBuscandoOmie(false); }
+  };
+
   const forcarSync = async () => {
     setSincronizando(true);
     try {
@@ -825,6 +846,15 @@ function ImportacaoVarejoPage({ setRoute }) {
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
         <input className="input" style={{ maxWidth: 340 }} placeholder="Buscar por código, descrição ou fornecedor…" value={busca} onChange={(e) => setBusca(e.target.value)} />
         <span className="small" style={{ color: 'var(--fg3)' }}>{filtrados.length} de {items.length} produtos</span>
+        {podeGerenciar && (
+          <form style={{ display: 'flex', gap: 6, alignItems: 'center' }} onSubmit={(e) => { e.preventDefault(); buscarNoOmie(); }}>
+            <input className="input" style={{ width: 230 }} placeholder="Não achou? Código p/ buscar no Omie" value={codigoOmie} onChange={(e) => setCodigoOmie(e.target.value)} disabled={buscandoOmie} />
+            <Button variant="outline" size="sm" icon="search" onClick={buscarNoOmie} disabled={buscandoOmie || !codigoOmie.trim()}
+              data-tip="Procura o código no Omie (só leitura). Se estiver cadastrado e ativo, passa a fazer parte desta lista; se não, avisa.">
+              {buscandoOmie ? 'Buscando…' : 'Buscar no Omie'}
+            </Button>
+          </form>
+        )}
         <div className="spacer" style={{ flex: 1 }} />
         {podeGerenciar && selecionados.size > 0 && (
           <Button variant="primary" size="sm" onClick={abrirCesta}
