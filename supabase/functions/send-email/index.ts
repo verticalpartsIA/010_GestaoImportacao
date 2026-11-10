@@ -74,9 +74,10 @@ function assinaturaHtml(): string {
     `<a href="https://verticalparts.com.br" target="_blank" style="text-decoration:none">` +
     `<img src="${ASSINATURA_IMG}" width="600" alt="VerticalParts — Assistente Virtual | hub@verticalparts.com.br | verticalparts.com.br | Rua Armandina Braga de Almeida, 383, Guarulhos/SP" style="display:block;width:100%;max-width:600px;height:auto;border:0">` +
     `</a></td></tr><tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.5;color:#777;padding-top:6px">` +
-    `<b>VerticalParts</b> | Assistente Virtual &middot; <a href="mailto:hub@verticalparts.com.br" style="color:#777">hub@verticalparts.com.br</a> &middot; ` +
-    `<a href="https://verticalparts.com.br" style="color:#777">verticalparts.com.br</a><br>` +
-    `Canal digital automatizado da VerticalParts, destinado ao recebimento e envio de mensagens.</td></tr></table>`;
+    `<b>E-mail corporativo VerticalParts</b> &mdash; fale com todas as áreas da empresa por aqui. Basta responder.<br>` +
+    `<b>VerticalParts corporate e-mail</b> &mdash; reach every area of the company here. Just reply.<br>` +
+    `<a href="mailto:hub@verticalparts.com.br" style="color:#777">hub@verticalparts.com.br</a> &middot; ` +
+    `<a href="https://verticalparts.com.br" style="color:#777">verticalparts.com.br</a></td></tr></table>`;
 }
 
 function escaparHtml(s: string): string {
