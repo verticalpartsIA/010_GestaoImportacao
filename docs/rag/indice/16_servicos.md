@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/16_servicos.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 01/11/2026 (origin/main `ae64ebf`)
-- **Palavras:** 12494 · **blocos:** 264 · **seções com selo próprio:** 77 de 90
-- **Origem do selo dos blocos:** próprio 137 · da seção 67 · da seção-pai 0 · do cabeçalho 29 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 31
-- **Selo efetivo dos blocos:** Conferido 176 · Herdado 40 · Não verificado 17
+- **Palavras:** 12853 · **blocos:** 265 · **seções com selo próprio:** 78 de 90
+- **Origem do selo dos blocos:** próprio 138 · da seção 71 · da seção-pai 0 · do cabeçalho 25 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 31
+- **Selo efetivo dos blocos:** Conferido 172 · Herdado 39 · Não verificado 23
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -80,13 +80,13 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | S6.1 O que é | `docs/modulos/16_servicos.md#s61-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | S6.2 Onde está | `docs/modulos/16_servicos.md#s62-onde-está` | 3 | Conferido (uniforme) | 1 | b1 |
 | S6.3 Quem usa | `docs/modulos/16_servicos.md#s63-quem-usa` | 3 | Herdado (uniforme) | 1 | b1 |
-| S6.4 Como entra e sai | `docs/modulos/16_servicos.md#s64-como-entra-e-sai` | 3 | Herdado (misto (vale o mais fraco)) | 3 | b3 |
+| S6.4 Como entra e sai | `docs/modulos/16_servicos.md#s64-como-entra-e-sai` | 3 | Não verificado (misto (vale o mais fraco)) | 3 | b3 |
 | S6.5 Regras e janelas | `docs/modulos/16_servicos.md#s65-regras-e-janelas` | 3 | Herdado (misto (vale o mais fraco)) | 3 | b3 |
 | S6.6 Dados | `docs/modulos/16_servicos.md#s66-dados` | 3 | Conferido (uniforme) | 1 | b1 |
 | S6.7 Segurança | `docs/modulos/16_servicos.md#s67-segurança` | 3 | Conferido (uniforme) | 1 | b1 |
 | S6.8 Falhas e como se percebe | `docs/modulos/16_servicos.md#s68-falhas-e-como-se-percebe` | 3 | Conferido (uniforme) | 1 | b1 |
 | S6.9 Testes | `docs/modulos/16_servicos.md#s69-testes` | 3 | Herdado (uniforme) | 1 | b1 |
-| S6.10 Pendências e achados | `docs/modulos/16_servicos.md#s610-pendências-e-achados` | 3 | — | 4 | c4 |
+| S6.10 Pendências e achados | `docs/modulos/16_servicos.md#s610-pendências-e-achados` | 3 | Não verificado (uniforme) | 5 | b1 s4 |
 | S6.11 Histórico | `docs/modulos/16_servicos.md#s611-histórico` | 3 | Herdado (misto (vale o mais fraco)) | 1 | b1 |
 | PC-1 Mapa de ligações | `docs/modulos/16_servicos.md#pc-1-mapa-de-ligações` | 2 | Conferido (uniforme) | 1 | b1 |
 | PC-2 Um aviso de ponta a ponta | `docs/modulos/16_servicos.md#pc-2-um-aviso-de-ponta-a-ponta` | 2 | Conferido (uniforme) | 6 | b1 s5 |
