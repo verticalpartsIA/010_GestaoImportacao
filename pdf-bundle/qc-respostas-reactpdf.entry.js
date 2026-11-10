@@ -42,6 +42,8 @@ const S = StyleSheet.create({
   numData: { fontSize: 11, fontWeight: 700, color: NAVY, textAlign: 'right' },
   titulo: { fontSize: 13, fontWeight: 700, color: NAVY, marginBottom: 8 },
   linha: { flexDirection: 'row', borderBottom: '0.5pt solid #e5e5e5', paddingVertical: 4 },
+  secao: { marginTop: 10, marginBottom: 2, paddingVertical: 3, paddingHorizontal: 6, backgroundColor: '#f3f3f3', borderLeft: '3pt solid ' + YELLOW },
+  secaoTxt: { fontSize: 9.5, fontWeight: 700, color: NAVY },
   rotulo: { width: '34%', fontSize: 8.5, fontWeight: 600, color: '#555', paddingRight: 8 },
   valor: { width: '66%', fontSize: 9.5 },
   rodape: { position: 'absolute', bottom: 22, left: 42, right: 42, flexDirection: 'row', justifyContent: 'space-between', fontSize: 8, color: '#777' },
@@ -49,8 +51,9 @@ const S = StyleSheet.create({
 });
 
 function montarDocumento(d) {
-  const linhas = (d.linhas || []).map((p, i) =>
-    h(View, { style: S.linha, key: 'l' + i, wrap: false }, [
+  const linhas = (d.linhas || []).map((p, i) => String(p[0]).indexOf('§ ') === 0
+    ? h(View, { style: S.secao, key: 'l' + i, wrap: false, minPresenceAhead: 40 }, [h(Text, { style: S.secaoTxt, key: 's' }, String(p[0]).slice(2))])
+    : h(View, { style: S.linha, key: 'l' + i, wrap: false }, [
       h(Text, { style: S.rotulo, key: 'r' }, String(p[0])),
       h(Text, { style: S.valor, key: 'v' }, String(p[1])),
     ]));
