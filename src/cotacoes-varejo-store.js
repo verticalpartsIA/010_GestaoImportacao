@@ -472,9 +472,9 @@
     for (const i of (itens || [])) {
       const patch = {};
       const url = banco[i.codigo];
-      if (url && url !== i.foto_url) patch.foto_url = url;
+      if (i.foto_url === '') { /* removida de propósito pelo operador */ } else if (url && url !== i.foto_url) patch.foto_url = url;
       const url2 = segunda[i.codigo];
-      if (url2 && url2 !== i.foto_url2) patch.foto_url2 = url2;
+      if (i.foto_url2 === '') { /* idem */ } else if (url2 && url2 !== i.foto_url2) patch.foto_url2 = url2;
       if (Object.keys(patch).length) await c.from('iv_cotacao_itens').update(patch).eq('id', i.id);
     }
     return banco;

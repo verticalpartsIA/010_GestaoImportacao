@@ -34,6 +34,15 @@ function CVLista({ onAbrir, setRoute }) {
   const [erro, setErro] = React.useState(null);
   const [busca, setBusca] = React.useState(''); // 23/10 (pedido do usuário)
   const ord = window.useOrdenacao();
+  const [podeExcluir, setPodeExcluir] = React.useState(false);
+  const [confirmar, setConfirmar] = React.useState(null);
+  React.useEffect(() => { window.PropostaStore?.temCapacidade?.('cotacoes-varejo', 'criar').then(setPodeExcluir).catch(() => setPodeExcluir(false)); }, []);
+  /* Lixeira do lote: só rascunho ou em cotação (lote aprovado já gerou P.I.). Não apaga nada: o lote vira "cancelado" e sai da lista. */
+  const excluirLote = (l) => setConfirmar({
+    titulo: 'Excluir lote ' + l.numero, rotulo: 'Sim, excluir o lote',
+    texto: 'Tem certeza que quer excluir o lote ' + l.numero + (l.titulo ? ' (' + l.titulo + ')' : '') + '? Ele sai da lista e os ' + l.qtdItens + ' produto(s) deixam de aparecer "em cotação". Os links já enviados aos fornecedores deixam de valer. Nada é enviado ao Omie.',
+    acao: async () => { await window.CotacoesVarejoStore.cancelarLote(l.id); window.toast?.('Lote ' + l.numero + ' excluído.', 'success'); carregar(); },
+  });
   const carregar = React.useCallback(() => {
     setErro(null);
     window.CotacoesVarejoStore.listarLotes().then(setLotes).catch((e) => { setErro(e.message || String(e)); setLotes([]); });
@@ -64,7 +73,7 @@ function CVLista({ onAbrir, setRoute }) {
               <thead><tr>
                 {ord.th('lote', 'Lote')}{ord.th('descricao', 'Descrição')}{ord.th('status', 'Status')}
                 {ord.th('itens', 'Itens', { className: 'text-right' })}{ord.th('fornecedores', 'Fornecedores', { className: 'text-right' })}
-                {ord.th('responderam', 'Responderam', { className: 'text-right' })}{ord.th('criadoPor', 'Criado por')}{ord.th('criadoEm', 'Criado em')}
+                {ord.th('responderam', 'Responderam', { className: 'text-right' })}{ord.th('criadoPor', 'Criado por')}{ord.th('criadoEm', 'Criado em')}<th style={{ width: 44 }} aria-label="Excluir lote" />
               </tr></thead>
               <tbody>
                 {(() => {
@@ -78,8 +87,8 @@ function CVLista({ onAbrir, setRoute }) {
                     criadoPor: (l) => l.criado_por_nome || l.criado_por,
                     criadoEm: (l) => (l.created_at ? new Date(l.created_at).getTime() : null),
                   });
-                  if (lotes.length === 0) return <tr><td colSpan={8} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>Nenhum lote ainda. Na Importação Varejo, marque os produtos e clique em "Pedir cotação".</td></tr>;
-                  if (linhas.length === 0) return <tr><td colSpan={8} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>Nenhum resultado para "{busca}".</td></tr>;
+                  if (lotes.length === 0) return <tr><td colSpan={9} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>Nenhum lote ainda. Na Importação Varejo, marque os produtos e clique em "Pedir cotação".</td></tr>;
+                  if (linhas.length === 0) return <tr><td colSpan={9} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>Nenhum resultado para "{busca}".</td></tr>;
                   return linhas.map((l) => {
                     const st = CV_STATUS_LOTE[l.status] || CV_STATUS_LOTE.rascunho;
                     return (
@@ -92,6 +101,11 @@ function CVLista({ onAbrir, setRoute }) {
                         <td className="text-right">{l.qtdRespondidos}/{l.qtdFornecedores}</td>
                         <td>{l.criado_por_nome || l.criado_por || '—'}</td>
                         <td>{cvFmtData(l.created_at)}</td>
+                        <td className="text-right" onClick={(e) => e.stopPropagation()}>
+                          {podeExcluir && ['rascunho', 'em_cotacao'].includes(l.status) && (
+                            <button type="button" className="link-btn muted" title="Excluir lote" aria-label={'Excluir lote ' + l.numero} onClick={() => excluirLote(l)} style={{ display: 'inline-flex', padding: 4 }}><Icon.trash /></button>
+                          )}
+                        </td>
                       </tr>
                     );
                   });
@@ -101,6 +115,7 @@ function CVLista({ onAbrir, setRoute }) {
           </div>
         </Card>
       )}
+      {confirmar && <CVModalConfirmar cfg={confirmar} onClose={() => setConfirmar(null)} />}
     </div>
   );
 }
@@ -415,18 +430,13 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
 
   const carregarNps = React.useCallback(() => { S.npsDosFornecedores().then(setNpsMap).catch(() => {}); }, []);
   React.useEffect(() => { carregarNps(); }, [carregarNps]);
-  // Descrições técnicas já guardadas do produto entram sozinhas nos itens sem observação (uma vez por abertura).
-  const descTentadas = React.useRef(false);
-  React.useEffect(() => {
-    if (!dados || descTentadas.current || !podeGerenciar || !['rascunho', 'em_cotacao'].includes(dados.lote.status)) return;
-    descTentadas.current = true;
-    S.aplicarDescricoesGuardadas(dados.itens).then((n) => { if (n) carregar(); }).catch(() => {});
-  }, [dados && dados.lote.id, podeGerenciar]);
+  // 11/11/2026 (Gelson): a descrição técnica NÃO entra mais sozinha no item; o operador digita à mão
+  // (o botão "descrição EN/中文" continua guardando a descrição por produto, mas só quando ele pede).
 
   // Fotos: procura no banco / traz da Ficha Técnica uma vez por abertura.
   React.useEffect(() => {
     if (!dados || fotosTentadas.current) return;
-    if (dados.itens.some((i) => !i.foto_url || !i.foto_url2)) { fotosTentadas.current = true; S.resolverFotos(dados.lote.id, dados.itens).then(() => carregar()).catch(() => {}); }
+    if (dados.itens.some((i) => i.foto_url == null || i.foto_url2 == null)) { fotosTentadas.current = true; S.resolverFotos(dados.lote.id, dados.itens).then(() => carregar()).catch(() => {}); }
   }, [dados && dados.lote.id]);
 
   if (erro) return <div className="page fade-in"><div className="alert danger"><Icon.warning /><div><div className="alert__title">Erro</div><div className="alert__sub">{erro}</div></div></div><Button variant="outline" onClick={onVoltar}>← Voltar</Button></div>;
@@ -550,6 +560,11 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const tirarFotoManual = async (item, url) => {
     if (!window.confirm('Remover esta foto?')) return;
     try { await S.removerFotoManual(item, url); await carregar(); } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
+  };
+  /* Tira a foto do banco SÓ deste item do lote (o banco de fotos do produto fica intacto). '' = removida de propósito: o resolvedor não a traz de volta. */
+  const tirarFotoBanco = async (item, campo) => {
+    if (!window.confirm('Remover esta foto do produto ' + item.codigo + ' neste lote?')) return;
+    try { await S.atualizarItem(item.id, { [campo]: '' }); await carregar(); } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
   };
   const editarItem = async (item, campo, valor) => { try { await S.atualizarItem(item.id, { [campo]: valor }); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
   const tirarItem = (item) => setConfirmar({
@@ -723,10 +738,21 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                           <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => { addFotosManuais(it, e.target.files); e.target.value = ''; }} />
                         </label>
                       )}
+                      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'flex-start' }}>
+                      <span style={{ position: 'relative', display: 'inline-block' }}>
+                      {editavel && it.foto_url && <button type="button" title="Remover esta foto do produto neste lote" aria-label={'Remover foto de ' + it.codigo} onClick={() => tirarFotoBanco(it, 'foto_url')} style={{ position: 'absolute', top: -6, right: -6, zIndex: 1, width: 18, height: 18, borderRadius: 9, border: 0, background: '#c00', color: '#fff', fontSize: 11, lineHeight: '18px', cursor: 'pointer', padding: 0 }}>×</button>}
                       <label style={{ cursor: editavel ? 'pointer' : 'default' }} title={editavel ? 'Trocar a foto (fica no banco de fotos, nomeada pelo código)' : ''}>
-                        {it.foto_url ? <span style={{ display: 'inline-flex', gap: 4 }}><img src={it.foto_url} alt={it.codigo} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} />{it.foto_url2 && <img src={it.foto_url2} alt={it.codigo + ' (2)'} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} />}</span> :<div style={{ width: 52, height: 52, border: '1px dashed var(--border, #ccc)', borderRadius: 6, display: 'grid', placeItems: 'center', fontSize: 10, color: 'var(--fg3)' }}>sem foto</div>}
+                        {it.foto_url ? <img src={it.foto_url} alt={it.codigo} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} /> : <div style={{ width: 52, height: 52, border: '1px dashed var(--border, #ccc)', borderRadius: 6, display: 'grid', placeItems: 'center', fontSize: 10, color: 'var(--fg3)' }}>sem foto</div>}
                         {editavel && <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => trocarFoto(it, e.target.files && e.target.files[0])} />}
                       </label>
+                      </span>
+                      {it.foto_url2 && (
+                        <span style={{ position: 'relative', display: 'inline-block' }}>
+                          {editavel && <button type="button" title="Remover esta foto do produto neste lote" aria-label={'Remover 2ª foto de ' + it.codigo} onClick={() => tirarFotoBanco(it, 'foto_url2')} style={{ position: 'absolute', top: -6, right: -6, zIndex: 1, width: 18, height: 18, borderRadius: 9, border: 0, background: '#c00', color: '#fff', fontSize: 11, lineHeight: '18px', cursor: 'pointer', padding: 0 }}>×</button>}
+                          <img src={it.foto_url2} alt={it.codigo + ' (2)'} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} />
+                        </span>
+                      )}
+                      </div>
                     </td>
                     <td className="mono">{it.codigo}</td>
                     <td style={{ maxWidth: 260 }}>
@@ -742,7 +768,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                       {editavel
                         ? <input className="input text-right" style={{ width: 80, ...(cvNum(it.quantidade_pedida) > 0 ? {} : { borderColor: '#d97706', background: '#fffbeb' }) }} placeholder="a definir" title={cvNum(it.quantidade_pedida) > 0 ? '' : 'Sem sugestão de compra: informe a quantidade que queremos cotar'} type="number" min="1" step="any" defaultValue={cvNum(it.quantidade_pedida) > 0 ? it.quantidade_pedida : ''} onBlur={(e) => { const v = cvNum(e.target.value); if (v > 0 && v !== cvNum(it.quantidade_pedida)) editarItem(it, 'quantidade_pedida', v); }} />
                         : cvFmtNum(it.quantidade_pedida)}
-                      {editavel && <div><button className="link-btn muted" onClick={() => tirarItem(it)}>tirar</button></div>}
+                      {editavel && <div><button type="button" className="link-btn muted" title="Remover produto do lote" aria-label={'Remover produto ' + it.codigo + ' do lote'} onClick={() => tirarItem(it)} style={{ display: 'inline-flex', padding: 4 }}><Icon.trash /></button></div>}
                     </td>
                     {convites.map((cv) => (
                       <td key={cv.id}>
