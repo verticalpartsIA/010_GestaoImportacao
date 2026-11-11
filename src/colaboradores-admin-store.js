@@ -333,7 +333,7 @@
     'CRM': ['leads'],
     'Cadastros Mestres': ['cadastro-clientes', 'cadastro-fornecedores', 'cadastro-materias-primas', 'cadastro-produtos'],
     'Comercial | Pré-venda': ['formularios', 'controle-cotacoes', 'cotacoes-fornecedor', 'propostas', 'contratos-sociais'],
-    'Financeiro & Preços': ['cadastro-custos', 'precificacao', 'aval-financeiro', 'emissao-nf'],
+    'Financeiro & Preços': ['cadastro-custos', 'precificacao', 'aval-financeiro', 'emissao-nf', 'boletos-avisos'],
     'Contratos & Jurídico': ['contrato-venda-equipamentos', 'aval-juridico', 'juridico'],
     'Suprimentos & Importação': ['importacao', 'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos', 'ncm-catalogo', 'compras', 'cotacoes-varejo', 'pedidos-acompanhamento'],
     'Engenharia & Produto': ['engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'solicitacoes-produto', 'ficha-tecnica', 'ncm-catalogo', 'linha-do-tempo'],

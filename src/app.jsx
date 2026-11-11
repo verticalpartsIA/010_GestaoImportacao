@@ -39,6 +39,7 @@ const ROUTE_TITLE = {
   separacao: "Separação",
   etiquetas: "Etiquetas",
   "emissao-nf": "Emissão de NF",
+  "boletos-avisos": "Boletos Avisos",
   pcp: "PCP — Planejamento e Controle da Produção",
   mes: "MES — Sistema de Execução da Manufatura",
   leads: "Pipeline de Leads",
@@ -427,6 +428,7 @@ function App() {
       case "separacao": return <window.SeparacaoPage/>;
       case "etiquetas": return <window.EtiquetasPage/>;
       case "emissao-nf": return <window.EmissaoNFPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "boletos-avisos": return <window.BoletosAvisosPage/>;
       case "relatorios-pcp": return <window.RelatoriosPCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "simulacao-producao": return <window.SimulacaoProducaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "montagem-produto": return <window.MontagemProdutoPage setRoute={setRoute} setSubsel={setSubsel}/>;
