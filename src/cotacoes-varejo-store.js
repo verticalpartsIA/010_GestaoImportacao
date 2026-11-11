@@ -204,11 +204,8 @@
   function textoConvite(lote, convite) {
     const link = portalUrl(convite.token);
     const subject = 'Request for Quotation ' + lote.numero + ' — VerticalParts';
-    const rodada = (convite.rodada || 1) > 1 ? ' (updated round / rodada atualizada / 更新报价)' : '';
-    const text =
-      'Dear ' + convite.fornecedor_nome + ',\n\nPlease quote the items of request ' + lote.numero + rodada + ' using the link below (prices by quantity break, lead time and MOQ):\n' + link + '\n\n' +
-      '---\nPrezado(a) ' + convite.fornecedor_nome + ',\n\nPor favor cote os itens da solicitação ' + lote.numero + ' pelo link abaixo (preço por faixa de quantidade, prazo e MOQ):\n' + link + '\n\n' +
-      '---\n尊敬的 ' + convite.fornecedor_nome + '：\n\n请通过以下链接对询价单 ' + lote.numero + ' 中的产品报价（按数量阶梯价、交货期和最小起订量）：\n' + link + '\n\nVerticalParts';
+    const rodada = (convite.rodada || 1) > 1 ? ' (updated round)' : '';
+    const text = 'Dear ' + convite.fornecedor_nome + ',' + '\n\nPlease quote the items of request ' + lote.numero + rodada + ' using the link below (prices by quantity break, lead time and certificates where required):\n' + link + '\n\nBest regards,\nVerticalParts';
     return { subject, text, link };
   }
 
@@ -242,15 +239,13 @@
 
   /* APROVAR (o "martelo"): cria 1 P.I. em RASCUNHO por fornecedor vencedor (itens, quantidades e preços já decididos), registra o
      que foi decidido em "Comprado" (a sugestão da Importação Varejo deixa de pedir de novo) e manda ao fornecedor, na tratativa,
-     o pedido de Proforma Invoice em PT/EN/中文. NADA vai ao Omie. Cada fornecedor processado é gravado em lote.requisicoes na hora
+     o pedido de Proforma Invoice em inglês. NADA vai ao Omie. Cada fornecedor processado é gravado em lote.requisicoes na hora
      ({convite_id, fornecedor, pi_id, pi_numero…}): se um falhar, aprovar de novo PULA os já feitos (nunca duplica). */
   function textoProforma(lote, conv, g, itens) {
     const un = (cod) => { const it = itens.find((x) => x.codigo === cod); return (it && it.unidade) || 'pcs'; };
     const linhas = g.itens.map((i) => '- ' + i.codigo + ' — ' + (i.descricao || '') + ' — ' + i.quantidade + ' ' + un(i.codigo) + ' × ' + i.preco + ' ' + conv.moeda).join('\n');
     return 'We would like to proceed with the items below from quotation ' + lote.numero + '. Please send us the Proforma Invoice (PI) with final prices, payment terms, Incoterm, production/delivery time and bank details.\n\n'
-      + 'Gostaríamos de seguir com os itens abaixo da cotação ' + lote.numero + '. Por favor envie a Proforma Invoice (PI) com preços finais, condições de pagamento, Incoterm, prazo de produção/entrega e dados bancários.\n\n'
-      + '我们希望就询价单 ' + lote.numero + ' 中的以下产品下单。请发送形式发票（PI），注明最终价格、付款条件、贸易术语、生产/交货时间及银行信息。\n\n'
-      + 'Items / Itens / 产品:\n' + linhas;
+      + 'Items:\n' + linhas;
   }
   async function aprovarLote(dados) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
