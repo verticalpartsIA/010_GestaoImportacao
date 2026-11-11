@@ -267,12 +267,18 @@
   async function desbloquearDependentes(c, decisaoId) {
     const { data: dependentes } = await c.from('decisoes_gerenciais')
       .select('id, depende_de').eq('status', 'bloqueada_por_dependencia').contains('depende_de', [decisaoId]);
-    for (const dep of dependentes || []) {
-      const { data: pais } = await c.from('decisoes_gerenciais').select('id, status').in('id', dep.depende_de);
-      const todasAprovadas = (pais || []).every((p) => p.status === 'aprovada');
-      if (todasAprovadas) {
-        await c.from('decisoes_gerenciais').update({ status: 'pendente', atualizado_em: new Date().toISOString() }).eq('id', dep.id);
-      }
+    if (!dependentes || !dependentes.length) return;
+    /* 1 consulta para todos os pais (antes: 1 por dependente) e 1 atualização para todos os liberados. */
+    const idsPais = [...new Set(dependentes.flatMap((d) => d.depende_de || []))];
+    const { data: pais } = idsPais.length ? await c.from('decisoes_gerenciais').select('id, status').in('id', idsPais) : { data: [] };
+    const statusPai = new Map((pais || []).map((p) => [p.id, p.status]));
+    const liberar = dependentes.filter((dep) => {
+      /* mesmo comportamento de antes: só libera se TODOS os pais encontrados estão aprovados (lista de pais vazia libera) */
+      const encontrados = (dep.depende_de || []).filter((id) => statusPai.has(id));
+      return encontrados.every((id) => statusPai.get(id) === 'aprovada');
+    }).map((dep) => dep.id);
+    if (liberar.length) {
+      await c.from('decisoes_gerenciais').update({ status: 'pendente', atualizado_em: new Date().toISOString() }).in('id', liberar);
     }
   }
 

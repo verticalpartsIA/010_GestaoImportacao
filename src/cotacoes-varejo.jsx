@@ -1,7 +1,7 @@
 /* ============================================================
    cotacoes-varejo.jsx — Suprimentos & Importação › Cotações de Varejo
    Lista de lotes + MAPA COMPARATIVO (produto × fornecedor). Pedido do usuário (16/10/2026): o comprador marca produtos na
-   Importação Varejo e clica em "Pedir cotação"; aqui os fornecedores respondem (preço por faixa de quantidade, prazo, MOQ),
+   Importação Varejo e clica em "Pedir cotação"; aqui os fornecedores respondem (preço por faixa de quantidade, prazo e certificado),
    o comprador escolhe vencedor(es) e QUANTIDADE por item (pode comprar mais ou menos que o pedido, e dividir entre
    fornecedores) e só ao APROVAR a Requisição de Compra vai ao Omie, uma por fornecedor vencedor.
    URL: /logistica/cotacoes-varejo[/<id do lote>]. window.CotacoesVarejoPage
@@ -34,6 +34,15 @@ function CVLista({ onAbrir, setRoute }) {
   const [erro, setErro] = React.useState(null);
   const [busca, setBusca] = React.useState(''); // 23/10 (pedido do usuário)
   const ord = window.useOrdenacao();
+  const [podeExcluir, setPodeExcluir] = React.useState(false);
+  const [confirmar, setConfirmar] = React.useState(null);
+  React.useEffect(() => { window.PropostaStore?.temCapacidade?.('cotacoes-varejo', 'criar').then(setPodeExcluir).catch(() => setPodeExcluir(false)); }, []);
+  /* Lixeira do lote: só rascunho ou em cotação (lote aprovado já gerou P.I.). Não apaga nada: o lote vira "cancelado" e sai da lista. */
+  const excluirLote = (l) => setConfirmar({
+    titulo: 'Excluir lote ' + l.numero, rotulo: 'Sim, excluir o lote',
+    texto: 'Tem certeza que quer excluir o lote ' + l.numero + (l.titulo ? ' (' + l.titulo + ')' : '') + '? Ele sai da lista e os ' + l.qtdItens + ' produto(s) deixam de aparecer "em cotação". Os links já enviados aos fornecedores deixam de valer. Nada é enviado ao Omie.',
+    acao: async () => { await window.CotacoesVarejoStore.cancelarLote(l.id); window.toast?.('Lote ' + l.numero + ' excluído.', 'success'); carregar(); },
+  });
   const carregar = React.useCallback(() => {
     setErro(null);
     window.CotacoesVarejoStore.listarLotes().then(setLotes).catch((e) => { setErro(e.message || String(e)); setLotes([]); });
@@ -64,7 +73,7 @@ function CVLista({ onAbrir, setRoute }) {
               <thead><tr>
                 {ord.th('lote', 'Lote')}{ord.th('descricao', 'Descrição')}{ord.th('status', 'Status')}
                 {ord.th('itens', 'Itens', { className: 'text-right' })}{ord.th('fornecedores', 'Fornecedores', { className: 'text-right' })}
-                {ord.th('responderam', 'Responderam', { className: 'text-right' })}{ord.th('criadoPor', 'Criado por')}{ord.th('criadoEm', 'Criado em')}
+                {ord.th('responderam', 'Responderam', { className: 'text-right' })}{ord.th('criadoPor', 'Criado por')}{ord.th('criadoEm', 'Criado em')}<th style={{ width: 44 }} aria-label="Excluir lote" />
               </tr></thead>
               <tbody>
                 {(() => {
@@ -78,8 +87,8 @@ function CVLista({ onAbrir, setRoute }) {
                     criadoPor: (l) => l.criado_por_nome || l.criado_por,
                     criadoEm: (l) => (l.created_at ? new Date(l.created_at).getTime() : null),
                   });
-                  if (lotes.length === 0) return <tr><td colSpan={8} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>Nenhum lote ainda. Na Importação Varejo, marque os produtos e clique em "Pedir cotação".</td></tr>;
-                  if (linhas.length === 0) return <tr><td colSpan={8} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>Nenhum resultado para "{busca}".</td></tr>;
+                  if (lotes.length === 0) return <tr><td colSpan={9} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>Nenhum lote ainda. Na Importação Varejo, marque os produtos e clique em "Pedir cotação".</td></tr>;
+                  if (linhas.length === 0) return <tr><td colSpan={9} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>Nenhum resultado para "{busca}".</td></tr>;
                   return linhas.map((l) => {
                     const st = CV_STATUS_LOTE[l.status] || CV_STATUS_LOTE.rascunho;
                     return (
@@ -92,6 +101,11 @@ function CVLista({ onAbrir, setRoute }) {
                         <td className="text-right">{l.qtdRespondidos}/{l.qtdFornecedores}</td>
                         <td>{l.criado_por_nome || l.criado_por || '—'}</td>
                         <td>{cvFmtData(l.created_at)}</td>
+                        <td className="text-right" onClick={(e) => e.stopPropagation()}>
+                          {podeExcluir && ['rascunho', 'em_cotacao'].includes(l.status) && (
+                            <button type="button" className="link-btn muted" title="Excluir lote" aria-label={'Excluir lote ' + l.numero} onClick={() => excluirLote(l)} style={{ display: 'inline-flex', padding: 4 }}><Icon.trash /></button>
+                          )}
+                        </td>
                       </tr>
                     );
                   });
@@ -101,6 +115,7 @@ function CVLista({ onAbrir, setRoute }) {
           </div>
         </Card>
       )}
+      {confirmar && <CVModalConfirmar cfg={confirmar} onClose={() => setConfirmar(null)} />}
     </div>
   );
 }
@@ -110,9 +125,6 @@ function CVCelula({ resp, qtdRef, melhor, editavel, valorQtd, onQtd, onTudo }) {
   const C = window.CotacoesVarejoCalc;
   const faixas = resp ? C.faixasOrdenadas(resp.faixas) : [];
   const aplicada = resp ? C.precoNaQuantidade(resp.faixas, qtdRef) : null;
-  const moq = resp && resp.moq ? cvNum(resp.moq) : 0;
-  const qtd = cvNum(valorQtd);
-  const abaixoMoq = moq > 0 && qtd > 0 && qtd < moq;
   return (
     <div style={{ minWidth: 170, padding: '4px 2px', background: melhor ? 'rgba(34,160,90,.10)' : undefined, borderRadius: 6 }}>
       {!resp || !faixas.length ? <div className="small muted">sem preço</div> : (
@@ -122,7 +134,7 @@ function CVCelula({ resp, qtdRef, melhor, editavel, valorQtd, onQtd, onTudo }) {
               {cvFmtMoeda(f.preco, resp._moeda)} <span className="muted">{f.min > 1 ? '≥ ' + cvFmtNum(f.min) : 'un.'}</span>
             </div>
           ))}
-          <div className="muted">{resp.lead_time_dias ? resp.lead_time_dias + ' d' : '— d'}{moq > 0 ? ' · MOQ ' + cvFmtNum(moq) : ''}</div>
+          <div className="muted">{resp.lead_time_dias ? resp.lead_time_dias + ' d' : '— d'}</div>
           {resp.historico && resp.historico.length > 0 && (
             <div className="muted" title={resp.historico.map((h) => 'Rodada ' + h.rodada + ': ' + (h.faixas || []).map((f) => cvFmtMoeda(f.preco, resp._moeda) + (f.min > 1 ? ' (≥' + f.min + ')' : '')).join(' · ')).join('\n')}>
               rodada {resp.rodada} · antes: {cvFmtMoeda(((resp.historico[resp.historico.length - 1].faixas || [])[0] || {}).preco, resp._moeda)}
@@ -137,6 +149,9 @@ function CVCelula({ resp, qtdRef, melhor, editavel, valorQtd, onQtd, onTudo }) {
           {resp.fotos_fornecedor.map((u) => <a key={u} href={u} target="_blank" rel="noopener noreferrer"><img src={u} alt="foto do fornecedor" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border, #ccc)' }} /></a>)}
         </div>
       )}
+      {resp && resp.certificado_url && (
+        <div className="small" style={{ margin: '4px 0' }}>📎 <a href={resp.certificado_url} target="_blank" rel="noopener noreferrer" title="Certificado enviado pelo fornecedor">{resp.certificado_nome || 'certificado'}</a></div>
+      )}
       {resp && resp.obs && (
         <div className="small" style={{ margin: '4px 0', padding: '4px 6px', background: 'rgba(246,192,0,.15)', borderLeft: '3px solid var(--vp-yellow, #f6c000)', borderRadius: 4, maxWidth: 210, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
           <b>Obs. do fornecedor:</b> {resp.obs}
@@ -148,7 +163,6 @@ function CVCelula({ resp, qtdRef, melhor, editavel, valorQtd, onQtd, onTudo }) {
           <button className="link-btn" title="Comprar a quantidade pedida deste fornecedor" onClick={onTudo}>★</button>
         </div>
       )}
-      {abaixoMoq && <div className="small" style={{ color: 'var(--vp-amber-700, #b45309)' }}>⚠ abaixo do MOQ ({cvFmtNum(moq)})</div>}
     </div>
   );
 }
@@ -295,7 +309,7 @@ function CVModalNPS({ lote, convite, onClose, onSalvo }) {
 /* ---------- Descrição técnica do produto para o fornecedor ---------- */
 function CVModalDescricao({ item, onClose, onSalvo }) {
   const S = window.CotacoesVarejoStore;
-  const [d, setD] = React.useState({ aplicacao: '', equipamento: '', tensao: '', potencia: '', medidas: '', material: '', observacao: '', texto_pt: '', texto_en: '', texto_zh: '' });
+  const [d, setD] = React.useState({ aplicacao: '', equipamento: '', tensao: '', potencia: '', medidas: '', material: '', observacao: '', texto_pt: '', texto_en: '' });
   const [perguntas, setPerguntas] = React.useState([]);
   const [fontes, setFontes] = React.useState([]);
   const [bruta, setBruta] = React.useState('');
@@ -311,10 +325,10 @@ function CVModalDescricao({ item, onClose, onSalvo }) {
     try {
       const r = await S.sugerirDescricaoIA({ ...d, codigo: item.codigo, descricao: item.descricao, ficha, web });
       setBruta(''); setPerguntas(r.perguntas); setFontes(r.fontes || []);
-      if (r.texto_pt || r.texto_en || r.texto_zh) {
-        // Texto novo SUBSTITUI os três (idioma que não veio fica vazio): manter a tradução antiga ao lado do texto novo deixaria idiomas incoerentes (ex.: 220 V × 380 V).
-        setD((p) => ({ ...p, texto_pt: r.texto_pt, texto_en: r.texto_en, texto_zh: r.texto_zh })); setIa(true);
-        if (!(r.texto_pt && r.texto_en && r.texto_zh)) window.toast?.('A IA não escreveu todos os idiomas. Os que faltam ficaram vazios — peça de novo ou preencha à mão antes de salvar.', 'warning');
+      if (r.texto_pt || r.texto_en) {
+        // Texto novo SUBSTITUI os dois (idioma que não veio fica vazio): manter a tradução antiga ao lado do texto novo deixaria idiomas incoerentes (ex.: 220 V × 380 V).
+        setD((p) => ({ ...p, texto_pt: r.texto_pt, texto_en: r.texto_en })); setIa(true);
+        if (!(r.texto_pt && r.texto_en)) window.toast?.('A IA não escreveu os dois idiomas. O que falta ficou vazio — peça de novo ou preencha à mão antes de salvar.', 'warning');
       }
       else window.toast?.('A IA não escreveu o texto: precisa de mais dados (veja as perguntas). Cole a ficha técnica do fabricante e tente de novo.', 'warning');
     }
@@ -333,9 +347,9 @@ function CVModalDescricao({ item, onClose, onSalvo }) {
   const texto = (k, rot) => <label className="small" style={{ display: 'block' }}>{rot}<textarea className="input" rows={4} style={{ width: '100%' }} value={d[k] || ''} onChange={(e) => set(k, e.target.value)} /></label>;
   return (
     <Modal title={'Descrição para o fornecedor — ' + item.codigo} onClose={onClose} width={820}
-      footer={<><Button variant="ghost" onClick={onClose}>Fechar</Button><Button variant="primary" onClick={salvar} disabled={salvando || !(d.texto_pt || d.texto_en || d.texto_zh)}>{salvando ? 'Salvando…' : 'Salvar descrição'}</Button></>}>
+      footer={<><Button variant="ghost" onClick={onClose}>Fechar</Button><Button variant="primary" onClick={salvar} disabled={salvando || !(d.texto_pt || d.texto_en)}>{salvando ? 'Salvando…' : 'Salvar descrição'}</Button></>}>
       <div className="stack" style={{ gap: 10 }}>
-        <p className="small">Nossa descrição no Omie: <b>{item.descricao || '—'}</b>. Conte ao fornecedor onde a peça é usada e o que importa; a IA monta o texto em português, inglês e chinês. Você revisa antes de salvar — o que o fornecedor lê é o texto final.</p>
+        <p className="small">Nossa descrição no Omie: <b>{item.descricao || '—'}</b>. Conte ao fornecedor onde a peça é usada e o que importa; a IA monta o texto em inglês (e em português, para nós). Você revisa antes de salvar — o que o fornecedor lê é o texto final.</p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           {campo('aplicacao', 'Onde é aplicada', 'ex.: roldana do carro, porta de cabine…')}
           {campo('equipamento', 'Tipo de equipamento', 'elevador, escada rolante, esteira…')}
@@ -352,7 +366,6 @@ function CVModalDescricao({ item, onClose, onSalvo }) {
         {fontes.length > 0 && <div className="small">Fontes usadas pela IA: {fontes.map((f, i) => <span key={i}>{i ? ' · ' : ''}{/^https?:\/\//.test(f) ? <a href={f} target="_blank" rel="noopener noreferrer">{f}</a> : f}</span>)}</div>}
         {perguntas.length > 0 && <div className="alert warning"><div><div className="alert__title">A IA precisa saber</div><div className="alert__sub">{perguntas.map((q, i) => <div key={i}>• {q}</div>)} Responda nos campos acima (ou cole a ficha) e peça a sugestão de novo.</div></div></div>}
         {texto('texto_en', 'English (o fornecedor lê primeiro)')}
-        {texto('texto_zh', '中文')}
         {texto('texto_pt', 'Português (nosso)')}
       </div>
     </Modal>
@@ -415,18 +428,13 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
 
   const carregarNps = React.useCallback(() => { S.npsDosFornecedores().then(setNpsMap).catch(() => {}); }, []);
   React.useEffect(() => { carregarNps(); }, [carregarNps]);
-  // Descrições técnicas já guardadas do produto entram sozinhas nos itens sem observação (uma vez por abertura).
-  const descTentadas = React.useRef(false);
-  React.useEffect(() => {
-    if (!dados || descTentadas.current || !podeGerenciar || !['rascunho', 'em_cotacao'].includes(dados.lote.status)) return;
-    descTentadas.current = true;
-    S.aplicarDescricoesGuardadas(dados.itens).then((n) => { if (n) carregar(); }).catch(() => {});
-  }, [dados && dados.lote.id, podeGerenciar]);
+  // 11/11/2026 (Gelson): a descrição técnica NÃO entra mais sozinha no item; o operador digita à mão
+  // (o botão "descrição em inglês" continua guardando a descrição por produto, mas só quando ele pede).
 
   // Fotos: procura no banco / traz da Ficha Técnica uma vez por abertura.
   React.useEffect(() => {
     if (!dados || fotosTentadas.current) return;
-    if (dados.itens.some((i) => !i.foto_url || !i.foto_url2)) { fotosTentadas.current = true; S.resolverFotos(dados.lote.id, dados.itens).then(() => carregar()).catch(() => {}); }
+    if (dados.itens.some((i) => i.foto_url == null || i.foto_url2 == null)) { fotosTentadas.current = true; S.resolverFotos(dados.lote.id, dados.itens).then(() => carregar()).catch(() => {}); }
   }, [dados && dados.lote.id]);
 
   if (erro) return <div className="page fade-in"><div className="alert danger"><Icon.warning /><div><div className="alert__title">Erro</div><div className="alert__sub">{erro}</div></div></div><Button variant="outline" onClick={onVoltar}>← Voltar</Button></div>;
@@ -467,7 +475,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     window.toast?.('Informe a quantidade de ' + semQtd.length + ' produto(s) antes de pedir a cotação (' + semQtd.slice(0, 3).map((i) => i.codigo).join(', ') + (semQtd.length > 3 ? '…' : '') + '). O fornecedor precisa saber quanto queremos.', 'warning');
     return true;
   };
-  const enviarEmail = async (cv) => {
+  const enviarEmailDireto = async (cv) => {
     if (travaQtd() || !ccOk()) return;
     try {
       const r = await S.enviarPorEmail(lote, cv, { cc });
@@ -477,7 +485,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
       await carregar();
     } catch (e) { window.toast?.('Erro ao enviar: ' + (e.message || e), 'error'); }
   };
-  const enviarTodosEmail = async () => {
+  const enviarTodosEmailDireto = async () => {
     if (travaQtd() || !ccOk()) return;
     setEnviandoTodos(true);
     let ok = 0, falha = 0;
@@ -489,19 +497,33 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
       await carregar();
     } finally { setEnviandoTodos(false); }
   };
-  const copiarLink = async (cv) => {
+  const copiarLinkDireto = async (cv) => {
     if (travaQtd()) return;
     const link = S.portalUrl(cv.token);
     try { await navigator.clipboard.writeText(link); window.toast?.('Link copiado.', 'success'); } catch (e) { window.prompt('Copie o link:', link); }
     try { await S.marcarEnviado({ ...cv, lote_id: lote.id }, 'link'); await carregar(); } catch (e) {}
   };
-  const zap = async (cv) => {
+  const zapDireto = async (cv) => {
     if (travaQtd()) return;
     const f = forn.find((x) => x.id === cv.fornecedor_id); const tel = f && f.telefone;
     if (!tel) { window.toast?.('Sem telefone no cadastro deste fornecedor.', 'warning'); return; }
     window.open(S.whatsAppHref(tel, lote, cv), '_blank');
     try { await S.marcarEnviado({ ...cv, lote_id: lote.id }, 'whatsapp', tel); await carregar(); } catch (e) {}
   };
+  /* Lote em rascunho = ainda aceita produtos. O 1º envio (e-mail, WhatsApp ou "Copiar link", que também registra envio) fecha o lote, então pergunta antes. */
+  const fecharAntes = (acao, validar) => {
+    if (validar && validar()) return;
+    if (lote.status !== 'rascunho') return acao();
+    setConfirmar({
+      titulo: 'Enviar a cotação e fechar o lote', rotulo: 'Enviar e fechar o lote',
+      texto: 'Ao enviar a cotação aos fornecedores, o lote ' + lote.numero + ' fecha e não aceita mais produtos. Quer mesmo fechar o lote agora?',
+      acao: async () => { await acao(); },
+    });
+  };
+  const enviarEmail = (cv) => fecharAntes(() => enviarEmailDireto(cv), () => (semQtd.length > 0 && travaQtd()) || false);
+  const enviarTodosEmail = () => fecharAntes(() => enviarTodosEmailDireto(), () => (semQtd.length > 0 && travaQtd()) || false);
+  const copiarLink = (cv) => fecharAntes(() => copiarLinkDireto(cv), () => (semQtd.length > 0 && travaQtd()) || false);
+  const zap = (cv) => fecharAntes(() => zapDireto(cv), () => (semQtd.length > 0 && travaQtd()) || false);
   const rodada = async (cv) => { try { await S.novaRodada(cv); window.toast?.('Nova rodada aberta — reenvie o link ao fornecedor.', 'success'); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
   const tirar = (cv) => setConfirmar({
     titulo: 'Remover fornecedor do lote', rotulo: 'Remover fornecedor',
@@ -536,6 +558,11 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const tirarFotoManual = async (item, url) => {
     if (!window.confirm('Remover esta foto?')) return;
     try { await S.removerFotoManual(item, url); await carregar(); } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
+  };
+  /* Tira a foto do banco SÓ deste item do lote (o banco de fotos do produto fica intacto). '' = removida de propósito: o resolvedor não a traz de volta. */
+  const tirarFotoBanco = async (item, campo) => {
+    if (!window.confirm('Remover esta foto do produto ' + item.codigo + ' neste lote?')) return;
+    try { await S.atualizarItem(item.id, { [campo]: '' }); await carregar(); } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
   };
   const editarItem = async (item, campo, valor) => { try { await S.atualizarItem(item.id, { [campo]: valor }); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
   const tirarItem = (item) => setConfirmar({
@@ -681,6 +708,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
               <tr>
                 <th style={{ width: 64 }}>Foto</th><th>Código</th><th>Descrição</th><th className="text-right">Qtd. pedida</th>
                 {convites.map((cv) => <th key={cv.id}>{cv.fornecedor_nome}<div className="small muted" style={{ fontWeight: 400 }}>{cv.moeda}</div></th>)}
+                <th className="text-center" title="Marque se este item exige certificado: o fornecedor só consegue enviar o preço anexando o arquivo no link">Certificado</th>
                 <th className="text-right">Comprar</th>
               </tr>
             </thead>
@@ -709,18 +737,28 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                           <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => { addFotosManuais(it, e.target.files); e.target.value = ''; }} />
                         </label>
                       )}
+                      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'flex-start' }}>
+                      <span style={{ position: 'relative', display: 'inline-block' }}>
+                      {editavel && it.foto_url && <button type="button" title="Remover esta foto do produto neste lote" aria-label={'Remover foto de ' + it.codigo} onClick={() => tirarFotoBanco(it, 'foto_url')} style={{ position: 'absolute', top: -6, right: -6, zIndex: 1, width: 18, height: 18, borderRadius: 9, border: 0, background: '#c00', color: '#fff', fontSize: 11, lineHeight: '18px', cursor: 'pointer', padding: 0 }}>×</button>}
                       <label style={{ cursor: editavel ? 'pointer' : 'default' }} title={editavel ? 'Trocar a foto (fica no banco de fotos, nomeada pelo código)' : ''}>
-                        {it.foto_url ? <span style={{ display: 'inline-flex', gap: 4 }}><img src={it.foto_url} alt={it.codigo} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} />{it.foto_url2 && <img src={it.foto_url2} alt={it.codigo + ' (2)'} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} />}</span> :<div style={{ width: 52, height: 52, border: '1px dashed var(--border, #ccc)', borderRadius: 6, display: 'grid', placeItems: 'center', fontSize: 10, color: 'var(--fg3)' }}>sem foto</div>}
+                        {it.foto_url ? <img src={it.foto_url} alt={it.codigo} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} /> : <div style={{ width: 52, height: 52, border: '1px dashed var(--border, #ccc)', borderRadius: 6, display: 'grid', placeItems: 'center', fontSize: 10, color: 'var(--fg3)' }}>sem foto</div>}
                         {editavel && <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => trocarFoto(it, e.target.files && e.target.files[0])} />}
                       </label>
+                      </span>
+                      {it.foto_url2 && (
+                        <span style={{ position: 'relative', display: 'inline-block' }}>
+                          {editavel && <button type="button" title="Remover esta foto do produto neste lote" aria-label={'Remover 2ª foto de ' + it.codigo} onClick={() => tirarFotoBanco(it, 'foto_url2')} style={{ position: 'absolute', top: -6, right: -6, zIndex: 1, width: 18, height: 18, borderRadius: 9, border: 0, background: '#c00', color: '#fff', fontSize: 11, lineHeight: '18px', cursor: 'pointer', padding: 0 }}>×</button>}
+                          <img src={it.foto_url2} alt={it.codigo + ' (2)'} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} />
+                        </span>
+                      )}
+                      </div>
                     </td>
                     <td className="mono">{it.codigo}</td>
                     <td style={{ maxWidth: 260 }}>
-                      {it.descricao}
                       {editavel
                         ? <>
                             <textarea key={it.obs_vp || ''} className="input" rows={(it.obs_vp || '').length > 90 ? 3 : 1} style={{ width: '100%', marginTop: 4, fontSize: 12 }} placeholder="Obs. VerticalParts (o fornecedor lê no portal)" defaultValue={it.obs_vp || ''} onBlur={(e) => { if ((e.target.value || '') !== (it.obs_vp || '')) editarItem(it, 'obs_vp', e.target.value || null); }} />
-                            <button className="link-btn" onClick={() => setDescItem(it)} title="Descrição técnica em português, inglês e chinês, com ajuda da IA">{it.obs_vp ? '✎ descrição EN/中文' : '+ descrição EN/中文 (com IA)'}</button>
+                            <button className="link-btn" onClick={() => setDescItem(it)} title="Descrição técnica em inglês (e português), com ajuda da IA">{it.obs_vp ? '✎ descrição em inglês' : '+ descrição em inglês (com IA)'}</button>
                           </>
                         : (it.obs_vp ? <div className="small muted" style={{ whiteSpace: 'pre-wrap' }}>{it.obs_vp}</div> : null)}
                     </td>
@@ -728,7 +766,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                       {editavel
                         ? <input className="input text-right" style={{ width: 80, ...(cvNum(it.quantidade_pedida) > 0 ? {} : { borderColor: '#d97706', background: '#fffbeb' }) }} placeholder="a definir" title={cvNum(it.quantidade_pedida) > 0 ? '' : 'Sem sugestão de compra: informe a quantidade que queremos cotar'} type="number" min="1" step="any" defaultValue={cvNum(it.quantidade_pedida) > 0 ? it.quantidade_pedida : ''} onBlur={(e) => { const v = cvNum(e.target.value); if (v > 0 && v !== cvNum(it.quantidade_pedida)) editarItem(it, 'quantidade_pedida', v); }} />
                         : cvFmtNum(it.quantidade_pedida)}
-                      {editavel && <div><button className="link-btn muted" onClick={() => tirarItem(it)}>tirar</button></div>}
+                      {editavel && <div><button type="button" className="link-btn muted" title="Remover produto do lote" aria-label={'Remover produto ' + it.codigo + ' do lote'} onClick={() => tirarItem(it)} style={{ display: 'inline-flex', padding: 4 }}><Icon.trash /></button></div>}
                     </td>
                     {convites.map((cv) => (
                       <td key={cv.id}>
@@ -736,6 +774,11 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                           valorQtd={qtd[it.id + '|' + cv.id]} onQtd={(v) => setQ(it.id, cv.id, v)} onTudo={() => setQ(it.id, cv.id, String(it.quantidade_pedida))} />
                       </td>
                     ))}
+                    <td className="text-center">
+                      {editavel
+                        ? <label className="small" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', cursor: 'pointer' }} title="O fornecedor só consegue enviar o preço deste item anexando o certificado"><input type="checkbox" checked={!!it.exige_certificado} onChange={(e) => editarItem(it, 'exige_certificado', e.target.checked)} /> Exigir</label>
+                        : (it.exige_certificado ? <span className="small" style={{ color: 'var(--vp-amber-700, #b45309)' }}>📎 Exige</span> : <span className="small muted">—</span>)}
+                    </td>
                     <td className="text-right" style={{ whiteSpace: 'nowrap' }}>
                       <b>{cvFmtNum(comprada)}</b>
                       {comprada > 0 && dif !== 0 && <div className="small" style={{ color: dif > 0 ? 'var(--vp-success, #15803d)' : 'var(--vp-amber-700, #b45309)' }}>{dif > 0 ? '+' : ''}{cvFmtNum(dif)} vs pedido</div>}
@@ -749,6 +792,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                 <tr>
                   <td colSpan={4} style={{ fontWeight: 800 }}>Total por fornecedor</td>
                   {convites.map((cv) => { const g = calc.porConvite[cv.id]; return <td key={cv.id}>{g ? <><b>{cvFmtMoeda(g.totalOriginal, cv.moeda)}</b>{g.totalBRL != null && cv.moeda !== 'BRL' && <div className="small muted">≈ {cvFmtMoeda(g.totalBRL, 'BRL')}</div>}</> : <span className="muted">—</span>}</td>; })}
+                  <td />
                   <td className="text-right"><b>{calc.totalBRL != null ? cvFmtMoeda(calc.totalBRL, 'BRL') : (cambioNum > 0 ? '—' : 'informe o câmbio')}</b></td>
                 </tr>
               </tfoot>

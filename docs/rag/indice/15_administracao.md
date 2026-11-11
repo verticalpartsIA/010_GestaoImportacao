@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/15_administracao.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 01/11/2026 (origin/main `c0d5db5`)
-- **Palavras:** 3598 · **blocos:** 78 · **seções com selo próprio:** 30 de 36
-- **Origem do selo dos blocos:** próprio 44 · da seção 11 · da seção-pai 0 · do cabeçalho 4 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 19
-- **Selo efetivo dos blocos:** Conferido 38 · Herdado 14 · Não verificado 7
+- **Palavras:** 3946 · **blocos:** 78 · **seções com selo próprio:** 31 de 36
+- **Origem do selo dos blocos:** próprio 45 · da seção 11 · da seção-pai 0 · do cabeçalho 3 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 19
+- **Selo efetivo dos blocos:** Conferido 37 · Herdado 14 · Não verificado 8
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -48,7 +48,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-6 Edge Functions: inventário e regras de deploy | `docs/modulos/15_administracao.md#pc-6-edge-functions-inventário-e-regras-de-deploy` | 2 | Herdado (misto (vale o mais fraco)) | 1 | b1 |
 | PC-7 Crons, buckets e integrações | `docs/modulos/15_administracao.md#pc-7-crons-buckets-e-integrações` | 2 | Conferido (uniforme) | 3 | b2 s1 |
 | PC-8 Tabelas | `docs/modulos/15_administracao.md#pc-8-tabelas` | 2 | — | 1 | c1 |
-| PC-9 Navegação, cache, CI e testes | `docs/modulos/15_administracao.md#pc-9-navegação-cache-ci-e-testes` | 2 | — | 1 | c1 |
+| PC-9 Navegação, cache, CI e testes | `docs/modulos/15_administracao.md#pc-9-navegação-cache-ci-e-testes` | 2 | Não verificado (misto (vale o mais fraco)) | 1 | b1 |
 | PC-10 Menu "?" e tutoriais | `docs/modulos/15_administracao.md#pc-10-menu--e-tutoriais` | 2 | Não verificado (uniforme) | 1 | b1 |
 | PC-11 Documentos soltos e destino do que foi concatenado | `docs/modulos/15_administracao.md#pc-11-documentos-soltos-e-destino-do-que-foi-concatenado` | 2 | — | 1 | c1 |
 | PC-12 Benefícios trocados com os outros módulos | `docs/modulos/15_administracao.md#pc-12-benefícios-trocados-com-os-outros-módulos` | 2 | Conferido (uniforme) | 2 | b2 |

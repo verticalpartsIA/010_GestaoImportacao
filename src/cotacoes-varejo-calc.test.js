@@ -73,3 +73,20 @@ test('faixas fora de ordem: preço que sobe com a quantidade é avisado (3,70 ->
   assert.equal(salto.tipo, 'salto');
   assert.equal(salto.para.min, 10);
 });
+
+test('cesta: separa itens novos, repetidos no lote e repetidos na própria seleção', () => {
+  const r = C.itensParaAdicionar(
+    [{ codigo: 'vper-1', quantidade: 5 }, { codigo: 'VPER-2', quantidade: 0 }, { codigo: ' VPER-1 ', quantidade: 9 }, { codigo: 'VPER-3', quantidade: 2 }, { codigo: '', quantidade: 1 }],
+    [{ codigo: 'vper-3' }]
+  );
+  assert.deepEqual(r.novos.map((i) => i.codigo), ['VPER-1', 'VPER-2']);
+  assert.equal(r.novos[0].quantidade, 5, 'a 1ª ocorrência vale, a repetida não sobrescreve');
+  assert.deepEqual(r.ignorados, ['VPER-3']);
+});
+
+test('cesta: só lote em rascunho aceita produto', () => {
+  assert.equal(C.loteAceitaItens({ status: 'rascunho' }), true);
+  assert.equal(C.loteAceitaItens({ status: 'em_cotacao' }), false);
+  assert.equal(C.loteAceitaItens({ status: 'aprovado' }), false);
+  assert.equal(C.loteAceitaItens(null), false);
+});

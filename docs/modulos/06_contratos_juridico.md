@@ -163,6 +163,7 @@ A tela onde o contrato de venda é **criado, enviado ao cliente para assinatura 
 
 ### 6.1.11 Histórico
 (Herdado do `CLAUDE.md`, não reconferido data a data.) O número passou a herdar o da cotação em 27/08/2026; o desenho de instalação enviado à parte e o PDF no layout da minuta, em 29/09; o "Salvar rascunho", em 30/09; o texto foi alinhado às minutas de 30/09 e 01/10; a lista de destinatários com link próprio, em 01/10 (depois do caso AKAI); a assinatura passou a ser feita por funções do servidor e o bloco de assinaturas digitais entrou no PDF em 05/10; a tabela foi fechada ao público em 13/10/2026.
+- **11/11/2026 (selo OEA):** o PDF do Contrato de Venda ganhou o selo acima da faixa do rodapé, alinhado à margem esquerda, em todas as páginas. Selo **OEA Conformidade – Qualificado** (versão original, texto azul, em português), arte em `assets/selo-oea-conformidade-qualificado.png`, conforme o manual do selo OEA da Receita Federal (v2.0): uso só com certificado ativo e no nível concedido (a modalidade foi informada pelo Gelson; **não conferida** no Sistema OEA), sem deformar, recolorir ou aplicar efeitos. Em caso de alteração de nível ou exclusão, trocar/retirar o arquivo e rebuildar. **Conferido** gerando o PDF no Chromium; layout do instalador **não** aberto no navegador.
 
 ---
 

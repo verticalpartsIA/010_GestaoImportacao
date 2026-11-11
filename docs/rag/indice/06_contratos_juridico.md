@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/06_contratos_juridico.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `53e05d6`)
-- **Palavras:** 11039 · **blocos:** 237 · **seções com selo próprio:** 35 de 48
-- **Origem do selo dos blocos:** próprio 62 · da seção 115 · da seção-pai 0 · do cabeçalho 36 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 24
-- **Selo efetivo dos blocos:** Conferido 172 · Herdado 22 · Não verificado 19
+- **Palavras:** 11141 · **blocos:** 238 · **seções com selo próprio:** 35 de 48
+- **Origem do selo dos blocos:** próprio 63 · da seção 115 · da seção-pai 0 · do cabeçalho 36 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 24
+- **Selo efetivo dos blocos:** Conferido 173 · Herdado 22 · Não verificado 19
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -27,7 +27,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 6.1.8 Regras e armadilhas | `docs/modulos/06_contratos_juridico.md#618-regras-e-armadilhas` | 3 | — | 11 | c11 |
 | 6.1.9 Testes | `docs/modulos/06_contratos_juridico.md#619-testes` | 3 | Conferido (uniforme) | 7 | b1 s6 |
 | 6.1.10 Pendências e decisões | `docs/modulos/06_contratos_juridico.md#6110-pendências-e-decisões` | 3 | Não verificado (misto (vale o mais fraco)) | 15 | b9 s6 |
-| 6.1.11 Histórico | `docs/modulos/06_contratos_juridico.md#6111-histórico` | 3 | Herdado (uniforme) | 1 | b1 |
+| 6.1.11 Histórico | `docs/modulos/06_contratos_juridico.md#6111-histórico` | 3 | Herdado (misto (vale o mais fraco)) | 2 | b2 |
 | 6.2 Aval Jurídico | `docs/modulos/06_contratos_juridico.md#62-aval-jurídico` | 2 | — | 0 | — |
 | 6.2.1 O que é | `docs/modulos/06_contratos_juridico.md#621-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 6.2.2 Rota e arquivos | `docs/modulos/06_contratos_juridico.md#622-rota-e-arquivos` | 3 | Conferido (uniforme) | 2 | b2 |

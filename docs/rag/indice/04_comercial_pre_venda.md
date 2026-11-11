@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/04_comercial_pre_venda.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `746db79`)
-- **Palavras:** 20194 · **blocos:** 324 · **seções com selo próprio:** 49 de 85
-- **Origem do selo dos blocos:** próprio 93 · da seção 141 · da seção-pai 13 · do cabeçalho 52 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
-- **Selo efetivo dos blocos:** Conferido 188 · Herdado 74 · Não verificado 37
+- **Palavras:** 20523 · **blocos:** 328 · **seções com selo próprio:** 50 de 85
+- **Origem do selo dos blocos:** próprio 96 · da seção 145 · da seção-pai 10 · do cabeçalho 52 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
+- **Selo efetivo dos blocos:** Conferido 192 · Herdado 74 · Não verificado 37
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -18,7 +18,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | Glossário (módulo Comercial \| Pré-venda) | `docs/modulos/04_comercial_pre_venda.md#glossário-módulo-comercial--pré-venda` | 2 | meta | 16 | m16 |
 | 4.1 Formulários | `docs/modulos/04_comercial_pre_venda.md#41-formulários` | 2 | Conferido (uniforme) | 1 | b1 |
 | 4.1.1 O que é | `docs/modulos/04_comercial_pre_venda.md#411-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
-| 4.1.2 Rota e arquivos | `docs/modulos/04_comercial_pre_venda.md#412-rota-e-arquivos` | 3 | Conferido (uniforme) | 6 | b2 s4 |
+| 4.1.2 Rota e arquivos | `docs/modulos/04_comercial_pre_venda.md#412-rota-e-arquivos` | 3 | Conferido (uniforme) | 7 | b2 s5 |
 | 4.1.3 Perfil e acesso | `docs/modulos/04_comercial_pre_venda.md#413-perfil-e-acesso` | 3 | Conferido (uniforme) | 6 | b1 s5 |
 | 4.1.4 O que a tela mostra | `docs/modulos/04_comercial_pre_venda.md#414-o-que-a-tela-mostra` | 3 | Conferido (uniforme) | 11 | b1 s10 |
 | 4.1.5 Botões e controles | `docs/modulos/04_comercial_pre_venda.md#415-botões-e-controles` | 3 | Conferido (uniforme) | 9 | b1 s8 |
@@ -27,7 +27,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 4.1.8 Regras e armadilhas | `docs/modulos/04_comercial_pre_venda.md#418-regras-e-armadilhas` | 3 | Herdado (misto (vale o mais fraco)) | 12 | b3 s9 |
 | 4.1.9 Testes | `docs/modulos/04_comercial_pre_venda.md#419-testes` | 3 | Herdado (misto (vale o mais fraco)) | 2 | b1 s1 |
 | 4.1.10 Pendências e decisões | `docs/modulos/04_comercial_pre_venda.md#4110-pendências-e-decisões` | 3 | Não verificado (misto (vale o mais fraco)) | 14 | b8 s6 |
-| 4.1.11 Histórico | `docs/modulos/04_comercial_pre_venda.md#4111-histórico` | 3 | — | 3 | p3 |
+| 4.1.11 Histórico | `docs/modulos/04_comercial_pre_venda.md#4111-histórico` | 3 | Conferido (uniforme) | 4 | b1 s3 |
 | 4.2 Controle de Cotações | `docs/modulos/04_comercial_pre_venda.md#42-controle-de-cotações` | 2 | — | 0 | — |
 | 4.2.1 O que é | `docs/modulos/04_comercial_pre_venda.md#421-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 4.2.2 Rota e arquivos | `docs/modulos/04_comercial_pre_venda.md#422-rota-e-arquivos` | 3 | Conferido (uniforme) | 2 | b1 s1 |
@@ -75,7 +75,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 4.5.8 Regras e armadilhas | `docs/modulos/04_comercial_pre_venda.md#458-regras-e-armadilhas` | 3 | Herdado (misto (vale o mais fraco)) | 11 | b6 s5 |
 | 4.5.9 Testes | `docs/modulos/04_comercial_pre_venda.md#459-testes` | 3 | — | 7 | c7 |
 | 4.5.10 Pendências e decisões | `docs/modulos/04_comercial_pre_venda.md#4510-pendências-e-decisões` | 3 | Não verificado (misto (vale o mais fraco)) | 15 | b8 s7 |
-| 4.5.11 Histórico | `docs/modulos/04_comercial_pre_venda.md#4511-histórico` | 3 | Conferido (uniforme) | 2 | b1 s1 |
+| 4.5.11 Histórico | `docs/modulos/04_comercial_pre_venda.md#4511-histórico` | 3 | Conferido (uniforme) | 4 | b3 s1 |
 | 4.6 Contratos Social | `docs/modulos/04_comercial_pre_venda.md#46-contratos-social` | 2 | — | 0 | — |
 | 4.6.1 O que é | `docs/modulos/04_comercial_pre_venda.md#461-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 4.6.2 Rota e arquivos | `docs/modulos/04_comercial_pre_venda.md#462-rota-e-arquivos` | 3 | Conferido (uniforme) | 1 | b1 |

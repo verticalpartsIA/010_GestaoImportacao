@@ -29,6 +29,7 @@ const ROUTE_TITLE = {
   "fabricacao-corrimao": "Fabricação Corrimão",
   "fabricacao-corte": "Fabricação Corte",
   "quadros-pedidos": "Quadros de Comando · Pedidos",
+  "quadros-formularios-respondidos": "Quadros de Comando · Formulários Respondidos",
   "quadros-separacao": "Quadros de Comando · Separação PV QC",
   "quadros-separacao-fab": "Quadros de Comando · Separação FAB QC",
   "quadros-calculadora-cabos": "Quadros de Comando · Calculadora de Cabos",
@@ -38,6 +39,7 @@ const ROUTE_TITLE = {
   separacao: "Separação",
   etiquetas: "Etiquetas",
   "emissao-nf": "Emissão de NF",
+  "boletos-avisos": "Boletos Avisos",
   pcp: "PCP — Planejamento e Controle da Produção",
   mes: "MES — Sistema de Execução da Manufatura",
   leads: "Pipeline de Leads",
@@ -426,6 +428,7 @@ function App() {
       case "separacao": return <window.SeparacaoPage/>;
       case "etiquetas": return <window.EtiquetasPage/>;
       case "emissao-nf": return <window.EmissaoNFPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "boletos-avisos": return <window.BoletosAvisosPage/>;
       case "relatorios-pcp": return <window.RelatoriosPCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "simulacao-producao": return <window.SimulacaoProducaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "montagem-produto": return <window.MontagemProdutoPage setRoute={setRoute} setSubsel={setSubsel}/>;
@@ -433,6 +436,7 @@ function App() {
       case "fabricacao-corrimao": return <window.FabricacaoCorrimaoPage/>;
       case "fabricacao-corte": return <window.FabricacaoCortePage/>;
       case "quadros-pedidos": return <window.QuadrosPedidosPage/>;
+      case "quadros-formularios-respondidos": return <window.FormulariosRespondidosPage/>;
       case "quadros-separacao": return <window.QuadrosSeparacaoPage/>;
       case "quadros-separacao-fab": return <window.QuadrosSeparacaoFabPage/>;
       case "quadros-calculadora-cabos": return <window.CalculadoraCabosPage/>;

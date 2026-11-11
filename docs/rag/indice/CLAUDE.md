@@ -5,7 +5,7 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `CLAUDE.md#âncora`. Em divergência vale a origem.
 
 - **Selo:** não se aplica (CLAUDE.md não é documento de módulo; o Art. 6 vale para `docs/modulos/`).
-- **Palavras:** 87416 · **blocos:** 1330
+- **Palavras:** 87495 · **blocos:** 1331
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -34,7 +34,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | Módulo 1 — Geral → docs/modulos/01_geral.md (fonte da verdade) | `CLAUDE.md#módulo-1--geral--docsmodulos01_geralmd-fonte-da-verdade` | 2 | — | 4 | m4 |
 | Módulo 2 — CRM → docs/modulos/02_crm.md (fonte da verdade; aprovado em 31/10/2026) | `CLAUDE.md#módulo-2--crm--docsmodulos02_crmmd-fonte-da-verdade-aprovado-em-31102026` | 2 | — | 4 | m4 |
 | Módulo 3 — Cadastros Mestres → docs/modulos/03_cadastros_mestres.md (fonte da verdade; aprovado em 31/10/2026) | `CLAUDE.md#módulo-3--cadastros-mestres--docsmodulos03_cadastros_mestresmd-fonte-da-verdade-aprovado-em-31102026` | 2 | — | 4 | m4 |
-| Módulo 4 — Comercial \| Pré-venda → docs/modulos/04_comercial_pre_venda.md (fonte da verdade; aprovado em 31/10/2026) | `CLAUDE.md#módulo-4--comercial--pré-venda--docsmodulos04_comercial_pre_vendamd-fonte-da-verdade-aprovado-em-31102026` | 2 | — | 4 | m4 |
+| Módulo 4 — Comercial \| Pré-venda → docs/modulos/04_comercial_pre_venda.md (fonte da verdade; aprovado em 31/10/2026) | `CLAUDE.md#módulo-4--comercial--pré-venda--docsmodulos04_comercial_pre_vendamd-fonte-da-verdade-aprovado-em-31102026` | 2 | — | 5 | m5 |
 | Módulo 5 — Financeiro & Preços → docs/modulos/05_financeiro_precos.md (fonte da verdade; aprovado em 31/10/2026) | `CLAUDE.md#módulo-5--financeiro--preços--docsmodulos05_financeiro_precosmd-fonte-da-verdade-aprovado-em-31102026` | 2 | — | 4 | m4 |
 | Módulo 6 — Contratos & Jurídico → docs/modulos/06_contratos_juridico.md (fonte da verdade; aprovado em 31/10/2026) | `CLAUDE.md#módulo-6--contratos--jurídico--docsmodulos06_contratos_juridicomd-fonte-da-verdade-aprovado-em-31102026` | 2 | — | 5 | m5 |
 | Módulo 7 — Suprimentos & Importação → docs/modulos/07_suprimentos_importacao.md (fonte da verdade; aprovado em 31/10/2026) | `CLAUDE.md#módulo-7--suprimentos--importação--docsmodulos07_suprimentos_importacaomd-fonte-da-verdade-aprovado-em-31102026` | 2 | — | 4 | m4 |
