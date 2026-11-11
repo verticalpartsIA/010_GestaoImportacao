@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=1">
 
   <link rel="stylesheet" href="/colors_and_type.css?v=1">
-  <link rel="stylesheet" href="/styles/contrato-instalador.css?v=13">
+  <link rel="stylesheet" href="/styles/contrato-instalador.css?v=14">
   <link rel="stylesheet" href="/styles/contrato-venda.css?v=4">
   <link rel="stylesheet" href="/styles/proposta-editor.css?v=20">
   <style>
@@ -59,7 +59,7 @@
   <!-- Distrato do Contrato do Instalador (30/10/2026) — token próprio da Contratada
        + fila de ciência (Diego/Juliana/Maurício) via documento_signatarios. -->
   <script src="/src/contrato-instalador-distrato-store.js?v=1"></script>
-  <script type="text/babel" src="/src/contrato-instalador-preview.jsx?v=7"></script>
+  <script type="text/babel" src="/src/contrato-instalador-preview.jsx?v=8"></script>
   <script src="/src/contrato-venda-engine.js?v=15"></script>
   <!-- Signatários com token individual — genérico (Proposta/Contrato Venda/Contrato
        Instalador), ver documento-signatarios-store.js. Precisa vir ANTES de
@@ -89,13 +89,13 @@
        impressão do navegador, justamente o caminho que gerava a página em
        branco (achado 21/08: o cliente recebia um PDF pior que o do
        vendedor). Ver pdf-bundle/proposta-reactpdf.entry.js. -->
-  <script src="/src/proposta-reactpdf.bundle.js?v=28"></script>
+  <script src="/src/proposta-reactpdf.bundle.js?v=29"></script>
   <script type="text/babel" src="/src/proposta-preview.jsx?v=31"></script>
 
   <!-- Motor de PDF do Contrato de Venda (react-pdf) — layout idêntico à minuta
        oficial, com cabeçalho/rodapé em toda página. Ver
        pdf-bundle/contrato-venda-reactpdf.entry.js. -->
-  <script src="/src/contrato-venda-reactpdf.bundle.js?v=5"></script>
+  <script src="/src/contrato-venda-reactpdf.bundle.js?v=6"></script>
 
   <!-- App unificado de assinatura (auto-detecta o tipo pelo token) -->
   <script type="text/babel" src="/src/assinar-app.jsx?v=28"></script>

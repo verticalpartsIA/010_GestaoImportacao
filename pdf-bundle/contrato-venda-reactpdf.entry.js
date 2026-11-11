@@ -79,6 +79,9 @@ const S = StyleSheet.create({
   },
   header: { position: 'absolute', top: 0, left: 0, width: PAGE_W, height: HEADER_H },
   footer: { position: 'absolute', bottom: 0, left: 0, width: PAGE_W, height: FOOTER_H },
+  /* Selo OEA (Conformidade – Qualificado): na folga de 36pt acima da faixa
+     do rodapé, alinhado à margem esquerda do texto. Proporção nativa 900x435. */
+  selo: { position: 'absolute', bottom: FOOTER_H + 3, left: MARGEM_ESQ, width: 30 * 2.069, height: 30, objectFit: 'contain' },
 
   titulo: { fontSize: 12, fontWeight: BOLD, textAlign: 'center', textDecoration: 'underline', marginBottom: 34 },
   numero: { fontWeight: BOLD, textAlign: 'right', textDecoration: 'underline', marginBottom: 34 },
@@ -359,7 +362,7 @@ function Testemunhas() {
 }
 
 /* ---------- Imagens (cabeçalho/rodapé da minuta) ---------- */
-const IMG = { cabecalho: null, rodape: null };
+const IMG = { cabecalho: null, rodape: null, selo: null };
 const _imgCache = new Map();
 async function carregarImagem(caminho) {
   if (_imgCache.has(caminho)) return _imgCache.get(caminho);
@@ -387,6 +390,8 @@ async function montarDocumento(doc, assinaturas) {
       .catch((e) => { IMG.cabecalho = null; montarDocumento.ultimasFalhas.push(e.message); }),
     carregarImagem('assets/contrato-venda-rodape.png').then((u) => { IMG.rodape = u; })
       .catch((e) => { IMG.rodape = null; montarDocumento.ultimasFalhas.push(e.message); }),
+    carregarImagem('assets/selo-oea-conformidade-qualificado.png').then((u) => { IMG.selo = u; })
+      .catch((e) => { IMG.selo = null; montarDocumento.ultimasFalhas.push(e.message); }),
   ]);
 
   const corpo = [
@@ -400,6 +405,7 @@ async function montarDocumento(doc, assinaturas) {
   const pagina = h(Page, { size: 'A4', style: S.page }, [
     IMG.cabecalho ? h(Image, { key: 'cab', src: IMG.cabecalho, style: S.header, fixed: true }) : null,
     IMG.rodape ? h(Image, { key: 'rod', src: IMG.rodape, style: S.footer, fixed: true }) : null,
+    IMG.selo ? h(Image, { key: 'selo', src: IMG.selo, style: S.selo, fixed: true }) : null,
     ...corpo,
   ]);
   return h0(Document, { title: doc.numero ? `Contrato ${doc.numero}` : 'Contrato' }, pagina);
