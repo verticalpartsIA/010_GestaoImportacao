@@ -524,6 +524,51 @@ function FtAddCategoryModal({ onAdd, onClose }) {
 }
 
 /* ============================================================
+   TROCAR VALORES — pares "de → para" aplicados na ficha em edição,
+   com prévia da contagem antes de aplicar. Nada é gravado aqui.
+   ============================================================ */
+function FtTrocarModal({ state, onApply, onClose }) {
+  const [pares, setPares] = _ftUS([{ de: '', para: '' }]);
+  const [ic, setIc] = _ftUS(false);
+  const prev = _ftUM(() => window.FT.substituirEmFicha(state, pares, { ignorarCaixa: ic }), [state, pares, ic]);
+  const setPar = (i, k, v) => setPares((a) => a.map((p, j) => j === i ? { ...p, [k]: v } : p));
+  const inp = { padding: '7px 9px', border: '1px solid var(--ft-border-strong, #ccc)', borderRadius: 6, font: 'inherit', width: '100%' };
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Trocar valores" onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 10, padding: 20, width: 'min(640px, 100%)', maxHeight: '90vh', overflow: 'auto' }}>
+        <h3 style={{ margin: '0 0 4px' }}>Trocar valores na ficha</h3>
+        <p style={{ margin: '0 0 12px', fontSize: 12, color: '#555' }}>
+          Troca texto exato em nome, descrições, part number, marca, modelo, Descrição DUIMP e no valor dos campos técnicos.
+          <strong> Não mexe no código do produto nem no SKU</strong> — digite o código no campo próprio.
+        </p>
+        {pares.map((p, i) => (
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginBottom: 6 }}>
+            <input style={inp} placeholder="Trocar (ex.: 380Vac)" value={p.de} onChange={(e) => setPar(i, 'de', e.target.value)} aria-label={'Trocar ' + (i + 1)}/>
+            <input style={inp} placeholder="Por (ex.: 220Vac)" value={p.para} onChange={(e) => setPar(i, 'para', e.target.value)} aria-label={'Por ' + (i + 1)}/>
+            <button className="ft-btn ghost" disabled={pares.length === 1} onClick={() => setPares((a) => a.filter((_, j) => j !== i))} title="Remover este par">✕</button>
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center', margin: '8px 0 12px', fontSize: 13 }}>
+          <button className="ft-btn ghost" onClick={() => setPares((a) => [...a, { de: '', para: '' }])}>+ Outro par</button>
+          <label><input type="checkbox" checked={ic} onChange={(e) => setIc(e.target.checked)}/> Ignorar maiúsculas/minúsculas</label>
+        </div>
+        <div style={{ background: '#f6f6f6', borderRadius: 8, padding: 10, fontSize: 13, minHeight: 40 }} aria-live="polite">
+          {prev.total === 0
+            ? 'Nenhuma ocorrência encontrada.'
+            : (<><strong>{prev.total} ocorrência(s)</strong> em {prev.mudou.length} campo(s):
+                <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{prev.mudou.map((m, i) => <li key={i}>{m.campo} — {m.n}</li>)}</ul></>)}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+          <button className="ft-btn ghost" onClick={onClose}>Cancelar</button>
+          <button className={'ft-btn primary' + (prev.total ? '' : ' off')} disabled={!prev.total} onClick={() => onApply(prev.state, prev.total)}>Aplicar na ficha</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
    GENERATOR (wizard universal) — sub-componente da página
    ============================================================ */
 function FtGenerator({ initial, onSaved, onCancel, setRoute, setSubsel }) {
@@ -532,6 +577,7 @@ function FtGenerator({ initial, onSaved, onCancel, setRoute, setSubsel }) {
   const [modal, setModal] = _ftUS(null);
   const [overlay, setOverlay] = _ftUS(false);
   const [saving, setSaving] = _ftUS(false);
+  const [trocando, setTrocando] = _ftUS(false);
   const previewWrap = _ftUR(null);
   const [scale, setScale] = _ftUS(0.42);
   /* Alçada — Configurações › Administração › Engenharia › Ficha Técnica ›
@@ -670,7 +716,7 @@ function FtGenerator({ initial, onSaved, onCancel, setRoute, setSubsel }) {
       const old = state.midia[slot];
       setState((s) => ({ ...s, midia: { ...s.midia, [slot]: null } }));
       // Apaga do Storage se for path (não dataURL legado)
-      if (window.FTImg && window.FTImg.isStoragePath(old)) {
+      if (window.FTImg && window.FTImg.isStoragePath(old) && window.FTImg.ehDaFicha(old, state.__id)) {
         window.FTImg.remove(old).catch((err) => console.warn('remove falhou', err));
       }
       return;
@@ -710,10 +756,24 @@ function FtGenerator({ initial, onSaved, onCancel, setRoute, setSubsel }) {
     if (!podeGerar || saving) return;
     setSaving(true);
     try {
-      const editando = !!(initial && initial.__id);
+      const copia = !!(initial && initial.__copiaDe);
+      const editando = !!(initial && initial.__id) && !copia;
+      let stSalvar = state;
+      if (copia) {
+        /* a cópia ganha os PRÓPRIOS arquivos: se falhar, não salva (nunca fica apontando para a foto da original) */
+        const midia = { ...(state.midia || {}) };
+        for (const slot of ['foto', 'desenho']) {
+          const v = midia[slot];
+          if (window.FTImg && window.FTImg.isStoragePath(v) && !window.FTImg.ehDaFicha(v, state.__id)) {
+            midia[slot] = await window.FTImg.copiarPara(v, state.__id);
+          }
+        }
+        stSalvar = { ...state, midia };
+        setState(stSalvar);
+      }
       const rec = editando
-        ? await window.FTStore.update(initial.__id, state)
-        : await window.FTStore.createDraft(state);
+        ? await window.FTStore.update(initial.__id, stSalvar)
+        : await window.FTStore.createDraft(stSalvar);
       /* Histórico do funil (quem criou/editou, quando) — best-effort */
       if (window.FWFStore && rec) {
         const ator = window.FWFStore.atorAtual();
@@ -734,6 +794,8 @@ function FtGenerator({ initial, onSaved, onCancel, setRoute, setSubsel }) {
 
   return (
     <div className="ft-gen-shell">
+      {trocando && <FtTrocarModal state={state} onClose={() => setTrocando(false)}
+        onApply={(novo, n) => { setState(novo); setTrocando(false); window.toast?.('✅ ' + n + ' ocorrência(s) trocada(s). Confira e clique em Salvar ficha.', 'success'); }}/>}
       <div className="ft-namebar">
         <label className="ft-name">
           <span>Nome do produto <i>*</i></span>
@@ -745,6 +807,12 @@ function FtGenerator({ initial, onSaved, onCancel, setRoute, setSubsel }) {
             <span><strong>Campos faltando:</strong> revise campos com <i>*</i> e Descrição Técnica</span>
           </div>
         )}
+        {state.__copiaDe && (
+          <span className="ft-omie-status is-pend" role="status" title="Nada foi gravado ainda: clique em Salvar ficha">
+            Cópia de {state.__copiaDe.numero || 'outra ficha'} — ainda não salva
+          </span>
+        )}
+        <button className="ft-btn ghost" onClick={() => setTrocando(true)} title="Trocar um texto/valor em toda a ficha (ex.: 380Vac → 220Vac)">⇄ Trocar valores</button>
         <button className="ft-btn ghost" onClick={onCancel}>Cancelar</button>
         <button className={'ft-btn primary' + (podeGerar ? '' : ' off')} disabled={!podeGerar || saving} onClick={handleSalvar}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
@@ -1038,7 +1106,7 @@ function FtGenerator({ initial, onSaved, onCancel, setRoute, setSubsel }) {
 /* ============================================================
    DASHBOARD — listagem das fichas
    ============================================================ */
-function FtDashboard({ onNew, onOpen }) {
+function FtDashboard({ onNew, onOpen, onCopy }) {
   const [fichas, setFichas] = _ftUS([]);
   const [loading, setLoading] = _ftUS(true);
   const [query, setQuery] = _ftUS('');
@@ -1115,6 +1183,7 @@ function FtDashboard({ onNew, onOpen }) {
                   <td className="ft-cell-time">{window.FTStore.relative(f.criado_em)}</td>
                   <td style={{textAlign:'right'}}>
                     <button className="ft-mini-btn" onClick={() => onOpen(f)}>Abrir</button>
+                    <button className="ft-mini-btn" onClick={() => onCopy(f)} title="Abre uma ficha nova com os dados desta (sem código); nada é gravado até salvar">Copiar</button>
                     <button className="ft-mini-btn ft-mini-btn--danger" onClick={() => setDelTarget(f)}>Excluir</button>
                   </td>
                 </tr>
@@ -1216,6 +1285,14 @@ function FichaTecnicaPage({ fichaId, setRoute, setSubsel }) {
     if (window.VpRouter && ficha.id) window.VpRouter.navigate('ficha-tecnica', ficha.id);
   };
 
+  /* Copiar: abre o editor NOVO com os dados da ficha (sem código; fotos copiadas só ao salvar).
+     Não navega para /nova-ficha-tecnica: aquela rota limpa o editor. */
+  const handleCopy = (ficha) => {
+    setInitial(window.FT.copiarFicha(ficha));
+    setView('nova');
+    window.toast?.('Cópia aberta — nada foi gravado. Digite o código do produto, ajuste (⇄ Trocar valores) e salve.', 'info');
+  };
+
   /* Deep-link via URL: /engenharia/ficha-tecnica/nova-ficha-tecnica abre direto o editor */
   _ftUE(() => {
     if (!libReady) return;
@@ -1274,7 +1351,7 @@ function FichaTecnicaPage({ fichaId, setRoute, setSubsel }) {
       </div>
       <div className="ci-page-body">
         {view === 'painel'
-          ? <FtDashboard onNew={() => { setInitial(null); setView('nova'); }} onOpen={handleOpen}/>
+          ? <FtDashboard onNew={() => { setInitial(null); setView('nova'); }} onOpen={handleOpen} onCopy={handleCopy}/>
           : <FtGenerator initial={initial} setRoute={setRoute} setSubsel={setSubsel} onSaved={() => { setView('painel'); setInitial(null); }} onCancel={() => { setView('painel'); setInitial(null); }}/>}
       </div>
     </div>
