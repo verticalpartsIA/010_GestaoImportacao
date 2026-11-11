@@ -1787,7 +1787,7 @@ async function ciBaixarPdf(recLeve) {
 
     // blocos "atômicos" — nunca partidos ao meio entre 2 páginas
     const cssToCanvas = canvas.width / sheetBox.width;
-    const atoms = Array.from(sheetEl.querySelectorAll('.ci-doc-clause, .ci-doc-sign-block, .ci-doc-digital, .ci-doc-witness'))
+    const atoms = Array.from(sheetEl.querySelectorAll('.ci-doc-clause, .ci-doc-sign-block, .ci-doc-digital, .ci-doc-witness, .ci-doc-selo'))
       .map((el) => {
         const r = el.getBoundingClientRect();
         return { top: Math.round((r.top - sheetBox.top) * cssToCanvas), bottom: Math.round((r.bottom - sheetBox.top) * cssToCanvas) };

@@ -238,6 +238,8 @@
 .ci-doc-meta-label { font-size: 8pt; color: #555; font-family: Arial, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
 .ci-doc-meta-num { font-size: 11pt; font-weight: 800; font-family: 'Courier New', monospace; }
 .ci-doc-title { text-align: center; font-family: Arial, sans-serif; font-size: 13.5pt; font-weight: 700; margin: 6pt 0 14pt; letter-spacing: .02em; }
+.ci-doc-selo { margin-top: 22pt; padding-top: 8pt; text-align: left; }
+.ci-doc-selo img { height: 48px; width: auto; display: block; }
 .ci-doc-p { text-align: justify; margin: 8pt 0; }
 .ci-doc-intro { margin-top: 12pt; }
 .ci-doc-e { text-align: left; margin: 4pt 0; }

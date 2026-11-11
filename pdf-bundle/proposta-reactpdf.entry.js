@@ -72,7 +72,7 @@ const pt = (px) => Math.round(px * 0.75 * 100) / 100;
 
 function montarStyles() {
   return StyleSheet.create({
-    page: { fontFamily: 'Inter', fontSize: pt(15.5), color: TXT, paddingTop: pt(63), paddingBottom: pt(120), paddingLeft: pt(58), paddingRight: pt(58) },
+    page: { fontFamily: 'Inter', fontSize: pt(15.5), color: TXT, paddingTop: pt(63), paddingBottom: pt(160), paddingLeft: pt(58), paddingRight: pt(58) },
     pageNoPad: { fontFamily: 'Inter', padding: 0 },
 
     // Capa
@@ -112,6 +112,7 @@ function montarStyles() {
     headerNumVal: { fontSize: pt(19), fontWeight: 800, color: NAVY, marginTop: pt(4), textAlign: 'right' },
 
     footer: { position: 'absolute', bottom: 0, left: 0, right: 0 },
+    footerSelo: { position: 'absolute', top: -pt(44), left: pt(58), width: pt(44 * 2.069), height: pt(44), objectFit: 'contain' },
     footerInfo: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: pt(58), paddingTop: pt(17), paddingBottom: pt(13) },
     footerCol: { fontSize: pt(12.5), color: '#444', lineHeight: 1.5, flex: 1 },
     footerBar: { height: pt(13), flexDirection: 'row' },
@@ -180,7 +181,7 @@ function montarStyles() {
 /* Imagens já resolvidas em data URI, preenchidas por montarDocumento()
    antes de qualquer página ser montada. As funções de página leem daqui
    em vez de receber mais um parâmetro em 13 assinaturas. */
-const IMG = { logo: null, capa: null };
+const IMG = { logo: null, capa: null, selo: null };
 
 const _imgCache = new Map();
 async function carregarImagem(caminho) {
@@ -250,6 +251,10 @@ function PdfHeader(S, numero) {
 }
 function PdfFooter(S) {
   return h(View, { style: S.footer, fixed: true }, [
+    /* Selo OEA acima do rodapé, alinhado à margem esquerda (absoluto, para
+       fora do fluxo; o paddingBottom da página reserva o espaço). Proporção
+       nativa 900x435; sempre width+height explícitos (ver headerLogo). */
+    IMG.selo ? h(Image, { key: 'selo', src: IMG.selo, style: S.footerSelo }) : null,
     h(View, { style: S.footerInfo, key: 'i' }, [
       h(Text, { style: S.footerCol, key: '1' }, 'Rua Armandina Braga de Almeida, 383\nJardim Santa Emília\nGuarulhos/SP - CEP 07141-003'),
       h(Text, { style: S.footerCol, key: '2' }, '+55 (11) 2528-6473\n+55 (11) 2528-6479\n+55 (11) 94460-6396'),
@@ -870,6 +875,10 @@ async function montarDocumento(data, assinaturas, eqParam) {
       .catch((e) => { IMG.logo = null; montarDocumento.ultimasFalhas.push(e.message); }),
     carregarImagem(capaArquivo).then((u) => { IMG.capa = u; })
       .catch((e) => { IMG.capa = null; montarDocumento.ultimasFalhas.push(e.message); }),
+    /* Selo OEA (Conformidade – Qualificado), rodapé à esquerda. Falha ao
+       carregar não impede o PDF: só sai sem o selo. */
+    carregarImagem('assets/selo-oea-conformidade-qualificado.png').then((u) => { IMG.selo = u; })
+      .catch((e) => { IMG.selo = null; montarDocumento.ultimasFalhas.push(e.message); }),
   ]);
 
   const OPx = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
