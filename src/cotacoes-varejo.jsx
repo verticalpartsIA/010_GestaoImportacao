@@ -708,6 +708,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
               <tr>
                 <th style={{ width: 64 }}>Foto</th><th>Código</th><th>Descrição</th><th className="text-right">Qtd. pedida</th>
                 {convites.map((cv) => <th key={cv.id}>{cv.fornecedor_nome}<div className="small muted" style={{ fontWeight: 400 }}>{cv.moeda}</div></th>)}
+                <th className="text-center" title="Marque se este item exige certificado: o fornecedor só consegue enviar o preço anexando o arquivo no link">Certificado</th>
                 <th className="text-right">Comprar</th>
               </tr>
             </thead>
@@ -757,10 +758,9 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                       {editavel
                         ? <>
                             <textarea key={it.obs_vp || ''} className="input" rows={(it.obs_vp || '').length > 90 ? 3 : 1} style={{ width: '100%', marginTop: 4, fontSize: 12 }} placeholder="Obs. VerticalParts (o fornecedor lê no portal)" defaultValue={it.obs_vp || ''} onBlur={(e) => { if ((e.target.value || '') !== (it.obs_vp || '')) editarItem(it, 'obs_vp', e.target.value || null); }} />
-                            <label className="small" style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, cursor: 'pointer' }} title="O fornecedor só consegue enviar o preço deste item anexando o certificado"><input type="checkbox" checked={!!it.exige_certificado} onChange={(e) => editarItem(it, 'exige_certificado', e.target.checked)} /> Exige certificado</label>
                             <button className="link-btn" onClick={() => setDescItem(it)} title="Descrição técnica em inglês (e português), com ajuda da IA">{it.obs_vp ? '✎ descrição em inglês' : '+ descrição em inglês (com IA)'}</button>
                           </>
-                        : <>{it.exige_certificado && <div className="small" style={{ color: 'var(--vp-amber-700, #b45309)' }}>📎 Exige certificado</div>}{it.obs_vp ? <div className="small muted" style={{ whiteSpace: 'pre-wrap' }}>{it.obs_vp}</div> : null}</>}
+                        : (it.obs_vp ? <div className="small muted" style={{ whiteSpace: 'pre-wrap' }}>{it.obs_vp}</div> : null)}
                     </td>
                     <td className="text-right">
                       {editavel
@@ -774,6 +774,11 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                           valorQtd={qtd[it.id + '|' + cv.id]} onQtd={(v) => setQ(it.id, cv.id, v)} onTudo={() => setQ(it.id, cv.id, String(it.quantidade_pedida))} />
                       </td>
                     ))}
+                    <td className="text-center">
+                      {editavel
+                        ? <label className="small" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', cursor: 'pointer' }} title="O fornecedor só consegue enviar o preço deste item anexando o certificado"><input type="checkbox" checked={!!it.exige_certificado} onChange={(e) => editarItem(it, 'exige_certificado', e.target.checked)} /> Exigir</label>
+                        : (it.exige_certificado ? <span className="small" style={{ color: 'var(--vp-amber-700, #b45309)' }}>📎 Exige</span> : <span className="small muted">—</span>)}
+                    </td>
                     <td className="text-right" style={{ whiteSpace: 'nowrap' }}>
                       <b>{cvFmtNum(comprada)}</b>
                       {comprada > 0 && dif !== 0 && <div className="small" style={{ color: dif > 0 ? 'var(--vp-success, #15803d)' : 'var(--vp-amber-700, #b45309)' }}>{dif > 0 ? '+' : ''}{cvFmtNum(dif)} vs pedido</div>}
@@ -787,6 +792,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                 <tr>
                   <td colSpan={4} style={{ fontWeight: 800 }}>Total por fornecedor</td>
                   {convites.map((cv) => { const g = calc.porConvite[cv.id]; return <td key={cv.id}>{g ? <><b>{cvFmtMoeda(g.totalOriginal, cv.moeda)}</b>{g.totalBRL != null && cv.moeda !== 'BRL' && <div className="small muted">≈ {cvFmtMoeda(g.totalBRL, 'BRL')}</div>}</> : <span className="muted">—</span>}</td>; })}
+                  <td />
                   <td className="text-right"><b>{calc.totalBRL != null ? cvFmtMoeda(calc.totalBRL, 'BRL') : (cambioNum > 0 ? '—' : 'informe o câmbio')}</b></td>
                 </tr>
               </tfoot>
