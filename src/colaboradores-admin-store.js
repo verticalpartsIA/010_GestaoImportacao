@@ -404,9 +404,15 @@
      mesmo id de profiles/colaboradores_vpsistema) e enriquece
      window.__VP_USER com foto real + os grupos alocados, depois redispara
      o evento pra Shell/sidebar re-renderizarem já com a foto. */
+  /* Uma tentativa por usuário: quem não tem foto cadastrada continuava com avatarUrl vazio, o listener abaixo
+     chamava esta função de novo, que redisparava 'vpprd:user' — loop infinito que remontava Dashboard e Shell
+     (tela "tremendo", 11/11/2026). Só repete se for outro usuário ou se a chamada falhou. */
+  let enriquecidoId = null;
   async function enriquecerUsuarioLogado() {
     const c = sb(); const u = window.__VP_USER;
     if (!c || !u || !u.id || u.id === 'dev-local') return;
+    if (enriquecidoId === u.id) return;
+    enriquecidoId = u.id;
     try {
       const { data: col } = await c.from('colaboradores_vpsistema').select('id, avatar_url, departamento').eq('id', u.id).maybeSingle();
       if (!col) return;
@@ -414,7 +420,7 @@
       window.__VP_USER = { ...u, avatarUrl: col.avatar_url || null, departamentoReal: col.departamento || null, gruposAlocados: (aloc || []).map((a) => a.grupo_modulo) };
       try { sessionStorage.setItem('vpprd_user', JSON.stringify(window.__VP_USER)); } catch (e) {}
       window.dispatchEvent(new CustomEvent('vpprd:user', { detail: window.__VP_USER }));
-    } catch (e) { console.warn('[ColaboradoresAdminStore] enriquecerUsuarioLogado falhou', e); }
+    } catch (e) { enriquecidoId = null; console.warn('[ColaboradoresAdminStore] enriquecerUsuarioLogado falhou', e); }
   }
 
   window.addEventListener('vpprd:user', () => { if (!(window.__VP_USER || {}).avatarUrl) enriquecerUsuarioLogado(); });
