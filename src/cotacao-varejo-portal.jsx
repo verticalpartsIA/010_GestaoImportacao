@@ -6,7 +6,7 @@
 const { useState, useEffect } = React;
 
 const T = (en) => en; // portal somente em inglês (11/11/2026, pedido do Gelson)
-const NFAIXAS = 3;
+const NFAIXAS = 1; // só a linha "a partir de 1 → preço" (pedido do Gelson, 11/11/2026)
 const MAX_FOTOS = 5;
 const CERT_MAX_MB = 10;
 
@@ -17,7 +17,7 @@ function tokenDaUrl() {
 function sbc() { return window.__VP_SB.sb; }
 
 function inicial(item, resp) {
-  const f = ((resp && resp.faixas) || []).map((x) => ({ min: String(x.min), preco: String(x.preco) }));
+  const f = ((resp && resp.faixas) || []).slice(0, NFAIXAS).map((x) => ({ min: String(x.min), preco: String(x.preco) }));
   while (f.length < NFAIXAS) f.push({ min: f.length === 0 ? '1' : '', preco: '' });
   return { f, lt: resp && resp.lead_time_dias != null ? String(resp.lead_time_dias) : '', cert: (resp && resp.certificado_url) ? { url: resp.certificado_url, nome: resp.certificado_nome || 'certificate' } : null, obs: (resp && resp.obs) || '', foto: (resp && resp.foto_fornecedor) || '', fotos: (resp && Array.isArray(resp.fotos_fornecedor)) ? resp.fotos_fornecedor : [] };
 }
@@ -143,10 +143,10 @@ function Portal() {
   };
 
   /* Planilha (CSV abre no Excel): baixa com os nossos itens, o fornecedor preenche e importa de volta — sem digitar item por item. */
-  const CSV_COLS = ['ref', 'description', 'qty_needed', 'unit', 'certificate_required', 'from_qty_1', 'unit_price_1', 'from_qty_2', 'unit_price_2', 'from_qty_3', 'unit_price_3', 'lead_time_days', 'remarks'];
+  const CSV_COLS = ['ref', 'description', 'qty_needed', 'unit', 'certificate_required', 'from_qty_1', 'unit_price_1', 'lead_time_days', 'remarks'];
   const csvCel = (v) => { const s = v == null ? '' : String(v); return /[",\n\r;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const baixarPlanilha = () => {
-    const linhas = itens.map((i) => { const x = form[i.id] || inicial(i, null); return [i.codigo, i.descricao || '', i.quantidade, i.unidade || '', i.exige_certificado ? 'yes' : 'no', x.f[0].min, x.f[0].preco, x.f[1].min, x.f[1].preco, x.f[2].min, x.f[2].preco, x.lt, x.obs]; });
+    const linhas = itens.map((i) => { const x = form[i.id] || inicial(i, null); return [i.codigo, i.descricao || '', i.quantidade, i.unidade || '', i.exige_certificado ? 'yes' : 'no', x.f[0].min, x.f[0].preco, x.lt, x.obs]; });
     const csv = '\ufeff' + [CSV_COLS].concat(linhas).map((r) => r.map(csvCel).join(',')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = lote.numero + '-quotation.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
@@ -199,7 +199,7 @@ function Portal() {
       {encerrado && <div style={{ background: '#fdecec', border: '1px solid #e49a9a', padding: 14, borderRadius: 10, marginTop: 14 }}><b>{T('This quotation is closed.')}</b></div>}
 
       <p style={{ fontSize: 13, lineHeight: 1.5, margin: '14px 2px' }}>
-        {T('Enter the UNIT price of each item. The "Qty" column is how many we need. Each price row reads "from N pieces, each piece costs X": row 1 is normally from 1 piece; use rows 2 and 3 only if the price drops for bigger quantities (e.g. from 1 pc: 4.10; from 100 pcs: 3.80). Leave them empty if the price is the same. Lead time in days. Items marked "Certificate required" need their certificate attached before you send.')}
+        {T('Enter the UNIT price of each item. The "Qty" column is how many we need. Enter the price of one piece (from 1 piece). Lead time in days. Items marked "Certificate required" need their certificate attached before you send.')}
       </p>
 
       <div style={{ margin: '0 0 10px', fontSize: 13 }}>
@@ -223,7 +223,7 @@ function Portal() {
               <th style={th}>REF.</th>
               <th style={th}>{T('Description')}</th>
               <th style={{ ...th, textAlign: 'right' }}>{T('Qty')}</th>
-              <th style={th}>{T('Price by quantity (from qty → unit price)')}</th>
+              <th style={th}>{T('Unit price')}</th>
               <th style={th}>{T('Lead time (days)')}</th>
               <th style={th}>{T('Certificate')}</th>
               <th style={th}>{T('Remarks')}</th>
