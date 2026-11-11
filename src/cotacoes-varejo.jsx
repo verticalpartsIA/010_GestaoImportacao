@@ -310,7 +310,7 @@ function CVModalNPS({ lote, convite, onClose, onSalvo }) {
 /* ---------- Descrição técnica do produto para o fornecedor ---------- */
 function CVModalDescricao({ item, onClose, onSalvo }) {
   const S = window.CotacoesVarejoStore;
-  const [d, setD] = React.useState({ aplicacao: '', equipamento: '', tensao: '', potencia: '', medidas: '', material: '', observacao: '', texto_pt: '', texto_en: '', texto_zh: '' });
+  const [d, setD] = React.useState({ aplicacao: '', equipamento: '', tensao: '', potencia: '', medidas: '', material: '', observacao: '', texto_pt: '', texto_en: '' });
   const [perguntas, setPerguntas] = React.useState([]);
   const [fontes, setFontes] = React.useState([]);
   const [bruta, setBruta] = React.useState('');
@@ -326,10 +326,10 @@ function CVModalDescricao({ item, onClose, onSalvo }) {
     try {
       const r = await S.sugerirDescricaoIA({ ...d, codigo: item.codigo, descricao: item.descricao, ficha, web });
       setBruta(''); setPerguntas(r.perguntas); setFontes(r.fontes || []);
-      if (r.texto_pt || r.texto_en || r.texto_zh) {
-        // Texto novo SUBSTITUI os três (idioma que não veio fica vazio): manter a tradução antiga ao lado do texto novo deixaria idiomas incoerentes (ex.: 220 V × 380 V).
-        setD((p) => ({ ...p, texto_pt: r.texto_pt, texto_en: r.texto_en, texto_zh: r.texto_zh })); setIa(true);
-        if (!(r.texto_pt && r.texto_en && r.texto_zh)) window.toast?.('A IA não escreveu todos os idiomas. Os que faltam ficaram vazios — peça de novo ou preencha à mão antes de salvar.', 'warning');
+      if (r.texto_pt || r.texto_en) {
+        // Texto novo SUBSTITUI os dois (idioma que não veio fica vazio): manter a tradução antiga ao lado do texto novo deixaria idiomas incoerentes (ex.: 220 V × 380 V).
+        setD((p) => ({ ...p, texto_pt: r.texto_pt, texto_en: r.texto_en })); setIa(true);
+        if (!(r.texto_pt && r.texto_en)) window.toast?.('A IA não escreveu os dois idiomas. O que falta ficou vazio — peça de novo ou preencha à mão antes de salvar.', 'warning');
       }
       else window.toast?.('A IA não escreveu o texto: precisa de mais dados (veja as perguntas). Cole a ficha técnica do fabricante e tente de novo.', 'warning');
     }
@@ -348,9 +348,9 @@ function CVModalDescricao({ item, onClose, onSalvo }) {
   const texto = (k, rot) => <label className="small" style={{ display: 'block' }}>{rot}<textarea className="input" rows={4} style={{ width: '100%' }} value={d[k] || ''} onChange={(e) => set(k, e.target.value)} /></label>;
   return (
     <Modal title={'Descrição para o fornecedor — ' + item.codigo} onClose={onClose} width={820}
-      footer={<><Button variant="ghost" onClick={onClose}>Fechar</Button><Button variant="primary" onClick={salvar} disabled={salvando || !(d.texto_pt || d.texto_en || d.texto_zh)}>{salvando ? 'Salvando…' : 'Salvar descrição'}</Button></>}>
+      footer={<><Button variant="ghost" onClick={onClose}>Fechar</Button><Button variant="primary" onClick={salvar} disabled={salvando || !(d.texto_pt || d.texto_en)}>{salvando ? 'Salvando…' : 'Salvar descrição'}</Button></>}>
       <div className="stack" style={{ gap: 10 }}>
-        <p className="small">Nossa descrição no Omie: <b>{item.descricao || '—'}</b>. Conte ao fornecedor onde a peça é usada e o que importa; a IA monta o texto em português, inglês e chinês. Você revisa antes de salvar — o que o fornecedor lê é o texto final.</p>
+        <p className="small">Nossa descrição no Omie: <b>{item.descricao || '—'}</b>. Conte ao fornecedor onde a peça é usada e o que importa; a IA monta o texto em inglês (e em português, para nós). Você revisa antes de salvar — o que o fornecedor lê é o texto final.</p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           {campo('aplicacao', 'Onde é aplicada', 'ex.: roldana do carro, porta de cabine…')}
           {campo('equipamento', 'Tipo de equipamento', 'elevador, escada rolante, esteira…')}
@@ -367,7 +367,6 @@ function CVModalDescricao({ item, onClose, onSalvo }) {
         {fontes.length > 0 && <div className="small">Fontes usadas pela IA: {fontes.map((f, i) => <span key={i}>{i ? ' · ' : ''}{/^https?:\/\//.test(f) ? <a href={f} target="_blank" rel="noopener noreferrer">{f}</a> : f}</span>)}</div>}
         {perguntas.length > 0 && <div className="alert warning"><div><div className="alert__title">A IA precisa saber</div><div className="alert__sub">{perguntas.map((q, i) => <div key={i}>• {q}</div>)} Responda nos campos acima (ou cole a ficha) e peça a sugestão de novo.</div></div></div>}
         {texto('texto_en', 'English (o fornecedor lê primeiro)')}
-        {texto('texto_zh', '中文')}
         {texto('texto_pt', 'Português (nosso)')}
       </div>
     </Modal>
@@ -431,7 +430,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const carregarNps = React.useCallback(() => { S.npsDosFornecedores().then(setNpsMap).catch(() => {}); }, []);
   React.useEffect(() => { carregarNps(); }, [carregarNps]);
   // 11/11/2026 (Gelson): a descrição técnica NÃO entra mais sozinha no item; o operador digita à mão
-  // (o botão "descrição EN/中文" continua guardando a descrição por produto, mas só quando ele pede).
+  // (o botão "descrição em inglês" continua guardando a descrição por produto, mas só quando ele pede).
 
   // Fotos: procura no banco / traz da Ficha Técnica uma vez por abertura.
   React.useEffect(() => {
@@ -756,11 +755,10 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                     </td>
                     <td className="mono">{it.codigo}</td>
                     <td style={{ maxWidth: 260 }}>
-                      {it.descricao}
                       {editavel
                         ? <>
                             <textarea key={it.obs_vp || ''} className="input" rows={(it.obs_vp || '').length > 90 ? 3 : 1} style={{ width: '100%', marginTop: 4, fontSize: 12 }} placeholder="Obs. VerticalParts (o fornecedor lê no portal)" defaultValue={it.obs_vp || ''} onBlur={(e) => { if ((e.target.value || '') !== (it.obs_vp || '')) editarItem(it, 'obs_vp', e.target.value || null); }} />
-                            <button className="link-btn" onClick={() => setDescItem(it)} title="Descrição técnica em português, inglês e chinês, com ajuda da IA">{it.obs_vp ? '✎ descrição EN/中文' : '+ descrição EN/中文 (com IA)'}</button>
+                            <button className="link-btn" onClick={() => setDescItem(it)} title="Descrição técnica em inglês (e português), com ajuda da IA">{it.obs_vp ? '✎ descrição em inglês' : '+ descrição em inglês (com IA)'}</button>
                           </>
                         : (it.obs_vp ? <div className="small muted" style={{ whiteSpace: 'pre-wrap' }}>{it.obs_vp}</div> : null)}
                     </td>
