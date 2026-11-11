@@ -17,7 +17,7 @@ function tokenDaUrl() {
 function sbc() { return window.__VP_SB.sb; }
 
 function inicial(item, resp) {
-  const f = ((resp && resp.faixas) || []).slice(0, NFAIXAS).map((x) => ({ min: String(x.min), preco: String(x.preco) }));
+  const f = ((resp && resp.faixas) || []).slice(0, NFAIXAS).map((x) => ({ min: '1', preco: String(x.preco) }));
   while (f.length < NFAIXAS) f.push({ min: f.length === 0 ? '1' : '', preco: '' });
   return { f, lt: resp && resp.lead_time_dias != null ? String(resp.lead_time_dias) : '', cert: (resp && resp.certificado_url) ? { url: resp.certificado_url, nome: resp.certificado_nome || 'certificate' } : null, obs: (resp && resp.obs) || '', foto: (resp && resp.foto_fornecedor) || '', fotos: (resp && Array.isArray(resp.fotos_fornecedor)) ? resp.fotos_fornecedor : [] };
 }
@@ -143,10 +143,10 @@ function Portal() {
   };
 
   /* Planilha (CSV abre no Excel): baixa com os nossos itens, o fornecedor preenche e importa de volta — sem digitar item por item. */
-  const CSV_COLS = ['ref', 'description', 'qty_needed', 'unit', 'certificate_required', 'from_qty_1', 'unit_price_1', 'lead_time_days', 'remarks'];
+  const CSV_COLS = ['ref', 'description', 'qty_needed', 'unit', 'certificate_required', 'unit_price', 'lead_time_days', 'remarks'];
   const csvCel = (v) => { const s = v == null ? '' : String(v); return /[",\n\r;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const baixarPlanilha = () => {
-    const linhas = itens.map((i) => { const x = form[i.id] || inicial(i, null); return [i.codigo, i.descricao || '', i.quantidade, i.unidade || '', i.exige_certificado ? 'yes' : 'no', x.f[0].min, x.f[0].preco, x.lt, x.obs]; });
+    const linhas = itens.map((i) => { const x = form[i.id] || inicial(i, null); return [i.codigo, i.descricao || '', i.quantidade, i.unidade || '', i.exige_certificado ? 'yes' : 'no', x.f[0].preco, x.lt, x.obs]; });
     const csv = '\ufeff' + [CSV_COLS].concat(linhas).map((r) => r.map(csvCel).join(',')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = lote.numero + '-quotation.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
@@ -175,7 +175,7 @@ function Portal() {
         const it = itens.find((i) => String(i.codigo).toUpperCase() === String(r[col('ref')] || '').trim().toUpperCase()); if (!it) return;
         const g = (nome) => (col(nome) >= 0 ? String(r[col(nome)] == null ? '' : r[col(nome)]).trim() : '');
         const base = novo[it.id] || inicial(it, null);
-        const f = base.f.map((x, idx) => ({ min: g('from_qty_' + (idx + 1)) || (idx === 0 ? '1' : ''), preco: g('unit_price_' + (idx + 1)) }));
+        const f = [{ min: '1', preco: g('unit_price') }];
         novo[it.id] = { ...base, f, lt: g('lead_time_days') || base.lt, obs: g('remarks') || base.obs }; n++;
       });
       setForm(novo); setErro(null);
@@ -199,7 +199,7 @@ function Portal() {
       {encerrado && <div style={{ background: '#fdecec', border: '1px solid #e49a9a', padding: 14, borderRadius: 10, marginTop: 14 }}><b>{T('This quotation is closed.')}</b></div>}
 
       <p style={{ fontSize: 13, lineHeight: 1.5, margin: '14px 2px' }}>
-        {T('Enter the UNIT price of each item. The "Qty" column is how many we need. Enter the price of one piece (from 1 piece). Lead time in days. Items marked "Certificate required" need their certificate attached before you send.')}
+        {T('Enter the UNIT price of each item. The "Qty" column is how many we need. Enter the price of ONE piece; the total is calculated for the quantity we need. Lead time in days. Items marked "Certificate required" need their certificate attached before you send.')}
       </p>
 
       <div style={{ margin: '0 0 10px', fontSize: 13 }}>
@@ -223,7 +223,8 @@ function Portal() {
               <th style={th}>REF.</th>
               <th style={th}>{T('Description')}</th>
               <th style={{ ...th, textAlign: 'right' }}>{T('Qty')}</th>
-              <th style={th}>{T('Unit price')}</th>
+              <th style={th}>{T('Unit price (' + moeda + ')')}</th>
+              <th style={th}>{T('Total (' + moeda + ')')}</th>
               <th style={th}>{T('Lead time (days)')}</th>
               <th style={th}>{T('Certificate')}</th>
               <th style={th}>{T('Remarks')}</th>
@@ -238,16 +239,11 @@ function Portal() {
                   <td style={{ ...td, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{i.codigo}</td>
                   <td style={{ ...td, maxWidth: 260 }}>{i.descricao}{i.obs_vp && <div style={{ fontSize: 12, color: '#8a6d00', marginTop: 4, whiteSpace: 'pre-wrap' }}><b>VerticalParts:</b> {i.obs_vp}</div>}</td>
                   <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}><b>{Number(i.quantidade).toLocaleString('en-US')}</b> {i.unidade || T('pcs')}<div style={{ fontSize: 10, color: '#666' }}>{T('we need')}</div></td>
-                  <td style={{ ...td, minWidth: 250 }}>
-                    {x.f.map((r, idx) => (
-                      <div key={idx} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
-                        <span style={{ fontSize: 11, color: '#666', width: 60, lineHeight: 1.2 }}>{T('from')}</span>
-                        <input style={{ ...inp, width: 70 }} inputMode="decimal" placeholder="qty" value={r.min} disabled={encerrado} onChange={(e) => setFaixa(i.id, idx, 'min', e.target.value)} />
-                        <span>→</span>
-                        <input style={{ ...inp, width: 96 }} inputMode="decimal" placeholder={moeda} value={r.preco} disabled={encerrado} onChange={(e) => setFaixa(i.id, idx, 'preco', e.target.value)} />
-                      </div>
-                    ))}
-                    {(() => { const fo = faixasForaDeOrdem(x.f); return fo ? <div style={{ fontSize: 11, color: '#b91c1c', marginTop: 2 }}>{T('Price goes up with quantity (' + fo.de.preco + ' → ' + fo.para.preco + ')' + (fo.salto ? ' — is there a typo? Please check.' : '. Please check.'))}</div> : null; })()}
+                  <td style={{ ...td, minWidth: 130 }}>
+                    <input style={{ ...inp, width: 110 }} inputMode="decimal" placeholder={moeda} value={x.f[0].preco} disabled={encerrado} onChange={(e) => setFaixa(i.id, 0, 'preco', e.target.value)} />
+                  </td>
+                  <td style={{ ...td, minWidth: 130, whiteSpace: 'nowrap' }}>
+                    {num(x.f[0].preco) > 0 ? <b>{(num(x.f[0].preco) * Number(i.quantidade)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b> : <span style={{ color: '#aaa' }}>—</span>}
                   </td>
                   <td style={td}><input style={{ ...inp, width: 80 }} inputMode="numeric" value={x.lt} disabled={encerrado} onChange={(e) => set(i.id, 'lt', e.target.value)} /></td>
                   <td style={{ ...td, minWidth: 150 }}>
