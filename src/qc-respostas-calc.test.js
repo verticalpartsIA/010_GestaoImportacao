@@ -42,3 +42,29 @@ test('nomeArquivoPdf: usa o nº do pedido do Omie e limpa caracteres', () => {
   assert.equal(C.nomeArquivoPdf('30/570 ../'), 'Quadro-de-Comando-Pedido-30570.pdf');
   assert.equal(C.nomeArquivoPdf(''), 'Quadro-de-Comando-Pedido-sem-numero.pdf');
 });
+
+test('montarResumoCompleto: seções, fiação por extenso, distâncias entre pavimentos e "Não informado"', () => {
+  const f = { ...base, f_l1: '3.5', f_ua: '3,5', f_tr: '2', f_bp: '', f_lim: '3.5', f_fp: '3.5', fiacao_omitida: false,
+    dist: [{ de: '1', ate: '2', m: '3' }, { de: '2', ate: '3', m: '' }], obs_fiacao: 'poço estreito' };
+  const r = C.montarResumoCompleto(f, { maquinas: [{ codigo: 'VPMAC-1', descricao: 'Máquina 15 kW' }] }, 10);
+  const m = Object.fromEntries(r);
+  assert.ok(r.some((p) => p[0] === '§ Fiação de poço' && p[1] === ''), 'tem título de seção');
+  assert.equal(m['Quadro até a entrada do poço (L1)'], '3,5 m');
+  assert.equal(m['Contato de TRICO até a calha (TR)'], '2 m');
+  assert.equal(m['Botoeira até a calha (BP)'], 'Não informado');
+  assert.equal(m['Distância entre pavimentos: do 1 ao 2'], '3 m');
+  assert.equal(m['Distâncias entre pavimentos'], '1 intervalo(s) sem medida');
+  assert.equal(m['Observações da fiação'], 'poço estreito');
+  assert.equal(m['CNPJ'], '11.222.333/0001-81');
+  assert.equal(m['Máquina de tração'], 'Máquina 15 kW');
+  assert.equal(m['Porta de cabina'], 'Não solicitado');
+});
+
+test('montarResumoCompleto: fiação omitida e tabela de distâncias toda em branco', () => {
+  const m1 = Object.fromEntries(C.montarResumoCompleto({ ...base, fiacao_omitida: true }, {}, 0));
+  assert.match(m1['Dados da fiação'], /valores padrão/);
+  assert.equal(m1['Quadro até a entrada do poço (L1)'], undefined);
+  const m2 = Object.fromEntries(C.montarResumoCompleto({ ...base, fiacao_omitida: false, dist: [{ de: '', ate: '', m: '' }, { de: '', ate: '', m: '' }] }, {}, 0));
+  assert.equal(m2['Distâncias entre pavimentos'], 'Não informado (2 intervalo(s) sem medida)');
+  assert.equal(m2['E-mail'], 'Não informado');
+});

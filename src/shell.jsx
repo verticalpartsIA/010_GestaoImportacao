@@ -163,6 +163,7 @@ const NAV_GROUPS = [
        evolucao-fabricacao, então links antigos (/logistica/evolucao-fabricacao) seguem abrindo. */
     { id: "evolucao-fabricacao", label: "Fabricação QC", icon: "history" },
     { id: "quadros-calculadora-cabos", label: "Calculadora de Cabos", icon: "bolt" },
+    { id: "quadros-formularios-respondidos", label: "Formulários Respondidos", icon: "fileText" },
   ]},
   { label: "Administração", items: [
     { id: "logs", label: "Logs de Atividade", icon: "history", restrict: ["admin"] },
@@ -467,6 +468,7 @@ const BREADCRUMB_MAP = {
   "fabricacao-corrimao": { module: "Logística", page: "Fabricação Corrimão", icon: "history" },
   "fabricacao-corte": { module: "Logística", page: "Fabricação Corte", icon: "history" },
   "quadros-pedidos": { module: "Quadros de Comando", page: "Pedidos com Quadro", icon: "layers" },
+  "quadros-formularios-respondidos": { module: "Quadros de Comando", page: "Formulários Respondidos", icon: "fileText" },
   "quadros-separacao": { module: "Quadros de Comando", page: "Separação PV QC", icon: "package" },
   "quadros-separacao-fab": { module: "Quadros de Comando", page: "Separação FAB QC", icon: "package" },
   "quadros-calculadora-cabos": { module: "Quadros de Comando", page: "Calculadora de Cabos", icon: "bolt" },

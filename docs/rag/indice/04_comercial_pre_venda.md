@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/04_comercial_pre_venda.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `746db79`)
-- **Palavras:** 20342 · **blocos:** 326 · **seções com selo próprio:** 50 de 85
-- **Origem do selo dos blocos:** próprio 94 · da seção 145 · da seção-pai 10 · do cabeçalho 52 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
-- **Selo efetivo dos blocos:** Conferido 190 · Herdado 74 · Não verificado 37
+- **Palavras:** 20523 · **blocos:** 328 · **seções com selo próprio:** 50 de 85
+- **Origem do selo dos blocos:** próprio 96 · da seção 145 · da seção-pai 10 · do cabeçalho 52 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
+- **Selo efetivo dos blocos:** Conferido 192 · Herdado 74 · Não verificado 37
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -75,7 +75,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 4.5.8 Regras e armadilhas | `docs/modulos/04_comercial_pre_venda.md#458-regras-e-armadilhas` | 3 | Herdado (misto (vale o mais fraco)) | 11 | b6 s5 |
 | 4.5.9 Testes | `docs/modulos/04_comercial_pre_venda.md#459-testes` | 3 | — | 7 | c7 |
 | 4.5.10 Pendências e decisões | `docs/modulos/04_comercial_pre_venda.md#4510-pendências-e-decisões` | 3 | Não verificado (misto (vale o mais fraco)) | 15 | b8 s7 |
-| 4.5.11 Histórico | `docs/modulos/04_comercial_pre_venda.md#4511-histórico` | 3 | Conferido (uniforme) | 2 | b1 s1 |
+| 4.5.11 Histórico | `docs/modulos/04_comercial_pre_venda.md#4511-histórico` | 3 | Conferido (uniforme) | 4 | b3 s1 |
 | 4.6 Contratos Social | `docs/modulos/04_comercial_pre_venda.md#46-contratos-social` | 2 | — | 0 | — |
 | 4.6.1 O que é | `docs/modulos/04_comercial_pre_venda.md#461-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 4.6.2 Rota e arquivos | `docs/modulos/04_comercial_pre_venda.md#462-rota-e-arquivos` | 3 | Conferido (uniforme) | 1 | b1 |

@@ -80,6 +80,13 @@ Ligação do módulo: **ainda não ligado** (sem tutorial de módulo no menu).
 |---|---|---|
 | mapa-de-obras | `mapa-obras` (`/engenharia/mapa-obras`, aba `/evolucao`) | — |
 
+### engenharia-produto — "Engenharia & Produto"
+Ligação do módulo: **ainda não ligado** (sem tutorial de módulo no menu).
+
+| Tela | Rota | Ligação "?" da tela |
+|---|---|---|
+| ficha-tecnica | `ficha-tecnica` (`/engenharia/ficha-tecnica[/<id>]`) | — (a linha `"ficha-tecnica": "engenharia-produto/ficha-tecnica"` em `TUTORIAIS` depende de pedido do usuário) |
+
 ## Fora do roteiro (decisão do usuário)
 
 - **Emissão de NF**: usada pela Expedição. Só entra se pedirem tutorial para o perfil da Expedição.

@@ -23,86 +23,8 @@
 
 function qpData(d) { return d ? String(d).slice(0, 10).split('-').reverse().join('/') : '—'; }
 
-/* Formulário do cliente (10/11/2026): link único do formulário público amarrado a este pedido do Omie; quando o cliente responde, as
-   respostas ficam aqui, o PDF é baixado e anexado à mão no Omie. Nada é escrito no Omie. Gerar/cancelar/corrigir exige a alçada link_cliente. */
-function QcFormCliente({ linha, form, podeLink, aoMudar }) {
-  const sb = window.__VP_SB && window.__VP_SB.sb;
-  const Store = window.QuadrosPedidosStore;
-  const [ocupado, setOcupado] = React.useState(false);
-  const [aberto, setAberto] = React.useState(false);
-  const [edit, setEdit] = React.useState(null);
-  const [erro, setErro] = React.useState(null);
-  const codigo = Number(linha.chave);
-  if (!isFinite(codigo)) return <span style={{ color: 'var(--fg3)' }}>—</span>;
-  const rodar = async (fn, okMsg) => {
-    setOcupado(true); setErro(null);
-    try { await fn(); if (okMsg) window.toast?.(okMsg); await aoMudar(); }
-    catch (e) { setErro(((e && e.message) || String(e)).replace(/^.*formulário QC: /, '')); }
-    setOcupado(false);
-  };
-  const copiar = async () => { const u = Store.linkFormulario(form.token); try { await navigator.clipboard.writeText(u); window.toast?.('Link copiado.'); } catch (e) { window.prompt('Copie o link:', u); } };
-  const baixar = async () => {
-    if (!window.QcRespostasReactPdf) { setErro('Gerador de PDF não carregou. Recarregue a página.'); return; }
-    setOcupado(true); setErro(null);
-    try {
-      const C = window.QcRespostasCalc;
-      await window.QcRespostasReactPdf.baixar({
-        numeroPedido: linha.numero, cliente: linha.cliente, linhas: C.normalizarResumo(form.resumo),
-        respondidoEm: form.respondido_em ? new Date(form.respondido_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '',
-      }, C.nomeArquivoPdf(linha.numero));
-      window.VPLog?.registrar({ modulo: 'Quadros de Comando', acao: 'Baixou o PDF do formulário do cliente', alvo: 'Pedido ' + linha.numero, alvo_id: String(codigo) });
-    } catch (e) { setErro('Não foi possível gerar o PDF: ' + ((e && e.message) || e)); }
-    setOcupado(false);
-  };
-  const aviso = erro ? <div style={{ fontSize: 11, color: 'var(--vp-danger)', maxWidth: 240 }}>{erro}</div> : null;
-  if (!form) {
-    return podeLink
-      ? <span><button className="btn" disabled={ocupado} onClick={() => rodar(() => Store.gerarFormulario(sb, codigo).then(() => window.VPLog?.registrar({ modulo: 'Quadros de Comando', acao: 'Gerou o link do formulário do cliente', alvo: 'Pedido ' + linha.numero, alvo_id: String(codigo) })), 'Link gerado.')} title="Gera o link do formulário para o cliente preencher">🔗 Gerar link</button>{aviso}</span>
-      : <span style={{ color: 'var(--fg3)' }}>—</span>;
-  }
-  const respondido = form.status === 'respondido';
-  return (
-    <div style={{ minWidth: 190 }}>
-      <div style={{ fontSize: 12, marginBottom: 4 }}>
-        {respondido
-          ? <b style={{ fontWeight: 600, color: 'var(--vp-success, #2e9e5b)' }}>✓ Respondido {form.respondido_em ? qpData(form.respondido_em) : ''}</b>
-          : <span style={{ color: 'var(--fg3)' }}>⏳ Aguardando o cliente</span>}
-        {form.corrigido_em ? <div style={{ fontSize: 10, color: 'var(--fg3)' }}>corrigido por {form.corrigido_por}</div> : null}
-      </div>
-      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-        <button className="btn" disabled={ocupado} onClick={copiar} title="Copia o link para enviar ao cliente">Copiar link</button>
-        {respondido ? <button className="btn" disabled={ocupado} onClick={() => setAberto(true)}>Ver respostas</button> : null}
-        {respondido ? <button className="btn" disabled={ocupado} onClick={baixar} title="Baixa o PDF das respostas para anexar ao pedido no Omie">⬇ PDF</button> : null}
-        {podeLink ? <button className="btn" disabled={ocupado} onClick={() => { if (window.confirm('Cancelar este link? O cliente não poderá mais usá-lo e você poderá gerar outro.')) rodar(() => Store.cancelarFormulario(sb, form.id).then(() => window.VPLog?.registrar({ modulo: 'Quadros de Comando', acao: 'Cancelou o link do formulário do cliente', alvo: 'Pedido ' + linha.numero, alvo_id: String(codigo) })), 'Link cancelado.'); }}>Cancelar</button> : null}
-      </div>
-      {aviso}
-      {aberto ? (
-        <div className="modal-backdrop" onClick={() => { setAberto(false); setEdit(null); }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="card" onClick={(e) => e.stopPropagation()} style={{ width: 'min(720px, 94vw)', maxHeight: '88vh', overflow: 'auto', padding: 20, background: 'var(--bg, #fff)' }}>
-            <h3 style={{ marginTop: 0 }}>Formulário do cliente — pedido {linha.numero}</h3>
-            <table className="t"><tbody>
-              {(edit || window.QcRespostasCalc.normalizarResumo(form.resumo)).map((p, i) => (
-                <tr key={i}>
-                  <td style={{ width: '34%', fontWeight: 500 }}>{p[0]}</td>
-                  <td>{edit
-                    ? <input style={{ width: '100%' }} value={p[1]} onChange={(e) => setEdit(edit.map((q, j) => (j === i ? [q[0], e.target.value] : q)))} />
-                    : p[1]}</td>
-                </tr>
-              ))}
-            </tbody></table>
-            <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-              {podeLink && !edit ? <button className="btn" onClick={() => setEdit(window.QcRespostasCalc.normalizarResumo(form.resumo))}>Corrigir respostas</button> : null}
-              {edit ? <button className="btn btn--primary" disabled={ocupado} onClick={() => rodar(() => Store.corrigirFormulario(sb, form.id, edit).then(() => { window.VPLog?.registrar({ modulo: 'Quadros de Comando', acao: 'Corrigiu as respostas do formulário do cliente', alvo: 'Pedido ' + linha.numero, alvo_id: String(codigo) }); setEdit(null); }), 'Respostas corrigidas.')}>Salvar correção</button> : null}
-              {!edit ? <button className="btn" onClick={baixar} disabled={ocupado}>⬇ Baixar PDF</button> : null}
-              <button className="btn" onClick={() => { setAberto(false); setEdit(null); }}>Fechar</button>
-            </div>
-            {erro ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginTop: 8 }}>{erro}</div> : null}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
+/* 10/11/2026: o link do formulário POR PEDIDO VENDIDO (coluna "Formulário do cliente") saiu desta tela, a pedido do Gelson: o link nasce na pré-venda,
+   antes de o quadro existir. As respostas dos clientes agora ficam em "Formulários Respondidos" (src/formularios-respondidos.jsx). */
 
 // Barra de 0 a 100%. `info` = { pct, sub } ou null (mostra o traço com a explicação no balão).
 function QpBarra({ info, vazio, titulo }) {
@@ -158,27 +80,11 @@ function QuadrosPedidosPage() {
   const caixaRef = React.useRef(null);
   const [alturaCaixa, setAlturaCaixa] = React.useState(null);
 
-  const [formularios, setFormularios] = React.useState({});
-  const [erroForm, setErroForm] = React.useState(null);
-  const [podeLink, setPodeLink] = React.useState(false);
-  React.useEffect(() => {
-    let vivo = true;
-    const PS = window.PropostaStore;
-    if (PS && PS.temCapacidade) PS.temCapacidade('quadros-pedidos', 'link_cliente').then((ok) => { if (vivo) setPodeLink(!!ok); }).catch(() => {});
-    return () => { vivo = false; };
-  }, []);
-  const carregarForms = React.useCallback(async () => {
-    if (!sb) return;
-    try { setFormularios(await window.QuadrosPedidosStore.listarFormularios(sb)); setErroForm(null); }
-    catch (e) { setErroForm((e && e.message) || String(e)); }
-  }, [sb]);
-
   const carregar = React.useCallback(async () => {
     if (!sb) { setErro('Supabase indisponível.'); return; }
     try { setLinhas(await window.QuadrosPedidosStore.carregar(sb)); setErro(null); }
     catch (e) { setErro((e && e.message) || String(e)); }
-    carregarForms();
-  }, [sb, carregarForms]);
+  }, [sb]);
 
   React.useEffect(() => { carregar(); }, [carregar]);
   // Atualiza sozinha (a cada minuto e ao voltar para a aba), como as outras telas que leem pcp_pedidos.
@@ -218,7 +124,6 @@ function QuadrosPedidosPage() {
       </div>
       <div className="qc-print-only" style={{ fontSize: 11, marginBottom: 6 }}>Impresso em {new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}{(window.__VP_USER || {}).nome ? ` por ${(window.__VP_USER || {}).nome}` : ''}</div>
       {erro ? <div className="card" style={{ padding: 16, color: 'var(--vp-danger)' }}>Não foi possível carregar os pedidos: {erro}</div> : null}
-      {erroForm ? <div className="card" style={{ padding: 12, color: 'var(--vp-danger)', marginBottom: 8 }}>Formulários dos clientes indisponíveis: {erroForm}</div> : null}
       {!erro && !linhas ? <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div> : null}
       {linhas ? (
         <>
@@ -230,7 +135,7 @@ function QuadrosPedidosPage() {
               <thead><tr>
                 {ord.th('pedido', 'Nº do pedido')}{ord.th('cliente', 'Cliente')}{ord.th('vendedor', 'Vendedor')}
                 {ord.th('incluido', 'Incluído no Omie')}{ord.th('prazo', 'Prazo de entrega')}
-                {ord.th('fabricacao', 'Fabricação')}{ord.th('separacao', 'Separação')}<th>Formulário do cliente</th>
+                {ord.th('fabricacao', 'Fabricação')}{ord.th('separacao', 'Separação')}
               </tr></thead>
               <tbody>
                 {lista.map((r) => (
@@ -253,10 +158,9 @@ function QuadrosPedidosPage() {
                           </div>
                         : <span style={{ color: 'var(--fg3)' }} title="Nada a separar neste pedido (só quadro e cabos, ou serviço)">—</span>}
                     </td>
-                    <td><QcFormCliente linha={r} form={formularios[r.chave]} podeLink={podeLink} aoMudar={carregarForms} /></td>
                   </tr>
                 ))}
-                {!lista.length ? <tr><td colSpan={8} style={{ color: 'var(--fg3)', padding: 16 }}>Nenhum pedido com quadro de comando.</td></tr> : null}
+                {!lista.length ? <tr><td colSpan={7} style={{ color: 'var(--fg3)', padding: 16 }}>Nenhum pedido com quadro de comando.</td></tr> : null}
               </tbody>
             </table>
           </div>

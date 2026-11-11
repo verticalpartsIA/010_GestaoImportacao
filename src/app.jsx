@@ -29,6 +29,7 @@ const ROUTE_TITLE = {
   "fabricacao-corrimao": "Fabricação Corrimão",
   "fabricacao-corte": "Fabricação Corte",
   "quadros-pedidos": "Quadros de Comando · Pedidos",
+  "quadros-formularios-respondidos": "Quadros de Comando · Formulários Respondidos",
   "quadros-separacao": "Quadros de Comando · Separação PV QC",
   "quadros-separacao-fab": "Quadros de Comando · Separação FAB QC",
   "quadros-calculadora-cabos": "Quadros de Comando · Calculadora de Cabos",
@@ -433,6 +434,7 @@ function App() {
       case "fabricacao-corrimao": return <window.FabricacaoCorrimaoPage/>;
       case "fabricacao-corte": return <window.FabricacaoCortePage/>;
       case "quadros-pedidos": return <window.QuadrosPedidosPage/>;
+      case "quadros-formularios-respondidos": return <window.FormulariosRespondidosPage/>;
       case "quadros-separacao": return <window.QuadrosSeparacaoPage/>;
       case "quadros-separacao-fab": return <window.QuadrosSeparacaoFabPage/>;
       case "quadros-calculadora-cabos": return <window.CalculadoraCabosPage/>;

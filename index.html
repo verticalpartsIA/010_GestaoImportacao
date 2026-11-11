@@ -20,9 +20,9 @@
   <link rel="stylesheet" href="/styles/inbox-gmail.css?v=5">
   <link rel="stylesheet" href="/styles/pcp-tabelas.css?v=10">
   <link rel="stylesheet" href="/styles/quadros-comando.css?v=3">
-  <link rel="stylesheet" href="/styles/proposta-editor.css?v=22">
+  <link rel="stylesheet" href="/styles/proposta-editor.css?v=23">
   <link rel="stylesheet" href="/styles/ncm.css">
-  <link rel="stylesheet" href="/styles/contrato-instalador.css?v=13">
+  <link rel="stylesheet" href="/styles/contrato-instalador.css?v=14">
   <link rel="stylesheet" href="/styles/contrato-venda.css?v=4">
   <link rel="stylesheet" href="/styles/ficha-tecnica.css?v=10">
   <link rel="stylesheet" href="/styles/vp-copiloto.css?v=4">
@@ -122,7 +122,7 @@
   <!-- Roteamento por URL (Fase 1 da roteirização, issue #279) — carrega
        depois do guard de SSO (mexe só na query string, nunca no pathname)
        e antes de shell.jsx/app.jsx, que o consomem. -->
-  <script src="/src/router.js?v=44"></script>
+  <script src="/src/router.js?v=45"></script>
 
   <script src="/src/notificacoes-processamento.js?v=6"></script>
   <script src="/src/notificacoes-lidas-store.js?v=3"></script>
@@ -130,7 +130,7 @@
   <!-- Administração — espelho de colaboradores (vpsistema) + alocação de
        módulos do VP Gestão. Carrega cedo pra enriquecer window.__VP_USER
        (foto + grupos alocados) assim que a identidade SSO chegar. -->
-  <script src="/src/colaboradores-admin-store.js?v=60"></script>
+  <script src="/src/colaboradores-admin-store.js?v=62"></script>
 
   <!-- Registro central de atividades (auditoria global) -->
   <script src="/src/vp-log.js?v=4"></script>
@@ -191,9 +191,9 @@
   <script type="text/vp-jsx" src="/src/toast.jsx?v=6"></script>
   <script type="text/vp-jsx" src="/src/ajuda-suporte.jsx?v=3"></script>
   <script type="text/vp-jsx" src="/src/sidebar-busca.jsx?v=1"></script>
-  <script type="text/vp-jsx" src="/src/shell.jsx?v=141"></script>
+  <script type="text/vp-jsx" src="/src/shell.jsx?v=142"></script>
   <script type="text/vp-jsx" src="/src/dashboard.jsx?v=30"></script>
-  <script type="text/vp-jsx" src="/src/comercial.jsx?v=48"></script>
+  <script type="text/vp-jsx" src="/src/comercial.jsx?v=49"></script>
   <script type="text/vp-jsx" src="/src/crm.jsx?v=3"></script>
   <script type="text/vp-jsx" src="/src/linha-do-tempo.jsx?v=5"></script>
 
@@ -259,7 +259,7 @@
   <script src="/src/proposta-opcoes.js?v=18"></script>
   <script src="/src/proposta-padroes-escest.js?v=1"></script>
   <script type="text/vp-jsx" src="/src/proposta-form.jsx?v=29"></script>
-  <script type="text/vp-jsx" src="/src/proposta-preview.jsx?v=35"></script>
+  <script type="text/vp-jsx" src="/src/proposta-preview.jsx?v=36"></script>
   <script src="/src/proposta-store.js?v=36"></script>
   <script src="/src/proposta-legado.js?v=1"></script>
   <script src="/src/proposta-textos-base.js?v=1"></script>
@@ -275,7 +275,7 @@
   <!-- Fase 2 da migração pra @react-pdf/renderer (plano aprovado 20/08) —
        gerado por `npm run build:pdf:proposta` a partir de
        pdf-bundle/proposta-reactpdf.entry.js. Só Elevador por enquanto. -->
-  <script src="/src/proposta-reactpdf.bundle.js?v=29"></script>
+  <script src="/src/proposta-reactpdf.bundle.js?v=30"></script>
   <script type="text/vp-jsx" src="/src/proposta-editor.jsx?v=65"></script>
   <script type="text/vp-jsx" src="/src/ncm.jsx?v=6"></script>
 
@@ -298,9 +298,10 @@
   <script src="/src/fabricacao-quadro-store.js?v=6"></script>
   <script type="text/vp-jsx" src="/src/evolucao-fabricacao-quadro.jsx?v=8"></script>
   <script src="/src/quadros-pedidos-calc.js?v=7"></script>
-  <script src="/src/qc-respostas-calc.js?v=1"></script>
+  <script src="/src/qc-respostas-calc.js?v=2"></script>
   <script src="/src/quadros-pedidos-store.js?v=8"></script>
-  <script type="text/vp-jsx" src="/src/quadros-pedidos.jsx?v=9"></script>
+  <script type="text/vp-jsx" src="/src/quadros-pedidos.jsx?v=10"></script>
+  <script type="text/vp-jsx" src="/src/formularios-respondidos.jsx?v=3"></script>
   <script type="text/vp-jsx" src="/src/calculadora-cabos.jsx?v=2"></script>
   <script type="text/vp-jsx" src="/src/quadros-separacao.jsx?v=12"></script>
   <script src="/src/fabricacao-oficina-calc.js?v=6"></script>
@@ -316,13 +317,13 @@
   <script type="text/vp-jsx" src="/src/inbox-preco.jsx?v=1"></script>
   <script type="text/vp-jsx" src="/src/inbox-preco-varejo.jsx?v=3"></script>
   <script type="text/vp-jsx" src="/src/logistica.jsx?v=81"></script>
-  <script src="/src/importacao-varejo-store.js?v=16"></script>
+  <script src="/src/importacao-varejo-store.js?v=17"></script>
   <script src="/src/ordenar-tabela.js?v=1"></script>
-  <script type="text/vp-jsx" src="/src/importacao-varejo.jsx?v=33"></script>
+  <script type="text/vp-jsx" src="/src/importacao-varejo.jsx?v=34"></script>
   <script src="/src/cotacoes-varejo-calc.js?v=3"></script>
-  <script src="/src/cotacoes-varejo-store.js?v=11"></script>
+  <script src="/src/cotacoes-varejo-store.js?v=12"></script>
   <script src="/src/rfq-varejo-store.js?v=2"></script>
-  <script type="text/vp-jsx" src="/src/cotacoes-varejo.jsx?v=18"></script>
+  <script type="text/vp-jsx" src="/src/cotacoes-varejo.jsx?v=19"></script>
   <script src="/src/comissionamento-store.js?v=3"></script>
   <script type="text/vp-jsx" src="/src/colaboradores-admin.jsx?v=8"></script>
   <script type="text/vp-jsx" src="/src/financeiro.jsx?v=51"></script>
@@ -385,7 +386,7 @@
   <!-- Vistorias de Obras (Instalação & Entrega) -->
   <script src="/src/vistorias-questionarios-store.js?v=18"></script>
   <script src="/src/vistoria-reactpdf.bundle.js?v=2"></script>
-  <script src="/src/qc-respostas-reactpdf.bundle.js?v=1"></script>
+  <script src="/src/qc-respostas-reactpdf.bundle.js?v=3"></script>
   <script type="text/vp-jsx" src="/src/vistorias-envio.jsx?v=22"></script>
   <script type="text/vp-jsx" src="/src/vistorias-obras.jsx?v=19"></script>
 
@@ -441,8 +442,8 @@
   <!-- Distrato do Contrato do Instalador (30/10/2026) — token próprio da Contratada
        + fila de ciência (Diego/Juliana/Maurício) via documento_signatarios. -->
   <script src="/src/contrato-instalador-distrato-store.js?v=1"></script>
-  <script type="text/vp-jsx" src="/src/contrato-instalador-preview.jsx?v=7"></script>
-  <script type="text/vp-jsx" src="/src/contrato-instalador.jsx?v=48"></script>
+  <script type="text/vp-jsx" src="/src/contrato-instalador-preview.jsx?v=8"></script>
+  <script type="text/vp-jsx" src="/src/contrato-instalador.jsx?v=49"></script>
   <script type="text/vp-jsx" src="/src/pagamentos-instalador-acordos.jsx?v=2"></script>
   <script type="text/vp-jsx" src="/src/pagamentos-instalador-recibos.jsx?v=2"></script>
   <script type="text/vp-jsx" src="/src/pagamentos-instalador.jsx?v=8"></script>
@@ -461,16 +462,16 @@
   <script src="/src/contrato-venda-store.js?v=23"></script>
   <script src="/src/contrato-venda-signatarios-store.js?v=3"></script>
   <!-- Motor de PDF do Contrato de Venda (react-pdf) — layout idêntico à minuta oficial. Ver pdf-bundle/contrato-venda-reactpdf.entry.js -->
-  <script src="/src/contrato-venda-reactpdf.bundle.js?v=5"></script>
+  <script src="/src/contrato-venda-reactpdf.bundle.js?v=6"></script>
   <script type="text/vp-jsx" src="/src/contrato-venda-preview.jsx?v=4"></script>
   <script type="text/vp-jsx" src="/src/contrato-venda.jsx?v=37"></script>
 
   <!-- Engenharia · Ficha Técnica (gerador universal) -->
-  <script src="/src/ficha-tecnica-engine.js?v=10"></script>
+  <script src="/src/ficha-tecnica-engine.js?v=11"></script>
   <script src="/src/ficha-tecnica-store.js?v=6"></script>
-  <script src="/src/ficha-tecnica-imagens.js?v=1"></script>
+  <script src="/src/ficha-tecnica-imagens.js?v=2"></script>
   <script src="/src/ficha-omie-publish.js?v=5"></script>
-  <script type="text/vp-jsx" src="/src/ficha-tecnica.jsx?v=30"></script>
+  <script type="text/vp-jsx" src="/src/ficha-tecnica.jsx?v=31"></script>
   <script type="text/vp-jsx" src="/src/ficha-tecnica-copiloto.jsx?v=5"></script>
 
   <!-- Engenharia · Solicitações de Produto (fluxo Comercial → Engenharia → Ficha Técnica) -->
@@ -503,6 +504,6 @@
   <script type="text/vp-jsx" src="/src/vp-copiloto.jsx?v=11"></script>
 
   <!-- Main app last -->
-  <script type="text/vp-jsx" src="/src/app.jsx?v=121"></script>
+  <script type="text/vp-jsx" src="/src/app.jsx?v=122"></script>
 </body>
 </html>

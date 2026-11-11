@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/08_engenharia_produto.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 01/11/2026 (origin/main `4653a17`)
-- **Palavras:** 10638 · **blocos:** 213 · **seções com selo próprio:** 43 de 74
-- **Origem do selo dos blocos:** próprio 85 · da seção 62 · da seção-pai 0 · do cabeçalho 43 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 23
-- **Selo efetivo dos blocos:** Conferido 165 · Herdado 23 · Não verificado 2
+- **Palavras:** 10929 · **blocos:** 215 · **seções com selo próprio:** 44 de 74
+- **Origem do selo dos blocos:** próprio 87 · da seção 67 · da seção-pai 0 · do cabeçalho 38 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 23
+- **Selo efetivo dos blocos:** Conferido 167 · Herdado 23 · Não verificado 2
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -59,7 +59,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 8.4.3 Perfil e acesso | `docs/modulos/08_engenharia_produto.md#843-perfil-e-acesso` | 3 | Conferido (uniforme) | 1 | b1 |
 | 8.4.4 O que a tela mostra | `docs/modulos/08_engenharia_produto.md#844-o-que-a-tela-mostra` | 3 | — | 4 | c4 |
 | 8.4.5 Botões e controles | `docs/modulos/08_engenharia_produto.md#845-botões-e-controles` | 3 | — | 1 | c1 |
-| 8.4.6 Comportamento | `docs/modulos/08_engenharia_produto.md#846-comportamento` | 3 | — | 5 | c5 |
+| 8.4.6 Comportamento | `docs/modulos/08_engenharia_produto.md#846-comportamento` | 3 | Conferido (uniforme) | 7 | b2 s5 |
 | 8.4.7 Dados | `docs/modulos/08_engenharia_produto.md#847-dados` | 3 | Conferido (uniforme) | 1 | b1 |
 | 8.4.8 Regras e armadilhas | `docs/modulos/08_engenharia_produto.md#848-regras-e-armadilhas` | 3 | Não verificado (misto (vale o mais fraco)) | 11 | b10 s1 |
 | 8.4.9 Testes | `docs/modulos/08_engenharia_produto.md#849-testes` | 3 | — | 1 | c1 |

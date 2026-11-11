@@ -285,6 +285,7 @@
         ...ACOES_PADRAO,
         { chave: 'link_cliente', label: 'Gera/cancela o link do formulário do cliente e corrige as respostas' },
       ]},
+      { modulo: 'quadros-formularios-respondidos', label: 'Quadros de Comando — Formulários Respondidos (só leitura das respostas do link público)' },
       { modulo: 'quadros-separacao', label: 'Quadros de Comando — Separação PV QC' },
       { modulo: 'quadros-separacao-fab', label: 'Quadros de Comando — Separação FAB QC (a gravação do Peguei usa a alçada da Separação PV QC)' },
       { modulo: 'quadros-calculadora-cabos', label: 'Quadros de Comando — Calculadora de Cabos (só cálculo na tela, não grava nada)' },
@@ -346,7 +347,7 @@
     /* Fabricação saiu de Logística Interna (17/10/2026). Logística Interna mantém a lista completa de propósito: quem já tinha o grupo alocado não perde nada. */
     /* Matérias-Primas e Produtos passaram a morar aqui no menu (18/10/2026); continuam também em Cadastros Mestres acima, para ninguém perder a alçada já concedida. */
     'Fabricação': ['pcp', 'carga-maquina', 'cadastro-materias-primas', 'cadastro-produtos', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'relatorios-pcp', 'fabricacao-corrimao', 'fabricacao-corte'],
-    'Quadros de Comando': ['quadros-pedidos', 'quadros-separacao', 'quadros-separacao-fab', 'quadros-calculadora-cabos'],
+    'Quadros de Comando': ['quadros-pedidos', 'quadros-formularios-respondidos', 'quadros-separacao', 'quadros-separacao-fab', 'quadros-calculadora-cabos'],
     'Administração': ['logs'],
   };
 
@@ -403,9 +404,15 @@
      mesmo id de profiles/colaboradores_vpsistema) e enriquece
      window.__VP_USER com foto real + os grupos alocados, depois redispara
      o evento pra Shell/sidebar re-renderizarem já com a foto. */
+  /* Uma tentativa por usuário: quem não tem foto cadastrada continuava com avatarUrl vazio, o listener abaixo
+     chamava esta função de novo, que redisparava 'vpprd:user' — loop infinito que remontava Dashboard e Shell
+     (tela "tremendo", 11/11/2026). Só repete se for outro usuário ou se a chamada falhou. */
+  let enriquecidoId = null;
   async function enriquecerUsuarioLogado() {
     const c = sb(); const u = window.__VP_USER;
     if (!c || !u || !u.id || u.id === 'dev-local') return;
+    if (enriquecidoId === u.id) return;
+    enriquecidoId = u.id;
     try {
       const { data: col } = await c.from('colaboradores_vpsistema').select('id, avatar_url, departamento').eq('id', u.id).maybeSingle();
       if (!col) return;
@@ -413,7 +420,7 @@
       window.__VP_USER = { ...u, avatarUrl: col.avatar_url || null, departamentoReal: col.departamento || null, gruposAlocados: (aloc || []).map((a) => a.grupo_modulo) };
       try { sessionStorage.setItem('vpprd_user', JSON.stringify(window.__VP_USER)); } catch (e) {}
       window.dispatchEvent(new CustomEvent('vpprd:user', { detail: window.__VP_USER }));
-    } catch (e) { console.warn('[ColaboradoresAdminStore] enriquecerUsuarioLogado falhou', e); }
+    } catch (e) { enriquecidoId = null; console.warn('[ColaboradoresAdminStore] enriquecerUsuarioLogado falhou', e); }
   }
 
   window.addEventListener('vpprd:user', () => { if (!(window.__VP_USER || {}).avatarUrl) enriquecerUsuarioLogado(); });
