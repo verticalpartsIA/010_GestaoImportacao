@@ -1,0 +1,65 @@
+{
+  "_leia": "Violações de acessibilidade JÁ CONHECIDAS (dívida aceita, sem correção). O teste e2e/acessibilidade.spec.js só trata como NOVA o que não está aqui. alvo \"*\" = qualquer elemento daquela regra naquela tela. Para tirar um item, corrija a causa e apague a linha; para aceitar dívida nova, acrescente com motivo e peça revisão no PR. Medido em 08/11/2026 com @axe-core/playwright 4.10.2, Supabase simulado e vazio.",
+  "conhecidas": [
+    {
+      "tela": "aval-financeiro",
+      "regra": "color-contrast",
+      "alvo": ".page-head__eyebrow",
+      "motivo": "Eyebrow amarelo da marca (#C99E00 sobre #F9F9F9) = 2,38:1; decisão de design do Gelson (01_geral.md PC-11, item c)."
+    },
+    {
+      "tela": "cadastro-clientes",
+      "regra": "color-contrast",
+      "alvo": ".page-head__eyebrow",
+      "motivo": "Eyebrow amarelo da marca (#C99E00 sobre #F9F9F9) = 2,38:1; decisão de design do Gelson (01_geral.md PC-11, item c)."
+    },
+    {
+      "tela": "dashboard",
+      "regra": "color-contrast",
+      "alvo": ".page-head__eyebrow",
+      "motivo": "Eyebrow amarelo da marca (#C99E00 sobre #F9F9F9) = 2,38:1; decisão de design do Gelson (01_geral.md PC-11, item c)."
+    },
+    {
+      "tela": "dashboard",
+      "regra": "scrollable-region-focusable",
+      "alvo": ".gantt",
+      "motivo": "Gantt do Dashboard rola mas não recebe foco de teclado; achado novo do teste de 08/11/2026, sem correção."
+    },
+    {
+      "tela": "decisoes",
+      "regra": "color-contrast",
+      "alvo": ".page-head__eyebrow",
+      "motivo": "Eyebrow amarelo da marca (#C99E00 sobre #F9F9F9) = 2,38:1; decisão de design do Gelson (01_geral.md PC-11, item c)."
+    },
+    {
+      "tela": "formulario-elevador",
+      "regra": "color-contrast",
+      "alvo": ".page-head__eyebrow",
+      "motivo": "Eyebrow amarelo da marca (#C99E00 sobre #F9F9F9) = 2,38:1; decisão de design do Gelson (01_geral.md PC-11, item c)."
+    },
+    {
+      "tela": "formulario-elevador",
+      "regra": "color-contrast",
+      "alvo": ".mono",
+      "motivo": "Etiqueta \"Cotação Nº — (gerado ao salvar)\" (#71717a sobre #e5e5e5) = 3,83:1, cor fixa em FENumeroCotacaoBadge (01_geral.md PC-11, item d)."
+    },
+    {
+      "tela": "formulario-quadro-comando",
+      "regra": "color-contrast",
+      "alvo": ".page-head__eyebrow",
+      "motivo": "Eyebrow amarelo da marca (#C99E00 sobre #F9F9F9) = 2,38:1; decisão de design do Gelson (01_geral.md PC-11, item c)."
+    },
+    {
+      "tela": "propostas",
+      "regra": "color-contrast",
+      "alvo": ".page-head__eyebrow",
+      "motivo": "Eyebrow amarelo da marca (#C99E00 sobre #F9F9F9) = 2,38:1; decisão de design do Gelson (01_geral.md PC-11, item c)."
+    },
+    {
+      "tela": "separacao",
+      "regra": "color-contrast",
+      "alvo": ".page-head__eyebrow",
+      "motivo": "Eyebrow amarelo da marca (#C99E00 sobre #F9F9F9) = 2,38:1; decisão de design do Gelson (01_geral.md PC-11, item c)."
+    }
+  ]
+}
