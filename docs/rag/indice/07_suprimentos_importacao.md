@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/07_suprimentos_importacao.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `fe50b5b`)
-- **Palavras:** 11596 · **blocos:** 273 · **seções com selo próprio:** 69 de 145
-- **Origem do selo dos blocos:** próprio 86 · da seção 60 · da seção-pai 0 · do cabeçalho 102 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
-- **Selo efetivo dos blocos:** Conferido 170 · Herdado 60 · Não verificado 18
+- **Palavras:** 11804 · **blocos:** 274 · **seções com selo próprio:** 69 de 145
+- **Origem do selo dos blocos:** próprio 87 · da seção 60 · da seção-pai 0 · do cabeçalho 102 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
+- **Selo efetivo dos blocos:** Conferido 170 · Herdado 60 · Não verificado 19
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -130,7 +130,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 7.10.3 Perfil e acesso | `docs/modulos/07_suprimentos_importacao.md#7103-perfil-e-acesso` | 3 | Conferido (uniforme) | 1 | b1 |
 | 7.10.4 O que a tela mostra | `docs/modulos/07_suprimentos_importacao.md#7104-o-que-a-tela-mostra` | 3 | — | 1 | c1 |
 | 7.10.5 Botões e controles | `docs/modulos/07_suprimentos_importacao.md#7105-botões-e-controles` | 3 | Não verificado (uniforme) | 1 | b1 |
-| 7.10.6 Comportamento | `docs/modulos/07_suprimentos_importacao.md#7106-comportamento` | 3 | Não verificado (misto (vale o mais fraco)) | 8 | b3 s5 |
+| 7.10.6 Comportamento | `docs/modulos/07_suprimentos_importacao.md#7106-comportamento` | 3 | Não verificado (misto (vale o mais fraco)) | 9 | b4 s5 |
 | 7.10.7 Dados | `docs/modulos/07_suprimentos_importacao.md#7107-dados` | 3 | — | 1 | c1 |
 | 7.10.8 Regras e armadilhas | `docs/modulos/07_suprimentos_importacao.md#7108-regras-e-armadilhas` | 3 | — | 4 | c4 |
 | 7.10.9 Testes | `docs/modulos/07_suprimentos_importacao.md#7109-testes` | 3 | — | 1 | c1 |

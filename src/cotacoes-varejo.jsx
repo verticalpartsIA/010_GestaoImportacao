@@ -1,7 +1,7 @@
 /* ============================================================
    cotacoes-varejo.jsx — Suprimentos & Importação › Cotações de Varejo
    Lista de lotes + MAPA COMPARATIVO (produto × fornecedor). Pedido do usuário (16/10/2026): o comprador marca produtos na
-   Importação Varejo e clica em "Pedir cotação"; aqui os fornecedores respondem (preço por faixa de quantidade, prazo, MOQ),
+   Importação Varejo e clica em "Pedir cotação"; aqui os fornecedores respondem (preço por faixa de quantidade, prazo e certificado),
    o comprador escolhe vencedor(es) e QUANTIDADE por item (pode comprar mais ou menos que o pedido, e dividir entre
    fornecedores) e só ao APROVAR a Requisição de Compra vai ao Omie, uma por fornecedor vencedor.
    URL: /logistica/cotacoes-varejo[/<id do lote>]. window.CotacoesVarejoPage
@@ -125,9 +125,6 @@ function CVCelula({ resp, qtdRef, melhor, editavel, valorQtd, onQtd, onTudo }) {
   const C = window.CotacoesVarejoCalc;
   const faixas = resp ? C.faixasOrdenadas(resp.faixas) : [];
   const aplicada = resp ? C.precoNaQuantidade(resp.faixas, qtdRef) : null;
-  const moq = resp && resp.moq ? cvNum(resp.moq) : 0;
-  const qtd = cvNum(valorQtd);
-  const abaixoMoq = moq > 0 && qtd > 0 && qtd < moq;
   return (
     <div style={{ minWidth: 170, padding: '4px 2px', background: melhor ? 'rgba(34,160,90,.10)' : undefined, borderRadius: 6 }}>
       {!resp || !faixas.length ? <div className="small muted">sem preço</div> : (
@@ -137,7 +134,7 @@ function CVCelula({ resp, qtdRef, melhor, editavel, valorQtd, onQtd, onTudo }) {
               {cvFmtMoeda(f.preco, resp._moeda)} <span className="muted">{f.min > 1 ? '≥ ' + cvFmtNum(f.min) : 'un.'}</span>
             </div>
           ))}
-          <div className="muted">{resp.lead_time_dias ? resp.lead_time_dias + ' d' : '— d'}{moq > 0 ? ' · MOQ ' + cvFmtNum(moq) : ''}</div>
+          <div className="muted">{resp.lead_time_dias ? resp.lead_time_dias + ' d' : '— d'}</div>
           {resp.historico && resp.historico.length > 0 && (
             <div className="muted" title={resp.historico.map((h) => 'Rodada ' + h.rodada + ': ' + (h.faixas || []).map((f) => cvFmtMoeda(f.preco, resp._moeda) + (f.min > 1 ? ' (≥' + f.min + ')' : '')).join(' · ')).join('\n')}>
               rodada {resp.rodada} · antes: {cvFmtMoeda(((resp.historico[resp.historico.length - 1].faixas || [])[0] || {}).preco, resp._moeda)}
@@ -152,6 +149,9 @@ function CVCelula({ resp, qtdRef, melhor, editavel, valorQtd, onQtd, onTudo }) {
           {resp.fotos_fornecedor.map((u) => <a key={u} href={u} target="_blank" rel="noopener noreferrer"><img src={u} alt="foto do fornecedor" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border, #ccc)' }} /></a>)}
         </div>
       )}
+      {resp && resp.certificado_url && (
+        <div className="small" style={{ margin: '4px 0' }}>📎 <a href={resp.certificado_url} target="_blank" rel="noopener noreferrer" title="Certificado enviado pelo fornecedor">{resp.certificado_nome || 'certificado'}</a></div>
+      )}
       {resp && resp.obs && (
         <div className="small" style={{ margin: '4px 0', padding: '4px 6px', background: 'rgba(246,192,0,.15)', borderLeft: '3px solid var(--vp-yellow, #f6c000)', borderRadius: 4, maxWidth: 210, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
           <b>Obs. do fornecedor:</b> {resp.obs}
@@ -163,7 +163,6 @@ function CVCelula({ resp, qtdRef, melhor, editavel, valorQtd, onQtd, onTudo }) {
           <button className="link-btn" title="Comprar a quantidade pedida deste fornecedor" onClick={onTudo}>★</button>
         </div>
       )}
-      {abaixoMoq && <div className="small" style={{ color: 'var(--vp-amber-700, #b45309)' }}>⚠ abaixo do MOQ ({cvFmtNum(moq)})</div>}
     </div>
   );
 }
@@ -709,6 +708,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
               <tr>
                 <th style={{ width: 64 }}>Foto</th><th>Código</th><th>Descrição</th><th className="text-right">Qtd. pedida</th>
                 {convites.map((cv) => <th key={cv.id}>{cv.fornecedor_nome}<div className="small muted" style={{ fontWeight: 400 }}>{cv.moeda}</div></th>)}
+                <th className="text-center" title="Marque se este item exige certificado: o fornecedor só consegue enviar o preço anexando o arquivo no link">Certificado</th>
                 <th className="text-right">Comprar</th>
               </tr>
             </thead>
@@ -774,6 +774,11 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                           valorQtd={qtd[it.id + '|' + cv.id]} onQtd={(v) => setQ(it.id, cv.id, v)} onTudo={() => setQ(it.id, cv.id, String(it.quantidade_pedida))} />
                       </td>
                     ))}
+                    <td className="text-center">
+                      {editavel
+                        ? <label className="small" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', cursor: 'pointer' }} title="O fornecedor só consegue enviar o preço deste item anexando o certificado"><input type="checkbox" checked={!!it.exige_certificado} onChange={(e) => editarItem(it, 'exige_certificado', e.target.checked)} /> Exigir</label>
+                        : (it.exige_certificado ? <span className="small" style={{ color: 'var(--vp-amber-700, #b45309)' }}>📎 Exige</span> : <span className="small muted">—</span>)}
+                    </td>
                     <td className="text-right" style={{ whiteSpace: 'nowrap' }}>
                       <b>{cvFmtNum(comprada)}</b>
                       {comprada > 0 && dif !== 0 && <div className="small" style={{ color: dif > 0 ? 'var(--vp-success, #15803d)' : 'var(--vp-amber-700, #b45309)' }}>{dif > 0 ? '+' : ''}{cvFmtNum(dif)} vs pedido</div>}
@@ -787,6 +792,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                 <tr>
                   <td colSpan={4} style={{ fontWeight: 800 }}>Total por fornecedor</td>
                   {convites.map((cv) => { const g = calc.porConvite[cv.id]; return <td key={cv.id}>{g ? <><b>{cvFmtMoeda(g.totalOriginal, cv.moeda)}</b>{g.totalBRL != null && cv.moeda !== 'BRL' && <div className="small muted">≈ {cvFmtMoeda(g.totalBRL, 'BRL')}</div>}</> : <span className="muted">—</span>}</td>; })}
+                  <td />
                   <td className="text-right"><b>{calc.totalBRL != null ? cvFmtMoeda(calc.totalBRL, 'BRL') : (cambioNum > 0 ? '—' : 'informe o câmbio')}</b></td>
                 </tr>
               </tfoot>
