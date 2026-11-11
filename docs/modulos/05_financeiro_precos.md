@@ -6,12 +6,12 @@
 >
 > **Fonte da verdade:** o código e o banco, conferidos em 31/10/2026 (`origin/main` `980586c`). **Conferido** quer dizer lido no código ou consultado no banco (só SELECT) nesta data; **Herdado** quer dizer que veio do `CLAUDE.md` ou de uma spec e **não** foi reconferido agora; **Não verificado** é o que não foi possível conferir. Sem selo vale como Não verificado (Art. 6). Sem número de linha (envelhece): cita-se arquivo e função.
 >
-> **Escopo do módulo:** as cinco telas do grupo "Financeiro & Preços" do menu (`NAV_GROUPS` em `shell.jsx`): **Atualização de Custos**, **Precificação**, **Aval Financeiro**, **Emissão de NF** e **Comissões**. O mapa do `CLAUDE.md` listava "Precificação, Atualização de Custos, Avais" e não citava Emissão de NF nem Comissões; **vale o menu** (Conferido). Fora deste módulo: Formulário, Cotação a Fornecedor e Proposta (4); Aval Jurídico e Contrato de Venda (6); P.I. e Embarques (7); Prazos & Pendências, Central de Decisões, Notificações e Dashboard (1); Pagamentos a Instaladores (11); Expedição e a leitura de pedidos do Omie (12 e 13).
+> **Escopo do módulo:** as seis telas do grupo "Financeiro & Preços" do menu (`NAV_GROUPS` em `shell.jsx`): **Atualização de Custos**, **Precificação**, **Aval Financeiro**, **Emissão de NF**, **Boletos Avisos** e **Comissões**. O mapa do `CLAUDE.md` listava "Precificação, Atualização de Custos, Avais" e não citava Emissão de NF nem Comissões; **vale o menu** (Conferido). Fora deste módulo: Formulário, Cotação a Fornecedor e Proposta (4); Aval Jurídico e Contrato de Venda (6); P.I. e Embarques (7); Prazos & Pendências, Central de Decisões, Notificações e Dashboard (1); Pagamentos a Instaladores (11); Expedição e a leitura de pedidos do Omie (12 e 13).
 >
 > **Arquivos do módulo que moram em arquivos de outro módulo (Conferido):** `ComissoesPage` está em `financeiro.jsx` (o arquivo de Prazos & Pendências e Notificações, módulo 1); `PropostasPage` está em `precificacao.jsx` (descrita no 4.5).
 
 ## Como esta numeração funciona
-- A regra de numeração (móvel, como cláusula de contrato) e os 11 temas de cada tela moram **uma vez só**, em `docs/modulos/01_geral.md` ("Como esta numeração funciona"). Aqui vale a mesma: módulo = **5**; telas filhas = **5.1 a 5.5**, na ordem do menu; o conteúdo comum fica na **Parte comum**, com prefixo PC-.
+- A regra de numeração (móvel, como cláusula de contrato) e os 11 temas de cada tela moram **uma vez só**, em `docs/modulos/01_geral.md` ("Como esta numeração funciona"). Aqui vale a mesma: módulo = **5**; telas filhas = **5.1 a 5.6**, na ordem do menu; o conteúdo comum fica na **Parte comum**, com prefixo PC-.
 - **Tudo o que é janela, aba, cartão ou modo de uma tela pertence a ela.** Na 5.1 estão as seis abas; na 5.2 a fila, o detalhe de cálculo, a Memória de cálculo, os modais e o modo "Outros projetos"; na 5.3 as cinco janelas de ação.
 - Mudou algo? Escreva no tema certo da tela e **reescreva o Índice e o Glossário** na mesma sessão.
 
@@ -25,8 +25,10 @@
    &nbsp;&nbsp;&nbsp;5.3.1 O que é · 5.3.2 Rota e arquivos · 5.3.3 Perfil e acesso · 5.3.4 O que a tela mostra · 5.3.5 Botões e controles · 5.3.6 Comportamento · 5.3.7 Dados (lê/grava) · 5.3.8 Regras e armadilhas · 5.3.9 Testes · 5.3.10 Pendências e decisões · 5.3.11 Histórico
    5.4 Emissão de NF
    &nbsp;&nbsp;&nbsp;5.4.1 O que é · 5.4.2 Rota e arquivos · 5.4.3 Perfil e acesso · 5.4.4 O que a tela mostra · 5.4.5 Botões e controles · 5.4.6 Comportamento · 5.4.7 Dados (lê/grava) · 5.4.8 Regras e armadilhas · 5.4.9 Testes · 5.4.10 Pendências e decisões · 5.4.11 Histórico
-   5.5 Comissões
+   5.5 Boletos Avisos (clientes com boleto em aberto, semáforo, log de e-mails e respostas, avisos D-5/D-1/D0/D+1)
    &nbsp;&nbsp;&nbsp;5.5.1 O que é · 5.5.2 Rota e arquivos · 5.5.3 Perfil e acesso · 5.5.4 O que a tela mostra · 5.5.5 Botões e controles · 5.5.6 Comportamento · 5.5.7 Dados (lê/grava) · 5.5.8 Regras e armadilhas · 5.5.9 Testes · 5.5.10 Pendências e decisões · 5.5.11 Histórico
+   5.6 Comissões
+   &nbsp;&nbsp;&nbsp;5.6.1 O que é · 5.6.2 Rota e arquivos · 5.6.3 Perfil e acesso · 5.6.4 O que a tela mostra · 5.6.5 Botões e controles · 5.6.6 Comportamento · 5.6.7 Dados (lê/grava) · 5.6.8 Regras e armadilhas · 5.6.9 Testes · 5.6.10 Pendências e decisões · 5.6.11 Histórico
    Parte comum de Financeiro & Preços (sem número de tela)
    &nbsp;&nbsp;&nbsp;PC-1 Mapa de ligações · PC-2 Como o preço se forma (herança e cálculo) · PC-3 Os avais e a liberação da compra · PC-4 As três "comissões" · PC-5 Imposto e margem: ICMS, DIFAL e a regra dos 15% · PC-6 Identidade, alçadas e segurança · PC-7 Gatilhos e rotinas · PC-8 Tabelas · PC-9 Navegação, cache e testes · PC-10 Menu "?" e tutoriais · PC-11 Documentos soltos e destino do que foi concatenado · PC-12 Benefícios trocados com os outros módulos
 6. Contratos & Jurídico → `06_contratos_juridico.md` (REAL)
@@ -53,6 +55,10 @@ Termos gerais (soft-delete, alerta, alçada, Nº da cotação) estão no glossá
 - **Teto de custo:** preço de venda × (1 − margem mínima), gravado quando o CEO aprova; os custos reais depois dele são comparados com ele.
 - **Conferência proposta × NF:** registro manual, na Emissão de NF, de que a nota confere com a proposta.
 - **Histórico (pedido):** pedido já entregue antes do sistema; não tem SLA.
+- **Boletos Avisos:** a tela dos avisos de boleto (5.5). Lista só clientes com boleto em aberto no Omie.
+- **Semáforo (Em dia / Vence hoje / Atrasado):** situação do cliente na lista de Boletos Avisos; vale o pior boleto dele.
+- **D-5 / D-1 / D0 / D+1:** as quatro etapas dos avisos automáticos: 5 dias antes, 1 dia antes, no dia e 1 dia depois do vencimento.
+- **Modo teste (Boletos Avisos):** endereço único para onde vão todos os e-mails, para ensaiar sem avisar o cliente.
 - **Split de comissão / origem da venda:** a regra de comissão divide o valor entre recebedores conforme a "Origem da venda" do formulário.
 
 ---
@@ -144,7 +150,7 @@ Cabeçalho "Cadastros · Atualização de Custos" / **Atualização de Custos** 
 4. **Os 27 DIFAL e as 27 capitais** são lidos sem paginar (abaixo de 1.000). Sem risco hoje.
 5. **Números do `CLAUDE.md` defasados** (containers, GRI, 20HC a R$ 30.100,20): o banco mostra 20HC a R$ 24.138,45 e 40HC a R$ 26.820,50 (cotação de 29/10/2026). É dado vivo do Financeiro; a seção antiga continua como histórico (Art. 12: ela cita valores que não valem mais).
 6. **Só uma regra de ICMS** (SP→SP). Outras UFs caem no 4% global e avisam na Memória de cálculo. A coluna NCM existe mas **a busca ignora o NCM** quando a regra tem um (devolve a primeira regra sem NCM, senão a primeira da lista). Conferido.
-7. **Texto do Copiloto** desta tela está desatualizado (5.5 PC-10).
+7. **Texto do Copiloto** desta tela está desatualizado (PC-10).
 8. **Ajuda "?" não existe** para `cadastro-custos`; o tutorial existe (PC-10).
 9. **Sem teste de componente nem da escolha de faixa da busca de MO** (5.1.9).
 10. **ID-TAG, Taxa de porto e Porto nos Containers (06/11/2026, pedido do Gelson; banco, aba Containers e Precificação FEITOS, cada um com "Confirmo").** Selo: **Herdado** das respostas do Gelson no chat; o que cita código foi **Conferido** em 06/11/2026.
@@ -426,24 +432,100 @@ Nasceu em 03/10/2026 junto da fila de produção e da Expedição do PCP; o SLA 
 
 ---
 
-## 5.5 Comissões
+## 5.5 Boletos Avisos
 
 ### 5.5.1 O que é
-A tela que lista as **comissões de venda** (uma linha por recebedor), aplica as **regras de comissionamento por origem da venda** e deixa o Financeiro **aprovar** e **pagar**. Uma fila no topo mostra as **propostas assinadas ainda sem comissão** e o botão que a gera. **Conferido** em `ComissoesPage` (`financeiro.jsx`), `comissionamento-store.js` e no banco, 31/10/2026.
+A tela onde **moram os avisos de boleto**: lista **só os clientes que têm boleto em aberto** no Omie (Razão Social · Qtd de Boletos), com um **semáforo** por cliente (**Em dia**, **Vence hoje**, **Atrasado**, com os dias de atraso). Ao clicar no cliente abre o **Log de envios** (dia e hora de cada e-mail de aviso, a etapa, para quem foi e a **resposta do cliente**, se houver) e os boletos dele. O sistema manda **e-mail de aviso 5 dias antes (D-5), 1 dia antes (D-1), no dia (D0) e 1 dia depois (D+1) do vencimento**, e **avisa a Juliana dos atrasos** pelo gi-avisos (WhatsApp). O financeiro também pode mandar um aviso na hora, pelo botão **Enviar aviso**. Pedido do Gelson em 11/11/2026. **Conferido** no código, nos testes e na tela com dados simulados, 11/11/2026; a migration e a Edge Function foram **aplicadas em produção em 11/11/2026** (com o "Confirmo" do Gelson) e a leitura do Omie foi **conferida de verdade**; o envio de e-mail real e o acesso com o login dos 3 **ainda não foram testados** (ver 5.5.10).
 
-**Fora do escopo desta tela:** a **comissão do vendedor e a de consultoria da Precificação** (5.2: abatem do lucro do preço e **não** geram linha aqui, PC-4); a **comissão manual do lead** (CRM, 2.1); pagar de fato (o "Pagar" aqui só muda o status, 5.5.8).
+**Fora do escopo desta tela:** emitir ou segunda via de boleto (Omie); baixar/dar baixa em pagamento (Omie); cobrança judicial ou negativação; o alerta nativo do Omie ("Alertas de Cobrança" da conta corrente), que é outro mecanismo e não aparece aqui; título **sem boleto gerado** (fica fora da lista); aviso por WhatsApp **ao cliente** (o gi-avisos só avisa a equipe, ver 16).
 
 ### 5.5.2 Rota e arquivos
+- Rota `boletos-avisos`; URL `/adm-financeiro/boletos-avisos[/<código do cliente no Omie>]` (o 2º segmento abre o cliente; `useRotaId`). Item "Boletos Avisos" no menu, entre Emissão de NF e Comissões. **Conferido** (`router.js`, `shell.jsx`, `app.jsx`, mapa de rotas regenerado).
+- Arquivos: `src/boletos-avisos.jsx` (`window.BoletosAvisosPage`), `src/boletos-avisos-store.js` (`window.BoletosAvisosStore`), `src/boletos-avisos-calc.js` (`window.BoletosAvisosCalc`, regra pura), `supabase/functions/boletos-avisos/index.ts`, `supabase/migrations/20261111100000_boletos_avisos.sql`.
+
+### 5.5.3 Perfil e acesso
+**Só Gelson, Diego e Juliana** (`gelson.simoes@`, `diego@` e `juliana@verticalparts.com.br`), **nem outro Administrador**. Três camadas, a de verdade é a do banco:
+1. **Banco:** as 5 tabelas e a visão nascem com RLS fechada; só passa quem satisfaz `boletos_avisos_pode()` (usuário ativo **e** e-mail na lista de `boletos_avisos_email_permitido()`, fixa na migration; mudar a lista = migration nova). Sem política para a chave pública. **Não há bypass de Administrador de propósito.**
+2. **Edge Function:** confere o token do usuário no Supabase e a mesma lista (via RPC só do servidor); qualquer outro recebe 403.
+3. **Menu e tela:** o item só aparece para os 3 e-mails e a tela mostra "Esta tela é restrita" para os demais (organização, não segurança, Art. 25).
+**Limite:** o e-mail da sessão só é confiável com a autenticação nativa ligada (hoje "on" para todos, `01_geral.md` PC-6). A **resposta do cliente** é lida de `emails_projeto`, que continua legível por qualquer usuário logado como o resto do Inbox (ver PC-6): a trava dos 3 cobre as tabelas desta tela, **não** essa tabela. **Conferido no banco (11/11/2026):** 5 tabelas com RLS ligada, 6 políticas, **nenhuma** para a chave pública (`anon` não lê nem executa a lista); a lista aceita Juliana e recusa outro e-mail; a função recusa chamada sem credencial (401). **Não verificado:** a tela com o login real de cada um dos 3.
+
+### 5.5.4 O que a tela mostra
+Cabeçalho "Financeiro & Preços · Boletos Avisos" e os botões **Atualizar do Omie** e **Simular envio de hoje**. Cartão de controle: caixa **Envio automático (ligado/desligado)**, **Modo teste** (endereço para onde tudo vai, ou "desligado"), hora da última leitura do Omie, contagens (clientes, boletos, atrasados, vencem hoje, sem e-mail) e busca por razão social ou CNPJ. Tabela **Situação (semáforo) · Razão Social · Qtd de Boletos · E-mail · Último aviso · Enviar aviso**, ordenada por mais dias de atraso. Linha aberta: **Boletos em aberto** (semáforo por boleto, NF · parcela, vencimento, valor, nº do boleto) e **Log de envios e respostas**. Vazio: "Nenhum boleto em aberto lido do Omie ainda. Clique em Atualizar do Omie." **Conferido** com dados simulados e, no banco, com dados reais do Omie (11/11/2026: 160 clientes, 633 boletos, 47 clientes atrasados, 1 vence hoje, 112 em dia).
+
+### 5.5.5 Botões e controles
+| Controle | O que faz |
+|---|---|
+| **Atualizar do Omie** | Chama a função `boletos-avisos` (`sincronizar`): relê os boletos em aberto e os e-mails dos clientes. Só leitura no Omie |
+| **Simular envio de hoje** | Mostra quem receberia aviso hoje, sem enviar |
+| **Envio automático** | Liga/desliga o envio das 4 etapas (confirma antes; nasce **desligado**) |
+| **Modo teste** (alterar) | Define um endereço único para onde vão **todos** os e-mails (com "[MODO TESTE]" no assunto); vazio = e-mail para os clientes de verdade |
+| Linha do cliente | Abre/fecha o detalhe (boletos e log) |
+| **Enviar aviso** | Manda agora um e-mail com todos os boletos em aberto do cliente (pede confirmação, mostra o destinatário); desabilitado se o cliente não tem e-mail |
+
+### 5.5.6 Comportamento
+1. **Leitura do Omie** (`sincronizar`, todo dia às 06h de Brasília ou pelo botão): lista contas a receber **a vencer, que vencem hoje e atrasadas**, fica só com as que têm **boleto gerado** e não estão recebidas/canceladas; quem sumiu da lista (pago, cancelado) passa a "não aberto". O e-mail do cliente é o de **faturamento**; se vazio, o **geral**; vários endereços separados por vírgula valem todos; só entra e-mail de formato válido. Cliente sem nenhum aparece "sem e-mail" e **não recebe**. Os e-mails são renovados a cada 7 dias, até 60 clientes por rodada.
+2. **Avisos automáticos** (`automatico`, segunda a sexta às 08h30 de Brasília, **só se o envio automático estiver ligado**): para cada boleto, a etapa devida é **D-5**, **D-1**, **D0** ou **D+1** (regra única em `BoletosAvisosCalc.etapaDevida`). A etapa só vale **na data dela**; na **segunda-feira** sai também a que caiu no sábado/domingo (a mais recente vence). Se a rotina falhar num dia, a etapa daquele dia **não** é recuperada. **Um e-mail por cliente por dia**, listando os boletos da etapa; o assunto segue a etapa mais urgente. Cada boleto recebe cada etapa **uma vez só** (tabela de itens com índice único).
+3. **Atraso → Juliana:** depois de enviar, grava um alerta para `juliana@verticalparts.com.br` (módulo Financeiro, clique abre esta tela): "Boletos em atraso — <dia da semana>, dd/mm: N cliente(s)", com os mais antigos. **Um por dia** (o id leva a data; o gi-avisos agrupa por título em 24 h, por isso o título leva o dia da semana).
+4. **Envio:** pela caixa **hub@verticalparts.com.br** (Microsoft Graph), na mesma forma da `send-email`, **sem passar por ela**: a `send-email` só envia a e-mail já cadastrado no hub e quase nenhum e-mail de cliente do Omie está lá (Conferido: na amostra, 12 de 160 clientes). O destinatário **só pode vir de `boletos_avisos_clientes`** (gravado do Omie), nunca do pedido da tela. Limite de 40 clientes por rodada (3 em modo teste), pausa entre envios. Cada envio grava `boletos_avisos_envios` (imutável) e **uma linha em `emails_projeto`** (`referencia_tipo = 'boleto_aviso'`, `referencia_id` = id do envio) para o `read-inbox` ligar a **resposta do cliente** pelo Message-ID.
+5. **Semáforo do cliente** = o pior dos boletos: **Atrasado** se algum venceu antes de hoje; senão **Vence hoje** se algum vence hoje; senão **Em dia**. Dias de atraso = o maior. Data de Brasília.
+6. **Texto do aviso** (`montarAviso`): português, lista NF · parcela, vencimento, valor e a **linha digitável**; pede o comprovante se já pagou; assinatura "Financeiro — VerticalParts". O D-5 **não promete "5 dias"** (na segunda-feira pode sair com 3 ou 4 dias de folga).
+**Conferido** no código e nos testes; a leitura do Omie foi **conferida em produção** (11/11/2026). O envio real **não foi testado**.
+
+### 5.5.7 Dados — o que lê e o que grava
+**Lê do Omie (só leitura):** `financas/contareceber ListarContasReceber` (filtros AVENCER, VENCEHOJE, ATRASADO; 100 por página) e `geral/clientes ConsultarCliente`. **Tabelas novas** (todas `boletos_avisos_*`, fechadas): `_config` (uma linha: `envio_automatico` **false** por padrão, `destino_teste`, `sincronizado_em`), `_clientes` (razão, CNPJ, e-mails, origem do e-mail), `_boletos` (espelho dos boletos em aberto), `_envios` (log imutável: etapa, origem, para, assunto, corpo, status, erro, modo teste, quem enviou), `_envio_itens` (idempotência: um boleto por etapa automática) e a visão `boletos_avisos_resumo_v` (a lista: semáforo, qtd, dias, último aviso; `security_invoker`). **Grava também:** `emails_projeto` (saída) e `alertas` (aviso à Juliana), `vp_logs` (módulo "Boletos Avisos"). **Herda de:** Omie. **Doa para:** Inbox (1.5: o envio e a resposta), Notificações/gi-avisos (o alerta da Juliana).
+
+### 5.5.8 Regras e armadilhas
+- **O envio automático nasce desligado** e o **modo teste** existe para o primeiro uso: ligar o modo teste, simular, enviar para si, só então desligar o modo teste e ligar o automático (decisão do Gelson, 11/11/2026).
+- **Não use a `send-email` para estes avisos** (travaria quase todos por "não cadastrado") **nem afrouxe a trava dela** por causa disto (área blindada, `01_geral.md` 1.5). A função `boletos-avisos` tem guarda própria; **não** aceite destinatário vindo do navegador (um teste confere).
+- **Regra em dois lugares:** o bloco `BEGIN CALC … END CALC` da função é cópia de `boletos-avisos-calc.js`; `boletos-avisos-calc.test.js` falha se divergirem. **Mudou a regra? Mude os dois e republique a função.**
+- **A lista dos 3 e-mails mora na migration** (e uma cópia só de menu em `shell.jsx`): mudar quem acessa exige migration nova e o "Confirmo" do Art. 14.
+- **Omie (Art. 30):** só leitura; a rotina para de consultar clientes depois de 3 erros seguidos (o Omie bloqueia a API toda por 30 minutos depois de ~10 erros).
+- **Boleto sem e-mail do cliente não recebe** e a tela só marca "sem e-mail"; quem cuida do cadastro é o Omie (3).
+- Quem **pagou no mesmo dia** de um aviso D0 pode receber o e-mail se o Omie ainda não baixou o título (a leitura é diária).
+
+### 5.5.9 Testes
+**Conferido** (11/11/2026): `src/boletos-avisos-calc.test.js` (18): etapas D-5/D-1/D0/D+1, recuperação da segunda-feira, semáforo e dias de atraso, texto do aviso, **paridade com a Edge Function**, lista dos 3 e-mails na migration, envio automático desligado por padrão e destinatário nunca vindo do pedido. Tela aberta no navegador (restrita para usuário fora da lista; preenchida com dados simulados). **Conferido em produção (11/11/2026):** a primeira leitura real do Omie gravou 633 boletos em aberto de 160 clientes e resolveu os 160 e-mails; o banco recusa a chave pública. **Sem teste de componente, sem teste de envio pela Microsoft e sem teste das políticas com o login de cada um dos 3.**
+
+**Cenários de aceitação**
+1. *Dado* um boleto que vence em 5 dias, *quando* a rotina roda, *então* o cliente recebe o aviso D-5 e o log registra dia, hora e etapa (`etapaDevida`; envio **sem teste**).
+2. *Dado* um boleto que venceu ontem, *quando* a rotina roda, *então* sai o D+1 ao cliente e a Juliana recebe o alerta de atraso do dia (envio **sem teste**).
+3. *Dado* um usuário que não é Gelson, Diego nem Juliana, *quando* abre a tela, *então* vê "restrita" e o banco não devolve linha (tela conferida; **banco sem teste**).
+4. *Dado* o cliente respondeu ao aviso, *então* a resposta aparece no log do envio (depende do `read-inbox`; **sem teste**).
+
+### 5.5.10 Pendências e decisões
+1. **Aplicado em produção em 11/11/2026** (com "Confirmo"): migration `20261111100000_boletos_avisos.sql` (tabelas, políticas, visão, 2 crons) e Edge Function `boletos-avisos` (versão 1, `verify_jwt` ligado). **O envio automático está DESLIGADO** e o modo teste está vazio. O texto publicado tem o cabeçalho de comentário mais curto que o do arquivo do repositório; o código é o mesmo.
+2. **Conferido na primeira leitura real:** 633 boletos em aberto de 160 clientes; os 160 têm e-mail com formato válido (95 pelo faturamento, 65 pelo geral, 0 sem e-mail); 47 clientes atrasados, 1 vence hoje, 112 em dia. **Não verificado:** o envio real pela hub@, o alerta à Juliana no WhatsApp e a ligação da resposta do cliente ao envio.
+3. **Cobertura de e-mail:** os 160 clientes têm e-mail com formato válido; **não se sabe** se as caixas existem e estão ativas.
+3.1. **Achado do primeiro uso:** a leitura resolve **60 e-mails por rodada** (proteção contra o bloqueio do Omie); com 160 clientes novos foram necessárias 3 rodadas, feitas à mão pelo comando do cron. Cliente novo no Omie pode ficar "sem e-mail" na tela até a rodada seguinte.
+4. **Boleto vencido há mais de 4 dias não recebe e-mail automático** (a regra só tem D+1); a Juliana é avisada todo dia e o financeiro pode usar **Enviar aviso**. Decisão do Gelson se deve continuar cobrando (D+3, D+7…).
+5. **Feriados** não entram na regra (segunda a sexta). **Achado, sem correção.**
+6. **Sem Realtime, sem ajuda "?", sem tutorial e sem texto no Copiloto** (a tela é nova).
+7. **A resposta do cliente** sai de `emails_projeto`, que não é fechada só para os 3 (ver 5.5.3).
+
+### 5.5.11 Histórico
+Nasceu em 11/11/2026 por pedido do Gelson. Antes, o levantamento no Omie (leitura) mostrou que o Omie tem alerta nativo por e-mail (até 2 por conta corrente, de 30 dias antes até 30 dias depois só na conta Omie.CASH Conta Completa), mas **não expõe pela API o log do que enviou**; por isso o log só existe se o hub enviar. A conta tem as contas BB e Santander, sem Omie.CASH entre as 78 contas lidas (inferência).
+
+---
+
+## 5.6 Comissões
+
+### 5.6.1 O que é
+A tela que lista as **comissões de venda** (uma linha por recebedor), aplica as **regras de comissionamento por origem da venda** e deixa o Financeiro **aprovar** e **pagar**. Uma fila no topo mostra as **propostas assinadas ainda sem comissão** e o botão que a gera. **Conferido** em `ComissoesPage` (`financeiro.jsx`), `comissionamento-store.js` e no banco, 31/10/2026.
+
+**Fora do escopo desta tela:** a **comissão do vendedor e a de consultoria da Precificação** (5.2: abatem do lucro do preço e **não** geram linha aqui, PC-4); a **comissão manual do lead** (CRM, 2.1); pagar de fato (o "Pagar" aqui só muda o status, 5.6.8).
+
+### 5.6.2 Rota e arquivos
 - Rota `comissoes`; URL `/adm-financeiro/comissoes`; item "Comissões"; caminho de navegação "Financeiro / Comissões". **Conferido.**
 - Arquivos: `ComissoesPage` em `src/financeiro.jsx` (o arquivo do módulo 1), `src/comissionamento-store.js` (`window.ComissionamentoStore`), `src/print-app.jsx` (também a abre na versão de impressão).
 
-### 5.5.3 Perfil e acesso
+### 5.6.3 Perfil e acesso
 Restrita ao Financeiro e ao Administrador. **Não existe alçada `comissoes` no catálogo** e a tela não chama `temCapacidade`. **Aprovar, Aprovar (diretoria), Aprovar todas e Pagar** funcionam para qualquer um que abra a tela (**inclusive "diretoria"**: nada confere se quem clica é o aprovador). **Banco (Conferido):** `comissoes` e `regras_comissionamento` (RLS ligada) leem, inserem e atualizam para o **público**, **sem DELETE**, mais `vp_valores_leitura` e `vp_valores_guarda` (modo `fechada`, etiqueta `precificacao.comissao`).
 
-### 5.5.4 O que a tela mostra
+### 5.6.4 O que a tela mostra
 Cabeçalho "Financeiro · Comissões" / **Comissões — Q2/26** (**fixo no código**) / "Comissionamento sobre faturamento líquido · liberação após confirmação de entrada"; quatro KPIs (**Total comissões Q2**, **Aprovado**, **Aguardando**, **Maior comissão**); cartão **Propostas assinadas aguardando geração de comissão** (só quando há) com Proposta, Cotação Nº, Valor e **Gerar comissão**; cartão **Resumo por vendedor** com **Vendedor (e cargo) · Projetos fechados · Faturamento líquido · % · Comissão Q2 · Progresso ("% meta Q" contra 150.000 fixo) · Status · ação**; rodapé "Total a pagar Q2/26". Vazio: "Nenhum registro cadastrado." **Conferido.**
 
-### 5.5.5 Botões e controles
+### 5.6.5 Botões e controles
 | Controle | O que faz |
 |---|---|
 | **Folha de pagto** | Baixa `folha-comissoes-q2.csv` com as linhas (vendedor, cargo, projetos, faturado, %, comissão, status) |
@@ -453,37 +535,37 @@ Cabeçalho "Financeiro · Comissões" / **Comissões — Q2/26** (**fixo no cód
 | **Aprovar (diretoria)** | Para "Aguardando aprovação diretoria"; status "Aprovado" (sem conferir quem aprova) |
 | **Pagar** | Para "Aprovado"; status "Pago" |
 
-### 5.5.6 Comportamento
+### 5.6.6 Comportamento
 **Conferido.**
 1. **Gerar comissão** (`gerarComissoesDaProposta`): só para proposta **aprovada**; lê `origem_venda` e `vendedor` do **Formulário da mesma cotação**; busca a regra pela origem; para cada **split** da regra cria uma linha com recebedor, `pct` (guardado como 100 × fração), `comissao = valor total da proposta × fração`, status "Aguardando aprovação" ou "Aguardando aprovação diretoria" (se o percentual passa do limite da regra). É **idempotente** (erro se já existe comissão da proposta).
 2. **Erros explicam o motivo:** sem origem da venda no formulário ("não informou 'Origem da venda'") ou sem regra cadastrada para a origem.
 3. **A fila** lista até 50 propostas aprovadas e vigentes sem linha em `comissoes`.
 4. **Aprovar e Pagar** atualizam o status com `.select()` e tratam 0 linhas como erro (RLS) em vez de falso sucesso; registram em `vp_logs`.
-5. As quatro **regras** vivem em `regras_comissionamento`: Conquista Vendedor; Indicação VerticalParts; Indicação Escamax + Vendedor (2 splits); Indicação Terceiros (limite de 2% sem aprovação, aprovador Diego). **Não há tela** para editá-las (5.5.10 item 2).
+5. As quatro **regras** vivem em `regras_comissionamento`: Conquista Vendedor; Indicação VerticalParts; Indicação Escamax + Vendedor (2 splits); Indicação Terceiros (limite de 2% sem aprovação, aprovador Diego). **Não há tela** para editá-las (5.6.10 item 2).
 
-### 5.5.7 Dados — o que lê e o que grava
+### 5.6.7 Dados — o que lê e o que grava
 **Lê e grava:** `comissoes` (**0 linhas hoje**; colunas: vendedor, cargo, projetos, faturado, comissão, pct, status, período, cotação, proposta, origem, recebedor, exige diretoria, aprovador), `regras_comissionamento` (4). **Lê:** `propostas`, `formularios_elevador`. **Herda de:** 4.5 (proposta aprovada), 4.1 (origem da venda e vendedor). **Doa para:** o Dashboard (`supabase.js` carrega `comissoes` e o KPI de comissões pendentes, 1.1) e a folha de pagamento (CSV). **Hoje:** há 3 propostas aprovadas e vigentes; **só 1 tem formulário com origem da venda preenchida**. Entre os 61 formulários, a origem "Site VerticalParts" (2) **não tem regra** e 8 estão sem origem; gerar comissão dessas daria erro.
 
-### 5.5.8 Regras e armadilhas
+### 5.6.8 Regras e armadilhas
 - **"Pagar" não paga:** só muda o status para "Pago". Não há integração com o Omie nem com o Contas a Pagar.
 - **A base é o valor total da proposta**, embora o texto da tela diga "faturamento líquido".
 - **"Aprovar todas" ignora** as que exigem diretoria (por desenho).
 - **Percentual:** `pct` é guardado como 100 × fração e exibido com "%".
 - **Segurança:** como toda a escrita está liberada ao público, o "limite que exige diretoria" é regra de tela (PC-6).
 
-### 5.5.9 Testes
-**Não há teste** de `comissionamento-store.js` nem da tela (Conferido: nenhum `*.test.js` o cita). O KPI de comissões pendentes do Dashboard é coberto por `dashboard-metrics-financeiro.test.js` (9 testes), que usa os status "Aguardando" e "Paga" (5.5.10 item 3). Cenário sem teste (Art. 33 pede teste junto da regra nova; isto é dívida): **dado** uma proposta aprovada com origem "Conquista Vendedor", **quando** se gera a comissão, **então** nasce uma linha por split com a soma igual ao percentual da regra.
+### 5.6.9 Testes
+**Não há teste** de `comissionamento-store.js` nem da tela (Conferido: nenhum `*.test.js` o cita). O KPI de comissões pendentes do Dashboard é coberto por `dashboard-metrics-financeiro.test.js` (9 testes), que usa os status "Aguardando" e "Paga" (5.6.10 item 3). Cenário sem teste (Art. 33 pede teste junto da regra nova; isto é dívida): **dado** uma proposta aprovada com origem "Conquista Vendedor", **quando** se gera a comissão, **então** nasce uma linha por split com a soma igual ao percentual da regra.
 
-### 5.5.10 Pendências e decisões
+### 5.6.10 Pendências e decisões
 1. **Três vocabulários de status:** a tela e o motor usam "Aguardando aprovação", "Aguardando aprovação diretoria", "Aprovado" e "Pago"; o KPI do Dashboard e seus testes contam só `status === 'Aguardando'` e falam em "Paga". **Comissões geradas pelo motor não entram nesse KPI.** Hoje não há linhas, então sem efeito. **Achado, sem correção** (também para a Geral, 1.1).
 2. **Sem tela para editar as regras de comissionamento:** `salvarRegra` e `listarRegras` existem no store e **nenhuma tela os chama**. Editar é por SQL.
-3. **Origem da venda faltando:** ver 5.5.7. Decisão do Gelson: criar a regra de "Site VerticalParts"? tornar a origem obrigatória no Formulário?
-4. **Ninguém confere quem aprova "diretoria"** (5.5.3). Decisão do Gelson.
+3. **Origem da venda faltando:** ver 5.6.7. Decisão do Gelson: criar a regra de "Site VerticalParts"? tornar a origem obrigatória no Formulário?
+4. **Ninguém confere quem aprova "diretoria"** (5.6.3). Decisão do Gelson.
 5. **Rótulos fixos no código:** "Q2/26", "150.000" de meta, "pagamento dia 10", "N colaboradores" (conta linhas). Quando entrar o 4º trimestre, a tela continua dizendo Q2.
 6. **A tabela `comissoes` está vazia:** a tela nunca foi usada de ponta a ponta em produção (Conferido). Não testei a geração (gravaria dado real).
 7. **Sem ajuda "?"**, sem linha no Copiloto; tutorial existe (PC-10).
 
-### 5.5.11 Histórico
+### 5.6.11 Histórico
 O motor de regras por origem da venda nasceu na issue #68; a fila de "propostas assinadas aguardando comissão" e a geração automática vieram depois (data exata **não verificada**).
 
 ---
@@ -505,9 +587,12 @@ O motor de regras por origem da venda nasceu na issue #68; a fila de "propostas 
 | Aval Engenharia (8, 9) → Aval Financeiro | projeto de instalação assinado vira o terceiro aval | 8/9 → 5.3 |
 | Pedidos do Omie (12) → Emissão de NF | etapa 20, 50, 60, 70, 80; faturado; OP-mãe | 12, 13 → 5.4 |
 | Emissão de NF → Expedição (12) | a trava da Expedição exige NF | 5.4 → 12 |
-| Proposta aprovada + Formulário → Comissões | origem da venda, vendedor, valor total | 4.5, 4.1 → 5.5 |
+| Proposta aprovada + Formulário → Comissões | origem da venda, vendedor, valor total | 4.5, 4.1 → 5.6 |
 | Eventos de fluxo → Prazos & Pendências (1) | cada ação de aval cria ou fecha uma etapa | PC-7 |
-| Comissões → Dashboard (1.1) | KPI de comissões pendentes | 5.5 → 1.1 |
+| Comissões → Dashboard (1.1) | KPI de comissões pendentes | 5.6 → 1.1 |
+| Omie (contas a receber e cadastro do cliente) → Boletos Avisos | boleto em aberto, vencimento, valor, linha digitável, e-mail de faturamento do cliente | 3 → 5.5 |
+| Boletos Avisos → Inbox (1.5) | o e-mail de aviso sai em Enviados e a resposta do cliente volta ligada ao envio (`referencia_tipo = boleto_aviso`) | 5.5 → 1.5 |
+| Boletos Avisos → Notificações / gi-avisos (1.2, 16) | alerta diário de atraso para a Juliana (WhatsApp) | 5.5 → 1.2, 16 |
 
 ## PC-2 Como o preço se forma (herança e cálculo)
 **Conferido** em `precificacao-elevador-engine.js` (função `calcularPlanilha`) e no store.
@@ -530,8 +615,8 @@ O motor de regras por origem da venda nasceu na issue #68; a fila de "propostas 
 Há três coisas com o mesmo nome. **Não se somam e não se ligam entre si** no código (Conferido; a ligação por regra de negócio **não foi verificada**):
 1. **Comissão dentro da Precificação (5.2):** vendedor, indicação e consultoria, em % do preço. São um **custo do cálculo** (abatem do lucro); não geram linha em `comissoes`.
 2. **Comissão manual do lead (CRM, 2.1):** % do lead (2% se em branco), mostrada como "comissão prevista"; não gera linha em `comissoes`.
-3. **Comissão paga (5.5):** a lista `comissoes`, gerada da proposta aprovada pela regra da **origem da venda**.
-Esta divergência de origem é conhecida; **decisão do Gelson** sobre unificar ou manter separadas fica em 5.5.10.
+3. **Comissão paga (5.6):** a lista `comissoes`, gerada da proposta aprovada pela regra da **origem da venda**.
+Esta divergência de origem é conhecida; **decisão do Gelson** sobre unificar ou manter separadas fica em 5.6.10.
 
 ## PC-5 Imposto e margem: ICMS, DIFAL e a regra dos 15%
 - **Margem e CEO:** a constante `LIMITE_MARGEM_SEM_CEO` (15%, em `decisoes-store.js`) vale para o envio da proposta (4.5), para a decisão de compra (`compra_equipamento_ceo`) e para o selo do Aval Financeiro. A **margem mínima** do parâmetro padrão também é 15%; a tela pode editá-la por precificação.
@@ -555,6 +640,7 @@ Esta divergência de origem é conhecida; **decisão do Gelson** sobre unificar 
 | `pcp_pedido_acompanhamento`, `pcp_expedicoes` | ligada | ler, inserir e atualizar para o público |
 | `pcp_pedidos` | ligada | só ler para o público |
 
+- **Boletos Avisos (5.5) é a exceção:** as 5 tabelas e a visão `boletos_avisos_resumo_v` nascem **fechadas** (sem política para a chave pública) e só abrem para os e-mails de `boletos_avisos_email_permitido()` — Gelson, Diego e Juliana, **sem bypass de Administrador**. A Edge Function repete a conferência. **Conferido** no banco em 11/11/2026 (ver 5.5.3); **não verificado** com o login dos 3. A resposta do cliente vem de `emails_projeto`, que não é fechada só para os 3.
 - **Trava na tela é organização, não segurança** (Art. 25). Os botões "diretoria" e "restrito ao Financeiro" são do navegador. O que o banco garante sozinho: a guarda de valores `vp_valores_guarda` (só para sessão nativa e, para valer, ligada para a pessoa).
 - **Desfoque e guarda de valores em R$ (`vp_valores_*`):** a regra de quem vê valores vem do vpsistema (tabela `valores_acesso`); 7 das 17 tabelas com regra são deste módulo (`custos_containers`, `custos_instalacao_elevador`, `custos_instalacao_escada_esteira`, `precificacoes_elevador`, `avais_financeiros`, `comissoes`, `regras_comissionamento`). A tabela `vp_valores_piloto` tem 1 linha. O **plano** de 13/10/2026 (PC-11) é o desenho do desfoque na tela; **não verifiquei** quais telas deste módulo já usam o componente de valor: não achei `src/vp-valores.js` (Conferido, a lista de `src` não o traz). **Não verificado:** se algum valor de R$ já aparece desfocado nas telas daqui.
 - **Alçadas do módulo** (catálogo × uso na tela): só `emissao-nf.editar` é conferida. `cadastro-custos`, `precificacao`, `aval-financeiro` e `emissao-nf` (ver) existem no catálogo e **não** são conferidas; **`comissoes` não existe no catálogo**. O menu restringe a Financeiro e Administrador (exceto Atualização de Custos).
@@ -564,6 +650,7 @@ Esta divergência de origem é conhecida; **decisão do Gelson** sobre unificar 
 - **Gatilhos do banco** (**Conferido**): em `avais_financeiros`: `trg_avais_financeiros_ok`, `trg_avais_financeiros_ceo_ok` e `vp_valores_guarda`; funções `fn_avais_abrir_na_proposta` (abre os avais na aprovação da proposta) e `fn_avais_notificar_ok`; em `precificacoes_elevador`: `trg_precificacao_marca_inicio` (marca o início da etapa "Precificação" da cotação, falha engolida) e `vp_valores_guarda`; `vp_valores_guarda` também em `comissoes`, `regras_comissionamento` e nas três tabelas de custo da 5.1.
 - **Eventos de fluxo emitidos** (**Conferido** no código): `FINANCEIRO_CONSULTOU_SCORE`, `FINANCEIRO_APROVOU_VENDA`, `FINANCEIRO_REPROVOU_VENDA`, `SINAL_PAGO`, `AVAL_PAGAMENTO_CONFIRMADO`, `FINANCEIRO_APROVOU_CEO`, `FINANCEIRO_APROVOU_OWNER` (sem uso na tela). A Precificação não emite evento próprio ao aprovar; a Proposta criada dispara o dela (4).
 - **Rotinas agendadas** (**Conferido** em `cron.job`, horários em UTC): `sync-pcp-pedidos-etapa20` (`0,30 10-22 * * 1-5`, ou seja, de 7h a 19h de Brasília) e `sync-pcp-pedidos-abertos` (`10,40 10-22 * * 1-5`) alimentam a Emissão de NF; `sync-pcp-pedidos-previsao-etapa10` e `pcp-pedidos-tirar-etapa10` (a limpeza de hora em hora) mantêm a etapa 10 fora das telas de NF; `pcp-carga-semanal-2-ler` (domingo). **Nenhuma rotina é específica de Precificação, Avais ou Comissões.**
+- **Rotinas de Boletos Avisos** (migration `20261111100000`, **aplicada em 11/11/2026**; horários de Brasília): `boletos-avisos-sincronizar` (todo dia 06h, lê o Omie) e `boletos-avisos-automatico` (segunda a sexta 08h30, manda os avisos **só com o envio automático ligado**), ambas chamam a Edge Function `boletos-avisos` com o `cron_secret`. Gatilho: nenhum.
 - **Realtime:** `precificacoes_elevador` está publicada e nenhuma tela escuta (5.2.10 item 8); `avais_financeiros`, `comissoes` e `pcp_pedidos` **não** estão na publicação.
 
 ## PC-8 Tabelas
@@ -583,18 +670,20 @@ Esta divergência de origem é conhecida; **decisão do Gelson** sobre unificar 
 | `cotacao_custos_reais` | gastos reais contra o teto | 0 |
 | `comissoes` / `regras_comissionamento` | linhas de comissão / regras por origem | 0 / 4 |
 | `pcp_pedidos`, `pcp_pedido_acompanhamento`, `pcp_expedicoes` | pedidos do Omie / conferência da NF / despacho | 288 / 17 / 0 |
+| `boletos_avisos_config`, `_clientes`, `_boletos`, `_envios`, `_envio_itens` e a visão `boletos_avisos_resumo_v` | configuração dos avisos / clientes e e-mails do Omie / boletos em aberto / log imutável de e-mails / um boleto por etapa | **criadas em 11/11/2026**; hoje: `_clientes` 160, `_boletos` 633 em aberto, `_config` 1, `_envios` 0, `_envio_itens` 0 |
 
 ## PC-9 Navegação, cache e testes
 A regra geral (hooks, `setSubsel` + `setRoute`, estado na URL, cache `?v=`, jsx-loader) está em `01_geral.md` PC-9. O que é específico daqui:
 - **Estado na URL:** aba de Atualização de Custos (e a tração); precificação aberta (id); janela e proposta do Aval Financeiro; pedido em conferência da Emissão de NF. **Não vai para a URL:** o modo Elevadores/Outros projetos e a aba da Memória de cálculo.
 - **Hooks antes do `return` condicional** na fila da Precificação (já corrigido uma vez).
-- **Testes:** **115 testes nos 11 arquivos citados** nas telas (5.1: 26; 5.2: 74 sem contar o de DIFAL repetido; 5.3: 11; 5.4: 4 e a paridade de 5); o conjunto todo: **920 testes passam, 0 falham** (Conferido, `npm test`, 31/10/2026). `node scripts/check-cache-bust.js origin/main` rodado nesta tarefa. **E2E** (`npm run test:e2e`) **não rodado** (roda no CI); não há e2e específico, só a fumaça de rotas. A Comissões não tem teste (5.5.9).
+- **Testes:** **115 testes nos 11 arquivos citados** nas telas (5.1: 26; 5.2: 74 sem contar o de DIFAL repetido; 5.3: 11; 5.4: 4 e a paridade de 5); o conjunto todo: **920 testes passam, 0 falham** (Conferido, `npm test`, 31/10/2026). `node scripts/check-cache-bust.js origin/main` rodado nesta tarefa. **E2E** (`npm run test:e2e`) **não rodado** (roda no CI); não há e2e específico, só a fumaça de rotas. A Comissões não tem teste (5.6.9). Boletos Avisos: `boletos-avisos-calc.test.js` (18, 11/11/2026; 5.5.9).
 
 ## PC-10 Menu "?" e tutoriais
 Conferido em `shell.jsx` (`HELP_TOPICS`, `TUTORIAIS`) e em `TreinamentoVP/`, 31/10/2026.
 - **Ajuda "?"** existe só para `precificacao` (e o texto está desatualizado, 5.2.10 item 1). **Não existe** para `cadastro-custos`, `aval-financeiro`, `emissao-nf` nem `comissoes`.
 - **Copiloto VP:** só há texto em `vp_copiloto_docs` para `rota:cadastro-custos` e `rota:precificacao`, ambos de 10/10/2026 e defasados; para as outras três telas **não há linha** (5.2.10 item 2).
 - **Tutoriais** em `TreinamentoVP/financeiro-precos/` (módulo, `atualizacao-de-custos`, `precificacao`, `aval-financeiro`, `comissoes`): o do módulo é de **09/10/2026**; **não há tutorial de Emissão de NF**. A pasta está **fora do Git** (de outra sessão): não mexi. Telas mudaram depois (AFRMM, Ad-Valorem, regra de ICMS, devolução ao Vendas, Aval Engenharia, abas de Frete e DIFAL). **Tutorial não se edita à mão:** pedir à sessão de tutoriais para regenerar (Art. 46).
+- **Boletos Avisos (5.5)** é tela nova: **sem** ajuda "?", **sem** texto no Copiloto e **sem** tutorial (pedir à sessão de tutoriais, Art. 46).
 - **Cache do navegador:** ver `04_comercial_pre_venda.md` PC-10 (`?v=` igual ao publicado).
 
 ## PC-11 Documentos soltos e destino do que foi concatenado
@@ -613,7 +702,7 @@ Busca feita em `CLAUDE.md`, raiz, `docs/`, `docs/superpowers/specs/`, `docs/supe
 | `TreinamentoVP/financeiro-precos/*` | PC-10 | Tutoriais gerados por outra sessão (fora do Git); só apontados |
 | `README.md`, `AUDITORIA_FORENSE_E2E_SCORE.md`, `docs/PROJETO_INCRIVEL.md`, `.claude/agents/*`, `.claude/2026_*_relatorio.md` | — | Citam precificação de passagem; sem trecho que valha concatenar. Ficam como histórico |
 | `docs/eventos/`, `docs/relatorios/`, `handoffs/` | outros módulos | Sem relação direta encontrada; ficam |
-| **Parecem obsoletos — decisão do Gelson** | — | O modo "Outros projetos" da Precificação (código, 5.2.10 item 5); `aprovarComoOwner`/`isOwner` (5.3.10 item 2). O `salvarParametrosFiscais` e o `salvarRegra` **sem tela** (5.1.10 item 1 e 5.5.10 item 2) não são obsoletos: são lacunas |
+| **Parecem obsoletos — decisão do Gelson** | — | O modo "Outros projetos" da Precificação (código, 5.2.10 item 5); `aprovarComoOwner`/`isOwner` (5.3.10 item 2). O `salvarParametrosFiscais` e o `salvarRegra` **sem tela** (5.1.10 item 1 e 5.6.10 item 2) não são obsoletos: são lacunas |
 
 ## PC-12 Benefícios trocados com os outros módulos
 
@@ -632,9 +721,12 @@ Busca feita em `CLAUDE.md`, raiz, `docs/`, `docs/superpowers/specs/`, `docs/supe
 - **Recebido de Suprimentos & Importação (31/10/2026, texto em `07_suprimentos_importacao.md` PC-12):** a P.I. soma itens + taxas na moeda dela e as transferências entre P.I. entram na % paga; o frete vencedor do embarque vai em **USD** (BRL só se não há USD). Não existe câmbio central: cada tela usa o seu (`CambioAPI`, `cambio_diario`, cotação digitada na P.I.) — vale decidir uma fonte única com o Financeiro (7.PC-5). O **Aval de Pagamento** e a P.I. se ligam pelo gate de compra.
 - **Recebido de Contratos & Jurídico (31/10/2026, texto em `06_contratos_juridico.md` PC-12):** o Aval Jurídico (tela 6.2) é o segundo dos três avais da compra; **não** trava nada quando reprovado, só mostra o selo (6.2.8), o que combina com o achado de 5.3.10 item 3 (reprovar só muda o selo). A restrição daquela tela usa um perfil que o seletor não oferece; as telas deste módulo usam `financeiro` e `admin`, que existem no `ROLE_MAP` (**Conferido**).
 - **Doado** (acrescentado na mesma sessão aos outros documentos, no tema certo, texto completo aqui):
-  - **A Geral (PC-9) e a todos: o gatilho de mudança de status sem vocabulário único.** O KPI de comissões do Dashboard conta `'Aguardando'` e o motor grava `'Aguardando aprovação'`: o mesmo conceito com três grafias (5.5.10 item 1). Vale conferir outros KPIs que comparam status por texto.
-  - **A Geral (1.1 e PC-6): botão de aprovação sem conferir quem aprova.** O padrão "Aprovar (diretoria)" e "Dar Aval" é do navegador: a alçada existe no catálogo e não é conferida (5.5.3, 5.3.3). É o mesmo achado de 4.2.3.
+  - **A Geral (PC-9) e a todos: o gatilho de mudança de status sem vocabulário único.** O KPI de comissões do Dashboard conta `'Aguardando'` e o motor grava `'Aguardando aprovação'`: o mesmo conceito com três grafias (5.6.10 item 1). Vale conferir outros KPIs que comparam status por texto.
+  - **A Geral (1.1 e PC-6): botão de aprovação sem conferir quem aprova.** O padrão "Aprovar (diretoria)" e "Dar Aval" é do navegador: a alçada existe no catálogo e não é conferida (5.6.3, 5.3.3). É o mesmo achado de 4.2.3.
   - **A todos: botão que parece ação e só muda status.** "Pagar" em Comissões não paga; "Reprovar" no Aval não bloqueia nada. A tela deveria dizer o que o botão realmente faz.
-  - **Ao Comercial | Pré-venda (4.1.10 e 4.5): a regra de origem da venda** alimenta a comissão (5.5.7); campo vazio no Formulário vira erro no Financeiro.
+  - **Ao Comercial | Pré-venda (4.1.10 e 4.5): a regra de origem da venda** alimenta a comissão (5.6.7); campo vazio no Formulário vira erro no Financeiro.
+  - **A Administração (15) e a todos: tela restrita por lista de e-mails, conferida no banco.** O padrão de Boletos Avisos (5.5.3): uma função `..._email_permitido()` (só o servidor executa) e `..._pode()` usada nas políticas RLS, sem bypass de Administrador; quando a restrição é "só pessoas", e não "só perfil", é o jeito de a trava valer no banco e não só no menu. **Conferido** no código (11/11/2026).
+  - **Aos Serviços (16, S6 e-mail) e à Geral (1.5):** o canal de e-mail ganhou um segundo emissor fora da `send-email`: a Edge Function `boletos-avisos` envia pela mesma caixa hub@ (Microsoft Graph) e grava `emails_projeto` com `referencia_tipo = boleto_aviso`, por não poder passar pela trava de "e-mail cadastrado". **Conferido** no código.
+  - **Aos Serviços (16, S2 gi-avisos):** novo alerta diário para a Juliana, id `boletos-atraso-<data>`, título com o dia da semana (o gi-avisos agrupa por título em 24 h).
 - **Pedidos de mudança de código** que estes benefícios sugerem ficam como pendência; nenhuma linha de código foi alterada.
 - **Recebido de Serviços (01/11/2026, texto em `16_servicos.md` PC-2):** todo alerta com destinatário também vira WhatsApp pelo gi-avisos; para chegar certo, título curto com o essencial na frente, sem "teste", sem R$ no título e com o dia da semana por extenso, a obra ou o código do contrato quando houver vários no mesmo dia (o agrupamento de 24 h apaga números). **Conferido** no código do gi-avisos. O Copiloto em uso é o da VPS e **não lê** `vp_copiloto_docs`: o "ajuste por UPDATE sem redeploy" citado neste documento só valia para a Edge Function antiga `vp-copiloto`, removida em 01/11/2026 (`16_servicos.md` S3.5, divergência D1). **Conferido.**

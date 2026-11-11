@@ -1,6 +1,6 @@
 <!-- GERADO por scripts/gerar-rag.js — não edite à mão. Rode: npm run rag -->
 
-**87 telas; 81 citam rota; 2 citam rota que não está em `KNOWN_ROUTES`.**
+**88 telas; 82 citam rota; 2 citam rota que não está em `KNOWN_ROUTES`.**
 
 # Mapa de telas (módulo → tela → rota)
 
@@ -30,7 +30,8 @@
 | `05_financeiro_precos.md` | 5.2 Precificação | `precificacao` | `/comercial/precificacao` | sim | `docs/modulos/05_financeiro_precos.md#52-precificação` |
 | `05_financeiro_precos.md` | 5.3 Aval Financeiro | `aval-financeiro` | `/adm-financeiro/aval-financeiro` | sim | `docs/modulos/05_financeiro_precos.md#53-aval-financeiro` |
 | `05_financeiro_precos.md` | 5.4 Emissão de NF | `emissao-nf` | `/adm-financeiro/emissao-nf` | sim | `docs/modulos/05_financeiro_precos.md#54-emissão-de-nf` |
-| `05_financeiro_precos.md` | 5.5 Comissões | `comissoes` | `/adm-financeiro/comissoes` | sim | `docs/modulos/05_financeiro_precos.md#55-comissões` |
+| `05_financeiro_precos.md` | 5.5 Boletos Avisos | `boletos-avisos` | `/adm-financeiro/boletos-avisos` | sim | `docs/modulos/05_financeiro_precos.md#55-boletos-avisos` |
+| `05_financeiro_precos.md` | 5.6 Comissões | `comissoes` | `/adm-financeiro/comissoes` | sim | `docs/modulos/05_financeiro_precos.md#56-comissões` |
 | `06_contratos_juridico.md` | 6.1 Contrato Venda de Equipamentos | `contrato-venda-equipamentos` | `/juridico/contrato-venda-equipamentos` | sim | `docs/modulos/06_contratos_juridico.md#61-contrato-venda-de-equipamentos` |
 | `06_contratos_juridico.md` | 6.2 Aval Jurídico | `aval-juridico` | `/juridico/aval-juridico` | sim | `docs/modulos/06_contratos_juridico.md#62-aval-jurídico` |
 | `06_contratos_juridico.md` | 6.3 Contratos & Minutas | `juridico` | `/juridico/juridico` | sim | `docs/modulos/06_contratos_juridico.md#63-contratos--minutas` |

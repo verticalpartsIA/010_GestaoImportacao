@@ -50,6 +50,7 @@ const NAV_GROUPS = [
     { id: "precificacao", label: "Precificação", icon: "calculator", restrict: ["financeiro", "admin"] },
     { id: "aval-financeiro", label: "Aval Financeiro", icon: "shield", restrict: ["financeiro", "admin"] },
     { id: "emissao-nf", label: "Emissão de NF", icon: "fileText", restrict: ["financeiro", "admin"] },
+    { id: "boletos-avisos", label: "Boletos Avisos", icon: "mail", emails: ["gelson.simoes@verticalparts.com.br", "diego@verticalparts.com.br", "juliana@verticalparts.com.br"] },
     { id: "comissoes", label: "Comissões", icon: "award", restrict: ["financeiro", "admin"] },
   ]},
   { label: "Contratos & Jurídico", items: [
@@ -191,7 +192,9 @@ function formatBuildTime(iso) {
 const GROUPS_LS_KEY = "vp_sidebar_collapsed_groups";
 
 function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
-  const filterVisible = (item) => !item.restrict || item.restrict.includes(role);
+  const emailLogado = String((window.__VP_USER || {}).email || "").toLowerCase();
+  /* "emails": item visível só para esses e-mails (organização do menu; a trava de verdade está no banco, Art. 25) */
+  const filterVisible = (item) => (!item.restrict || item.restrict.includes(role)) && (!item.emails || item.emails.includes(emailLogado));
   /* Badge de decisões pendentes — o dado já existia em DecisoesStore
      (listarPendentesParaMim, usado por decisoes.jsx), só nunca tinha sido
      plugado no nav. Sidebar já re-renderiza a cada navegação (recebe
@@ -478,6 +481,7 @@ const BREADCRUMB_MAP = {
   separacao: { module: "Logística", page: "Separação", icon: "layers" },
   etiquetas: { module: "Logística", page: "Etiquetas", icon: "fileText" },
   "emissao-nf": { module: "Financeiro", page: "Emissão de NF", icon: "fileText" },
+  "boletos-avisos": { module: "Financeiro", page: "Boletos Avisos", icon: "mail" },
   pcp:           { module: "Logística", page: "PCP — Planejamento e Controle da Produção", icon: "calendar" },
   mes:           { module: "Logística", page: "MES — Sistema de Execução da Manufatura", icon: "settings" },
   "mes-cadastros": { module: "Logística", page: "MES — Cadastros do chão de fábrica", icon: "layers" },
