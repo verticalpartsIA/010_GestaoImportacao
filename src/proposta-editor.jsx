@@ -409,6 +409,56 @@ function PEChip({ label, value, mono, destaque }) {
 /* Envio por assinatura digital — mesmo padrão do Contrato Instalador/Venda
    (link público /assinar/:token, WhatsApp ou E-mail). Reaproveita FEField/
    FEInput (formulario-elevador.jsx, já global) pra não duplicar estilo. */
+/* Resultado da "Conferir proposta": lista de achados (checagens exatas), com "O que falta para enviar" e atalho para
+   a seção. Só leitura — nada aqui altera a proposta; o envio continua com o gate de sempre (4.5.10 item 13). */
+function ConferenciaModal({ achados, onClose, onIr }) {
+  const C = window.PropostaConferir;
+  const resumo = C.resumo(achados);
+  const falta = C.faltaParaEnviar(achados);
+  const COR = { impede: "#b00020", atencao: "#9a6a00", sugestao: "var(--fg3)" };
+  const ROT = { impede: "Grave", atencao: "Atenção", sugestao: "Sugestão" };
+  const [soFalta, setSoFalta] = React.useState(false);
+  const lista = soFalta ? falta : achados;
+  return (
+    <Modal title="Conferir proposta" onClose={onClose} width={620}
+      footer={<Button variant="primary" onClick={onClose}>Fechar</Button>}>
+      <div className="stack" style={{ gap: 12 }}>
+        {achados.length === 0 ? (
+          <div style={{ padding: "10px 12px", background: "var(--vp-gray-50)", borderRadius: 6 }}>
+            <b>✓ Nada fora do lugar nas checagens exatas.</b>
+            <div className="small muted" style={{ marginTop: 4 }}>Conferido por código: cliente, vendedor, texto, valores, parcelas e pedidos abertos.</div>
+          </div>
+        ) : (
+          <>
+            <div className="small muted">
+              {resumo.impede > 0 && <b style={{ color: COR.impede }}>{resumo.impede} grave{resumo.impede > 1 ? "s" : ""}</b>}
+              {resumo.impede > 0 && " · "}{resumo.atencao} atenção · {resumo.sugestao} sugest{resumo.sugestao === 1 ? "ão" : "ões"}.
+              {" "}A conferência só aponta: não bloqueia o envio nem altera a proposta.
+            </div>
+            <label className="small" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input type="checkbox" checked={soFalta} onChange={(e) => setSoFalta(e.target.checked)}/>
+              Mostrar só "O que falta para enviar" ({falta.length})
+            </label>
+            <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 8 }}>
+              {lista.map((a) => (
+                <li key={a.id} style={{ padding: "8px 10px", border: "1px solid var(--border, #ddd)", borderRadius: 6 }}>
+                  <div className="row gap-2" style={{ alignItems: "baseline", flexWrap: "wrap" }}>
+                    <b style={{ color: COR[a.gravidade] }}>{ROT[a.gravidade]}</b>
+                    <span>{a.titulo}</span>
+                    <button type="button" className="pe-acab-addfield" style={{ marginTop: 0, marginLeft: "auto" }} onClick={() => onIr(a.secao)}>Ir para a seção</button>
+                  </div>
+                  <div className="small muted" style={{ marginTop: 2 }}>{a.detalhe}</div>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        <div className="small muted">Conferido por código. A leitura por IA (Bolinha) vem em uma próxima fase.</div>
+      </div>
+    </Modal>
+  );
+}
+
 function PropostaSendModal({ record, onClose, onSent }) {
   const [telefone, setTelefone] = React.useState(record.cliente?.telefone || '');
   const [email, setEmail] = React.useState(record.cliente?.email || '');
@@ -645,6 +695,8 @@ function PropostaEditor({ setRoute, subsel }) {
        proposta pelo número e a trava de proposta enviada não valia na mesma tela. */
     const row = await window.PropostaStore.salvar({ data, eq, editId: editId || recordId, valorTotal: calcularValorTotal(data, eq) });
     if (row?.id) setRecordId(row.id);
+    /* o Nº da proposta é o da cotação e não muda depois de criado: acompanha o que ficou gravado */
+    if (row?.numero_documento && row.numero_documento !== data.numero) setData((d) => ({ ...d, numero: row.numero_documento }));
     return row;
   }, [data, eq, editId, recordId]);
 
@@ -814,11 +866,8 @@ function PropostaEditor({ setRoute, subsel }) {
   const [heranca, setHeranca] = React.useState(null);
 
   const herdar = React.useCallback(async (opts) => {
-    /* `atualizar` só vem do CLIQUE no botão (nunca da herança automática ao abrir):
-       a Precificação foi recalculada depois da 1ª herança e o merge só preenche
-       campo vazio, então o preço novo nunca entrava ("clico em Herdar e o valor
-       não muda"). No clique explícito os VALORES passam a seguir a Precificação. */
-    const atualizar = !!(opts && opts.atualizar === true);
+    /* O merge só completa campo vazio e NUNCA sobrescreve o que a proposta já tem; preço novo não vem daqui (REGRA de
+       06/11/2026: a proposta herda o preço sozinha quando a Precificação é calculada). */
     const num = String(data.numeroCotacao || '').trim();
     if (!num) return;
     if (!window.PropostaHeranca) {
@@ -845,26 +894,9 @@ function PropostaEditor({ setRoute, subsel }) {
           const bloco = window.PropostaHeranca.montarBlocoEscadaEsteira(r.fontes, eq);
           if (bloco) prefill[eq] = bloco;
         }
-        /* Atualiza os preços: troca itens/parcelas/forma de pagamento/opção 90d pelos da
-           Precificação atual. Só pede confirmação se algo vai mudar de verdade. */
-        let valoresNovos = null;
-        if (atualizar && eq === 'elevador' && prefill.elevador && prefill.elevador.valores
-            && Array.isArray(prefill.elevador.valores.itens) && prefill.elevador.valores.itens.length) {
-          const v = prefill.elevador.valores;
-          const atuais = (data.elevador && data.elevador.valores) || {};
-          const mudou = JSON.stringify(atuais.itens || []) !== JSON.stringify(v.itens)
-            || JSON.stringify(atuais.parcelas || []) !== JSON.stringify(v.parcelas || []);
-          if (!mudou) {
-            window.toast?.('Os valores já estão iguais aos da Precificação.', 'info');
-          } else if (confirm('A Precificação desta cotação tem valores diferentes dos da proposta.\n\n'
-              + 'Atualizar equipamentos, valores e parcelas com os da Precificação?\n'
-              + '(Descontos e parcelas ajustados na mão serão substituídos.)')) {
-            valoresNovos = {
-              itens: v.itens, parcelas: v.parcelas, formaTipo: v.formaTipo,
-              qtdParcelas: v.qtdParcelas, forma: v.forma, opcao90: v.opcao90 || null, escolhaEntrega: null,
-            };
-          }
-        }
+        /* REGRA (Gelson, 06/11/2026): o preço NÃO vem mais do "Herdar dados". Reprecificou, a proposta herda sozinha
+           (ao calcular a Precificação e ao abrir esta tela — ver `sincronizarPrecoAoAbrir` abaixo). Aqui o merge só
+           completa o que está vazio (inclusive os valores de uma proposta que acabou de nascer). */
         setData((d) => {
           /* A lista padrão de escada/esteira nasce com 1 unidade em branco, e o
              merge só preenche lista vazia: sem esvaziá-la a herança não entrava. */
@@ -883,9 +915,6 @@ function PropostaEditor({ setRoute, subsel }) {
             pf = { ...pf, elevador: restoElev };
           }
           const merged = deepMergeHeranca(base, pf);
-          if (valoresNovos) {
-            merged.elevador = { ...merged.elevador, valores: { ...(merged.elevador.valores || {}), ...valoresNovos } };
-          }
           return merged;
         });
         setHeranca({ tipo: 'ok', texto: 'Herdado de: ' + window.PropostaHeranca.resumoFontes(r.fontes) });
@@ -912,6 +941,28 @@ function PropostaEditor({ setRoute, subsel }) {
     autoHerdadoRef.current = true;
     herdar();
   }, [loadingExisting, data.numeroCotacao, herdar]);
+
+  /* REGRA (Gelson, 06/11/2026): reprecificou, a proposta herda. Ao abrir uma proposta de elevador já salva, confere com a
+     Precificação: rascunho recebe o preço novo (em memória e no banco); proposta que o cliente já viu NÃO muda sozinha
+     (só se o Comercial pediu o aumento) e fica marcada "Preço diferente da Precificação". */
+  const syncPrecoRef = React.useRef(false);
+  React.useEffect(() => {
+    if (syncPrecoRef.current || loadingExisting || !recordId || eq !== 'elevador' || !data.numeroCotacao) return;
+    if (!window.PropostaAumentoStore || !window.PropostaAumentoStore.sincronizarPreco) return;
+    syncPrecoRef.current = true;
+    const num = window.MasterIdEngine && window.MasterIdEngine.parseNumeroCotacao ? window.MasterIdEngine.parseNumeroCotacao(data.numeroCotacao) : data.numeroCotacao;
+    window.PropostaAumentoStore.sincronizarPreco(num, recordId).then((r) => {
+      const feita = (r.atualizadas || [])[0];
+      const marcada = (r.marcadas || [])[0];
+      if (feita) {
+        setData((d) => ({ ...d, precoDefasado: null, ...(feita.propostaAtendida || {}), elevador: { ...d.elevador, valores: { ...(d.elevador.valores || {}), ...feita.valores } } }));
+        const rs = (n) => 'R$ ' + (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        window.toast?.(`Preço atualizado pela Precificação: ${rs(feita.resultado.totalAnterior)} → ${rs(feita.resultado.total)}`, 'info');
+      } else if (marcada) {
+        setData((d) => ({ ...d, precoDefasado: { total: marcada.total, anterior: marcada.anterior, em: new Date().toISOString() } }));
+      }
+    }).catch(() => {});
+  }, [loadingExisting, recordId, eq, data.numeroCotacao]);
 
   /* ---- Salvar PDF / Imprimir ----
      Era html2canvas + jsPDF: capturava cada seção como FOTO e colava no
@@ -1014,6 +1065,22 @@ function PropostaEditor({ setRoute, subsel }) {
   const partialCount = fills.filter(f => f.kind === "partial").length;
   const completePct = Math.round((filledCount + partialCount * 0.5) / sections.length * 100);
 
+  /* "Conferir proposta" (06/11/2026): checagens EXATAS em código, sem IA; só lê e aponta (4.5.10 item 13). */
+  const [conferindo, setConferindo] = React.useState(false);
+  const [conferencia, setConferencia] = React.useState(null);
+  const conferirAgora = async () => {
+    setConferindo(true);
+    try {
+      let temContrato = false;
+      if (recordId && window.PropostaAumentoStore && window.PropostaAumentoStore.temContrato) {
+        try { temContrato = await window.PropostaAumentoStore.temContrato(recordId); } catch (_) { temContrato = false; }
+      }
+      const achados = window.PropostaConferir.conferir(data, eq, { travada, temContrato });
+      setConferencia({ achados, em: Date.now() });
+      try { window.VPLog?.registrar({ modulo: "Propostas", acao: "Conferiu a proposta (checagens exatas)", alvo: "Proposta", alvo_id: recordId || null, detalhe: window.PropostaConferir.resumo(achados) }); } catch (_) {}
+    } finally { setConferindo(false); }
+  };
+
   const jump = (sid) => {
     setActiveSection(sid);
     if (collapsed[sid]) setCollapsed((c) => ({ ...c, [sid]: false }));
@@ -1110,6 +1177,11 @@ function PropostaEditor({ setRoute, subsel }) {
               onClick={publicar}>
               {publicando ? "Publicando…" : (meta?.publicado_em ? "Republicar" : "Publicar")}
             </Button>
+            {window.PropostaConferir && (
+              <Button variant="outline" size="sm" icon="check" disabled={conferindo}
+                title="Aponta o que está fora do lugar antes de enviar. Só lê: não altera nada."
+                onClick={conferirAgora}>{conferindo ? "Conferindo…" : "Conferir"}</Button>
+            )}
             <Button variant="outline" size="sm" icon="download" onClick={() => setPdfOverlay(true)}>Gerar PDF</Button>
             <Button variant="secondary" size="sm" icon="check" disabled={travada}
               title={travada ? "Proposta travada — peça destrave" : undefined}
@@ -1275,6 +1347,10 @@ function PropostaEditor({ setRoute, subsel }) {
         {showPreview && <PEPreview data={data} eq={eq}/>}
       </div>
 
+      {conferencia && (
+        <ConferenciaModal achados={conferencia.achados} onClose={() => setConferencia(null)}
+          onIr={(sid) => { setConferencia(null); jump(sid); }}/>
+      )}
       {sendModal && (
         <PropostaSendModal record={sendModal} onClose={() => setSendModal(null)}
           onSent={() => window.toast?.('✓ Proposta enviada — o cliente já pode ler e assinar pelo link.', 'success')}/>
@@ -1318,7 +1394,7 @@ function PropostaEditor({ setRoute, subsel }) {
 function renderSection(sid, eq, data, set, extras) {
   extras = extras || {};
   switch (sid) {
-    case "proposta": return <S_Proposta d={data} set={set} herdar={extras.herdar} herdando={extras.herdando} heranca={extras.heranca}/>;
+    case "proposta": return <S_Proposta d={data} set={set} herdar={extras.herdar} herdando={extras.herdando} heranca={extras.heranca} recordId={extras.recordId}/>;
     case "cliente": return <S_Cliente d={data} set={set}/>;
     case "obra": return <S_Obra d={data} set={set}/>;
     case "texto": return <S_TextoProposta d={data} set={set} eq={eq}/>;

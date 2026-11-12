@@ -162,6 +162,7 @@ Tudo **Conferido** no código em 01/11/2026, salvo marca.
 - **Decisão do Gelson (24/10/2026): não mexer no gi-avisos**; reabrir só se um aviso chegar ilegível. **Herdado** (rascunho `serviços.md` e `01_geral.md` PC-4).
 
 ### S2.6 Dados
+- **Alerta novo (11/11/2026, função publicada; envio automático ainda desligado):** `boletos-atraso-<aaaa-mm-dd>` para `juliana@verticalparts.com.br` (módulo Financeiro, clique abre `/adm-financeiro/boletos-avisos`), um por dia, com o dia da semana no título por causa do agrupamento de 24 h. Gerado pela função `boletos-avisos` (`05_financeiro_precos.md` 5.5.6). **Não verificado** a entrega no WhatsApp.
 - **VPS, pasta `state/`:** `log.jsonl` (442 linhas de 07/10 a 30/10/2026), `estado.json` (847 chaves de "já enviado", apagadas após 90 dias), `fila.json` (2 avisos esperando a janela), `etapas_abertas.json` (9 etapas acompanhadas), `comparacao.jsonl` (parado desde 16/10, da fase de comparação). **Conferido.**
 - **vpsistema:** `eventos.entregas_externas` (**964** linhas de 16/10 a 01/11/2026: enviado 340, sem regra 301, agrupado 185, na fila 65, pausado 31, previsto 22, encerrado 19, autor 1). **Conferido** (SQL).
 - **Hub:** só lê (S2.4). Os dados que geram aviso estão em PC-7.
@@ -370,31 +371,32 @@ Login único e alçadas concedidas no vpsistema desde 09/10/2026; Central de Eve
 ## S6 E-mail (canal do Inbox)
 
 ### S6.1 O que é
-O **canal** de e-mail do hub: envio por SMTP e leitura por IMAP da caixa compartilhada `suporte@vpsistema.com`, com o registro de tudo em `emails_projeto`. A **tela** Inbox e a **lei blindada** do e-mail continuam em `01_geral.md` 1.5 e no `CLAUDE.md` ("ÁREA BLINDADA — Sistema de E-mail / Inbox"): **antes de mexer em qualquer coisa deste serviço, leia a lei de lá** (proibições: apagar e-mail da caixa, afrouxar as travas, reduzir o tempo ou apagar o cron, testar sem cópia). **Conferido** (código, 30/10–01/11/2026).
+O **canal** de e-mail do hub: envio e leitura pela Microsoft Graph na caixa `hub@verticalparts.com.br` (principal desde 09/11/2026) e, só recebendo durante a transição, leitura por IMAP da caixa antiga `suporte@vpsistema.com`, com o registro de tudo em `emails_projeto`. A troca está registrada em `docs/superpowers/specs/2026-11-09-email-microsoft-graph.md`. A **tela** Inbox e a **lei blindada** do e-mail continuam em `01_geral.md` 1.5 e no `CLAUDE.md` ("ÁREA BLINDADA — Sistema de E-mail / Inbox"): **antes de mexer em qualquer coisa deste serviço, leia a lei de lá** (proibições: apagar e-mail da caixa, afrouxar as travas, reduzir o tempo ou apagar o cron, testar sem cópia). **Conferido** (código, 30/10–01/11/2026).
 
 **Fora do escopo:** a tela, a visibilidade por dono/atribuição e a triagem (1.5); as regras de cada envio (Proposta, Contrato, RFQ, Tratativas, Frete) nos módulos 4, 6 e 7.
 
 ### S6.2 Onde está
-Edge Functions: `send-email` (v24, `verify_jwt: true`), `read-inbox` (v17), `sign-email-anexos` (v7, links de 7 dias para anexos), `suggest-email-reply` (v7, sugestão de resposta com IA). Bucket privado `emails-anexos`. **Conferido** (listagem, 30/10–01/11/2026). As mensagens próprias do vpsistema (convite, recuperação) usam a mesma caixa, por outro caminho (S5.4).
+Edge Functions: `send-email` (v30, `verify_jwt: true`), `read-inbox` (v23), `sign-email-anexos` (v7, links de 7 dias para anexos), `suggest-email-reply` (v7, sugestão de resposta com IA). Bucket privado `emails-anexos`. **Conferido** (listagem, 30/10–01/11/2026; versões de `send-email` e `read-inbox` reconferidas em 09/11/2026). As mensagens próprias do vpsistema (convite, recuperação) usam a mesma caixa, por outro caminho (S5.4).
 
 ### S6.3 Quem usa
 Inbox (1.5), Proposta, Contrato de Venda e do Instalador, RFQ, Tratativas, Frete, Cotações de Varejo, Projeto de Instalação. Chamadores no front: `email-envio-helper.js`, `contrato-venda-store.js`, `logistica.jsx`, `tratativas-store.js` (o `supabase.js` acrescenta `enviadoPor` a cada envio). **Herdado** (levantamento do código, 01/11/2026).
 
 ### S6.4 Como entra e sai
-- **Envio (`send-email`):** entrada `{to, cc?, subject, text?, html?, replyTo?, numeroCotacao?, referenciaTipo?, referenciaId?, enviadoPor?, attachments[]}`; saída `{ok, destinatarios, cc, messageId, avisoPersistencia}`. Grava a saída em `emails_projeto` (inclusive `cc`) e os anexos em `emails-anexos`. **Conferido.**
-- **Leitura (`read-inbox`):** cron `read-inbox-poll` a cada 10 minutos; até 25 mensagens por vez, 3 MB cada; vínculo à cotação por Message-ID ("certo") ou pelo Nº no assunto ("provável"). **Conferido** (cron) / **Herdado** (números do código).
+- **Segundo emissor (11/11/2026, publicado em produção):** a Edge Function `boletos-avisos` (Financeiro & Preços, 5.5) envia os avisos de boleto pela **mesma caixa hub@ (Microsoft Graph)**, **sem passar pela `send-email`** (a trava de "e-mail cadastrado" barraria quase todos os clientes do Omie), e grava `emails_projeto` com `referencia_tipo = boleto_aviso` e `referencia_id` = id do envio; o `read-inbox` liga a resposta do cliente pelo Message-ID. A `send-email` e o `read-inbox` **não foram alterados**. **Conferido** no código; envio **não testado** em produção.
+- **Envio (`send-email`, pela Microsoft Graph, remetente `hub@verticalparts.com.br`, desde 09/11/2026):** entrada `{to, cc?, subject, text?, html?, replyTo?, numeroCotacao?, referenciaTipo?, referenciaId?, enviadoPor?, attachments[]}`; saída `{ok, destinatarios, cc, messageId, avisoPersistencia}`. Grava a saída em `emails_projeto` (inclusive `cc`) e os anexos em `emails-anexos` (nome do arquivo guardado só com ASCII; o original fica em `filename`). A Graph não deixa escolher o Message-ID: a função cria o rascunho, lê o `internetMessageId` e só então envia; esse id vai para `message_id` e é ele que vincula a resposta. Todo e-mail sai com a assinatura corporativa (banner + texto de reserva; `ASSINATURA_HUB=off` desliga) e o corpo gravado em `emails_projeto` é o original, sem a assinatura. **Conferido** (envio real, 09/11/2026).
+- **Leitura (`read-inbox`):** cron `read-inbox-poll` a cada 10 minutos; lê as DUAS caixas e junta numa lista: `hub@` pela Graph (anexos até 2,5 MB, texto derivado do HTML, chave `g:<id>` em `imap_uid`) e `suporte@vpsistema.com` por IMAP (transição; a secret `LEITURA_SUPORTE=off` desliga). Se uma caixa falhar a outra continua (a resposta traz `fontes`). Até 25 mensagens por vez, 3 MB cada no IMAP; vínculo à cotação por Message-ID ("certo") ou pelo Nº no assunto ("provável"). **Conferido** (cron e leitura simulada em produção, 09/11/2026) / **Não verificado** (e-mail de fornecedor real e e-mail com anexo recebidos no `hub@`).
 - **Avisos que nascem do e-mail:** resposta recebida e triagem viram linha em `alertas` (gatilhos `trg_alertas_inbox_resposta` e `trg_alertas_inbox_triagem`) e, como todo alerta dirigido, **também viram WhatsApp** pelo gi-avisos (PC-2). Crons `inbox-alerta-sem-resposta` (seg–sex, 4 vezes por hora entre 11 e 21 UTC) e `inbox-acordar-adiados` (a cada 10 minutos). Desde 07/10/2026 a resposta de fornecedor vai ao vendedor, não a todos. **Conferido** (crons) / **Herdado** (regras, `01_geral.md` 1.5).
 
 ### S6.5 Regras e janelas
-- **Travas da `send-email`, todas antes do SMTP:** formato do endereço (400); no máximo **10 destinatários somando Para + Cc** (400); allowlist — domínios internos, extras autorizados e quem já existe em cadastro/histórico (`email_conhecidos`) (403); limite de taxa de 25 envios por IP e 60 no total a cada 10 minutos (429); se a verificação falhar, **bloqueia** (503); anexos somados até 2,5 MB. **Conferido** (código da v24).
-- **Assunto:** ASCII passa direto; acentuado curto segue com a codificação da biblioteca; **acentuado longo perde os acentos** (vira ASCII) para não quebrar o cabeçalho no Outlook. **Corpo** (texto e HTML) vai em Base64. **Conferido** (código da v24, 30/10/2026).
+- **Travas da `send-email`, todas antes do envio:** formato do endereço (400); no máximo **10 destinatários somando Para + Cc** (400); allowlist — domínios internos, extras autorizados e quem já existe em cadastro/histórico (`email_conhecidos`) (403); limite de taxa de 25 envios por IP e 60 no total a cada 10 minutos (429); se a verificação falhar, **bloqueia** (503); anexos somados até 2,5 MB (as mesmas travas valem na versão Graph). **Conferido** (código da v30, 09/11/2026).
+- **Assunto (regra do SMTP, até 09/11/2026):** ASCII passa direto; acentuado curto segue com a codificação da biblioteca; **acentuado longo perde os acentos** (vira ASCII) para não quebrar o cabeçalho no Outlook. **Corpo** (texto e HTML) vai em Base64. **Conferido** (código da v24, 30/10/2026). Com a Graph o assunto e o corpo seguem como enviados (a Microsoft cuida da codificação): **Conferido** em 09/11/2026 com acentos e anexo de nome acentuado.
 - Excluir e-mail no sistema é só marcar (`excluido_em`); **nunca** se apaga da caixa real. **Herdado** (lei do 1.5).
 
 ### S6.6 Dados
 `emails_projeto` (**133** linhas; coluna `cc` criada em 30/10/2026), `email_envios_log` (13, base do limite de taxa), `emails-anexos` (bucket). **Conferido** (SQL, 01/11/2026).
 
 ### S6.7 Segurança
-Secrets por nome: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM_NAME`, `IMAP_HOST`, `IMAP_PORT`, `SUPABASE_SECRET_KEYS`, `ANTHROPIC_API_KEY` (só a `suggest-email-reply`). `emails_projeto` está aberta à chave pública (política `ALL` para `anon`). **Conferido** (`pg_policies`). Riscos levantados em A5 e A6.
+Secrets por nome: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `SENDER_EMAIL` (hub@), `SMTP_FROM_NAME` (nome do remetente), opcionais `ASSINATURA_HUB`, `ASSINATURA_IMG_URL`, `LEITURA_SUPORTE`; `IMAP_HOST`, `IMAP_PORT`, `SMTP_USER`, `SMTP_PASS` (só a leitura do `suporte@`; `SMTP_HOST` e `SMTP_PORT` ficaram sem uso no envio), `SUPABASE_SECRET_KEYS`, `ANTHROPIC_API_KEY` (só a `suggest-email-reply`). `emails_projeto` está aberta à chave pública (política `ALL` para `anon`). **Conferido** (`pg_policies`). Riscos levantados em A5 e A6. **Pendente com o TI:** a política de acesso da Microsoft que limita o app só ao `hub@` ainda não foi aplicada (em 09/11/2026 o app alcançava também outra caixa da empresa) e o segredo do app teve trechos expostos em conversa e deve ser trocado. **Conferido** (09/11/2026).
 
 ### S6.8 Falhas e como se percebe
 Envio que sai mas não grava devolve `avisoPersistencia` (o e-mail já foi). Falha de leitura aparece no histórico do cron e nos logs da função. **Conferido** (código).
@@ -406,10 +408,11 @@ Redeploy sempre numa cópia descartável primeiro (OPTIONS 204, POST inválido 4
 - **Achado, sem correção (A5):** `read-inbox` e `sign-email-anexos` não conferem quem chama (registrado em `01_geral.md` 1.5).
 - **Achado, sem correção (A6):** a allowlist considera "conhecido" quem já mandou e-mail para a caixa; e `suggest-email-reply` não limita taxa (custo de API).
 - A migration da coluna `cc` está no PR #1194 (aberto); o banco já tem a coluna.
-- Teste real do assunto acentuado longo e do corpo em Base64: aguardando o Gelson.
+- Teste real do assunto acentuado longo e do corpo em Base64: aguardando o Gelson (regra do SMTP; com a Graph não se aplica).
+- **Pendente (09/11/2026):** desligar o `suporte@vpsistema.com` (`LEITURA_SUPORTE=off`) quando o Gelson mandar; primeira resposta de fornecedor real chegando no `hub@`; nome da pessoa no "De" (hoje "VerticalParts"). **Não verificado:** a assinatura no Outlook/celular e num e-mail enviado de dentro de uma tela.
 
 ### S6.11 Histórico
-Envio por SMTP direto desde 28/09/2026; travas anti-relay em 01/10/2026; dono do e-mail em 04/10/2026; campo Cc, assunto e corpo corrigidos em 30/10/2026. **Herdado/Conferido.**
+Envio por SMTP direto desde 28/09/2026; travas anti-relay em 01/10/2026; dono do e-mail em 04/10/2026; campo Cc, assunto e corpo corrigidos em 30/10/2026. **09/11/2026:** envio e leitura passam à Microsoft Graph (`hub@verticalparts.com.br`), com assinatura corporativa; o `suporte@vpsistema.com` fica só recebendo até ser desligado. Versão anterior (SMTP/IMAP) no Git, commit `b40b53e`. **Herdado/Conferido.**
 
 ---
 
@@ -432,7 +435,7 @@ módulos do hub ──grava──▶ alertas / gatilhos / eventos_fluxo / assina
 WhatsApp recebido ──pv360──▶ whatsapp-dispatcher (vpsistema) ──▶ 1º Copiloto /whatsapp (VPS) · senão menu RH/Suporte · Pós-Venda 360
                               (decisao-resposta-whatsapp do hub: ninguém chama hoje — A19)
 vpsistema ──vpsistema-sync──▶ hub (pessoas, alçadas, celular)      vpsistema ──sso──▶ hub (login)
-e-mail: telas ──send-email──▶ SMTP · IMAP ──read-inbox (10 min)──▶ emails_projeto ──▶ alertas ──▶ (mesmo caminho do WhatsApp)
+e-mail: telas ──send-email──▶ Microsoft Graph (hub@) · Graph + IMAP do suporte@ ──read-inbox (10 min)──▶ emails_projeto ──▶ alertas ──▶ (mesmo caminho do WhatsApp)
 ```
 **Conferido** (código, migrations e configuração, 01/11/2026, inclusive o `17_gente-gestao`).
 

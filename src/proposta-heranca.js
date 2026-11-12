@@ -288,8 +288,9 @@
         pisoCabina: u.piso_cabina || '',
         modeloPorta: abertura ? `Automática ${abertura}` : '',
         dimPortaCabine: dim(u.porta_largura_mm, u.porta_altura_mm),
-        acabPortaCabine: u.acabamento_porta_cabina || '',
-        portasPavimento: u.acabamento_porta_pavimento || '',
+        /* 12/11/2026 — com porta de vidro, o texto diz onde (portas-vidro-calc.js); sem vidro = o aço da coluna. */
+        acabPortaCabine: (window.PortasVidro ? window.PortasVidro.descricao(u, 'cabina', 'pt') : u.acabamento_porta_cabina) || '',
+        portasPavimento: (window.PortasVidro ? window.PortasVidro.descricao(u, 'pavimento', 'pt') : u.acabamento_porta_pavimento) || '',
         botoeirasPavimento: u.botoeira_pavimento || '',
       };
       return {
@@ -440,12 +441,22 @@
       /* UM item por EQUIPAMENTO FÍSICO, com o código dele (VPEL-EL0963-13…): cada equipamento é único e o
          cliente pode pedir mudança num específico. Unidade de quantidade N vira N itens (quantidade 1). */
       valores.itens = [];
+      /* 06/11/2026 — coluna "Alterar valor" da Precificação: o preço do equipamento é o rateio BASE + a diferença
+         que o Financeiro digitou para ELE (os outros não mudam). O total fecha em precoVendaProposta (= base + soma). */
+      const ajMap = (precificacao && precificacao.resultado_v2 && precificacao.resultado_v2.ajustes
+        && precificacao.resultado_v2.ajustes.porEquipamento) || {};
+      const moL = (precificacao && precificacao.mo_lookup) || [];
+      const ajDe = (cod) => {
+        const f = cod ? moL.find((x) => x.identificador === cod) : null;
+        return f ? (Number(ajMap[`${f.unidadeId}:${f.equipamentoIndice || 1}`]) || 0) : 0;
+      };
       especificacoes.forEach((e, i) => {
-        const unit = c2(e.valorUnitarioRs) || mediaFallback;
+        const unit0 = c2(e.valorUnitarioRs) || mediaFallback;
         const n = Math.max(1, Number(e.qtd) || 1);
         const codigos = (Array.isArray(e.codigos) && e.codigos.length === n) ? e.codigos : null;
         for (let k = 0; k < n; k++) {
           const cod = codigos ? codigos[k] : (n === 1 ? (e.id || e.codigoAtivo || `Equipamento ${i + 1}`) : null);
+          const unit = c2(unit0 + ajDe(cod));
           valores.itens.push({
             id: cod || e.id || `Equipamento ${i + 1}`,
             unidadeId: e.unidadeId || '',

@@ -23,6 +23,17 @@
 (function () {
   const EDGE_URL = 'https://jxtqwzmpgofwctqajewt.functions.supabase.co/capturar-lead-quadro-comando';
   const TOTAL_PASSOS = 6;
+  /* Modo "link do pedido" (10/11/2026): com ?t=<token> a página é a de UM pedido de venda do Omie. O envio não cria Lead:
+     grava as respostas no pedido (RPC public_qcf_responder) e o hub gera o PDF. Sem token, tudo funciona como sempre. */
+  const SB_URL = 'https://jxtqwzmpgofwctqajewt.supabase.co';
+  const SB_KEY = 'sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP';
+  const TOKEN = (new URLSearchParams(window.location.search).get('t') || '').trim();
+  async function rpc(nome, args) {
+    const r = await fetch(`${SB_URL}/rest/v1/rpc/${nome}`, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, body: JSON.stringify(args) });
+    const d = await r.json().catch(() => null);
+    if (!r.ok) throw new Error((d && d.message) || 'rpc');
+    return d;
+  }
 
   /* Ponto único de troca: quando houver imagem pronta pro passo, só
      preencher a URL aqui — o fallback em emoji continua funcionando
@@ -256,6 +267,13 @@
     const [cnpjStatus, setCnpjStatus] = React.useState(null); // {tipo:'ok'|'erro'|'buscando', msg}
     const [enviando, setEnviando] = React.useState(false);
     const [resultado, setResultado] = React.useState(null); // {ok:true, lead_id} | {ok:false, erro}
+    const [pedido, setPedido] = React.useState(TOKEN ? { carregando: true } : null); // só no modo link do pedido
+    React.useEffect(() => {
+      if (!TOKEN) return;
+      rpc('public_qcf_obter', { p_token: TOKEN })
+        .then((d) => setPedido(d ? { ...d } : { invalido: true }))
+        .catch(() => setPedido({ erro: true }));
+    }, []);
 
     const set = (patch) => setF((p) => ({ ...p, ...patch }));
     const setAcessorio = (key, v) => setF((p) => ({ ...p, acessorios: { ...p.acessorios, [key]: v } }));
@@ -409,6 +427,19 @@
           acessorios_chaves: ACESSORIOS.filter(([k]) => f.acessorios[k]).map(([k]) => k),
           distancias: (f.dist || []).map((d, i) => `${i + 1}# - De: ${d.de} - Até: ${d.ate} - Metros: ${d.m}`).filter((_, i) => f.dist[i] && f.dist[i].m).join('\n'),
         };
+        if (TOKEN) {
+          // Modo link do pedido: o arquivo da logo não segue (cabe pouco no registro); fica só o nome, que aparece nas respostas.
+          const respostas = { ...corpo, logo_upload: null };
+          const resumo = window.QcRespostasCalc.montarResumo(f, catalogo, totalLop);
+          const r = await rpc('public_qcf_responder', { p_token: TOKEN, p_respostas: respostas, p_resumo: resumo });
+          if (r && r.ok) setResultado({ ok: true, lead_id: pedido.numero_pedido, pedido: true });
+          else {
+            const msg = { ja_respondido: 'Este formulário já foi enviado. Obrigado!', link_cancelado: 'Este link foi cancelado. Peça um novo à VerticalParts.', link_invalido: 'Link inválido.' }[r && r.erro];
+            setResultado({ ok: false, erro: msg || 'Não foi possível enviar agora. Tente novamente em instantes.' });
+          }
+          setEnviando(false);
+          return;
+        }
         const resp = await fetch(EDGE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
         const dados = await resp.json().catch(() => ({}));
         if (!resp.ok || !dados.success) {
@@ -423,7 +454,25 @@
       }
     }
 
+    if (TOKEN && pedido && (pedido.carregando || pedido.invalido || pedido.erro || pedido.status !== 'aguardando') && !(resultado && resultado.ok)) {
+      const msg = pedido.carregando ? 'Carregando…'
+        : pedido.erro ? 'Não foi possível abrir o link agora. Tente novamente em instantes.'
+        : pedido.invalido ? 'Link inválido. Confira o endereço que você recebeu.'
+        : pedido.status === 'respondido' ? 'Este formulário já foi enviado. Obrigado! Nossa equipe já recebeu as informações.'
+        : 'Este link foi cancelado. Peça um novo à VerticalParts.';
+      return <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 4px 24px rgba(0,0,0,0.10)', padding: '48px 32px', textAlign: 'center', marginTop: 24, fontSize: 15 }}>{msg}</div>;
+    }
+
     if (resultado && resultado.ok) {
+      if (resultado.pedido) {
+        return (
+          <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 4px 24px rgba(0,0,0,0.10)', padding: '60px 40px', textAlign: 'center', marginTop: 24 }}>
+            <div style={{ fontSize: 60, marginBottom: 16 }}>🎉</div>
+            <h2 style={{ fontFamily: 'Poppins, sans-serif', fontSize: 26, fontWeight: 800, textTransform: 'uppercase', marginBottom: 10 }}>Informações enviadas!</h2>
+            <p style={{ fontSize: 14, color: 'var(--gray-700)', maxWidth: 480, margin: '0 auto' }}>Recebemos as informações do pedido <b>{resultado.lead_id}</b>. Nossa equipe vai seguir com a fabricação do seu quadro de comando.</p>
+          </div>
+        );
+      }
       return (
         <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 4px 24px rgba(0,0,0,0.10)', padding: '60px 40px', textAlign: 'center', marginTop: 24 }}>
           <div style={{ fontSize: 60, marginBottom: 16 }}>🎉</div>
@@ -437,6 +486,11 @@
 
     return (
       <div style={{ paddingTop: 24 }}>
+        {TOKEN && pedido && pedido.numero_pedido ? (
+          <div style={{ background: 'var(--vp-yellow-tint)', border: '1.5px solid var(--vp-yellow-press)', borderRadius: 8, padding: '10px 16px', marginBottom: 16, fontSize: 14 }}>
+            Pedido <b>{pedido.numero_pedido}</b>{pedido.cliente_nome ? ` — ${pedido.cliente_nome}` : ''}. Preencha as informações técnicas do quadro de comando.
+          </div>
+        ) : null}
         <Stepper passo={passo}/>
         <ErroBox erros={erros}/>
         {resultado && !resultado.ok && (
@@ -586,7 +640,7 @@
                   <RadioGroup name="lop_botoes" value={f.lop_botoes} onChange={(v) => set({ lop_botoes: v })}
                     options={[{ value: '2', label: '2 botões (▲ subir e ▼ descer)' }, { value: '1', label: '1 botão' }]}/>
                 </Field>
-                <Field label="Logo da empresa (opcional)" hint="Se quiser a logo gravada na botoeira, envie a imagem (PNG, JPG ou WebP, até 2 MB).">
+                <Field label="Logo da empresa (opcional)" hint={TOKEN ? "Informe o arquivo da logo para constar no pedido; envie a imagem também por e-mail ou WhatsApp à VerticalParts (este link guarda só o nome do arquivo)." : "Se quiser a logo gravada na botoeira, envie a imagem (PNG, JPG ou WebP, até 2 MB)."}>
                   <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => escolherLogo(e.target.files && e.target.files[0])}/>
                   {f.logo_arquivo && (
                     <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>✓ {f.logo_arquivo.nome} <a href="#" onClick={(ev) => { ev.preventDefault(); set({ logo_arquivo: null }); }} style={{ color: 'var(--danger)', marginLeft: 8 }}>remover</a></span>
@@ -720,30 +774,7 @@
         {passo === 6 && (
           <Section icon="📋" passo="revisao" title="Revisão — Resumo do Levantamento" tag="Passo Final">
             <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: '4px 16px', fontSize: 14 }}>
-              {[
-                ['Empresa', f.empresa], ['CNPJ', f.cnpj], ['Solicitante', f.solicitante], ['Telefone', f.telefone], ['E-mail', f.email || '—'],
-                ['Obra / Referência', f.identificacao], ['Nº de Paradas', f.num_paradas], ['Tipo de Serviço', lbl(f.tipo_servico)],
-                ['Modelo do Quadro', (VARIANTES_QUADRO.find((v) => v.value === f.variante_quadro) || {}).label || '—'],
-                ['Tensão da Rede', f.tensao_rede === 'outro' ? `${f.tensao_rede_outro} V (outro)` : `${f.tensao_rede} V`],
-                ['Tipo de Porta', lbl(f.tipo_porta)], ['Operador de Porta', lbl(f.operador_porta)],
-                ['Tipo de Freio', lbl(f.tipo_freio) + (f.tensao_freio ? ` — ${f.tensao_freio} V` : '')],
-                ['Acionamento', lbl(f.acionamento)], ['Casa de Máquinas', lbl(f.casa_maquinas)],
-                ['Acessórios', ACESSORIOS.filter(([k]) => f.acessorios[k]).map(([, l]) => l).join(' · ') || 'Nenhum'],
-                ...(f.acessorios.cop ? [['COP', f.cop_display === 'com' ? 'Com display' : 'Sem display']] : []),
-                ...(f.acessorios.lop ? [
-                  ['LOP — material', f.lop_material === 'vidro' ? 'Espelho em vidro' : 'Aço escovado'],
-                  ['LOP — intermediários', (f.lop_botoes === '1' ? '1 botão' : '2 botões (▲ e ▼)') + (f.lop_display === 'com' ? ' · com display' : ' · sem display')],
-                  ['LOP — total de botoeiras', String(totalLop)],
-                  ['LOP — logo', f.logo_arquivo ? f.logo_arquivo.nome : '—'],
-                ] : []),
-                ['Porta oposta', f.porta_oposta === 'sim' ? `Sim — andares ${(f.porta_oposta_paradas || []).join(', ')}` : 'Não'],
-                ...(f.ind_cor ? [['Cor do display', ({ vermelho: 'Vermelho', azul: 'Azul', branco: 'Branco' })[f.ind_cor]]] : []),
-                ...(f.maquina_codigo ? [['Máquina de Tração', ((catalogo.maquinas || []).find((m) => m.codigo === f.maquina_codigo) || {}).descricao || f.maquina_codigo]] : []),
-                ...(f.porta_cabina_codigo ? [['Porta de Cabina', ((catalogo.portas_cabina || []).find((m) => m.codigo === f.porta_cabina_codigo) || {}).descricao || f.porta_cabina_codigo]] : []),
-                ...(f.porta_pavimento_codigo ? [['Porta de Pavimento', ((catalogo.portas_pavimento || []).find((m) => m.codigo === f.porta_pavimento_codigo) || {}).descricao || f.porta_pavimento_codigo]] : []),
-                ['Observações', f.observacoes || '—'],
-                ['Fiação de Poço', f.fiacao_omitida ? 'Omitida — valores padrão' : `L1:${f.f_l1}m UA:${f.f_ua}m TR:${f.f_tr}m BP:${f.f_bp}m LIM:${f.f_lim}m FP:${f.f_fp}m`],
-              ].filter(([, v]) => v).map(([k, v]) => (
+              {window.QcRespostasCalc.montarResumo(f, catalogo, totalLop).map(([k, v]) => (
                 <React.Fragment key={k}>
                   <div style={{ fontWeight: 600, color: 'var(--gray-700)', fontSize: 11, textTransform: 'uppercase' }}>{k}</div>
                   <div>{v}</div>

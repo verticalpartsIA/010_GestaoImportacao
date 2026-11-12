@@ -69,6 +69,9 @@
      de uma precificação já existente/recarregada). */
   function enriquecerContainersComCusto(containers, custosContainers) {
     return (containers || []).map((ct) => {
+      // Linha com ID-TAG (06/11/2026): os valores vieram do cadastro quando o ID-TAG foi escolhido
+      // (aplicarIdTagNaLinha) e não são reaplicados por tipo ao abrir a tela.
+      if (ct && ct.id_tag) return ct;
       const custo = buscarContainerCustoPorIso(ct.tipo_tamanho, custosContainers);
       if (!custo) return ct;
       const out = { ...ct };
@@ -89,15 +92,51 @@
   function divergenciasContainerComCadastro(containers, custosContainers) {
     const out = [];
     (containers || []).forEach((ct, i) => {
-      const custo = buscarContainerCustoPorIso(ct.tipo_tamanho, custosContainers);
+      const custo = ct && ct.id_tag
+        ? (custosContainers || []).find((c) => c.id_tag === ct.id_tag) || null
+        : buscarContainerCustoPorIso(ct.tipo_tamanho, custosContainers);
       if (!custo) return;
-      [['preco_rs', 'preço do container'], ['capatazia_rs', 'capatazia'], ['gri_rs', 'GRI']].forEach(([campo, rotulo]) => {
+      [['preco_rs', 'preço do container'], ['capatazia_rs', 'capatazia'], ['gri_rs', 'GRI'], ['taxa_porto_rs', 'taxa de porto']].forEach(([campo, rotulo]) => {
         const atual = Number(ct[campo]) || 0;
         const cadastro = Number(custo[campo]) || 0;
         if (atual > 0 && cadastro > 0 && Math.abs(atual - cadastro) > 0.01) out.push({ indice: i, campo, rotulo, atual, cadastro });
       });
     });
     return out;
+  }
+
+  /* ID-TAG do container (06/11/2026): na Precificação o Financeiro cita o ID-TAG (CONT-001…) + a
+     quantidade e os valores do cadastro de Containers vêm sozinhos. Só precificações NOVAS (ou linhas
+     em que alguém escolhe o ID-TAG) herdam; precificação salva guarda o snapshot. */
+
+  // Tipo ISO a partir do nome do cadastro ("40HC (High Cube)" → "40'HC"). Sem equivalente → 'Outro'
+  // (o Embarque lê só os códigos ISO; ver o comentário do mapa acima).
+  function isoDoTipoCustos(tipoCustos) {
+    const par = Object.entries(CONTAINER_ISO_PARA_CUSTOS).find(([, nome]) => nome === tipoCustos);
+    return par ? par[0] : 'Outro';
+  }
+
+  // Aplica à linha da Precificação os valores da linha do cadastro escolhida pelo ID-TAG. Mantém a
+  // quantidade. Devolve uma linha nova (não muta). Valor ausente no cadastro vira 0.
+  function aplicarIdTagNaLinha(linha, custo) {
+    const n = (v) => Number(v) || 0;
+    return {
+      ...linha,
+      id_tag: custo.id_tag,
+      porto: custo.porto || '',
+      tipo_tamanho: isoDoTipoCustos(custo.tipo),
+      preco_rs: n(custo.preco_rs),
+      capatazia_rs: n(custo.capatazia_rs),
+      gri_rs: n(custo.gri_rs),
+      taxa_porto_rs: n(custo.taxa_porto_rs),
+    };
+  }
+
+  // A linha tem valor digitado/herdado que DIFERE do que o ID-TAG escolhido traria? (a tela pede
+  // confirmação antes de substituir.) Valor zero/vazio da linha não conta.
+  function linhaTemValorDiferenteDoIdTag(linha, custo) {
+    return ['preco_rs', 'capatazia_rs', 'gri_rs', 'taxa_porto_rs']
+      .some((k) => Number(linha[k]) > 0 && Math.abs(Number(linha[k]) - (Number(custo[k]) || 0)) > 0.01);
   }
 
   /* ============================================================
@@ -584,7 +623,16 @@
         respondedAt: form.envio_direto_precificacao_em, precificacaoId: null, precificacaoStatus: null,
         statusCotacao: null, direto: true,
       }));
-    return [...diretosResultado, ...daCotacao];
+    /* 06/11/2026 — "Alterar valor" da Proposta: cotação com pedido de aumento aberto ganha a marca
+       `revisaoValor` (lista de pedidos) para o Financeiro ver na fila. Só leitura; falha não derruba a fila. */
+    let pedidosAumento = {};
+    try {
+      if (window.PropostaAumentoStore) {
+        const nums = [...diretosResultado, ...daCotacao].map((r) => r.numeroCotacao).filter((n) => n != null);
+        pedidosAumento = await window.PropostaAumentoStore.pendentesPorCotacao(nums);
+      }
+    } catch (e) { console.warn('[PrecificacaoElevadorStore] pedidos de aumento indisponíveis', e); }
+    return [...diretosResultado, ...daCotacao].map((r) => ({ ...r, revisaoValor: (r.numeroCotacao != null && pedidosAumento[String(r.numeroCotacao)]) || null }));
   }
 
   /* ---------- Monta o snapshot inicial (modelos, quantidade, VMLE) a partir do
@@ -801,8 +849,42 @@
   }
 
   /* ---------- Calcula (2 passadas por causa do DIFAL — ver nota abaixo) e salva ---------- */
+  /* ---------- Alçadas de Calcular e Aprovar (07/11/2026, pendência 4 de 5.2.10) ----------
+     Duas ações novas no módulo `precificacao`: `calcular` e `aprovar`. Quem concede é o vpsistema.com/administracao
+     (o hub só lê `alcadas_capacidade`); Administrador sempre passa (PropostaStore.temCapacidade).
+     REGRA DE TRANSIÇÃO (para ninguém perder o acesso no deploy): enquanto NINGUÉM tiver a ação concedida, a conferência
+     fica DESLIGADA (todos que abrem a tela fazem tudo, como antes); assim que alguém recebe a ação, ela passa a valer
+     para todos. Falha ao consultar a alçada = recusa (nunca libera por erro, Art. 9). A trava é do front (o banco segue
+     aberto até a #571): é organização, não segurança. */
+  const ACOES_ALCADA = { calcular: 'Calcular a precificação', aprovar: 'Aprovar a precificação' };
+  function avaliarAlcada({ temAlcada, existeConcessao }) {
+    if (!existeConcessao) return { pode: true, ativa: false };
+    return { pode: !!temAlcada, ativa: true };
+  }
+  async function conferirAlcada(acao) {
+    const rotulo = ACOES_ALCADA[acao] || acao;
+    const falha = (motivo) => ({ pode: false, ativa: true, erro: true, motivo });
+    try {
+      const c = sb(); const PS = window.PropostaStore;
+      if (!c || !PS || typeof PS.temCapacidade !== 'function') return falha('Não foi possível conferir a alçada agora. Tente de novo.');
+      const { data, error } = await c.from('alcadas_capacidade').select('id').eq('modulo', 'precificacao').eq('capacidade', acao).limit(1);
+      if (error) return falha('Não foi possível conferir a alçada agora. Tente de novo.');
+      const temAlcada = await PS.temCapacidade('precificacao', acao);
+      const r = avaliarAlcada({ temAlcada, existeConcessao: (data || []).length > 0 });
+      return r.pode ? r : { ...r, motivo: `Você não tem a alçada "${rotulo}" na Precificação. Peça em vpsistema.com/administracao.` };
+    } catch (e) {
+      return falha('Não foi possível conferir a alçada agora. Tente de novo.');
+    }
+  }
+  async function exigirAlcada(acao) {
+    const r = await conferirAlcada(acao);
+    if (!r.pode) { const err = new Error(r.motivo); err.semAlcada = true; throw err; }
+    return r;
+  }
+
   async function calcularEsalvar(id) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    await exigirAlcada('calcular');
     const pz = await obter(id);
     const { data: formulario, error: e1 } = await c.from('formularios_elevador').select('*').eq('id', pz.formulario_elevador_id).single();
     if (e1) throw e1;
@@ -907,6 +989,39 @@
     }
     resultado = window.PrecificacaoElevadorEngine.calcular({ ...baseInputs, difalCustoRs });
 
+    /* 06/11/2026 — coluna "Alterar valor" (Gelson): diferenças em R$ por equipamento digitadas pelo Financeiro.
+       Total = preço base (no mark-up digitado) + soma das diferenças. O MARK-UP EFETIVO que fecha nesse total vem da
+       conta inversa do motor (alavancaParaPreco) e o V2 roda de novo com ele, então impostos, comissões e DIFAL
+       recalculam sobre o novo total. Os modelos ficam no rateio do preço BASE: a Proposta soma a diferença de cada
+       equipamento por cima (os outros equipamentos não mudam). O mark-up digitado NÃO é sobrescrito. */
+    const AJ = window.PrecificacaoAjustes;
+    const ajustes = AJ ? AJ.normalizar(pz.ajustes_valor) : {};
+    if (AJ && Object.keys(ajustes).length) {
+      const E = window.PrecificacaoElevadorEngine;
+      const precoBase = resultadoV2.precificacao.precoVendaProposta;
+      const modelosBase = E.ratearPorModelo(baseInputs.modelos, precoBase);
+      const alvo = AJ.totalComAjustes(precoBase, ajustes);
+      const al = E.alavancaParaPreco(resultadoV2, alvo);
+      if (!al || !al.valido) throw new Error('Os ajustes de valor levam o preço a um ponto que o cálculo não alcança (abaixo do custo + impostos). Revise a coluna "Alterar valor".');
+      const rodar = (mk) => {
+        let r = E.calcularV2({ ...baseInputs, difalCustoRs, ...v2Extras, markUpPct: mk });
+        let bd = valorOperacaoDifal;
+        for (let it = 0; it < 30; it++) {
+          const eq = r.precificacao.precoVendaProduto;
+          if (!(eq > 0) || Math.abs(eq - bd) < 0.005) break;
+          bd = eq;
+          difal = calcularDifal(bd);
+          difalCustoRs = difal.responsavel_recolhimento === 'emitente_verticalparts' ? difal.valor_difal : 0;
+          r = E.calcularV2({ ...baseInputs, difalCustoRs, ...v2Extras, markUpPct: mk });
+        }
+        return r;
+      };
+      resultadoV2 = rodar(al.valor);
+      resultado = E.calcular({ ...baseInputs, difalCustoRs });
+      resultadoV2.modelos = modelosBase;
+      resultadoV2.ajustes = { porEquipamento: ajustes, total: AJ.soma(ajustes), precoBase, markUpBase: Number(pz.mark_up_pct) || 0, markUpEfetivo: al.valor };
+    }
+
     /* Duas modalidades de entrega (issue "Precificação real"): 90 dias
        (container exclusivo, frete mais caro) × 120 dias (container
        compartilhado, o frete_seguro_capatazia_usd de sempre). Só o frete
@@ -927,6 +1042,8 @@
     /* 10/10/2026 — o método da planilha do Financeiro é o ÚNICO método de formação de preço; precificação antiga
        (markup sobre o custo / margem sobre a venda) é convertida ao calcular de novo. */
     await salvar(id, { resultado, resultado_v2: resultadoV2, resultado_v2_expresso: resultadoV2Expresso, difal, parametros_fiscais_snapshot: snapshotIcms, modo_formacao_preco: 'planilha', status: 'calculado' });
+    /* 06/11/2026 — pedido de aumento de valor da Proposta: se o preço mudou, avisa quem pediu (best-effort, não espera). */
+    try { if (window.PropostaAumentoStore) window.PropostaAumentoStore.aoSalvarPrecificacao(formulario.numero_cotacao); } catch (_) { /* aviso nunca impede o cálculo */ }
     return { resultado, resultadoV2, resultadoV2Expresso, difal };
   }
 
@@ -959,12 +1076,30 @@
     return faltando;
   }
 
+  /* DIFAL pendente (07/11/2026, spec de 15/10/2026 e pendência 3 de 5.2.10): o cadastro do cliente não diz se ele é
+     Contribuinte de ICMS, então o DIFAL não pôde ser calculado (mensagem do DifalEngine "Informe se o cliente é
+     Contribuinte de ICMS…"). Enquanto estiver assim, NÃO se aprova a precificação (e, como a Proposta nasce ao aprovar,
+     nem se gera a Proposta). Outros avisos do DIFAL (UF ausente, UF sem linha na tabela, revenda com cliente não
+     contribuinte) continuam só avisos. Função pura, usada pelo aprovar() e pela tela. */
+  const MOTIVO_DIFAL_PENDENTE = 'DIFAL pendente: o cadastro do cliente não informa se ele é Contribuinte de ICMS. Devolva ao Vendas para completar o cadastro e clique em Calcular antes de aprovar.';
+  function difalPendente(difal) {
+    if (!difal || typeof difal !== 'object') return false;
+    if (difal.contribuinte_icms === true || difal.contribuinte_icms === false) return false;
+    return /^Informe se o cliente/.test(difal.mensagem || '');
+  }
+
   async function aprovar(id, { forcarAbaixoMinima } = {}) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    await exigirAlcada('aprovar');
     const pz = await obter(id);
     if (!pz.resultado) throw new Error('Calcule a precificação antes de aprovar.');
     const faltando = camposObrigatoriosFaltando(pz);
     if (faltando.length) throw new Error(`Campos obrigatórios sem valor: ${faltando.join(', ')}.`);
+    if (difalPendente(pz.difal)) {
+      const err = new Error(MOTIVO_DIFAL_PENDENTE);
+      err.difalPendente = true; // bloqueio absoluto: "aprovar mesmo assim" (margem) não vale aqui
+      throw err;
+    }
     const margemMinima = Number((pz.parametros_fiscais_snapshot || {}).margem_minima_pct) || 0;
     // Motor oficial desde 29/08 é o V2 (custo econômico completo) — o V1
     // deixava markup positivo conviver com margem real negativa (issue
@@ -1141,6 +1276,7 @@
     listarPendentes, criar, obter, salvar, calcularEsalvar,
     camposObrigatoriosFaltando, aprovar, criarPropostaAutomatica, ressincronizarDoFornecedor,
     parseContainerNo, buscarContainerCustoPorIso, enriquecerContainersComCusto, divergenciasContainerComCadastro,
+    isoDoTipoCustos, aplicarIdTagNaLinha, linhaTemValorDiferenteDoIdTag, difalPendente, MOTIVO_DIFAL_PENDENTE, avaliarAlcada, conferirAlcada, exigirAlcada,
     classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, atualizarMaoDeObra, renumerarPorParadas, montarBaseInputs,
     acrescentarEquipamento, removerEquipamento, restaurarEquipamentoMO,
   };

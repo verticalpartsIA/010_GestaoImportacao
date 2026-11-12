@@ -444,6 +444,13 @@ app.use((req, res, next) => {
   return naoEncontrado(req, res);
 });
 
+/* Texto do front em gzip (js, jsx, css, html, json, svg) — ver server-lib/gzip-estaticos.js. Mesma regra de cache do
+   express.static logo abaixo. */
+app.use(require('./server-lib/gzip-estaticos').criar({
+  raiz: __dirname,
+  cacheControl: (arquivo) => (NO_CACHE_EXT.some((ext) => arquivo.endsWith(ext)) ? 'no-cache' : 'public, max-age=3600'),
+}));
+
 app.use(express.static(path.join(__dirname), {
   index: 'index.html',
   setHeaders(res, filePath) {

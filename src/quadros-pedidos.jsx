@@ -23,6 +23,9 @@
 
 function qpData(d) { return d ? String(d).slice(0, 10).split('-').reverse().join('/') : '—'; }
 
+/* 10/11/2026: o link do formulário POR PEDIDO VENDIDO (coluna "Formulário do cliente") saiu desta tela, a pedido do Gelson: o link nasce na pré-venda,
+   antes de o quadro existir. As respostas dos clientes agora ficam em "Formulários Respondidos" (src/formularios-respondidos.jsx). */
+
 // Barra de 0 a 100%. `info` = { pct, sub } ou null (mostra o traço com a explicação no balão).
 function QpBarra({ info, vazio, titulo }) {
   if (!info) return <span style={{ color: 'var(--fg3)' }} title={titulo || ''}>{vazio || '—'}</span>;
@@ -86,7 +89,7 @@ function QuadrosPedidosPage() {
   React.useEffect(() => { carregar(); }, [carregar]);
   // Atualiza sozinha (a cada minuto e ao voltar para a aba), como as outras telas que leem pcp_pedidos.
   React.useEffect(() => {
-    const t = setInterval(carregar, 60000);
+    const t = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
     const vis = () => { if (document.visibilityState === 'visible') carregar(); };
     document.addEventListener('visibilitychange', vis);
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };

@@ -800,6 +800,16 @@
     return true;
   }
 
+  /* Nº padrão da proposta: VPPR-<Nº da cotação, 4 dígitos>[-letra da revisão]. A letra vem do Master ID da cotação
+     (VPCT-1004-A) ou do de equipamento (VPEL-EL1004-A). Sem Nº de cotação válido, devolve null. */
+  function numeroPadrao(numeroCotacao, masterId) {
+    const M = window.MasterIdEngine;
+    const cot = M.parseNumeroCotacao(numeroCotacao);
+    if (cot == null) return null;
+    const m = String(masterId == null ? '' : masterId).trim().match(/^VP[A-Z]{2}-[A-Z]{0,2}\d+-([A-Za-z]+)$/);
+    return M.etapaId('proposta', cot, m ? m[1] : null);
+  }
+
   /* data/eq: o shape completo do editor (cliente/obra/elevador|escada|
      esteira/...). valorTotal: calculado pelo editor (calcularValorTotal),
      que já entende o shape por equipamento — o store não precisa saber
@@ -812,15 +822,23 @@
     if (!data?.cliente?.nome?.trim()) return { erro: 'Preencha o nome do cliente para salvar.' };
 
     const vpUser = window.__VP_USER || {};
-    const chave = (data.numero || '').trim() || null; // → numero_documento (texto)
+    let chave = (data.numero || '').trim() || null; // → numero_documento (texto)
+    /* REGRA (Gelson, 06/11/2026), só para as propostas de agora em diante: o Nº da proposta é o da cotação
+       (VPPR-<Nº da cotação>[-letra]) e ninguém o digita. Proposta NOVA que ainda está com o número padrão do editor
+       (VP-<ano>-001) ou sem número recebe o da cotação; depois de criada o número não muda (ver abaixo). Propostas
+       que já existem ficam exatamente como estão. */
+    const padrao = numeroPadrao(data.numeroCotacao, data.masterId);
+    if (!editId && padrao && (!chave || /^VP-\d{4}-\d{3}$/.test(chave))) chave = padrao;
     try {
       /* Trava por aprovação: editar uma proposta aprovada exige destrave
          prévio (capacidade 'destravar_aprovada'). Checagem aqui, não só na
          UI — quem chama salvar() direto não deveria conseguir passar por
          cima do botão desabilitado. Ao salvar, retrava sozinho na hora. */
       let destravadaAgora = false;
+      let numeroFixo = null; // número da proposta que já existe: nunca é trocado por salvar()
       if (editId) {
-        const { data: atual } = await c.from('propostas').select('status, destravada_em').eq('id', editId).maybeSingle();
+        const { data: atual } = await c.from('propostas').select('status, destravada_em, numero_documento').eq('id', editId).maybeSingle();
+        numeroFixo = (atual && atual.numero_documento) || null;
         if (atual && STATUS_TRAVADOS.includes(atual.status) && !atual.destravada_em) {
           return { erro: 'Proposta enviada ao cliente está travada para edição. Peça o destrave ao Líder (informando o motivo).' };
         }
@@ -838,6 +856,11 @@
         atualizado_em: new Date().toISOString(),
         ...(destravadaAgora ? { destravada_em: null, destravada_por: null } : {}),
       };
+
+      /* REGRA (06/11/2026): o número de uma proposta que já existe NÃO muda por salvar() (ex.: alguém digitou "993 A").
+         Não se envia numero_documento e o data_json acompanha o número gravado. */
+      if (numeroFixo) { delete payload.numero_documento; payload.data_json = { ...payload.data_json, numero: numeroFixo }; }
+      else if (chave) { payload.data_json = { ...payload.data_json, numero: chave }; }
 
       /* vendedor_id é NOT NULL — só mandamos quando resolve, pra um update
          não apagar o vendedor que já estava gravado. */
@@ -974,7 +997,7 @@
           ({ data: row, error } = await c.from('propostas').update({ ...payload, precificacao_id: null }).eq('id', existing.id).select('id, token').single());
         }
         if (error) throw error;
-        return { ...row, precificacaoOrfa };
+        return { ...row, numero_documento: numeroFixo || chave, precificacaoOrfa };
       } else {
         let { data: row, error } = await c.from('propostas').insert([{ ...payload, ...extrasRevisao, status: 'rascunho' }]).select('id, token').single();
         if (error && ehFkPrecificacaoMorta(error)) {
@@ -986,7 +1009,7 @@
           evento: 'PROPOSTA_ELABORADA', numeroCotacao: payload.numero_cotacao,
           alvoLabel: payload.titulo, alvoId: row.id,
         });
-        return { ...row, precificacaoOrfa };
+        return { ...row, numero_documento: chave, precificacaoOrfa };
       }
     } catch (e) {
       // Antes o erro era engolido e o usuário via "salva localmente" — uma
@@ -1003,7 +1026,7 @@
     publicar, conteudoVigente, conteudoRenderizavel, resolverEq, normalizarEq,
     markSent, markViewed, markSigned, refuse, solicitarRevisao, decidirRevisao,
     executarEfeitosAssinatura,
-    salvar,
+    salvar, numeroPadrao,
     resolverEscopoVisibilidade, resetEscopoVisibilidadeCache,
     resolverPerfilAtual, temCapacidade, podeConcederAlcadas, resetAlcadasCache,
     listarAlcadas, concederAlcada, destravar, excluir, podeOcultarEquipamento,

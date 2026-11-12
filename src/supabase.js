@@ -255,11 +255,12 @@
       })(),
       sb.from('tarefas').select('*').eq('role', (role === 'logistica' || role === 'importacao') ? 'admin' : role).eq('done', false).order('id'),
       sb.from('embarques').select('*').eq('teste', false).order('eta'),
-      sb.from('contratos_venda_equipamentos').select('*').or('status.is.null,status.neq.em_preenchimento').order('issued_date', { ascending: false }),
+      /* só as colunas que as métricas do Dashboard leem (id, proposta_id, status, valores) — antes vinha o contrato inteiro, com o texto (doc) */
+      sb.from('contratos_venda_equipamentos').select('id, proposta_id, status, valor_total_num, value').or('status.is.null,status.neq.em_preenchimento').order('issued_date', { ascending: false }),
       sb.from('comissoes').select('*').order('id'),
       sb.from('gatilhos').select('*').order('due_date'),
-      sb.from('fichas_tecnicas').select('*').order('criado_em', { ascending: false }),
-      sb.from('catalogo_produtos').select('*').order('created_at', { ascending: false }),
+      sb.from('fichas_tecnicas').select('id, criado_em').order('criado_em', { ascending: false }),   // o Dashboard só conta as fichas e as do mês
+      sb.from('catalogo_produtos').select('id, situacao').order('created_at', { ascending: false }),   // só a contagem de ativos
       // Esteira real (Formulário→Proposta→Contrato→Aval Financeiro) — usada
       // pra corrigir os KPIs do Dashboard Admin, que antes só liam a tabela
       // legada/desconectada `projetos` (achado E2E: Faturamento Total R$0 e

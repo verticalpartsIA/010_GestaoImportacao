@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/13_fabricacao.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 01/11/2026 (origin/main `df8b84e`)
-- **Palavras:** 6682 · **blocos:** 224 · **seções com selo próprio:** 144 de 156
+- **Palavras:** 6690 · **blocos:** 224 · **seções com selo próprio:** 144 de 156
 - **Origem do selo dos blocos:** próprio 176 · da seção 20 · da seção-pai 0 · do cabeçalho 5 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 23
-- **Selo efetivo dos blocos:** Conferido 111 · Herdado 81 · Não verificado 9
+- **Selo efetivo dos blocos:** Conferido 112 · Herdado 80 · Não verificado 9
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 

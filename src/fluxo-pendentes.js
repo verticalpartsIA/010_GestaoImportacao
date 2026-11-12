@@ -94,6 +94,6 @@
   window.FluxoPendentes = { processar };
 
   setTimeout(processar, 8000);
-  setInterval(processar, INTERVALO_MS);
+  setInterval(function () { if (!document.hidden) processar(); }, INTERVALO_MS);  /* pausa com a aba oculta; a volta à aba já chama processar() abaixo */
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') processar(); });
 })();

@@ -339,13 +339,19 @@ function feNovaUnidade(identificador, tipoEquipamento) {
    `chave` liga o campo à lista de faltantes que vem do contexto (cabeçalho ou equipamento); só acende depois que o
    usuário tenta salvar/enviar (ctx.mostrar). Estilo em styles/planilha.css (.pl-faltando). */
 const FEFaltandoCtx = React.createContext({ mostrar: false, falta: () => false });
+/* 07/11/2026 (auditoria de acessibilidade, WCAG 1.3.1/4.1.2): o <label> do FEField é irmão do campo, não o envolve nem
+   tem htmlFor, então leitor de tela anunciava "campo de edição" sem nome. O FEField publica o id do seu rótulo neste
+   contexto e FEInput/FESelect/FEFornecedorInput/FETextarea o usam em aria-labelledby (vários campos podem apontar para
+   o mesmo rótulo sem repetir id). Campo fora de um FEField não recebe nada, como antes. */
+const FERotuloCtx = React.createContext(undefined);
 function FEField({ label, children, span, chave, aviso }) {
   const ctx = React.useContext(FEFaltandoCtx);
+  const rotuloId = React.useId();
   const faltando = !!chave && ctx.mostrar && ctx.falta(chave);
   return (
     <div className={'stack' + (faltando ? ' pl-faltando' : '')} style={{ gap: 4, gridColumn: span ? `span ${span}` : undefined }}>
-      <label className="up-eyebrow muted">{label}</label>
-      {children}
+      <label id={rotuloId} className="up-eyebrow muted">{label}</label>
+      <FERotuloCtx.Provider value={rotuloId}>{children}</FERotuloCtx.Provider>
       {faltando && <div className="pl-faltando__msg">{aviso || 'Campo obrigatório — preencha para enviar.'}</div>}
     </div>
   );
@@ -374,11 +380,17 @@ function feFaltandoUnidade(u) {
   return FE_UNID_OBRIG.filter(([k]) => !u[k]).map(([k, nome]) => ({ chave: k, nome }));
 }
 function FEInput({ value, onChange, placeholder, type = 'text', disabled, onBlur }) {
-  return <input className="input" type={type} value={value ?? ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} placeholder={placeholder} disabled={disabled}/>;
+  const rotuloId = React.useContext(FERotuloCtx);
+  return <input className="input" type={type} value={value ?? ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} placeholder={placeholder} disabled={disabled} aria-labelledby={rotuloId}/>;
+}
+function FETextarea({ value, onChange, rows = 2 }) {
+  const rotuloId = React.useContext(FERotuloCtx);
+  return <textarea className="input" rows={rows} value={value || ''} onChange={(e) => onChange(e.target.value)} aria-labelledby={rotuloId}/>;
 }
 function FESelect({ value, onChange, options, placeholder, disabled }) {
+  const rotuloId = React.useContext(FERotuloCtx);
   return (
-    <select className="input" value={value ?? ''} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
+    <select className="input" value={value ?? ''} onChange={(e) => onChange(e.target.value)} disabled={disabled} aria-labelledby={rotuloId}>
       <option value="">{placeholder || '— escolha —'}</option>
       {options.map((o) => typeof o === 'string'
         ? <option key={o} value={o}>{o}</option>
@@ -396,10 +408,11 @@ function FESelect({ value, onChange, options, placeholder, disabled }) {
    lista, não inventar um nome novo. */
 function FEFornecedorInput({ value, onChange, fornecedores, disabled }) {
   const listId = React.useId();
+  const rotuloId = React.useContext(FERotuloCtx);
   return (
     <>
       <input className="input" list={listId} value={value ?? ''} onChange={(e) => onChange(e.target.value)}
-        placeholder="Digite pra filtrar (ex.: G)" disabled={disabled}/>
+        placeholder="Digite pra filtrar (ex.: G)" disabled={disabled} aria-labelledby={rotuloId}/>
       <datalist id={listId}>
         {/* `fornecedores` mistura string (RFQ configurado) e { value, label }
             (ainda não configurado — ver fornecedoresOptions). Usar o objeto
@@ -643,6 +656,92 @@ function FEAnexos({ formularioId, categoria, titulo, descricao, podeAnexar, gara
 }
 
 const FE_OPCOES_ACO = ['Aço 304', 'Aço 430', 'Pintado'];
+
+/* 12/11/2026 — Portas de VIDRO (cabina e pavimento). A coluna `acabamento_porta_*` continua guardando o AÇO (um só
+   por equipamento); o vidro é uma exceção guardada em `especificacoes.portas_vidro` (regra e textos em
+   portas-vidro-calc.js). Escolhendo "Vidro" o sistema pergunta: pavimento = todos ou só alguns (marca quais);
+   com porta oposta cada lado (frente/oposta) pode ser vidro ou aço de forma independente. */
+function FEPortaAcabamento({ unidade, alvo, label, onPatch }) {
+  const PV = window.PortasVidro;
+  const grupo = React.useId();
+  const colKey = 'acabamento_porta_' + alvo;
+  const col = unidade[colKey] || '';
+  const cfg = ((unidade.especificacoes || {}).portas_vidro || {})[alvo] || null;
+  const tem = !!PV && PV.temOposta(unidade.porta_oposta);
+  const pav = alvo === 'pavimento';
+  const grava = (novo, extra) => {
+    const esp = { ...(unidade.especificacoes || {}) };
+    const pv = { ...(esp.portas_vidro || {}) };
+    if (novo) pv[alvo] = novo; else delete pv[alvo];
+    if (Object.keys(pv).length) esp.portas_vidro = pv; else delete esp.portas_vidro;
+    onPatch({ especificacoes: esp, ...(extra || {}) });
+  };
+  const escolher = (v) => {
+    if (v === 'Vidro') grava({ base: FE_OPCOES_ACO.includes(col) ? col : '', modo: 'todos', frente: true, oposta: false, andares: [] });
+    else grava(null, { [colKey]: v });
+  };
+  const mudar = (patch, extra) => grava({ ...cfg, ...patch }, extra);
+  const lista = pav && PV && cfg ? PV.andares(unidade.paradas, unidade.pavimentos_desc) : [];
+  const marcar = (n, lado, v) => {
+    const todos = cfg.andares || [];
+    const atual = todos.find((a) => a.n === n) || { n, frente: false, oposta: false };
+    mudar({ andares: [...todos.filter((a) => a.n !== n), { ...atual, [lado]: v }] });
+  };
+  const erros = cfg && PV ? PV.validar(unidade).filter((e) => e.startsWith('Porta de ' + alvo)) : [];
+  const resumo = cfg && PV && !erros.length ? PV.descricao(unidade, alvo, 'pt') : '';
+  return (
+    <>
+      <FEField label={label}>
+        <FESelect value={cfg ? 'Vidro' : col} onChange={escolher} options={PV ? [...FE_OPCOES_ACO, 'Vidro'] : FE_OPCOES_ACO}/>
+      </FEField>
+      {cfg && (
+        <div className="stack" style={{ gridColumn: 'span 3', gap: 10, padding: 12, border: '1px solid var(--border)', borderRadius: 8 }}>
+          <div className="up-eyebrow muted">Porta de {pav ? 'pavimento' : 'cabina'} em vidro</div>
+          {pav && (
+            <div className="row gap-3" style={{ flexWrap: 'wrap' }}>
+              <label className="row gap-2" style={{ alignItems: 'center', fontSize: 13, cursor: 'pointer' }}>
+                <input type="radio" name={grupo} checked={cfg.modo !== 'alguns'} onChange={() => mudar({ modo: 'todos' })}/> Em todos os pavimentos
+              </label>
+              <label className="row gap-2" style={{ alignItems: 'center', fontSize: 13, cursor: 'pointer' }}>
+                <input type="radio" name={grupo} checked={cfg.modo === 'alguns'} onChange={() => mudar({ modo: 'alguns' })}/> Só em alguns pavimentos (os outros ficam em aço)
+              </label>
+            </div>
+          )}
+          {(!pav || cfg.modo !== 'alguns') && (
+            <div className="row gap-3" style={{ flexWrap: 'wrap' }}>
+              <FECheck label={tem ? 'Porta de frente em vidro' : 'Vidro'} checked={cfg.frente} onChange={(v) => mudar({ frente: v })}/>
+              {tem && <FECheck label="Porta oposta em vidro" checked={cfg.oposta} onChange={(v) => mudar({ oposta: v })}/>}
+            </div>
+          )}
+          {pav && cfg.modo === 'alguns' && (lista.length === 0
+            ? <div className="muted" style={{ fontSize: 12 }}>Informe o número de paradas (e a descrição dos pavimentos) para escolher onde o vidro será usado.</div>
+            : (
+              <div className="stack" style={{ gap: 6 }}>
+                <div className="muted" style={{ fontSize: 12 }}>Marque os pavimentos com vidro{tem ? ' (frente e/ou oposta)' : ''}:</div>
+                {lista.map((a) => {
+                  const x = (cfg.andares || []).find((y) => y.n === a.n) || {};
+                  return (
+                    <div key={a.n} className="row gap-3" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{ minWidth: 90, fontSize: 13 }}>{a.rotulo}</span>
+                      <FECheck label={tem ? 'Frente' : 'Vidro'} checked={x.frente} onChange={(v) => marcar(a.n, 'frente', v)}/>
+                      {tem && <FECheck label="Oposta" checked={x.oposta} onChange={(v) => marcar(a.n, 'oposta', v)}/>}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          <div style={{ maxWidth: 320 }}>
+            <FEField label="Material das portas que não forem de vidro">
+              <FESelect value={cfg.base} onChange={(v) => mudar({ base: v }, { [colKey]: v })} options={FE_OPCOES_ACO} placeholder="— escolha (304 ou 430, não se misturam) —"/>
+            </FEField>
+          </div>
+          {erros.map((e) => <div key={e} className="pl-faltando__msg">{e}</div>)}
+          {resumo && <div className="muted" style={{ fontSize: 12 }}>Sairá assim: {resumo}</div>}
+        </div>
+      )}
+    </>
+  );
+}
 const FE_OPCOES_VAZIAS = { teto_falso: [], piso: [], porta: [], botoeira_cabine: [], botoeira_pavimento: [] };
 
 /* ---------- Card de uma Unidade (um elevador) ---------- */
@@ -777,8 +876,8 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
               <FEField label="Largura (mm)"><FEInput type="number" value={unidade.porta_largura_mm} onChange={set('porta_largura_mm')}/></FEField>
               <FEField label="Altura (mm)"><FEInput type="number" value={unidade.porta_altura_mm} onChange={set('porta_altura_mm')}/></FEField>
               <FEField label="Aço da Cabina"><FESelect value={unidade.aco_cabina} onChange={set('aco_cabina')} options={FE_OPCOES_ACO} placeholder="— escolha —"/></FEField>
-              <FEField label="Acabamento porta cabina"><FESelect value={unidade.acabamento_porta_cabina} onChange={set('acabamento_porta_cabina')} options={FE_OPCOES_ACO}/></FEField>
-              <FEField label="Acabamento porta pavimento"><FESelect value={unidade.acabamento_porta_pavimento} onChange={set('acabamento_porta_pavimento')} options={FE_OPCOES_ACO}/></FEField>
+              <FEPortaAcabamento unidade={unidade} alvo="cabina" label="Acabamento porta cabina" onPatch={(p) => onChange({ ...unidade, ...p })}/>
+              <FEPortaAcabamento unidade={unidade} alvo="pavimento" label="Acabamento porta pavimento" onPatch={(p) => onChange({ ...unidade, ...p })}/>
               <FEField label="Classe corta-fogo"><FESelect value={unidade.classe_corta_fogo} onChange={set('classe_corta_fogo')} options={['Nenhuma', 'E120', 'EI60', 'EI120']}/></FEField>
             </div>
           </div>
@@ -807,7 +906,7 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
                 <FECheck label="Câmera na cabine" checked={unidade.camera} onChange={set('camera')}/>
                 <FECheck label="Anúncio de voz" checked={unidade.anuncio_voz} onChange={set('anuncio_voz')}/>
               </div>
-              <FEField label="Exigências especiais" span="3"><textarea className="input" rows={2} value={unidade.exigencias_especiais || ''} onChange={(e) => set('exigencias_especiais')(e.target.value)}/></FEField>
+              <FEField label="Exigências especiais" span="3"><FETextarea value={unidade.exigencias_especiais} onChange={(v) => set('exigencias_especiais')(v)}/></FEField>
             </div>
           </div>
           </React.Fragment>
@@ -1750,6 +1849,8 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, tip
       if (!u.tipo || !u.tracao || !u.velocidade_ms || !u.paradas || !u.pavimentos_desc || !u.casa_maquinas || !u.agrupamento || !u.porta_oposta || !u.estrutura_caixa || !u.percurso_mm || !u.porta_tipo_abertura || !u.tensao_principal || !u.tensao_iluminacao) {
         return `Equipamento ${u.identificador || ''}: preencha os campos obrigatórios (*).`;
       }
+      const errosVidro = window.PortasVidro ? window.PortasVidro.validar(u) : [];
+      if (errosVidro.length) return `Equipamento ${u.identificador || ''}: ${errosVidro[0]}`;
     }
     return null;
   };
@@ -2004,7 +2105,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, tip
               )}
             </div>
           </div>
-          <FEField label="Observações"><textarea className="input" rows={2} value={header.observacoes || ''} onChange={(e) => setH('observacoes')(e.target.value)}/></FEField>
+          <FEField label="Observações"><FETextarea value={header.observacoes} onChange={(v) => setH('observacoes')(v)}/></FEField>
         </div>
       </Card>
       </fieldset>

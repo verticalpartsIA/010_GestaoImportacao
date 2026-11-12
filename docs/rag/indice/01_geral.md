@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/01_geral.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `fd5cf97`)
-- **Palavras:** 23299 · **blocos:** 499 · **seções com selo próprio:** 9 de 74
-- **Origem do selo dos blocos:** próprio 27 · da seção 85 · da seção-pai 0 · do cabeçalho 343 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 44
-- **Selo efetivo dos blocos:** Conferido 412 · Herdado 0 · Não verificado 43
+- **Palavras:** 24557 · **blocos:** 510 · **seções com selo próprio:** 13 de 75
+- **Origem do selo dos blocos:** próprio 34 · da seção 113 · da seção-pai 0 · do cabeçalho 319 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 44
+- **Selo efetivo dos blocos:** Conferido 407 · Herdado 0 · Não verificado 59
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -52,7 +52,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 1.3.8 Regras e armadilhas | `docs/modulos/01_geral.md#138-regras-e-armadilhas` | 3 | Conferido (uniforme) | 20 | b1 s19 |
 | 1.3.9 Testes | `docs/modulos/01_geral.md#139-testes` | 3 | — | 2 | c2 |
 | 1.3.10 Pendências e decisões | `docs/modulos/01_geral.md#1310-pendências-e-decisões` | 3 | — | 14 | c14 |
-| 1.3.11 Histórico (só o que ainda ensina) | `docs/modulos/01_geral.md#1311-histórico-só-o-que-ainda-ensina` | 3 | — | 9 | c9 |
+| 1.3.11 Histórico (só o que ainda ensina) | `docs/modulos/01_geral.md#1311-histórico-só-o-que-ainda-ensina` | 3 | Conferido (uniforme) | 10 | b1 s9 |
 | 1.4 Prazos & Pendências | `docs/modulos/01_geral.md#14-prazos--pendências` | 2 | — | 0 | — |
 | 1.4.1 O que é | `docs/modulos/01_geral.md#141-o-que-é` | 3 | — | 1 | c1 |
 | 1.4.2 Rota e arquivos | `docs/modulos/01_geral.md#142-rota-e-arquivos` | 3 | — | 4 | c4 |
@@ -75,7 +75,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 1.5.7 Dados — o que lê e o que grava | `docs/modulos/01_geral.md#157-dados--o-que-lê-e-o-que-grava` | 3 | — | 5 | c5 |
 | 1.5.8 Regras e armadilhas | `docs/modulos/01_geral.md#158-regras-e-armadilhas` | 3 | — | 25 | c25 |
 | 1.5.9 Testes | `docs/modulos/01_geral.md#159-testes` | 3 | — | 2 | c2 |
-| 1.5.10 Pendências e decisões | `docs/modulos/01_geral.md#1510-pendências-e-decisões` | 3 | — | 10 | c10 |
+| 1.5.10 Pendências e decisões | `docs/modulos/01_geral.md#1510-pendências-e-decisões` | 3 | Não verificado (uniforme) | 10 | b1 s9 |
 | 1.5.11 Histórico (só o que ainda ensina) | `docs/modulos/01_geral.md#1511-histórico-só-o-que-ainda-ensina` | 3 | — | 9 | c9 |
 | Parte comum do Geral | `docs/modulos/01_geral.md#parte-comum-do-geral` | 2 | — | 1 | c1 |
 | PC-1 Mapa de ligações entre as 5 telas | `docs/modulos/01_geral.md#pc-1-mapa-de-ligações-entre-as-5-telas` | 3 | — | 2 | c2 |
@@ -83,10 +83,11 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-3 Fila de efeitos da assinatura pública (fluxo_pendentes) | `docs/modulos/01_geral.md#pc-3-fila-de-efeitos-da-assinatura-pública-fluxo_pendentes` | 3 | Não verificado (uniforme) | 7 | b1 s6 |
 | PC-4 Alertas como barramento | `docs/modulos/01_geral.md#pc-4-alertas-como-barramento` | 3 | — | 7 | c7 |
 | PC-5 Registro de atividades (vp_logs) | `docs/modulos/01_geral.md#pc-5-registro-de-atividades-vp_logs` | 3 | — | 4 | c4 |
-| PC-6 Identidade, alçadas e segurança | `docs/modulos/01_geral.md#pc-6-identidade-alçadas-e-segurança` | 3 | — | 5 | c5 |
+| PC-6 Identidade, alçadas e segurança | `docs/modulos/01_geral.md#pc-6-identidade-alçadas-e-segurança` | 3 | Conferido (uniforme) | 6 | b1 s5 |
 | PC-7 Jobs agendados do Geral | `docs/modulos/01_geral.md#pc-7-jobs-agendados-do-geral` | 3 | — | 3 | c3 |
 | PC-8 Tabelas comuns | `docs/modulos/01_geral.md#pc-8-tabelas-comuns` | 3 | — | 1 | c1 |
 | PC-9 Padrões de navegação, cache e testes | `docs/modulos/01_geral.md#pc-9-padrões-de-navegação-cache-e-testes` | 3 | Conferido (selo explícito da seção) | 22 | b15 s7 |
 | PC-10 Menu "?" (Ajuda, Treinamento, Enviar feedback) | `docs/modulos/01_geral.md#pc-10-menu--ajuda-treinamento-enviar-feedback` | 3 | — | 8 | c8 |
-| PC-11 Documentos soltos e pendências comuns | `docs/modulos/01_geral.md#pc-11-documentos-soltos-e-pendências-comuns` | 3 | Conferido (uniforme) | 6 | b1 s5 |
+| PC-11 Documentos soltos e pendências comuns | `docs/modulos/01_geral.md#pc-11-documentos-soltos-e-pendências-comuns` | 3 | Conferido (uniforme) | 7 | b2 s5 |
 | PC-12 Governança: departamentos, auditoria e lacunas | `docs/modulos/01_geral.md#pc-12-governança-departamentos-auditoria-e-lacunas` | 3 | — | 6 | c6 |
+| PC-13 A Bolinha como secretária: convite, cadeia entre módulos e dependências (SPECIFY, 06/11/2026, pedido do Gelson; ainda NÃO implementado — selo: Não verificado) | `docs/modulos/01_geral.md#pc-13-a-bolinha-como-secretária-convite-cadeia-entre-módulos-e-dependências-specify-06112026-pedido-do-gelson-ainda-não-implementado--selo-não-verificado` | 3 | Não verificado (selo no título) | 8 | b3 s5 |

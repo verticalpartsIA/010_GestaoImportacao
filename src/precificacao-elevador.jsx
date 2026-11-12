@@ -60,9 +60,14 @@ function PZField({ label, children, span, faltando, obrigatorio, aviso }) {
    equipamentos diferentes têm preços diferentes — a soma sozinha esconde isso.
    Calcula na hora a partir do preço do card, então vale também para
    precificações salvas antes do motor devolver o rateio. */
-function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res, onAplicar }) {
+function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res, onAplicar, ajustes, onAjuste }) {
   const E = window.PrecificacaoElevadorEngine;
-  const rateio = E && E.ratearPorModelo ? E.ratearPorModelo(modelos, precoTotal) : [];
+  const AJ = window.PrecificacaoAjustes;
+  /* 06/11/2026 — coluna "Alterar valor": `precoTotal` já inclui os ajustes do último cálculo; o rateio (e a coluna
+     VLR Proposta) é sempre do preço BASE, e o ajuste de cada equipamento entra por cima. */
+  const ajustesSalvos = res && res.ajustes ? Number(res.ajustes.total) || 0 : 0;
+  const rateio = E && E.ratearPorModelo ? E.ratearPorModelo(modelos, (Number(precoTotal) || 0) - ajustesSalvos) : [];
+  const ajNum = (k) => { const v = ajustes ? ajustes[k] : null; return v === undefined || v === null || v === '' ? 0 : (Number(v) || 0); };
   const linhas = [];
   rateio.forEach((m, i) => {
     const fisicos = (moLookup || [])
@@ -71,10 +76,10 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
     // Usa sempre o código da linha física (mo_lookup): com a numeração corrida 1..N o
     // código da Unidade do Formulário pode ser outro equipamento (inclusive com 1 só).
     if (fisicos.length && fisicos.length === m.quantidade) {
-      fisicos.forEach((f) => linhas.push({ chave: `${m.unidadeId || i}-${f.identificador}`, id: f.identificador, valor: m.valorUnitarioRs, mo: Number(f.valorRs) || 0, keyCeo: `${m.unidadeId}:${f.equipamentoIndice || 1}` }));
+      fisicos.forEach((f) => linhas.push({ chave: `${m.unidadeId || i}-${f.identificador}`, id: f.identificador, base: m.valorUnitarioRs, valor: m.valorUnitarioRs + ajNum(`${m.unidadeId}:${f.equipamentoIndice || 1}`), mo: Number(f.valorRs) || 0, keyCeo: `${m.unidadeId}:${f.equipamentoIndice || 1}` }));
     } else {
       linhas.push({
-        chave: m.unidadeId || String(i), id: m.identificador || `Equipamento ${i + 1}`, valor: m.valorUnitarioRs,
+        chave: m.unidadeId || String(i), id: m.identificador || `Equipamento ${i + 1}`, base: m.valorUnitarioRs, valor: m.valorUnitarioRs + ajNum(`${m.unidadeId || i}:1`),
         extra: m.quantidade > 1 ? `cada · × ${m.quantidade}` : '', mo: 0, keyCeo: `${m.unidadeId || i}:1`,
       });
     }
@@ -117,6 +122,9 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
   const novoTotal = totalCalc - descontoTotal;
   const lucroNovo = lucroTotal - calcs.reduce((s, x) => s + x.difLucro, 0);
   const alav = algumCeo && res && E && E.alavancaParaPreco ? E.alavancaParaPreco(res, novoTotal) : null;
+  const somaAjustes = linhas.reduce((s, l) => s + ajNum(l.keyCeo), 0);
+  const alavAjuste = onAjuste && somaAjustes !== 0 && res && E && E.alavancaParaPreco ? E.alavancaParaPreco(res, totalCalc) : null;
+  const ajusteComCeo = linhas.some((l) => ajNum(l.keyCeo) !== 0 && valCeo(l) != null);
   const aplicarTodos = () => {
     const v = Number(String(todos).replace(/\./g, '').replace(',', '.')) || 0;
     if (!(v > 0)) return;
@@ -140,6 +148,7 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
         <table className="pl-grid">
           <thead><tr>
             <th>Equipamento</th><th>VLR Proposta</th>
+            {onAjuste && <th title="Diferença em R$ (pode ser negativa) somada ao VLR Proposta do equipamento; os outros equipamentos não mudam. O mark-up se recalcula para fechar no novo total (depois, clique em Calcular).">Alterar valor</th>}
             {comCeo && <th title="Lucro LÍQUIDO do equipamento (o que sobra depois de pagar mercadoria, frete, despesas, impostos, comissões e DIFAL) = (lucro total + soma da mão de obra) × (VLR Proposta do equipamento ÷ preço total) − mão de obra do equipamento. A soma de todos fecha no lucro total.">Lucro líquido por Equip.</th>}
             {comCeo && <th>Lucro líquido desejado (CEO)</th>}
             {comCeo && <th>Desconto no preço</th>}
@@ -151,7 +160,13 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
               return (
                 <tr key={l.chave}>
                   <td className="mono" style={{ fontSize: 13 }}>{l.id}{l.extra ? <span className="muted"> ({l.extra})</span> : null}</td>
-                  <td className="pl-calc-cell cell-money" style={{ fontSize: 14 }}>{fmtBRL2(l.valor)}</td>
+                  <td className="pl-calc-cell cell-money" style={{ fontSize: 14 }}>{fmtBRL2(l.base != null ? l.base : l.valor)}</td>
+                  {onAjuste && (
+                    <td className="pl-edit-cell" style={{ minWidth: 150 }}>
+                      <PZCurrencyInput moeda="BRL" value={ajNum(l.keyCeo) || ''} onChange={(v) => onAjuste({ [l.keyCeo]: (v === '' || v === 0) ? null : v })}/>
+                      {ajNum(l.keyCeo) !== 0 && <div className="small muted" style={{ marginTop: 2 }}>= {fmtBRL2(l.valor)}</div>}
+                    </td>
+                  )}
                   {comCeo && <td className="pl-calc-cell mono">{fmtBRL2(c.lucro)}</td>}
                   {comCeo && (
                     <td className="pl-edit-cell" style={{ minWidth: 150 }}>
@@ -159,13 +174,14 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
                     </td>
                   )}
                   {comCeo && <td className="pl-calc-cell mono" style={{ color: c.c == null ? undefined : c.desconto > 0 ? '#b91c1c' : '#15803d' }}>{c.c == null ? '—' : c.desconto > 0 ? `−${fmtBRL2(c.desconto)}` : c.desconto < 0 ? `+${fmtBRL2(-c.desconto)}` : fmtBRL2(0)}</td>}
-                  {comCeo && <td className="pl-calc-cell cell-money" style={{ fontWeight: c.c == null ? 400 : 700 }}>{c.c == null ? '—' : fmtBRL2(c.novoPreco)}</td>}
+                  {comCeo && <td className="pl-calc-cell cell-money" style={{ fontWeight: c.c == null ? (ajNum(l.keyCeo) !== 0 ? 700 : 400) : 700 }}>{c.c == null ? (ajNum(l.keyCeo) !== 0 ? fmtBRL2(l.valor) : '—') : fmtBRL2(c.novoPreco)}</td>}
                 </tr>
               );
             })}
             <tr className="pl-total">
               <td>TOTAL ({linhas.length})</td>
-              <td className="pl-calc-cell">{fmtBRL2(totalCalc)}</td>
+              <td className="pl-calc-cell">{fmtBRL2(totalCalc - somaAjustes)}</td>
+              {onAjuste && <td className="pl-calc-cell">{somaAjustes !== 0 ? dinheiroSinal(somaAjustes) : '—'}</td>}
               {comCeo && <td className="pl-calc-cell">{fmtBRL2(lucroTotal)}</td>}
               {comCeo && <td className="pl-calc-cell">{algumCeo ? fmtBRL2(lucroNovo) : '—'}</td>}
               {comCeo && <td className="pl-calc-cell">{algumCeo ? (descontoTotal > 0 ? `−${fmtBRL2(descontoTotal)}` : descontoTotal < 0 ? `+${fmtBRL2(-descontoTotal)}` : fmtBRL2(0)) : '—'}</td>}
@@ -174,6 +190,19 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
           </tbody>
         </table>
       </div>
+      {ajusteComCeo && (
+        <div className="pl-note" style={{ marginTop: 8, color: '#991b1b' }}>
+          ⚠ Há equipamento com "Alterar valor" e com "Lucro líquido desejado (CEO)" ao mesmo tempo. Use um só em cada equipamento.
+        </div>
+      )}
+      {somaAjustes !== 0 && (
+        <div className="pl-note" style={{ marginTop: 8 }}>
+          Com as diferenças digitadas o total da cotação passa a <b>{fmtBRL2(totalCalc)}</b> ({dinheiroSinal(somaAjustes)}).
+          {alavAjuste && alavAjuste.valido
+            ? <> O mark-up que fecha nesse total é <b>{fmtPct2(alavAjuste.valor)}</b> (o campo MARK-UP continua com o que foi digitado). Clique em <b>Calcular</b>: impostos, comissões e DIFAL recalculam sobre o novo total.</>
+            : (alavAjuste ? <span style={{ color: '#991b1b' }}> ⚠ Esse total fica abaixo do custo + impostos: o cálculo não consegue chegar nele.</span> : null)}
+        </div>
+      )}
       {algumCeo && (
         <div className="pl-note" style={{ marginTop: 8 }}>
           Com o líquido que o CEO quer, o preço da proposta passa de <b>{fmtBRL2(totalCalc)}</b> para <b>{fmtBRL2(novoTotal)}</b> ({dinheiroSinal(-descontoTotal)}) e o lucro total fica em <b style={{ color: lucroNovo < 0 ? '#b91c1c' : undefined }}>{fmtBRL2(lucroNovo)}</b> ({fmtPct2(novoTotal > 0 ? lucroNovo / novoTotal : 0)}).
@@ -481,7 +510,14 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
                 <td>{item.direto ? <span className="small" title="Preço combinado por fora — sem Cotação a Fornecedor">Direto (sem fornecedor)</span> : <>{item.fornecedor}{item.numeroDocumentoFornecedor ? <span className="muted small mono"> · {item.numeroDocumentoFornecedor}</span> : null}{item.substituidaPor ? <span className="small" style={{ color: 'var(--vp-danger)', fontWeight: 700 }} title={`O fornecedor recebeu uma revisão mais nova (${item.substituidaPor}). Precifique a revisão mais nova.`}> · substituída por {item.substituidaPor}</span> : null}</>}</td>
                 <td>{item.respondedAt ? new Date(item.respondedAt).toLocaleDateString('pt-BR') : '—'}</td>
                 <td>{item.direto ? <span className="muted small">—</span> : <StatusBadge status={window.CotacaoElevadorFornecedorStore.statusGroupLabel(item.statusCotacao)}/>}</td>
-                <td>{item.precificacaoStatus ? <StatusBadge status={item.precificacaoStatus === 'finalizado' ? 'Aprovada' : item.precificacaoStatus === 'calculado' ? 'Em análise' : 'Recebida'}/> : <span className="muted small">Não iniciada</span>}</td>
+                <td>{item.precificacaoStatus ? <StatusBadge status={item.precificacaoStatus === 'finalizado' ? 'Aprovada' : item.precificacaoStatus === 'calculado' ? 'Em análise' : 'Recebida'}/> : <span className="muted small">Não iniciada</span>}
+                  {/* 06/11/2026 — "Alterar valor" da Proposta: o Comercial pediu um valor maior; o Financeiro ajusta aqui. */}
+                  {item.revisaoValor && item.revisaoValor.length > 0 && (() => {
+                    const A = window.PropostaAumento;
+                    const dica = item.revisaoValor.map((p) => `${p.nivel === 'proposta' ? 'Valor total' : p.itemId}: de ${A.brl(p.pedido.valorAtual)} para ${A.brl(p.pedido.valorPedido)}${p.pedido.motivo ? ' — ' + p.pedido.motivo : ''}`).join('\n');
+                    return <div><span className="pe-tag" style={{ background: 'var(--vp-warning-tint, #f8eed7)', marginTop: 4, display: 'inline-block' }} title={dica}>Revisão de valor pedida ({item.revisaoValor.length})</span></div>;
+                  })()}
+                </td>
                 <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
               </tr>
             ))}
@@ -631,6 +667,17 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const [calculando, setCalculando] = React.useState(false);
   const [salvando, setSalvando] = React.useState(false);
   const [aprovando, setAprovando] = React.useState(false);
+  /* Alçadas de Calcular e Aprovar (07/11/2026): conferidas ao abrir; enquanto carrega (null) os botões ficam como
+     estão e o store recusa de qualquer jeito. Conferência desligada até alguém receber a alçada (ver o store).
+     Hooks ficam ANTES do `if (!pz) return` (ordem de hooks). */
+  const [alcada, setAlcada] = React.useState(null);
+  React.useEffect(() => {
+    let vivo = true;
+    const S = window.PrecificacaoElevadorStore;
+    Promise.all([S.conferirAlcada('calcular'), S.conferirAlcada('aprovar')])
+      .then(([c, a]) => { if (vivo) setAlcada({ calcular: c, aprovar: a }); }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
   const [mostrarParametros, setMostrarParametros] = React.useState(false);
   const [mostrarObrigatorios, setMostrarObrigatorios] = React.useState(false); // células obrigatórias acendem depois de uma tentativa de Calcular
   const [ressincronizando, setRessincronizando] = React.useState(false);
@@ -659,7 +706,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
       // carrega, pros containers que ainda não têm preço nenhum — nunca
       // sobrescreve um valor já digitado (mesma regra de sempre).
       // 01/10/2026: a capatazia herda do cadastro com a mesma regra (só se ainda vazia).
-      if ((norm.containers || []).some((c) => !(Number(c.preco_rs) > 0) || !(Number(c.capatazia_rs) > 0) || !(Number(c.gri_rs) > 0))) {
+      if ((norm.containers || []).some((c) => !c.id_tag && (!(Number(c.preco_rs) > 0) || !(Number(c.capatazia_rs) > 0) || !(Number(c.gri_rs) > 0)))) {
         const custos = await window.CadastroCustosStore?.listarContainers();
         norm.containers = window.PrecificacaoElevadorStore.enriquecerContainersComCusto(norm.containers, custos);
       }
@@ -827,10 +874,46 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
     arr[i] = linha;
     return { ...p, containers: arr };
   });
+  /* ID-TAG do container (06/11/2026): o Financeiro escolhe o ID-TAG (CONT-001…) + a quantidade e os valores
+     do cadastro de Containers (preço, capatazia, GRI, taxa de porto, porto, tipo ISO) vêm para a linha.
+     Se a linha já tem valor digitado que difere do ID-TAG, pergunta antes de substituir. "Sem ID-TAG" volta
+     ao modo manual (mantém os valores e tira o vínculo). Só vale para precificação nova ou para a linha em
+     que alguém escolhe o ID-TAG: o que está salvo é snapshot. */
+  const escolherIdTag = (i, idTag) => {
+    const S = window.PrecificacaoElevadorStore;
+    const atual = (pz.containers || [])[i] || {};
+    if (!idTag) {
+      setPz((p) => {
+        const arr = [...(p.containers || [])];
+        const { id_tag: _t, porto: _p, ...resto } = arr[i] || {};
+        arr[i] = resto;
+        return { ...p, containers: arr };
+      });
+      return;
+    }
+    const custo = (custosContainers || []).find((c) => c.id_tag === idTag);
+    if (!custo) return;
+    if (S.linhaTemValorDiferenteDoIdTag(atual, custo)
+      && !window.confirm(`Substituir os valores desta linha pelos do ${custo.id_tag} (${custo.tipo} · ${custo.porto || 'sem porto'})?`)) return;
+    setPz((p) => {
+      const arr = [...(p.containers || [])];
+      arr[i] = S.aplicarIdTagNaLinha(arr[i] || {}, custo);
+      return { ...p, containers: arr };
+    });
+  };
+  // Opções do seletor: containers ativos do cadastro; a linha já salva com um ID-TAG o mantém visível.
+  const opcoesIdTag = (ct) => {
+    const lista = (custosContainers || []).filter((c) => c.id_tag && c.ativo !== false);
+    if (ct && ct.id_tag && !lista.some((c) => c.id_tag === ct.id_tag)) {
+      lista.push({ id_tag: ct.id_tag, tipo: ct.tipo_tamanho || '', porto: ct.porto || '' });
+    }
+    return lista;
+  };
   const removeContainer = (i) => setPz((p) => ({ ...p, containers: (p.containers || []).filter((_, idx) => idx !== i) }));
   const containersTotalRs = (pz.containers || []).reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.preco_rs) || 0), 0);
   const capataziaTotalRs = (pz.containers || []).reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.capatazia_rs) || 0), 0);
   const griTotalRs = (pz.containers || []).reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.gri_rs) || 0), 0);
+  const taxaPortoTotalRs = (pz.containers || []).reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.taxa_porto_rs) || 0), 0);
   // Aviso (não bloqueia) quando container/capatazia divergem do cadastro de Containers.
   const divergenciasContainer = window.PrecificacaoElevadorStore.divergenciasContainerComCadastro(pz.containers, custosContainers);
 
@@ -855,6 +938,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
     modo_formacao_preco: 'planilha', margem_desejada_pct: pz.margem_desejada_pct,
     contingencia_valor: pz.contingencia_valor, outros_custos_nao_recuperaveis_rs: pz.outros_custos_nao_recuperaveis_rs,
     valores_sugeridos_ceo: pz.valores_sugeridos_ceo || {},
+    ajustes_valor: pz.ajustes_valor || {},
   });
 
   const salvar = async () => {
@@ -913,6 +997,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
     if (!validarAntesDeCalcular()) return;
     setCalculando(true);
     try {
+      await window.PrecificacaoElevadorStore.exigirAlcada('calcular'); // antes de salvar: sem alçada não grava nada
       await window.PrecificacaoElevadorStore.salvar(pz.id, payloadSalvar());
       await window.PrecificacaoElevadorStore.calcularEsalvar(pz.id);
       await carregar();
@@ -962,6 +1047,10 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const margemOficialPct = pz.resultado_v2 && pz.resultado_v2.precificacao ? pz.resultado_v2.precificacao.margemEfetivaPct : (resultado ? resultado.margemFinalPct : null);
   const margemAbaixoMinima = margemOficialPct != null && margemOficialPct < margemMinima;
   const aprovado = pz.status === 'finalizado';
+  const semAlcadaCalcular = !!alcada && !alcada.calcular.pode;
+  const semAlcadaAprovar = !!alcada && !alcada.aprovar.pode;
+  // DIFAL pendente (07/11/2026): cadastro do cliente sem "Contribuinte de ICMS" => não aprova (nem gera a Proposta).
+  const difalPendente = window.PrecificacaoElevadorStore.difalPendente(pz.difal);
 
   const aprovar = async (forcar) => {
     setAprovando(true);
@@ -1011,9 +1100,9 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
         <div className="page-head__r">
           <Button variant="ghost" icon="chevLeft" onClick={onVoltar}>Voltar</Button>
           <Button variant="outline" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar rascunho'}</Button>
-          <Button variant="primary" icon="calculator" onClick={calcular} disabled={calculando}>{calculando ? 'Calculando…' : 'Calcular'}</Button>
+          <Button variant="primary" icon="calculator" onClick={calcular} disabled={calculando || semAlcadaCalcular} title={semAlcadaCalcular ? alcada.calcular.motivo : undefined}>{calculando ? 'Calculando…' : 'Calcular'}</Button>
           {resultado && !aprovado && (
-            <Button variant="outline" icon="check" onClick={() => aprovar(false)} disabled={aprovando}>{aprovando ? 'Aprovando…' : 'Aprovar precificação'}</Button>
+            <Button variant="outline" icon="check" onClick={() => aprovar(false)} disabled={aprovando || difalPendente || semAlcadaAprovar} title={difalPendente ? window.PrecificacaoElevadorStore.MOTIVO_DIFAL_PENDENTE : (semAlcadaAprovar ? alcada.aprovar.motivo : undefined)}>{aprovando ? 'Aprovando…' : 'Aprovar precificação'}</Button>
           )}
           {aprovado && (
             <span className="badge" style={{ background: 'var(--vp-success)', color: '#fff', display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>
@@ -1035,6 +1124,22 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
         </div>
       )}
 
+      {difalPendente && !aprovado && (
+        <div style={{ margin: '0 0 16px', padding: '12px 16px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 6, color: '#991b1b', fontSize: 13 }}>
+          <b>⚠ DIFAL pendente — não é possível aprovar nem gerar a Proposta.</b>{' '}
+          O cadastro do cliente não informa se ele é <b>Contribuinte de ICMS</b>, então o DIFAL não pôde ser calculado.
+          Devolva ao Vendas para completar o cadastro e clique em <b>Calcular</b> de novo.
+          <div style={{ marginTop: 8 }}>
+            <Button variant="outline" size="sm" icon="refresh" onClick={devolverAoVendas}>Devolver ao Vendas para completar o cadastro</Button>
+          </div>
+        </div>
+      )}
+
+      {window.PZRevisaoValor && (
+        <window.PZRevisaoValor numeroCotacao={pz.numero_cotacao} res={resultadoV2} pz={pz}
+          onAplicar={(campo, valor) => { set(campo)(valor); window.toast?.('Mark-up preenchido — clique em Calcular para refazer o preço.', 'info'); }}
+          onAplicarColuna={(patch) => { setPz((p) => ({ ...p, ajustes_valor: { ...(p.ajustes_valor || {}), ...patch } })); window.toast?.('Pedidos aplicados na coluna "Alterar valor" — confira e clique em Calcular.', 'info'); }}/>
+      )}
       <Card title="Unidades desta cotação" sub="herdado do Formulário de Elevadores + resposta do fornecedor"
         action={pz.cotacao_fornecedor_id && (
           <Button variant="outline" size="sm" icon="refresh" onClick={ressincronizarDoFornecedor} disabled={ressincronizando}>
@@ -1264,13 +1369,13 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
         <div className="grid-3" style={{ gap: 12 }}>
           <PZField label="VMLE (USD)" obrigatorio faltando={f('vmle_usd')}><PZCurrencyInput moeda="USD" value={pz.vmle_usd} onChange={set('vmle_usd')}/></PZField>
           <PZField label="Seguro (USD)"><PZCurrencyInput moeda="USD" value={pz.seguro_usd} onChange={set('seguro_usd')}/></PZField>
-          {/* 01/10/2026 — container e capatazia vêm do cadastro (Despesa Operacional); este
+          {/* 01/10/2026 — container, capatazia, GRI e taxa de porto vêm do cadastro (entram no frete/CIF); este
               campo só aparece quando já há um frete internacional lançado (informado pelo
               fornecedor na cotação, ou precificação antiga) pra poder ser conferido/zerado. */}
           {Number(pz.frete_seguro_capatazia_usd) > 0 && (
             <PZField label="Frete internacional informado (USD)">
               <PZCurrencyInput moeda="USD" value={pz.frete_seguro_capatazia_usd} onChange={set('frete_seguro_capatazia_usd')}/>
-              <div className="small muted" style={{ marginTop: 4 }}>Container e capatazia vêm do cadastro de Containers — não some aqui de novo. Zere se este valor já os incluía.</div>
+              <div className="small muted" style={{ marginTop: 4 }}>Container, capatazia, GRI e taxa de porto vêm do cadastro de Containers — não some aqui de novo. Zere se este valor já os incluía.</div>
             </PZField>
           )}
           <PZField label="Siscomex (R$)"><PZCurrencyInput moeda="BRL" value={pz.siscomex_rs} onChange={set('siscomex_rs')}/></PZField>
@@ -1292,7 +1397,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
 
         <div style={{ marginTop: 20 }}>
           <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>
-            Containers <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— tipo/quantidade vêm da resposta do fornecedor; preço e capatazia herdados do cadastro de Containers (Atualização de Custos) — Despesa Operacional</span>
+            Containers <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— escolha o ID-TAG e a quantidade: preço, capatazia, GRI e taxa de porto vêm do cadastro de Containers (Atualização de Custos). Entram no frete (CIF) e pagam os impostos de importação. Linha sem ID-TAG (a que vem da resposta do fornecedor) herda por tipo, como antes.</span>
           </div>
           {divergenciasContainer.length > 0 && (
             <div style={{ fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', padding: '8px 12px', marginBottom: 8, borderRadius: 6 }}>
@@ -1302,26 +1407,39 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
           <div className="stack" style={{ gap: 8 }}>
             {(pz.containers || []).length > 0 && (
               <div className="row gap-2 up-eyebrow muted" style={{ fontSize: 11 }}>
-                <div style={{ width: 140 }}>Tipo</div>
-                <div style={{ width: 100 }}>Qtd</div>
-                <div style={{ width: 160 }}>Preço do container (R$)</div>
-                <div style={{ width: 160 }}>Capatazia (R$)</div>
-                <div style={{ width: 160 }}>GRI (R$)</div>
+                <div style={{ width: 250 }}>ID-TAG</div>
+                <div style={{ width: 90 }}>Tipo</div>
+                <div style={{ width: 70 }}>Qtd</div>
+                <div style={{ width: 135 }}>Preço do container (R$)</div>
+                <div style={{ width: 135 }}>Capatazia (R$)</div>
+                <div style={{ width: 135 }}>GRI (R$)</div>
+                <div style={{ width: 135 }}>Taxa de porto (R$)</div>
               </div>
             )}
             {(pz.containers || []).map((ct, i) => (
               <div key={i} className="row gap-2">
-                <div style={{ width: 140 }}><PZSelect value={ct.tipo_tamanho} onChange={setContainer(i, 'tipo_tamanho')} options={PZ_CONTAINER_TIPOS} placeholder="Tamanho"/></div>
-                <input className="input" style={{ width: 100 }} type="number" value={ct.quantidade ?? 1} onChange={(e) => setContainer(i, 'quantidade')(Number(e.target.value) || 0)} placeholder="Qtd"/>
-                <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={ct.preco_rs} onChange={setContainer(i, 'preco_rs')}/></div>
-                <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={ct.capatazia_rs} onChange={setContainer(i, 'capatazia_rs')}/></div>
-                <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={ct.gri_rs} onChange={setContainer(i, 'gri_rs')}/></div>
+                <div style={{ width: 250 }}>
+                  <select className="input" value={ct.id_tag ?? ''} onChange={(e) => escolherIdTag(i, e.target.value)} title="ID-TAG do container (Cadastros › Atualização de Custos › Containers)">
+                    <option value="">Sem ID-TAG (manual)</option>
+                    {opcoesIdTag(ct).map((c) => <option key={c.id_tag} value={c.id_tag} title={`${c.tipo}${c.porto ? ` · ${c.porto}` : ''}`}>{c.id_tag} · {String(c.tipo || '').split(' (')[0]}{c.porto ? ` · ${c.porto}` : ''}</option>)}
+                  </select>
+                </div>
+                <div style={{ width: 90 }}>
+                  {ct.id_tag
+                    ? <div className="input mono" style={{ opacity: .75 }} title="Vem do ID-TAG">{ct.tipo_tamanho || '—'}</div>
+                    : <PZSelect value={ct.tipo_tamanho} onChange={setContainer(i, 'tipo_tamanho')} options={PZ_CONTAINER_TIPOS} placeholder="Tamanho"/>}
+                </div>
+                <input className="input" style={{ width: 70 }} type="number" value={ct.quantidade ?? 1} onChange={(e) => setContainer(i, 'quantidade')(Number(e.target.value) || 0)} placeholder="Qtd"/>
+                <div style={{ width: 135 }}><PZCurrencyInput moeda="BRL" value={ct.preco_rs} onChange={setContainer(i, 'preco_rs')}/></div>
+                <div style={{ width: 135 }}><PZCurrencyInput moeda="BRL" value={ct.capatazia_rs} onChange={setContainer(i, 'capatazia_rs')}/></div>
+                <div style={{ width: 135 }}><PZCurrencyInput moeda="BRL" value={ct.gri_rs} onChange={setContainer(i, 'gri_rs')}/></div>
+                <div style={{ width: 135 }}><PZCurrencyInput moeda="BRL" value={ct.taxa_porto_rs} onChange={setContainer(i, 'taxa_porto_rs')}/></div>
                 <Button variant="ghost" size="sm" icon="trash" onClick={() => removeContainer(i)}/>
               </div>
             ))}
           </div>
           <Button variant="outline" size="sm" icon="plus" style={{ marginTop: 8 }} onClick={addContainer}>+ Adicionar container</Button>
-          {(pz.containers || []).length > 0 && <div className="small muted" style={{ marginTop: 8 }}>Subtotal Containers: <b>{fmtBRL2(containersTotalRs)}</b> · Capatazia: <b>{fmtBRL2(capataziaTotalRs)}</b> · GRI: <b>{fmtBRL2(griTotalRs)}</b></div>}
+          {(pz.containers || []).length > 0 && <div className="small muted" style={{ marginTop: 8 }}>Subtotal Containers: <b>{fmtBRL2(containersTotalRs)}</b> · Capatazia: <b>{fmtBRL2(capataziaTotalRs)}</b> · GRI: <b>{fmtBRL2(griTotalRs)}</b> · Taxa de porto: <b>{fmtBRL2(taxaPortoTotalRs)}</b></div>}
         </div>
       </Card>
 
@@ -1422,11 +1540,11 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
           ? (Number(impImportacao.ii) || 0) + (Number(impImportacao.ipi) || 0) + (Number(impImportacao.pis) || 0)
             + (Number(impImportacao.cofins) || 0) + (Number(impImportacao.icms) || 0)
           : null;
-        /* AFRMM (13/10/2026): 8% do frete marítimo (container + capatazia + GRI), já calculado
+        /* AFRMM (13/10/2026): 8% do frete marítimo (container + capatazia + GRI + taxa de porto), já calculado
            pelo motor — aqui só aparece no resumo. Como o imposto, só depois de "Calcular". */
         const afrmmRs = impImportacao && impImportacao.afrmm != null ? Number(impImportacao.afrmm) || 0 : null;
         const somaRs = custosEquipamentosRs + custosFreteRs + moRs + custosOperacionaisRs + freteInternoRs
-          + despesasImportacaoRs + armazenagemRs + containersTotalRs + capataziaTotalRs + griTotalRs + (afrmmRs || 0) + despesasExtrasRs + contingenciaOutrosRs
+          + despesasImportacaoRs + armazenagemRs + containersTotalRs + capataziaTotalRs + griTotalRs + taxaPortoTotalRs + (afrmmRs || 0) + despesasExtrasRs + contingenciaOutrosRs
           + (custosImpostoRs || 0);
         const linha = (label, valor) => (
           <div className="row sb" style={{ padding: '4px 0' }}>
@@ -1447,7 +1565,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
               {linha('Containers', containersTotalRs)}
               {linha('Capatazia', capataziaTotalRs)}
               {linha('GRI', griTotalRs)}
-              {linha('AFRMM (8% de Containers + Capatazia + GRI)', afrmmRs)}
+              {linha('Taxa de porto', taxaPortoTotalRs)}
+              {linha('AFRMM (8% de Containers + Capatazia + GRI + Taxa de porto)', afrmmRs)}
               {linha('Despesas Extras (itens avulsos)', despesasExtrasRs)}
               {linha('Contingência e Outros custos não recuperáveis', contingenciaOutrosRs)}
               {linha('Custos Imposto', custosImpostoRs)}
@@ -1522,7 +1641,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
       <Card title="Formação do Preço" sub="método da planilha do Financeiro" style={{ marginTop: 16 }}>
         <div className="pl-note">
           <b>Preço = custo da nota (já sem os créditos) ÷ (1 − impostos da venda − MARK-UP).</b> O MARK-UP é uma margem sobre o
-          <b> preço de venda</b> (ex.: 53% na cotação 963). O frete internacional, o container, a capatazia e a GRI entram no valor CIF
+          <b> preço de venda</b> (ex.: 53% na cotação 963). O frete internacional, o container, a capatazia, a GRI e a taxa de porto entram no valor CIF
           e pagam II, PIS, COFINS, ICMS e AFRMM. Despachante, ad-valorem, frete interno, armazenagem e instalação só abatem do <b>lucro</b>, depois do preço.
           Contingência e outros custos não recuperáveis vêm do card "Despesas Extras". Veja o passo a passo na "Memória de cálculo" abaixo.
         </div>
@@ -1536,6 +1655,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
               <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 15 }}>{fmtBRL2(resultadoV2.custoEconomicoCompleto)}</div></div>
               <PZPrecoPorEquipamento modelos={pz.modelos} moLookup={pz.mo_lookup} precoTotal={resultadoV2.precificacao.precoVendaProposta}
                   ceo={pz.valores_sugeridos_ceo || {}} res={resultadoV2}
+                  ajustes={pz.ajustes_valor || {}}
+                  onAjuste={(patch) => setPz((p) => { const novo = { ...(p.ajustes_valor || {}) }; Object.keys(patch).forEach((k) => { if (patch[k] == null) delete novo[k]; else novo[k] = patch[k]; }); return { ...p, ajustes_valor: novo }; })}
                   onCeo={(patch) => setPz((p) => { const novo = { ...(p.valores_sugeridos_ceo || {}) }; Object.keys(patch).forEach((k) => { if (patch[k] == null) delete novo[k]; else novo[k] = patch[k]; }); return { ...p, valores_sugeridos_ceo: novo }; })}
                   onAplicar={(campo, valor) => { set(campo)(valor); window.toast?.('Alavanca ajustada — clique em Calcular para refazer o preço.', 'info'); }}/>
               <div><span className="up-eyebrow muted">{quantidadeEquipamentos > 1 ? 'Total da cotação — soma dos equipamentos acima' : 'Preço de venda total'}</span><div className="cell-money" style={{ fontSize: 20, fontWeight: 800 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta)}</div></div>

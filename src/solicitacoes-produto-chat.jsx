@@ -165,7 +165,7 @@
 
     React.useEffect(() => {
       carregar();
-      const poll = setInterval(carregar, 30000);      // reserva caso o Realtime não conecte
+      const poll = setInterval(() => { if (!document.hidden) carregar(); }, 30000);      // reserva caso o Realtime não conecte (pausa com a aba oculta)
       let canal = null;
       try {
         const c = window.__VP_SB && window.__VP_SB.sb;

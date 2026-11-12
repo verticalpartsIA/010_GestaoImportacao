@@ -152,6 +152,11 @@ function CIContractPreview({ doc, highlightConditional, assinaturas, fila }) {
           <CI_FilaSlot f={filaPorOrdem(3)}/>
         </div>
       </div>
+
+      {/* Selo OEA (Conformidade – Qualificado) no rodapé do documento, à esquerda. */}
+      <div className="ci-doc-selo">
+        <img src="/assets/selo-oea-conformidade-qualificado.png" alt="Operador Econômico Autorizado – Conformidade – Qualificado" />
+      </div>
     </div>
   );
 }

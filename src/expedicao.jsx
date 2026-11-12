@@ -79,7 +79,7 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
   React.useEffect(() => { carregar(); }, [carregar]);
   // Atualiza sozinha (a cada minuto e ao voltar para a aba), sem mexer no pedido que está aberto.
   React.useEffect(() => {
-    const t = setInterval(carregar, 60000);
+    const t = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
     const v = () => { if (document.visibilityState === 'visible') carregar(); };
     document.addEventListener('visibilitychange', v);
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', v); };

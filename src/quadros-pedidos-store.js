@@ -189,5 +189,32 @@
     return `${window.location.origin}/quadros-publico/${tipo}/${data}`;
   }
 
-  window.QuadrosPedidosStore = { carregar, buscarDados, montar, listarPegos, marcar, chavePeguei, listarPrevisoes, gravarPrevisao, linkPublico };
+  /* ---------- Formulário do cliente por pedido (10/11/2026; spec 2026-11-10-quadro-link-por-pedido-pdf.md) ----------
+     Tabela qc_pedido_formularios (fechada): o hub lê por alçada "ver" e grava SÓ pelas funções (alçada "link_cliente").
+     Nada aqui escreve no Omie. Mapa "<codigo_pedido>" → { id, token, status, resumo, respondido_em, … } (só o link ativo). */
+  async function listarFormularios(sb) {
+    const { data, error } = await sb.from('qc_pedido_formularios')
+      .select('id, token, codigo_pedido, numero_pedido, cliente_nome, status, resumo, respondido_em, corrigido_por, corrigido_em, criado_em')
+      .neq('status', 'cancelado').limit(2000);
+    if (error) throw new Error('formulários do cliente: ' + error.message);
+    const m = {};
+    (data || []).forEach((x) => { m[String(x.codigo_pedido)] = x; });
+    return m;
+  }
+  async function gerarFormulario(sb, codigoPedido) {
+    const { data, error } = await sb.rpc('qc_formulario_gerar', { p_codigo_pedido: Number(codigoPedido) });
+    if (error) throw new Error(error.message);
+    return data;
+  }
+  async function cancelarFormulario(sb, id) {
+    const { error } = await sb.rpc('qc_formulario_cancelar', { p_id: id });
+    if (error) throw new Error(error.message);
+  }
+  async function corrigirFormulario(sb, id, resumo) {
+    const { error } = await sb.rpc('qc_formulario_corrigir', { p_id: id, p_resumo: resumo });
+    if (error) throw new Error(error.message);
+  }
+  const linkFormulario = (token) => `${window.location.origin}/formulario-quadro-comando-publico.html?t=${encodeURIComponent(token)}`;
+
+  window.QuadrosPedidosStore = { listarFormularios, gerarFormulario, cancelarFormulario, corrigirFormulario, linkFormulario, carregar, buscarDados, montar, listarPegos, marcar, chavePeguei, listarPrevisoes, gravarPrevisao, linkPublico };
 })();
