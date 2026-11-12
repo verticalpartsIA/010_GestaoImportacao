@@ -155,7 +155,13 @@ test('aviso só com boletos continua igual ao de antes', () => {
 test('a sincronização limita o sem-boleto a 180 dias e a migration cria tem_boleto com padrão true', () => {
   const f = ler('supabase/functions/boletos-avisos/index.ts');
   assert.match(f, /LIMITE_SEM_BOLETO_DIAS = 180/);
-  assert.match(f, /!temBoleto && diasDesdeVencimento/);
+  assert.match(f, /!temBoleto && !semCorte.has/);
   const sql = ler('supabase/migrations/20261112100000_boletos_avisos_sem_boleto.sql');
   assert.match(sql, /tem_boleto boolean not null default true/);
+});
+
+test('a Escamax (raiz do CNPJ) fica sem o corte de 180 dias do sem-boleto', () => {
+  const f = ler('supabase/functions/boletos-avisos/index.ts');
+  assert.match(f, /RAIZES_CNPJ_SEM_CORTE = \["24845692", "42689068"\]/);
+  assert.match(f, /!semCorte\.has\(Number\(t\.codigo_cliente_fornecedor\)\) && diasDesdeVencimento/);
 });
