@@ -28,12 +28,13 @@ window.BoletosAvisosCalc = (() => {
     const d = diasDesdeVencimento(vencISO, hojeISO);
     return d > 0 ? 'atrasado' : d === 0 ? 'vence_hoje' : 'em_dia';
   }
-  function etapaDevida(vencISO, hojeISO, jaEnviadas) {
+  function etapaDevida(vencISO, hojeISO, jaEnviadas, semBoleto) {
     const d = diasDesdeVencimento(vencISO, hojeISO);
     const segunda = new Date(hojeISO + 'T12:00:00Z').getUTCDay() === 1;
     let achada = null;
     for (const e of ETAPAS) {
-      const atraso = d - e.dias;
+      const dias = (e.cod === 'D+1' && semBoleto) ? 2 : e.dias;   // sem boleto a conciliação é manual: o aviso de atraso sai no 2º dia
+      const atraso = d - dias;
       if (atraso === 0 || (segunda && (atraso === 1 || atraso === 2))) achada = e;
     }
     if (!achada || (jaEnviadas || []).includes(achada.cod)) return null;
@@ -89,7 +90,7 @@ window.BoletosAvisosCalc = (() => {
     vence_hoje: { rotulo: 'Vence hoje', cor: '#eab308' },
     atrasado: { rotulo: 'Atrasado', cor: '#dc2626' },
   };
-  const ETAPA_ROTULO = { 'D-5': '5 dias antes', 'D-1': '1 dia antes', 'D0': 'No dia', 'D+1': '1 dia depois', manual: 'Manual' };
+  const ETAPA_ROTULO = { 'D-5': '5 dias antes', 'D-1': '1 dia antes', 'D0': 'No dia', 'D+1': 'Aviso de atraso', manual: 'Manual' };
 
   function hojeBrasil(agora) { return new Date((agora || Date.now()) - 3 * 3600e3).toISOString().slice(0, 10); }
 

@@ -168,7 +168,7 @@ function BoletosAvisosPage() {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro &amp; Preços · Boletos Avisos</div>
           <h1 className="page-head__title">Boletos Avisos</h1>
-          <p className="page-head__sub">Clientes com título em aberto no Omie (com boleto ou, para quem paga por depósito, sem boleto até 180 dias de atraso). O sistema avisa por e-mail 5 dias antes, 1 dia antes, no dia e 1 dia depois do vencimento; a Juliana é avisada dos atrasos. Tela restrita: Gelson, Diego e Juliana.</p>
+          <p className="page-head__sub">Clientes com título em aberto no Omie (com boleto ou, para quem paga por depósito, sem boleto até 180 dias de atraso). O sistema avisa por e-mail 5 dias antes, 1 dia antes, no dia e, se atrasar, 1 dia depois (boleto) ou 2 dias depois (sem boleto, que o financeiro concilia à mão); a Juliana é avisada dos atrasos. Tela restrita: Gelson, Diego e Juliana.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <Button size="sm" variant="outline" disabled={busy === 'sync'} onClick={sincronizar}>{busy === 'sync' ? 'Lendo o Omie…' : 'Atualizar do Omie'}</Button>

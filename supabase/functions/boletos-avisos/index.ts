@@ -58,12 +58,13 @@ function hojeBrasil(agora) { return new Date((agora || Date.now()) - 3 * 3600e3)
     const d = diasDesdeVencimento(vencISO, hojeISO);
     return d > 0 ? 'atrasado' : d === 0 ? 'vence_hoje' : 'em_dia';
   }
-  function etapaDevida(vencISO, hojeISO, jaEnviadas) {
+  function etapaDevida(vencISO, hojeISO, jaEnviadas, semBoleto) {
     const d = diasDesdeVencimento(vencISO, hojeISO);
     const segunda = new Date(hojeISO + 'T12:00:00Z').getUTCDay() === 1;
     let achada = null;
     for (const e of ETAPAS) {
-      const atraso = d - e.dias;
+      const dias = (e.cod === 'D+1' && semBoleto) ? 2 : e.dias;   // sem boleto a conciliação é manual: o aviso de atraso sai no 2º dia
+      const atraso = d - dias;
       if (atraso === 0 || (segunda && (atraso === 1 || atraso === 2))) achada = e;
     }
     if (!achada || (jaEnviadas || []).includes(achada.cod)) return null;
@@ -182,10 +183,12 @@ function decodificar(s) { return String(s || "").replace(/&amp;/g, "&").replace(
    Para não trazer dívida antiga e esquecida (o "A VENCER" do Omie vai pela data de previsão, não pelo vencimento),
    o sem-boleto só entra até este atraso em dias. Boleto gerado entra sempre, como antes. */
 const LIMITE_SEM_BOLETO_DIAS = 180;
-/* Empresas SEM corte (decisão do Gelson, 12/11/2026): Escamax, do grupo, paga por depósito e a dívida é toda de 2026.
+/* Empresas com corte MAIOR (decisão do Gelson, 12/11/2026): Escamax, do grupo, paga por depósito. Tem título de 2024
+   e 2025 no Omie (R$ 523 mil), então o corte dela é de 365 dias, não 180.
    Casa pela RAIZ do CNPJ (8 primeiros dígitos) dos clientes já resolvidos em boletos_avisos_clientes, mais os códigos
    Omie das filiais já conhecidas (garante a 1ª leitura de um cliente ainda não resolvido). */
 const RAIZES_CNPJ_SEM_CORTE = ["24845692", "42689068"];
+const LIMITE_ESCAMAX_DIAS = 365;
 const CODIGOS_SEM_CORTE = [9171897422, 709496211, 9189022146, 9156116333, 8907119881, 8970602418];
 
 async function sincronizar() {
@@ -205,7 +208,7 @@ async function sincronizar() {
         if (/RECEBIDO|CANCELADO|LIQUIDADO/i.test(t.status_titulo || "")) continue;
         const venc = isoDeBR(t.data_vencimento);
         if (!venc) continue;
-        if (!temBoleto && !semCorte.has(Number(t.codigo_cliente_fornecedor)) && diasDesdeVencimento(venc, hojeSync) > LIMITE_SEM_BOLETO_DIAS) continue;
+        if (!temBoleto && diasDesdeVencimento(venc, hojeSync) > (semCorte.has(Number(t.codigo_cliente_fornecedor)) ? LIMITE_ESCAMAX_DIAS : LIMITE_SEM_BOLETO_DIAS)) continue;
         vistos.set(t.codigo_lancamento_omie, {
           codigo_lancamento_omie: t.codigo_lancamento_omie,
           codigo_cliente_omie: t.codigo_cliente_fornecedor,
@@ -359,7 +362,7 @@ async function automatico(simular) {
 
   const grupos = new Map();
   for (const b of boletos) {
-    const etapa = etapaDevida(b.data_vencimento, hoje, jaPorBoleto.get(b.codigo_lancamento_omie) || []);
+    const etapa = etapaDevida(b.data_vencimento, hoje, jaPorBoleto.get(b.codigo_lancamento_omie) || [], b.tem_boleto === false);
     if (!etapa) continue;
     if (!grupos.has(b.codigo_cliente_omie)) grupos.set(b.codigo_cliente_omie, { boletos: [], etapaPorBoleto: {} });
     const g = grupos.get(b.codigo_cliente_omie);
