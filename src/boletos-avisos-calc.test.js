@@ -138,3 +138,24 @@ test('resumo financeiro sem boletos devolve zeros', () => {
   assert.equal(r.total.valor, 0);
   assert.equal(r.pctAtrasado, 0);
 });
+
+// ---- títulos sem boleto (depósito/transferência) ----
+test('aviso com título sem boleto fala em pagamento, não em boleto, e não traz linha digitável', () => {
+  const m = C.montarAviso('ESCAMAX', [{ numero_documento: '123', numero_parcela: '1/1', data_vencimento: '2026-11-12', valor: 750, tem_boleto: false }], 'D0');
+  assert.match(m.assunto, /Seu pagamento vence hoje — ESCAMAX/);
+  assert.match(m.texto, /O pagamento abaixo vence hoje/);
+  assert.match(m.texto, /Sem boleto — pague pela forma combinada/);
+  assert.doesNotMatch(m.texto, /Linha digitável/);
+});
+test('aviso só com boletos continua igual ao de antes', () => {
+  const m = C.montarAviso('ACME', [{ numero_documento: '9', data_vencimento: '2026-11-12', valor: 10, linha_digitavel: '123', tem_boleto: true }], 'D0');
+  assert.match(m.assunto, /Seu boleto vence hoje/);
+  assert.match(m.texto, /Linha digitável: 123/);
+});
+test('a sincronização limita o sem-boleto a 180 dias e a migration cria tem_boleto com padrão true', () => {
+  const f = ler('supabase/functions/boletos-avisos/index.ts');
+  assert.match(f, /LIMITE_SEM_BOLETO_DIAS = 180/);
+  assert.match(f, /!temBoleto && diasDesdeVencimento/);
+  const sql = ler('supabase/migrations/20261112100000_boletos_avisos_sem_boleto.sql');
+  assert.match(sql, /tem_boleto boolean not null default true/);
+});

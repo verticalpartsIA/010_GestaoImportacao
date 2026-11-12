@@ -55,7 +55,7 @@ Termos gerais (soft-delete, alerta, alçada, Nº da cotação) estão no glossá
 - **Teto de custo:** preço de venda × (1 − margem mínima), gravado quando o CEO aprova; os custos reais depois dele são comparados com ele.
 - **Conferência proposta × NF:** registro manual, na Emissão de NF, de que a nota confere com a proposta.
 - **Histórico (pedido):** pedido já entregue antes do sistema; não tem SLA.
-- **Boletos Avisos:** a tela dos avisos de boleto (5.5). Lista só clientes com boleto em aberto no Omie.
+- **Boletos Avisos:** a tela dos avisos de boleto (5.5). Lista clientes com boleto em aberto no Omie e, desde 12/11/2026, também os títulos sem boleto (5.5.8).
 - **Semáforo (Em dia / Vence hoje / Atrasado):** situação do cliente na lista de Boletos Avisos; vale o pior boleto dele.
 - **D-5 / D-1 / D0 / D+1:** as quatro etapas dos avisos automáticos: 5 dias antes, 1 dia antes, no dia e 1 dia depois do vencimento.
 - **Modo teste (Boletos Avisos):** endereço único para onde vão todos os e-mails, para ensaiar sem avisar o cliente.
@@ -483,6 +483,7 @@ Cabeçalho "Financeiro & Preços · Boletos Avisos" e os botões **Atualizar do 
 - **Omie (Art. 30):** só leitura; a rotina para de consultar clientes depois de 3 erros seguidos (o Omie bloqueia a API toda por 30 minutos depois de ~10 erros).
 - **Boleto sem e-mail do cliente não recebe** e a tela só marca "sem e-mail"; quem cuida do cadastro é o Omie (3).
 - Quem **pagou no mesmo dia** de um aviso D0 pode receber o e-mail se o Omie ainda não baixou o título (a leitura é diária).
+- **Título sem boleto também entra (12/11/2026, pedido do Gelson: há clientes que pagam por depósito/transferência e estão no Contas a Receber, como a Escamax).** A leitura do Omie deixou de exigir `boleto.cGerado = "S"`: título sem boleto entra com `tem_boleto = false`, selo "sem boleto" na tela e filtro "Só clientes com título sem boleto". **Corte:** o sem-boleto só entra com até **180 dias de atraso** (`LIMITE_SEM_BOLETO_DIAS` na função), porque o "A VENCER" do Omie vai pela data de previsão e traz dívida de 2022; boleto gerado entra sempre. O e-mail do cliente com título sem boleto fala em "pagamento" (não "boleto"), sem linha digitável, e diz "pague pela forma combinada". **Conferido** (código, `boletos-avisos-calc.test.js`, leitura real 12/11/2026): mudou a regra do texto? mude os dois lados (CALC) e republique.
 
 ### 5.5.9 Testes
 **Conferido** (11/11/2026): `src/boletos-avisos-calc.test.js` (21): etapas D-5/D-1/D0/D+1, recuperação da segunda-feira, semáforo e dias de atraso, texto do aviso, **paridade com a Edge Function**, lista dos 3 e-mails na migration, **resumo financeiro** (soma em centavos, separação a vencer / vence hoje / atrasado até 30 e mais de 30 dias, % atrasado), envio automático desligado por padrão e destinatário nunca vindo do pedido. Tela aberta no navegador (restrita para usuário fora da lista; preenchida com dados simulados). **Conferido em produção (11/11/2026):** a primeira leitura real do Omie gravou 633 boletos em aberto de 160 clientes e resolveu os 160 e-mails; o banco recusa a chave pública. **Sem teste de componente, sem teste de envio pela Microsoft e sem teste das políticas com o login de cada um dos 3.**
@@ -502,6 +503,7 @@ Cabeçalho "Financeiro & Preços · Boletos Avisos" e os botões **Atualizar do 
 5. **Feriados** não entram na regra (segunda a sexta). **Achado, sem correção.**
 6. **Sem Realtime, sem ajuda "?", sem tutorial e sem texto no Copiloto** (a tela é nova).
 7. **A resposta do cliente** sai de `emails_projeto`, que não é fechada só para os 3 (ver 5.5.3).
+8. **Sem boleto (12/11/2026, aplicado em produção com "Confirmo"):** migration `20261112100000_boletos_avisos_sem_boleto.sql` (coluna `tem_boleto`, visão com `qtd_sem_boleto`) e a Edge Function `boletos-avisos` republicada. **Conferido na primeira leitura real:** 1.092 títulos em aberto de 201 clientes, dos quais **465 sem boleto de 58 clientes (R$ 4.074.057,29; 144 já atrasados)**. A Escamax aparece com 6 cadastros e 328 títulos (R$ 1,65 mi), **todos no limite de 180 dias: o que passou disso não aparece** (achado; o Gelson decide se amplia o corte). **Escamax é empresa do grupo:** com o envio automático ligado ela passaria a receber D-5/D-1/D0/D+1 como cliente; decidir se entra. **Não verificado:** e-mail real de título sem boleto; 6 clientes ainda sem e-mail resolvido (a leitura resolve 60 por rodada).
 
 ### 5.5.11 Histórico
 Nasceu em 11/11/2026 por pedido do Gelson. Antes, o levantamento no Omie (leitura) mostrou que o Omie tem alerta nativo por e-mail (até 2 por conta corrente, de 30 dias antes até 30 dias depois só na conta Omie.CASH Conta Completa), mas **não expõe pela API o log do que enviou**; por isso o log só existe se o hub enviar. A conta tem as contas BB e Santander, sem Omie.CASH entre as 78 contas lidas (inferência).

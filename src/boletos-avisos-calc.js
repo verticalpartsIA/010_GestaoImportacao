@@ -43,24 +43,38 @@ window.BoletosAvisosCalc = (() => {
   function moedaBR(v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function montarAviso(razao, boletos, etapa) {
     const plural = boletos.length > 1;
-    const intro = {
+    const algumSem = boletos.some((b) => b.tem_boleto === false);
+    const intro = (algumSem ? {
+      'D-5': 'Este é um lembrete: ' + (plural ? 'os pagamentos abaixo estão para vencer.' : 'o pagamento abaixo está para vencer.'),
+      'D-1': (plural ? 'Os pagamentos abaixo vencem' : 'O pagamento abaixo vence') + ' amanhã.',
+      'D0': (plural ? 'Os pagamentos abaixo vencem' : 'O pagamento abaixo vence') + ' hoje.',
+      'D+1': 'Identificamos que ' + (plural ? 'os pagamentos abaixo venceram e ainda não constam como recebidos.' : 'o pagamento abaixo venceu e ainda não consta como recebido.'),
+      'manual': (plural ? 'Seguem os pagamentos' : 'Segue o pagamento') + ' em aberto da sua empresa.',
+    } : {
       'D-5': 'Este é um lembrete: ' + (plural ? 'os boletos abaixo estão para vencer.' : 'o boleto abaixo está para vencer.'),
       'D-1': (plural ? 'Os boletos abaixo vencem' : 'O boleto abaixo vence') + ' amanhã.',
       'D0': (plural ? 'Os boletos abaixo vencem' : 'O boleto abaixo vence') + ' hoje.',
       'D+1': 'Identificamos que ' + (plural ? 'os boletos abaixo venceram e ainda não constam como pagos.' : 'o boleto abaixo venceu e ainda não consta como pago.'),
       'manual': (plural ? 'Seguem os boletos' : 'Segue o boleto') + ' em aberto da sua empresa.',
-    }[etapa] || 'Seguem os boletos em aberto da sua empresa.';
-    const assunto = {
+    })[etapa] || (algumSem ? 'Seguem os pagamentos em aberto da sua empresa.' : 'Seguem os boletos em aberto da sua empresa.');
+    const assunto = (algumSem ? {
+      'D-5': 'Lembrete: pagamento próximo do vencimento',
+      'D-1': 'Seu pagamento vence amanhã',
+      'D0': 'Seu pagamento vence hoje',
+      'D+1': 'Pagamento vencido — regularize',
+      'manual': 'Pagamentos em aberto',
+    } : {
       'D-5': 'Lembrete: boleto próximo do vencimento',
       'D-1': 'Seu boleto vence amanhã',
       'D0': 'Seu boleto vence hoje',
       'D+1': 'Boleto vencido — regularize o pagamento',
       'manual': 'Boletos em aberto',
-    }[etapa] + ' — ' + razao;
+    })[etapa] + ' — ' + razao;
     const linhas = boletos.map((b) => {
       let l = '• ' + [b.numero_documento ? 'NF ' + b.numero_documento : null, b.numero_parcela ? 'parcela ' + b.numero_parcela : null].filter(Boolean).join(' · ')
         + ' — vencimento ' + dataBR(b.data_vencimento) + ' — ' + moedaBR(b.valor);
-      if (b.linha_digitavel) l += '\n  Linha digitável: ' + b.linha_digitavel;
+      if (b.tem_boleto === false) l += '\n  Sem boleto — pague pela forma combinada.';
+      else if (b.linha_digitavel) l += '\n  Linha digitável: ' + b.linha_digitavel;
       return l;
     });
     const texto = 'Olá,\n\n' + intro + '\n\n' + linhas.join('\n') + '\n\n'
