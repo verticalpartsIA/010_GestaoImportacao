@@ -426,3 +426,49 @@ test('ratearLucroPorEquipamento — golden 963 (V2 oficial): soma dos 27 líquid
   const lucros = E.ratearLucroPorEquipamento({ lucroTotal: r.precificacao.lucroFinal, precoTotal: r.precificacao.precoVendaProposta, linhas });
   closeTo(lucros.reduce((s, v) => s + v, 0), r.precificacao.lucroFinal, 0.01, 'soma');
 });
+
+/* 12/11/2026 — campo "Lucro líquido desejado (CEO)": margemMarginal = quanto de cada R$ de preço vira lucro.
+   Caso 1048: com serviços (30%) e DIFAL proporcional ao preço do produto, a conta antiga (1 − impostos − comissões)
+   prometia R$ 80.000 e o motor entregava R$ 70.834. */
+function rodarComDifalProporcional(base, mk, aliqDifalSobreProduto) {
+  let difal = 0; let r;
+  for (let i = 0; i < 60; i++) {
+    r = E.calcularV2({ ...base, markUpPct: mk, difalCustoRs: difal });
+    const novo = r.precificacao.precoVendaProduto * aliqDifalSobreProduto;
+    if (Math.abs(novo - difal) < 0.001) break;
+    difal = novo;
+  }
+  return r.precificacao;
+}
+const CASO_1048 = {
+  vmleUsd: 32690, seguroUsd: 98.07, freteSeguroCapataziaUsd: 0, siscomexRs: 214.5, txCambial: 5.67, outrasDespesasImportacaoRs: 0,
+  despachanteDesembaracoRs: 954.95, demurrageRs: 0, freteInternoRs: 42450, armazenagemRs: 1988.85,
+  itensInstalacaoMontagem: [{ descricao: 'Instalação e montagem', valor: 72205 }],
+  containers: [{ quantidade: 1, preco_rs: 19295.5, capatazia_rs: 1755.78, gri_rs: 0, taxa_porto_rs: 0 }], containerRateioDivisor: 2, itensDespesasExtras: [],
+  quantidadeEquipamentos: 1, percentualServicos: 0.3, modelos: [{ unidadeId: 'U', quantidade: 1, valorUnitarioUsd: 32690 }],
+  comissaoConsultoriaPct: 0, comissaoVendedorPct: 0.01, comissaoIndicacaoPct: 0.01, modoFormacaoPreco: 'planilha',
+  parametros: GOLDEN_963.parametros,
+};
+
+test('margemMarginal — prevê exatamente o lucro de um novo preço (serviços + DIFAL proporcional ao preço)', () => {
+  const A = 0.2075471698; // DIFAL BA sobre o preço do produto (base dupla composta)
+  const p0 = rodarComDifalProporcional(CASO_1048, 0.38, A);
+  const m = E.margemMarginal(p0);
+  assert.ok(m > 0.70 && m < 0.73, `m deveria ficar perto de 71,7% e veio ${m}`);
+  // a conta antiga (88%) erra: confirma que é bem diferente
+  assert.ok(Math.abs(m - (1 - p0.impostosPagarProdutoPct - 0.02)) > 0.1);
+  const lucroAlvo = 80000;
+  const novoPreco = p0.precoVendaProposta + (lucroAlvo - p0.lucroFinal) / m;
+  // mark-up que fecha nesse preço (conta inversa do próprio motor) e lucro REAL do motor nele
+  let lo = 0.1, hi = 0.7;
+  for (let i = 0; i < 80; i++) { const k = (lo + hi) / 2; if (rodarComDifalProporcional(CASO_1048, k, A).precoVendaProposta < novoPreco) lo = k; else hi = k; }
+  const real = rodarComDifalProporcional(CASO_1048, lo, A);
+  closeTo(real.precoVendaProposta, novoPreco, 0.05, 'preço');
+  closeTo(real.lucroFinal, lucroAlvo, 0.5, 'o lucro real do motor é o desejado');
+});
+
+test('margemMarginal — sem campos detalhados cai na conta simples; sem preço devolve 0', () => {
+  closeTo(E.margemMarginal({ precoVendaProposta: 1000, impostosPagarProdutoPct: 0.1, comissaoVendedorRs: 20 }), 0.88, 1e-9, 'fallback');
+  assert.equal(E.margemMarginal({ precoVendaProposta: 0 }), 0);
+  assert.equal(E.margemMarginal(null), 0);
+});
