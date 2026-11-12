@@ -154,10 +154,13 @@ function BoletosAvisosPage() {
   });
 
   const filtrada = (lista || []).filter(c => (!soSem || Number(c.qtd_sem_boleto) > 0) && (!q || `${c.razao_social} ${c.cnpj || ''}`.toLowerCase().includes(q.toLowerCase())));
-  const fin = C.resumoFinanceiro(abertos, C.hojeBrasil());
+  /* Os cards acompanham a busca e o filtro: somam só os títulos dos clientes que estão na lista */
+  const filtrando = !!q || soSem;
+  const codigosFiltrados = new Set(filtrada.map(c => c.codigo_cliente_omie));
+  const fin = C.resumoFinanceiro(filtrando ? abertos.filter(b => codigosFiltrados.has(b.codigo_cliente_omie)) : abertos, C.hojeBrasil());
   const atrasadoDoCliente = new Map();
   for (const b of abertos) { if (C.situacaoDoBoleto(b.data_vencimento, C.hojeBrasil()) === 'atrasado') atrasadoDoCliente.set(b.codigo_cliente_omie, Math.round(((atrasadoDoCliente.get(b.codigo_cliente_omie) || 0) + Number(b.valor || 0)) * 100) / 100); }
-  const tot = (lista || []).reduce((a, c) => { a.boletos += Number(c.qtd_boletos || 0); a.sem += Number(c.qtd_sem_boleto || 0); if (c.situacao === 'atrasado') a.atr++; if (c.situacao === 'vence_hoje') a.hoje++; if (!(c.emails || []).length) a.semEmail++; return a; }, { boletos: 0, sem: 0, atr: 0, hoje: 0, semEmail: 0 });
+  const tot = filtrada.reduce((a, c) => { a.boletos += Number(c.qtd_boletos || 0); a.sem += Number(c.qtd_sem_boleto || 0); if (c.situacao === 'atrasado') a.atr++; if (c.situacao === 'vence_hoje') a.hoje++; if (!(c.emails || []).length) a.semEmail++; return a; }, { boletos: 0, sem: 0, atr: 0, hoje: 0, semEmail: 0 });
 
   return (
     <div className="page fade-in">
@@ -184,7 +187,7 @@ function BoletosAvisosPage() {
         </div>
         <div style={{ padding: '4px 16px 12px', display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
           {[
-            { t: 'Total em aberto', v: fin.total, cor: '#111827', sub: fin.total.clientes + ' clientes · ' + fin.total.boletos + ' títulos' },
+            { t: filtrando ? 'Total em aberto (filtrado)' : 'Total em aberto', v: fin.total, cor: '#111827', sub: fin.total.clientes + ' clientes · ' + fin.total.boletos + ' títulos' },
             { t: 'A vencer', v: fin.aVencer, cor: '#16a34a', sub: fin.aVencer.clientes + ' clientes · ' + fin.aVencer.boletos + ' títulos' },
             { t: 'Vence hoje', v: fin.venceHoje, cor: '#a16207', sub: fin.venceHoje.clientes + ' clientes · ' + fin.venceHoje.boletos + ' títulos' },
             { t: 'Atrasado (1 a 30 dias)', v: fin.atrasado30, cor: '#dc2626', sub: fin.atrasado30.clientes + ' clientes · ' + fin.atrasado30.boletos + ' títulos' },
