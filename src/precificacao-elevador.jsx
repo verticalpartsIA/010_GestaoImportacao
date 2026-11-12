@@ -101,7 +101,9 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
   const P0 = pvRes ? Number(pvRes.precoVendaProposta) || 0 : 0;
   const lucroTotal = pvRes ? Number(pvRes.lucroFinal) || 0 : 0;
   const comPct = pvRes && P0 > 0 ? ((Number(pvRes.comissaoConsultoriaRs) || 0) + (Number(pvRes.comissaoVendedorRs) || 0) + (Number(pvRes.comissaoIndicacaoRs) || 0)) / P0 : 0;
-  const m = pvRes ? 1 - (Number(pvRes.impostosPagarProdutoPct) || 0) - comPct : 0; // quanto de cada R$ de preço vira lucro
+  /* 12/11/2026 — quanto de cada R$ de preço vira lucro: conta do motor (E.margemMarginal), que inclui imposto de serviços e DIFAL.
+     A conta antiga (1 − % impostos de produto − % comissões) dava ~88% quando o real é ~72% e a tela prometia um lucro que o cálculo não entregava. */
+  const m = pvRes ? (E && E.margemMarginal ? E.margemMarginal(pvRes) : 1 - (Number(pvRes.impostosPagarProdutoPct) || 0) - comPct) : 0;
   const totalCalc = linhas.reduce((s, l) => s + (Number(l.valor) || 0), 0);
   const valCeo = (l) => { const v = ceo ? ceo[l.keyCeo] : null; return v === undefined || v === null || v === '' ? null : Number(v); };
   /* Líquido de cada equipamento: rateio por participação no preço, exceto a mão de obra, que cada um paga a sua
@@ -206,7 +208,7 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
       {algumCeo && (
         <div className="pl-note" style={{ marginTop: 8 }}>
           Com o líquido que o CEO quer, o preço da proposta passa de <b>{fmtBRL2(totalCalc)}</b> para <b>{fmtBRL2(novoTotal)}</b> ({dinheiroSinal(-descontoTotal)}) e o lucro total fica em <b style={{ color: lucroNovo < 0 ? '#b91c1c' : undefined }}>{fmtBRL2(lucroNovo)}</b> ({fmtPct2(novoTotal > 0 ? lucroNovo / novoTotal : 0)}).
-          <div className="small muted" style={{ marginTop: 2 }}>O desconto no preço é um pouco maior que a queda do líquido porque {fmtPct2(1 - m)} de cada R$ do preço vai para impostos e comissões.</div>
+          <div className="small muted" style={{ marginTop: 2 }}>O desconto no preço é um pouco maior que a queda do líquido porque {fmtPct2(1 - m)} de cada R$ do preço vai para impostos, comissões e DIFAL.</div>
           {alav && alav.valido && (
             <div className="row gap-2" style={{ alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
               <span>Para o cálculo chegar nesse preço: <b>{alav.campo === 'mark_up_pct' ? 'Mark-up' : 'Margem desejada'} = {fmtPct2(alav.valor)}</b>.</span>

@@ -435,6 +435,26 @@
     return { modo, campo: 'margem_desejada_pct', valor: marg, valido: marg > 0 && marg < 1 };
   }
 
+  /* Quanto de cada R$ a mais (ou a menos) de PREÇO vira LUCRO (12/11/2026, caso 1048: o campo "Lucro líquido
+     desejado (CEO)" prometia R$ 80.000 e entregava R$ 70.834). Tudo o que depende do preço sai da conta: impostos da
+     venda (cada um já calculado sobre a sua base), imposto de serviços, comissões e DIFAL (proporcional ao preço do
+     produto). Créditos de importação, custos e despesas não mudam com o preço. O lucro é linear no preço, então
+     desconto/acréscimo de preço = diferença de lucro ÷ este número (exato, sem tentativa e erro).
+     Sem os campos detalhados (resultado de modo antigo), cai na conta simples de antes: 1 − % impostos − % comissões. */
+  function margemMarginal(pv) {
+    if (!pv) return 0;
+    const P = Number(pv.precoVendaProposta) || 0;
+    if (!(P > 0)) return 0;
+    const abs = (k) => Math.abs(Number(pv[k]) || 0);
+    const comissoes = abs('comissaoConsultoriaRs') + abs('comissaoVendedorRs') + abs('comissaoIndicacaoRs');
+    const detalhado = ['custosIcmsVenda', 'custosPisVenda', 'custosCofinsVenda', 'custosIrpjVenda', 'custosCsllVenda'].every((k) => pv[k] != null);
+    if (!detalhado) return 1 - (Number(pv.impostosPagarProdutoPct) || 0) - comissoes / P;
+    const impostosVenda = abs('custosIcmsVenda') + abs('custosIpiVenda') + abs('custosPisVenda') + abs('custosCofinsVenda')
+      + abs('custosIrpjVenda') + abs('custosCsllVenda') + abs('custosIrpjAdicional');
+    const variavel = impostosVenda + abs('impostosPagarServicosRs') + abs('difalRs') + comissoes;
+    return 1 - variavel / P;
+  }
+
   /* Lucro LÍQUIDO de cada equipamento (10/10/2026) — resposta oficial para "quanto cada equipamento deixa de lucro?".
      Tudo o que é custo ou imposto é rateado pela participação do equipamento no PREÇO (e o preço já é rateado pelo custo
      em US$ de cada modelo, então mercadoria, despesas gerais, impostos da venda, comissões, DIFAL e contingência seguem
@@ -450,5 +470,5 @@
     return lista.map((l) => (P > 0 ? (L + somaMo) * ((Number(l.preco) || 0) / P) - (Number(l.mo) || 0) : 0));
   }
 
-  window.PrecificacaoElevadorEngine = { calcular, calcularV2, calcularPlanilha, alavancaParaPreco, ratearLucroPorEquipamento, creditoElegivel, ratearPorModelo };
+  window.PrecificacaoElevadorEngine = { calcular, calcularV2, calcularPlanilha, alavancaParaPreco, margemMarginal, ratearLucroPorEquipamento, creditoElegivel, ratearPorModelo };
 }());
