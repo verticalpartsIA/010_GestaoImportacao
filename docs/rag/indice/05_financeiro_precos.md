@@ -5,7 +5,7 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/05_financeiro_precos.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `980586c`)
-- **Palavras:** 20759 · **blocos:** 352 · **seções com selo próprio:** 58 de 84
+- **Palavras:** 20811 · **blocos:** 352 · **seções com selo próprio:** 58 de 84
 - **Origem do selo dos blocos:** próprio 87 · da seção 169 · da seção-pai 0 · do cabeçalho 60 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 36
 - **Selo efetivo dos blocos:** Conferido 238 · Herdado 25 · Não verificado 53
 
