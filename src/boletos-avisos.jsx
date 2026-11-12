@@ -49,6 +49,7 @@ function BavDetalhe({ cliente }) {
               </tr>
             ))}
           </tbody>
+          {boletos && boletos.length > 0 && <tfoot><tr><td colSpan={3}><b>Total em aberto deste cliente</b></td><td colSpan={2}><b>{C.moedaBR(boletos.reduce((a, b) => a + Math.round(Number(b.valor || 0) * 100), 0) / 100)}</b></td></tr></tfoot>}
         </table>
       </div>
       <div>
@@ -87,6 +88,7 @@ function BoletosAvisosPage() {
   const S = window.BoletosAvisosStore, C = window.BoletosAvisosCalc;
   const [acesso, setAcesso] = React.useState(null);
   const [lista, setLista] = React.useState(null);
+  const [abertos, setAbertos] = React.useState([]);
   const [cfg, setCfg] = React.useState(null);
   const [erro, setErro] = React.useState(null);
   const [busy, setBusy] = React.useState(null);
@@ -95,8 +97,8 @@ function BoletosAvisosPage() {
 
   const carregar = React.useCallback(async () => {
     try {
-      const [l, c] = await Promise.all([S.listarClientes(), S.config()]);
-      setLista(l); setCfg(c); setErro(null);
+      const [l, c, b] = await Promise.all([S.listarClientes(), S.config(), S.boletosAbertos()]);
+      setLista(l); setCfg(c); setAbertos(b); setErro(null);
     } catch (e) { setErro(e.message); setLista([]); }
   }, []);
   React.useEffect(() => {
@@ -151,6 +153,9 @@ function BoletosAvisosPage() {
   });
 
   const filtrada = (lista || []).filter(c => !q || `${c.razao_social} ${c.cnpj || ''}`.toLowerCase().includes(q.toLowerCase()));
+  const fin = C.resumoFinanceiro(abertos, C.hojeBrasil());
+  const atrasadoDoCliente = new Map();
+  for (const b of abertos) { if (C.situacaoDoBoleto(b.data_vencimento, C.hojeBrasil()) === 'atrasado') atrasadoDoCliente.set(b.codigo_cliente_omie, Math.round(((atrasadoDoCliente.get(b.codigo_cliente_omie) || 0) + Number(b.valor || 0)) * 100) / 100); }
   const tot = (lista || []).reduce((a, c) => { a.boletos += Number(c.qtd_boletos || 0); if (c.situacao === 'atrasado') a.atr++; if (c.situacao === 'vence_hoje') a.hoje++; if (!(c.emails || []).length) a.semEmail++; return a; }, { boletos: 0, atr: 0, hoje: 0, semEmail: 0 });
 
   return (
@@ -176,10 +181,23 @@ function BoletosAvisosPage() {
           <span className="small">Modo teste: {cfg && cfg.destino_teste ? <b>{cfg.destino_teste}</b> : <span className="muted">desligado (vai para os clientes)</span>} · <a href="#" onClick={e => { e.preventDefault(); definirTeste(); }}>alterar</a></span>
           <span className="small muted">Última leitura do Omie: {cfg && cfg.sincronizado_em ? new Date(cfg.sincronizado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'nunca'}</span>
         </div>
+        <div style={{ padding: '4px 16px 12px', display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+          {[
+            { t: 'Total em aberto', v: fin.total, cor: '#111827', sub: fin.total.clientes + ' clientes · ' + fin.total.boletos + ' boletos' },
+            { t: 'A vencer', v: fin.aVencer, cor: '#16a34a', sub: fin.aVencer.clientes + ' clientes · ' + fin.aVencer.boletos + ' boletos' },
+            { t: 'Vence hoje', v: fin.venceHoje, cor: '#a16207', sub: fin.venceHoje.clientes + ' clientes · ' + fin.venceHoje.boletos + ' boletos' },
+            { t: 'Atrasado (1 a 30 dias)', v: fin.atrasado30, cor: '#dc2626', sub: fin.atrasado30.clientes + ' clientes · ' + fin.atrasado30.boletos + ' boletos' },
+            { t: 'Atrasado (mais de 30 dias)', v: fin.atrasadoMais30, cor: '#991b1b', sub: fin.atrasadoMais30.clientes + ' clientes · ' + fin.atrasadoMais30.boletos + ' boletos' },
+          ].map(k => (
+            <div key={k.t} style={{ border: '1px solid var(--border, #e5e7eb)', borderLeft: '4px solid ' + k.cor, borderRadius: 6, padding: '8px 12px' }}>
+              <div className="small muted">{k.t}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: k.cor }}>{C.moedaBR(k.v.valor)}</div>
+              <div className="small muted">{k.sub}</div>
+            </div>
+          ))}
+        </div>
         <div style={{ padding: '0 16px 12px', display: 'flex', gap: 16, flexWrap: 'wrap' }} className="small">
-          <span><b>{(lista || []).length}</b> clientes · <b>{tot.boletos}</b> boletos</span>
-          <span style={{ color: '#dc2626' }}><b>{tot.atr}</b> atrasados</span>
-          <span style={{ color: '#a16207' }}><b>{tot.hoje}</b> vencem hoje</span>
+          <span><b>{fin.pctAtrasado.toLocaleString('pt-BR')}%</b> do valor em aberto está atrasado ({C.moedaBR(fin.atrasado.valor)} de {fin.atrasado.clientes} clientes)</span>
           <span className="muted"><b>{tot.semEmail}</b> sem e-mail</span>
         </div>
         <div style={{ padding: '0 16px 12px' }}>
@@ -188,10 +206,10 @@ function BoletosAvisosPage() {
         {erro && <div style={{ padding: 16, color: 'var(--vp-danger)' }}>{erro}</div>}
         <div className="table-wrap">
           <table className="t pcp-grid">
-            <thead><tr><th style={{ width: 28 }}></th><th>Situação</th><th>Razão Social</th><th style={{ textAlign: 'right' }}>Qtd de Boletos</th><th>E-mail</th><th>Último aviso</th><th></th></tr></thead>
+            <thead><tr><th style={{ width: 28 }}></th><th>Situação</th><th>Razão Social</th><th style={{ textAlign: 'right' }}>Qtd de Boletos</th><th style={{ textAlign: 'right' }}>Valor em aberto</th><th>E-mail</th><th>Último aviso</th><th></th></tr></thead>
             <tbody>
-              {lista === null && <tr><td colSpan={7}>Carregando…</td></tr>}
-              {lista && !filtrada.length && <tr><td colSpan={7} className="muted">{(lista || []).length ? 'Nenhum cliente encontrado.' : 'Nenhum boleto em aberto lido do Omie ainda. Clique em "Atualizar do Omie".'}</td></tr>}
+              {lista === null && <tr><td colSpan={8}>Carregando…</td></tr>}
+              {lista && !filtrada.length && <tr><td colSpan={8} className="muted">{(lista || []).length ? 'Nenhum cliente encontrado.' : 'Nenhum boleto em aberto lido do Omie ainda. Clique em "Atualizar do Omie".'}</td></tr>}
               {filtrada.map(c => {
                 const id = String(c.codigo_cliente_omie), isOpen = aberto === id;
                 const semEmail = !(c.emails || []).length;
@@ -202,13 +220,14 @@ function BoletosAvisosPage() {
                       <td><BavSemaforo situacao={c.situacao} dias={c.dias_atraso}/></td>
                       <td><b>{c.razao_social}</b>{c.cnpj ? <span className="muted small"> · {c.cnpj}</span> : null}</td>
                       <td style={{ textAlign: 'right' }}>{c.qtd_boletos}</td>
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><b>{C.moedaBR(c.valor_total)}</b>{atrasadoDoCliente.get(c.codigo_cliente_omie) > 0 && <div className="small" style={{ color: '#dc2626' }}>{C.moedaBR(atrasadoDoCliente.get(c.codigo_cliente_omie))} atrasado</div>}</td>
                       <td>{semEmail ? <Badge variant="warning">sem e-mail</Badge> : <span className="small" title={c.emails.join(', ')}>{c.emails[0]}{c.emails.length > 1 ? ` +${c.emails.length - 1}` : ''}</span>}</td>
                       <td className="small">{c.ultimo_aviso_em ? <>{new Date(c.ultimo_aviso_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · {C.ETAPA_ROTULO[c.ultimo_aviso_etapa] || c.ultimo_aviso_etapa}{c.ultimo_aviso_status === 'erro' ? ' (erro)' : ''}</> : <span className="muted">—</span>}</td>
                       <td onClick={e => e.stopPropagation()}>
                         <Button size="sm" variant="primary" disabled={semEmail || busy === 'env' + id} onClick={() => enviar(c)}>{busy === 'env' + id ? 'Enviando…' : 'Enviar aviso'}</Button>
                       </td>
                     </tr>
-                    {isOpen && <tr><td colSpan={7} style={{ padding: 0 }}><BavDetalhe cliente={c}/></td></tr>}
+                    {isOpen && <tr><td colSpan={8} style={{ padding: 0 }}><BavDetalhe cliente={c}/></td></tr>}
                   </React.Fragment>
                 );
               })}

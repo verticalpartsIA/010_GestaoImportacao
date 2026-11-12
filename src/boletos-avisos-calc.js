@@ -79,8 +79,35 @@ window.BoletosAvisosCalc = (() => {
 
   function hojeBrasil(agora) { return new Date((agora || Date.now()) - 3 * 3600e3).toISOString().slice(0, 10); }
 
+  /* Impacto financeiro (só da tela; não está na Edge Function): dinheiro em aberto por situação do BOLETO.
+     Soma em centavos para não acumular erro de ponto flutuante. Atrasado se divide em 1–30 dias e mais de 30. */
+  function resumoFinanceiro(boletos, hojeISO) {
+    const vazio = () => ({ centavos: 0, boletos: 0, clientes: new Set() });
+    const b = { aVencer: vazio(), venceHoje: vazio(), atrasado30: vazio(), atrasadoMais30: vazio() };
+    for (const x of boletos || []) {
+      const d = diasDesdeVencimento(x.data_vencimento, hojeISO);
+      const k = d < 0 ? 'aVencer' : d === 0 ? 'venceHoje' : d <= 30 ? 'atrasado30' : 'atrasadoMais30';
+      b[k].centavos += Math.round(Number(x.valor || 0) * 100);
+      b[k].boletos++;
+      b[k].clientes.add(x.codigo_cliente_omie);
+    }
+    const out = {};
+    let total = 0, qtd = 0;
+    const todos = new Set();
+    for (const k of Object.keys(b)) {
+      out[k] = { valor: b[k].centavos / 100, boletos: b[k].boletos, clientes: b[k].clientes.size };
+      total += b[k].centavos; qtd += b[k].boletos; b[k].clientes.forEach((c) => todos.add(c));
+    }
+    const atr = b.atrasado30.centavos + b.atrasadoMais30.centavos;
+    const atrClientes = new Set([...b.atrasado30.clientes, ...b.atrasadoMais30.clientes]);
+    out.atrasado = { valor: atr / 100, boletos: b.atrasado30.boletos + b.atrasadoMais30.boletos, clientes: atrClientes.size };
+    out.total = { valor: total / 100, boletos: qtd, clientes: todos.size };
+    out.pctAtrasado = total > 0 ? Math.round((atr / total) * 1000) / 10 : 0;
+    return out;
+  }
+
   return {
     ETAPAS, SITUACOES, ETAPA_ROTULO,
-    diasDesdeVencimento, situacaoDoBoleto, etapaDevida, montarAviso, dataBR, moedaBR, hojeBrasil,
+    diasDesdeVencimento, situacaoDoBoleto, etapaDevida, montarAviso, dataBR, moedaBR, hojeBrasil, resumoFinanceiro,
   };
 })();
