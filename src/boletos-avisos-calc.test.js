@@ -105,3 +105,36 @@ test('a função nunca usa o destinatário que vier no corpo da requisição', (
   const f = ler('supabase/functions/boletos-avisos/index.ts');
   assert.doesNotMatch(f, /p\.para|p\.to\b|payload\.to/);
 });
+
+// ---- impacto financeiro ----
+test('resumo financeiro separa a vencer, vence hoje e atrasado (1–30 e mais de 30 dias) em reais', () => {
+  const hoje = '2026-11-11';
+  const bs = [
+    { codigo_cliente_omie: 1, data_vencimento: '2026-11-20', valor: 1000.10 },   // a vencer
+    { codigo_cliente_omie: 1, data_vencimento: '2026-11-11', valor: 500.05 },    // vence hoje
+    { codigo_cliente_omie: 2, data_vencimento: '2026-11-01', valor: 250 },       // 10 dias
+    { codigo_cliente_omie: 3, data_vencimento: '2026-10-12', valor: 300 },       // 30 dias (ainda até 30)
+    { codigo_cliente_omie: 3, data_vencimento: '2026-10-11', valor: 400.40 },    // 31 dias
+  ];
+  const r = C.resumoFinanceiro(bs, hoje);
+  assert.equal(r.aVencer.valor, 1000.10);
+  assert.equal(r.venceHoje.valor, 500.05);
+  assert.equal(r.atrasado30.valor, 550);
+  assert.equal(r.atrasadoMais30.valor, 400.40);
+  assert.equal(r.atrasado.valor, 950.40);
+  assert.equal(r.atrasado.clientes, 2);
+  assert.equal(r.total.valor, 2450.55);
+  assert.equal(r.total.boletos, 5);
+  assert.equal(r.total.clientes, 3);
+});
+test('resumo financeiro: soma em centavos, sem erro de ponto flutuante, e % atrasado', () => {
+  const bs = Array.from({ length: 10 }, () => ({ codigo_cliente_omie: 1, data_vencimento: '2026-11-01', valor: 0.1 }));
+  const r = C.resumoFinanceiro(bs, '2026-11-11');
+  assert.equal(r.total.valor, 1);
+  assert.equal(r.pctAtrasado, 100);
+});
+test('resumo financeiro sem boletos devolve zeros', () => {
+  const r = C.resumoFinanceiro([], '2026-11-11');
+  assert.equal(r.total.valor, 0);
+  assert.equal(r.pctAtrasado, 0);
+});
