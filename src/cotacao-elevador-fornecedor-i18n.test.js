@@ -104,3 +104,16 @@ test('nova revisão: aviso de "nova versão" em PT, EN e 中文 + sufixo no assu
   const primeira = store.mensagemRfq(base);
   assert.ok(!/NOVA VERSÃO/.test(primeira.text) && !/Revisão/.test(primeira.subject));
 });
+
+/* 12/11/2026 — porta de vidro por pavimento chega ao fornecedor com o ONDE (nos três idiomas no portal). */
+test('portal: porta de vidro só no térreo chega com o pavimento e o aço das demais portas', () => {
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'portas-vidro-calc.js'), 'utf8'), { window: win });
+  const u = { ...unidade, paradas: 3, pavimentos_desc: 'Térreo, 1, 2', porta_oposta: 'Não', acabamento_porta_pavimento: 'Aço 304',
+    especificacoes: { portas_vidro: { pavimento: { base: 'Aço 304', modo: 'alguns', andares: [{ n: 1, frente: true }] } } } };
+  const tri = achar(store.unitSpecSecoes(u, 'elevator', 'elevador', { i18n: true }), 'acabamento_porta_pavimento')[3];
+  assert.match(tri, /Vidro nos pavimentos Térreo; demais portas em Aço 304 \/ Glass at landings Térreo; other doors in Stainless steel 304 \/ 玻璃/);
+  const pt = achar(store.unitSpecSecoes(u, 'elevator', 'elevador'), 'acabamento_porta_pavimento')[3];
+  assert.equal(pt, 'Vidro nos pavimentos Térreo; demais portas em Aço 304'); // visão interna: só PT
+  // sem vidro nada muda
+  assert.equal(achar(store.unitSpecSecoes(unidade, 'elevator', 'elevador'), 'acabamento_porta_cabina')[3], 'Aço 304');
+});

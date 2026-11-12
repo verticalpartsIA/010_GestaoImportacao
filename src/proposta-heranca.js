@@ -288,8 +288,9 @@
         pisoCabina: u.piso_cabina || '',
         modeloPorta: abertura ? `Automática ${abertura}` : '',
         dimPortaCabine: dim(u.porta_largura_mm, u.porta_altura_mm),
-        acabPortaCabine: u.acabamento_porta_cabina || '',
-        portasPavimento: u.acabamento_porta_pavimento || '',
+        /* 12/11/2026 — com porta de vidro, o texto diz onde (portas-vidro-calc.js); sem vidro = o aço da coluna. */
+        acabPortaCabine: (window.PortasVidro ? window.PortasVidro.descricao(u, 'cabina', 'pt') : u.acabamento_porta_cabina) || '',
+        portasPavimento: (window.PortasVidro ? window.PortasVidro.descricao(u, 'pavimento', 'pt') : u.acabamento_porta_pavimento) || '',
         botoeirasPavimento: u.botoeira_pavimento || '',
       };
       return {
