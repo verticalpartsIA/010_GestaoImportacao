@@ -182,10 +182,19 @@ function decodificar(s) { return String(s || "").replace(/&amp;/g, "&").replace(
    Para não trazer dívida antiga e esquecida (o "A VENCER" do Omie vai pela data de previsão, não pelo vencimento),
    o sem-boleto só entra até este atraso em dias. Boleto gerado entra sempre, como antes. */
 const LIMITE_SEM_BOLETO_DIAS = 180;
+/* Empresas SEM corte (decisão do Gelson, 12/11/2026): Escamax, do grupo, paga por depósito e a dívida é toda de 2026.
+   Casa pela RAIZ do CNPJ (8 primeiros dígitos) dos clientes já resolvidos em boletos_avisos_clientes, mais os códigos
+   Omie das filiais já conhecidas (garante a 1ª leitura de um cliente ainda não resolvido). */
+const RAIZES_CNPJ_SEM_CORTE = ["24845692", "42689068"];
+const CODIGOS_SEM_CORTE = [9171897422, 709496211, 9189022146, 9156116333, 8907119881, 8970602418];
 
 async function sincronizar() {
   const vistos = new Map();
   const hojeSync = hojeBrasil();
+  const semCorte = new Set(CODIGOS_SEM_CORTE);
+  for (const c of await pgSelectTudo("boletos_avisos_clientes", "select=codigo_cliente_omie,cnpj")) {
+    if (RAIZES_CNPJ_SEM_CORTE.includes(String(c.cnpj || "").replace(/\D/g, "").slice(0, 8))) semCorte.add(Number(c.codigo_cliente_omie));
+  }
   for (const status of ["AVENCER", "VENCEHOJE", "ATRASADO"]) {
     let pagina = 1, total = 1;
     while (pagina <= total) {
@@ -196,7 +205,7 @@ async function sincronizar() {
         if (/RECEBIDO|CANCELADO|LIQUIDADO/i.test(t.status_titulo || "")) continue;
         const venc = isoDeBR(t.data_vencimento);
         if (!venc) continue;
-        if (!temBoleto && diasDesdeVencimento(venc, hojeSync) > LIMITE_SEM_BOLETO_DIAS) continue;
+        if (!temBoleto && !semCorte.has(Number(t.codigo_cliente_fornecedor)) && diasDesdeVencimento(venc, hojeSync) > LIMITE_SEM_BOLETO_DIAS) continue;
         vistos.set(t.codigo_lancamento_omie, {
           codigo_lancamento_omie: t.codigo_lancamento_omie,
           codigo_cliente_omie: t.codigo_cliente_fornecedor,
