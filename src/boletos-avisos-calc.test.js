@@ -155,7 +155,7 @@ test('aviso só com boletos continua igual ao de antes', () => {
 test('a sincronização limita o sem-boleto a 180 dias e a migration cria tem_boleto com padrão true', () => {
   const f = ler('supabase/functions/boletos-avisos/index.ts');
   assert.match(f, /LIMITE_SEM_BOLETO_DIAS = 180/);
-  assert.match(f, /!temBoleto && !semCorte.has/);
+  assert.match(f, /!temBoleto && diasDesdeVencimento\(venc, hojeSync\) > \(semCorte\.has/);
   const sql = ler('supabase/migrations/20261112100000_boletos_avisos_sem_boleto.sql');
   assert.match(sql, /tem_boleto boolean not null default true/);
 });
@@ -163,5 +163,19 @@ test('a sincronização limita o sem-boleto a 180 dias e a migration cria tem_bo
 test('a Escamax (raiz do CNPJ) fica sem o corte de 180 dias do sem-boleto', () => {
   const f = ler('supabase/functions/boletos-avisos/index.ts');
   assert.match(f, /RAIZES_CNPJ_SEM_CORTE = \["24845692", "42689068"\]/);
-  assert.match(f, /!semCorte\.has\(Number\(t\.codigo_cliente_fornecedor\)\) && diasDesdeVencimento/);
+  assert.match(f, /LIMITE_ESCAMAX_DIAS = 365/);
+});
+
+test('sem boleto o aviso de atraso sai no 2º dia; boleto segue no 1º', () => {
+  assert.equal(C.etapaDevida('2026-11-10', '2026-11-11', [], false), 'D+1');
+  assert.equal(C.etapaDevida('2026-11-10', '2026-11-11', [], true), null);
+  assert.equal(C.etapaDevida('2026-11-10', '2026-11-12', [], true), 'D+1');
+  assert.equal(C.etapaDevida('2026-11-10', '2026-11-12', [], false), null);
+  assert.equal(C.etapaDevida('2026-11-10', '2026-11-12', ['D+1'], true), null);
+});
+test('sem boleto: D-5, D-1 e D0 continuam iguais; sexta vencida cai na segunda (2 dias depois)', () => {
+  assert.equal(C.etapaDevida('2026-11-16', '2026-11-11', [], true), 'D-5');
+  assert.equal(C.etapaDevida('2026-11-12', '2026-11-11', [], true), 'D-1');
+  assert.equal(C.etapaDevida('2026-11-11', '2026-11-11', [], true), 'D0');
+  assert.equal(C.etapaDevida('2026-11-13', '2026-11-16', [], true), 'D+1');   // vence sexta, 2º dia = domingo, sai na segunda
 });
