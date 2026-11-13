@@ -1,8 +1,9 @@
 /* ============================================================
    precificacao-elevador-engine.js
-   Motor de cálculo da Precificação de Elevador — réplica fiel da planilha
-   "Modelo_Pricing_Elevador.xlsx" (aba "FIN Pricing EL"). Cada variável traz
-   em comentário a célula original, pra facilitar auditoria/manutenção.
+   Motor de cálculo da Precificação de Elevador. A fonte da verdade é a planilha do
+   Financeiro ("JA - COTAÇÃO N° ...", aba FIN - ELEV; golden 963 e 1048 nos testes), com UMA
+   exceção decidida pelo Gelson (13/11/2026): comissão sobre o valor líquido de impostos.
+   Cada variável traz em comentário a célula original, pra facilitar auditoria/manutenção.
    Função pura — sem I/O, sem Supabase. window.PrecificacaoElevadorEngine
    ============================================================ */
 (function () {
@@ -173,9 +174,16 @@
 
     const S51_impostosPagarServicosRs = -(S67_precoVendaServicos * K51_impostosServicosPct);
     const S53_markUpRs = -S65_precoVendaProposta * K53_markUpPct;
-    const S55_comissaoConsultoriaRs = S65_precoVendaProposta * K55_comissaoConsultoriaPct;
-    const S56_comissaoVendedorRs = S65_precoVendaProposta * K56_comissaoVendedorPct;
-    const U57_comissaoIndicacaoRs = S65_precoVendaProposta * K57_comissaoIndicacaoPct;
+    /* 13/11/2026 — DECISÃO do Gelson: a comissão é sobre o valor LÍQUIDO de impostos, nunca sobre o bruto. Base = preço de venda
+       menos os impostos de PRODUTO da venda (ICMS, IPI, PIS, COFINS, IRPJ, CSLL e IRPJ adicional — S39:S45, brutos, antes do
+       crédito de importação). O imposto de serviços (16%) NÃO sai da base (opção A). Vale para vendedor, indicação e consultoria.
+       A planilha calcula sobre o preço bruto (S55 = S66 × K55); aqui a regra é do Gelson e a planilha não é seguida neste ponto. */
+    const impostosVendaProdutoBrutosRs = Math.abs(S39_custoIcmsVenda) + Math.abs(S40_custoIpiVenda) + Math.abs(S41_custoPisVenda) + Math.abs(S42_custoCofinsVenda)
+      + Math.abs(S43_custoIrpjVenda) + Math.abs(S44_custoCsllVenda) + Math.abs(S45_custoIrpjAdicional);
+    const baseComissaoRs = Math.max(0, S65_precoVendaProposta - impostosVendaProdutoBrutosRs);
+    const S55_comissaoConsultoriaRs = baseComissaoRs * K55_comissaoConsultoriaPct;
+    const S56_comissaoVendedorRs = baseComissaoRs * K56_comissaoVendedorPct;
+    const U57_comissaoIndicacaoRs = baseComissaoRs * K57_comissaoIndicacaoPct;
     const U59_totalComissaoRs = S56_comissaoVendedorRs + U57_comissaoIndicacaoRs;
 
     const U70_difalRs = Number(inputs.difalCustoRs) || 0; // custo do DIFAL, só quando responsabilidade é da VerticalParts
@@ -216,7 +224,7 @@
         creditoPisVenda: S48_creditoPisVenda, creditoCofinsVenda: S49_creditoCofinsVenda,
         impostosPagarProdutoRs: S50_impostosPagarProdutoRs, impostosPagarServicosRs: S51_impostosPagarServicosRs,
         markUpRs: S53_markUpRs, comissaoConsultoriaRs: S55_comissaoConsultoriaRs, comissaoVendedorRs: S56_comissaoVendedorRs,
-        comissaoIndicacaoRs: U57_comissaoIndicacaoRs, totalComissaoRs: U59_totalComissaoRs,
+        comissaoIndicacaoRs: U57_comissaoIndicacaoRs, totalComissaoRs: U59_totalComissaoRs, baseComissaoRs, impostosVendaProdutoBrutosRs,
         difalRs: U70_difalRs,
         lucroVenda: S71_lucroVenda, lucroFinal: S77_lucroFinal, margemFinalPct: U78_margemFinalPct,
         lucroPorEquipamento: V79_lucroPorEquipamento,

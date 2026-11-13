@@ -635,6 +635,34 @@
     return [...diretosResultado, ...daCotacao].map((r) => ({ ...r, revisaoValor: (r.numeroCotacao != null && pedidosAumento[String(r.numeroCotacao)]) || null }));
   }
 
+  /* Quantidade por unidade (13/11/2026, decisão do Gelson: "o formulário do vendedor manda"). Caso real: o vendedor enviou 1 equipamento,
+     o fornecedor cotou 2 e a precificação nasceu com 2. Compara, UNIDADE A UNIDADE, a quantidade dos modelos com a da Unidade do
+     Formulário (mesmo id). Não compara totais: uma cotação PARCIAL (um fornecedor só cota algumas unidades — VPPC-1009-A/1011-A) é legítima.
+     Unidade que não está no Formulário (equipamento acrescentado à mão, id 'avulso-…') não entra. Função pura. */
+  function divergenciasQuantidade(modelos, unidadesFormulario) {
+    const porId = {};
+    (unidadesFormulario || []).forEach((u) => { porId[String(u.id)] = u; });
+    const out = [];
+    (modelos || []).forEach((m) => {
+      const u = porId[String(m.unidadeId)];
+      if (!u) return;
+      const qm = Number(m.quantidade) || 0, qf = Number(u.quantidade) || 1;
+      if (qm !== qf) out.push({ unidadeId: m.unidadeId, identificador: m.identificador || u.identificador || '', quantidadePrecificacao: qm, quantidadeFormulario: qf });
+    });
+    return out;
+  }
+  function mensagemQuantidadeDivergente(divs) {
+    return 'A quantidade de equipamentos não bate com o Formulário do vendedor (o Formulário manda): ' +
+      divs.map((d) => `${d.identificador || 'unidade'} — precificação ${d.quantidadePrecificacao}, Formulário ${d.quantidadeFormulario}`).join('; ') +
+      '. Peça ao Vendas/Compras para acertar a cotação do fornecedor ou o Formulário antes de continuar.';
+  }
+  async function conferirQuantidadeComFormulario(c, formularioElevadorId, modelos) {
+    const { data, error } = await c.from('formularios_elevador_unidades').select('id, identificador, quantidade').eq('formulario_id', formularioElevadorId);
+    if (error) throw error; // falha ao conferir = não segue (Art. 9)
+    const divs = divergenciasQuantidade(modelos, data || []);
+    if (divs.length) { const err = new Error(mensagemQuantidadeDivergente(divs)); err.quantidadeDivergente = divs; throw err; }
+  }
+
   /* ---------- Monta o snapshot inicial (modelos, quantidade, VMLE) a partir do
      Formulário + resposta do fornecedor — ponto de entrada "herdar o Cotação Nº".
      cotacaoFornecedorId nulo = caminho "direto pra Precificação" (pedido do
@@ -704,6 +732,8 @@
       }
     }
 
+    if (cotacaoFornecedorId) await conferirQuantidadeComFormulario(c, formularioElevadorId, modelos);
+
     const parametros = await listarParametrosFiscais();
     const moLookup = await buscarMaoDeObraAutomatica(modelos);
 
@@ -730,7 +760,8 @@
       // precisa ser real". margem_desejada_pct fica preenchida como
       // referência caso o Financeiro troque de modo na tela.
       modo_formacao_preco: 'planilha',
-      margem_desejada_pct: Number(parametros.margem_minima_pct) || 0.2,
+      // Margem mínima/desejada não existe na planilha (Gelson, 13/11/2026): desconto = pedir reprecificação. Fica vazio.
+      margem_desejada_pct: null,
       // 10/10/2026 — OBRIGATÓRIO e do Financeiro: nasce em branco (null) e a tela exige digitar de 0% a 5% (0 vale)
       // antes de Calcular. Precificações já existentes mantêm o valor que têm.
       comissao_consultoria_pct: null,
@@ -937,7 +968,7 @@
        uma passada já dá o valor exato. V1 fica só de reserva (precificação antiga sem V2). */
     const pass1V2 = window.PrecificacaoElevadorEngine.calcularV2({
       ...baseInputs, difalCustoRs: 0, modoFormacaoPreco: 'planilha',
-      margemDesejadaPct: pz.margem_desejada_pct != null ? pz.margem_desejada_pct : (params.margemMinimaPct || 0.2),
+      margemDesejadaPct: pz.margem_desejada_pct != null ? pz.margem_desejada_pct : 0,
       contingenciaValor: pz.contingencia_valor, outrosCustosNaoRecuperaveisRs: pz.outros_custos_nao_recuperaveis_rs,
     });
     /* 19/10/2026 — REGRA do Financeiro (cotação 988): o DIFAL incide SÓ no preço do EQUIPAMENTO (produto),
@@ -947,7 +978,14 @@
     const valorOperacaoDifal = pv2.precoVendaProposta > 0 ? pv2.precoVendaProduto : pv1.precoVendaProduto;
 
     // ufFaturamento/ufDestino e a regra de ICMS já foram resolvidos acima, antes da 1ª passada.
-    const estadoDestino = await window.DifalEngine.buscarEstado(ufDestino);
+    /* 13/11/2026 (Gelson): o ICMS interestadual (4%) tem UMA fonte só — a alíquota da venda já resolvida acima (regra por UF de destino em
+       Atualização de Custos › Regras de ICMS, ou o % global dos Parâmetros Fiscais como reserva). O DIFAL usa essa mesma alíquota, em vez
+       da coluna aliquota_interestadual_* de difal_estados (que continua cadastrada, mas não manda mais no cálculo da Precificação). */
+    const estadoDestinoTabela = await window.DifalEngine.buscarEstado(ufDestino);
+    const icmsInterestadualUnico = Number(snapshotIcms.icms_venda_pct);
+    const estadoDestino = estadoDestinoTabela && isFinite(icmsInterestadualUnico)
+      ? { ...estadoDestinoTabela, aliquota_interestadual_estrangeira: icmsInterestadualUnico, aliquota_interestadual_nacional: icmsInterestadualUnico }
+      : estadoDestinoTabela;
     const calcularDifal = (valorOperacao) => window.DifalEngine.calcular({
       ufFaturamento, ufEntrega: ufEntregaNorm,
       finalidadeCompra: formulario.finalidade_compra, contribuinteIcms: cliente ? cliente.contribuinte_icms : null,
@@ -967,7 +1005,7 @@
     // pra registro novo); sem este fallback, calcularV2 tratava null como
     // 0% de margem desejada (Number(null)||0) e o preço/margem V2 saía
     // artificialmente baixo, sem o usuário nunca ter escolhido isso.
-    const margemDesejadaPct = pz.margem_desejada_pct != null ? pz.margem_desejada_pct : (params.margemMinimaPct || 0.2);
+    const margemDesejadaPct = pz.margem_desejada_pct != null ? pz.margem_desejada_pct : 0;
     const v2Extras = {
       modoFormacaoPreco: 'planilha',
       margemDesejadaPct,
@@ -976,8 +1014,10 @@
     };
     let resultadoV2 = window.PrecificacaoElevadorEngine.calcularV2({ ...baseInputs, difalCustoRs, ...v2Extras });
 
-    /* 19/10/2026 — o DIFAL incide EXATAMENTE no preço do equipamento FINAL (cotação 988: R$ 10.684.587,30). O custo do DIFAL
-       entra no preço, então a base e o preço final dependem um do outro: repete até a base igualar o equipamento final (centavos). */
+    /* 19/10/2026 — o DIFAL incide EXATAMENTE no preço do equipamento FINAL (cotação 988: R$ 10.684.587,30). Na planilha o DIFAL NÃO entra no
+       preço (só abate do lucro, U71), então o preço não depende do DIFAL e este laço fecha na 1ª volta; fica como proteção caso a base mude
+       (revisado em 13/11/2026). DIFAL: cliente contribuinte = custo 0 para a VerticalParts (recolhe o próprio cliente); não contribuinte = a
+       VerticalParts absorve, abatido do lucro, e só aparece na tela (nada é doado a Proposta/Contrato). */
     let baseDifal = valorOperacaoDifal;
     for (let it = 0; it < 30; it++) {
       const equipFinal = resultadoV2.precificacao.precoVendaProduto;
@@ -1088,7 +1128,7 @@
     return /^Informe se o cliente/.test(difal.mensagem || '');
   }
 
-  async function aprovar(id, { forcarAbaixoMinima } = {}) {
+  async function aprovar(id) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     await exigirAlcada('aprovar');
     const pz = await obter(id);
@@ -1100,19 +1140,9 @@
       err.difalPendente = true; // bloqueio absoluto: "aprovar mesmo assim" (margem) não vale aqui
       throw err;
     }
-    const margemMinima = Number((pz.parametros_fiscais_snapshot || {}).margem_minima_pct) || 0;
-    // Motor oficial desde 29/08 é o V2 (custo econômico completo) — o V1
-    // deixava markup positivo conviver com margem real negativa (issue
-    // "Precificação real"). Precificação sem resultado_v2 ainda (nunca
-    // recalculada após a migração) cai pro V1, não trava aprovação por
-    // um dado que nunca existiu pra ela.
-    const margemV2 = pz.resultado_v2 && pz.resultado_v2.precificacao ? Number(pz.resultado_v2.precificacao.margemEfetivaPct) : null;
-    const margemFinal = margemV2 != null ? margemV2 : Number((pz.resultado.precificacao || {}).margemFinalPct) || 0;
-    if (margemFinal < margemMinima && !forcarAbaixoMinima) {
-      const err = new Error(`Margem ${margemV2 != null ? 'efetiva (V2)' : 'final (V1)'} (${(margemFinal * 100).toFixed(2)}%) abaixo da margem mínima (${(margemMinima * 100).toFixed(2)}%).`);
-      err.margemAbaixoMinima = true;
-      throw err;
-    }
+    /* 13/11/2026 (Gelson): a "margem mínima" saiu da precificação (não consta da planilha). Preço não se aprova nem se trava por ela;
+       desconto na Proposta volta para a Precificação e recalcula tudo. */
+    await conferirQuantidadeComFormulario(c, pz.formulario_elevador_id, pz.modelos);
     const now = new Date().toISOString();
     // status usa o enum já existente na tabela ('rascunho'|'calculado'|'finalizado') — 'finalizado' é o estado de aprovado.
     const { error } = await c.from('precificacoes_elevador').update({
@@ -1122,7 +1152,7 @@
     if (window.VPLog) window.VPLog.registrar({
       modulo: 'Formulário de Elevadores', acao: 'Aprovou a precificação',
       alvo: pz.numero_documento || id, alvo_id: id,
-      detalhe: { margemFinal, forcarAbaixoMinima: !!forcarAbaixoMinima },
+      detalhe: { margemFinal: (pz.resultado_v2 && pz.resultado_v2.precificacao) ? Number(pz.resultado_v2.precificacao.margemEfetivaPct) : null },
     });
 
     /* Proposta nasce sozinha ao aprovar (pedido do usuário, 27/08) — puxa
@@ -1274,7 +1304,7 @@
     devolverParaVendas,
     listarParametrosFiscais, salvarParametrosFiscais,
     listarPendentes, criar, obter, salvar, calcularEsalvar,
-    camposObrigatoriosFaltando, aprovar, criarPropostaAutomatica, ressincronizarDoFornecedor,
+    camposObrigatoriosFaltando, divergenciasQuantidade, aprovar, criarPropostaAutomatica, ressincronizarDoFornecedor,
     parseContainerNo, buscarContainerCustoPorIso, enriquecerContainersComCusto, divergenciasContainerComCadastro,
     isoDoTipoCustos, aplicarIdTagNaLinha, linhaTemValorDiferenteDoIdTag, difalPendente, MOTIVO_DIFAL_PENDENTE, avaliarAlcada, conferirAlcada, exigirAlcada,
     classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, atualizarMaoDeObra, renumerarPorParadas, montarBaseInputs,

@@ -1042,30 +1042,25 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
      compartilhado, dividido por 2 com 1 equipamento). O card/cálculo de 90 dias (container exclusivo) saiu. */
   const difal = pz.difal && pz.difal.mensagem ? pz.difal : null;
   const params = pz.parametros_fiscais_snapshot || {};
-  const margemMinima = Number(params.margem_minima_pct) || 0;
   // V2 é o motor oficial (decisão 29/08) — a trava de aprovação usa a
   // margem dele; cai pro V1 só quando ainda não existe resultado_v2
   // (precificação nunca recalculada desde a migração).
   const margemOficialPct = pz.resultado_v2 && pz.resultado_v2.precificacao ? pz.resultado_v2.precificacao.margemEfetivaPct : (resultado ? resultado.margemFinalPct : null);
-  const margemAbaixoMinima = margemOficialPct != null && margemOficialPct < margemMinima;
+  // 13/11/2026 (Gelson): não existe "margem mínima" na precificação (não consta da planilha). Desconto = pedir reprecificação.
   const aprovado = pz.status === 'finalizado';
   const semAlcadaCalcular = !!alcada && !alcada.calcular.pode;
   const semAlcadaAprovar = !!alcada && !alcada.aprovar.pode;
   // DIFAL pendente (07/11/2026): cadastro do cliente sem "Contribuinte de ICMS" => não aprova (nem gera a Proposta).
   const difalPendente = window.PrecificacaoElevadorStore.difalPendente(pz.difal);
 
-  const aprovar = async (forcar) => {
+  const aprovar = async () => {
     setAprovando(true);
     try {
-      await window.PrecificacaoElevadorStore.aprovar(pz.id, { forcarAbaixoMinima: forcar });
+      await window.PrecificacaoElevadorStore.aprovar(pz.id);
       await carregar();
       window.toast?.('Precificação aprovada.', 'success');
     } catch (e) {
-      if (e.margemAbaixoMinima) {
-        if (window.confirm(`${e.message}\n\nAprovar mesmo assim?`)) return aprovar(true);
-      } else {
-        window.toast?.('Erro ao aprovar: ' + e.message, 'error');
-      }
+      window.toast?.('Erro ao aprovar: ' + e.message, 'error');
     } finally {
       setAprovando(false);
     }
@@ -1104,7 +1099,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
           <Button variant="outline" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar rascunho'}</Button>
           <Button variant="primary" icon="calculator" onClick={calcular} disabled={calculando || semAlcadaCalcular} title={semAlcadaCalcular ? alcada.calcular.motivo : undefined}>{calculando ? 'Calculando…' : 'Calcular'}</Button>
           {resultado && !aprovado && (
-            <Button variant="outline" icon="check" onClick={() => aprovar(false)} disabled={aprovando || difalPendente || semAlcadaAprovar} title={difalPendente ? window.PrecificacaoElevadorStore.MOTIVO_DIFAL_PENDENTE : (semAlcadaAprovar ? alcada.aprovar.motivo : undefined)}>{aprovando ? 'Aprovando…' : 'Aprovar precificação'}</Button>
+            <Button variant="outline" icon="check" onClick={() => aprovar()} disabled={aprovando || difalPendente || semAlcadaAprovar} title={difalPendente ? window.PrecificacaoElevadorStore.MOTIVO_DIFAL_PENDENTE : (semAlcadaAprovar ? alcada.aprovar.motivo : undefined)}>{aprovando ? 'Aprovando…' : 'Aprovar precificação'}</Button>
           )}
           {aprovado && (
             <span className="badge" style={{ background: 'var(--vp-success)', color: '#fff', display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>
@@ -1593,7 +1588,6 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
           <PZField label="Comissão consultoria (%) — 0 a 5%" obrigatorio faltando={f('comissao_consultoria_pct')} aviso="Obrigatório: digite de 0% a 5% (0 vale)." ><PZPercentInput value={pz.comissao_consultoria_pct} onChange={set('comissao_consultoria_pct')}/></PZField>
           <PZField label="Comissão vendedor (%)" obrigatorio faltando={f('comissao_vendedor_pct')}><PZPercentInput value={pz.comissao_vendedor_pct} onChange={set('comissao_vendedor_pct')}/></PZField>
           <PZField label="Comissão indicação (%)"><PZPercentInput value={pz.comissao_indicacao_pct} onChange={set('comissao_indicacao_pct')}/></PZField>
-          <PZField label="Margem mínima (%)"><PZPercentInput value={params.margem_minima_pct} onChange={setParam('margem_minima_pct')}/></PZField>
         </div>
 
         <Button variant="ghost" size="sm" style={{ marginTop: 12 }} onClick={() => setMostrarParametros((v) => !v)}>
@@ -1670,8 +1664,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
               <div className="row gap-3">
                 <div>
                   <span className="up-eyebrow muted">Margem efetiva</span>
-                  <div className="cell-money" style={{ fontSize: 16, color: margemAbaixoMinima ? 'var(--vp-warning-ink)' : 'var(--vp-success)' }}>{fmtPct2(resultadoV2.precificacao.margemEfetivaPct)}</div>
-                  {margemMinima > 0 && <div className="small muted" style={{ marginTop: 2 }}>mínima {fmtPct2(margemMinima)}</div>}
+                  <div className="cell-money" style={{ fontSize: 16, color: resultadoV2.precificacao.margemEfetivaPct < 0 ? 'var(--vp-warning-ink)' : 'var(--vp-success)' }}>{fmtPct2(resultadoV2.precificacao.margemEfetivaPct)}</div>
                 </div>
                 <div><span className="up-eyebrow muted">Lucro final</span><div className="cell-money" style={{ fontSize: 16, color: resultadoV2.precificacao.lucroFinal >= 0 ? 'var(--vp-success)' : 'var(--vp-warning-ink)' }}>{fmtBRL2(resultadoV2.precificacao.lucroFinal)}</div></div>
               </div>
@@ -1684,11 +1677,6 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
             {resultadoV2.divisorValido && margemEfetivaV2Negativa && (
               <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
                 ⚠ Margem efetiva negativa — este cenário não deveria ser aprovado como está. Revise custos operacionais, markup/margem ou comissões.
-              </p>
-            )}
-            {resultadoV2.divisorValido && !margemEfetivaV2Negativa && margemAbaixoMinima && (
-              <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
-                ⚠ Margem efetiva ({fmtPct2(resultadoV2.precificacao.margemEfetivaPct)}) abaixo da mínima configurada ({fmtPct2(margemMinima)}). É possível aprovar mesmo assim, com confirmação.
               </p>
             )}
           </Card>

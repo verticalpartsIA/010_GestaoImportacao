@@ -37,7 +37,6 @@ function PZRevisaoValor({ numeroCotacao, res, onAplicar, pz, onAplicarColuna }) 
   /* Margem no total pedido (07/11/2026, pendência 11 de 5.2.10): PREVIA pelo motor oficial com o mark-up que leva ao
      total (PrecificacaoRevisaoMargem). O que o Financeiro precisa saber antes de preencher o mark-up: quanto sobra.
      Já alcançando o pedido, mostra a margem do cálculo atual. Só leitura; o valor exato sai ao clicar em Calcular. */
-  const margemMinimaPct = Number(((pz && pz.parametros_fiscais_snapshot) || {}).margem_minima_pct) || 0;
   let previa = null;
   const PM = window.PrecificacaoRevisaoMargem;
   const S = window.PrecificacaoElevadorStore;
@@ -46,10 +45,10 @@ function PZRevisaoValor({ numeroCotacao, res, onAplicar, pz, onAplicarColuna }) 
       const { baseInputs, params } = S.montarBaseInputs(pz);
       const difalAtualRs = pz.difal && pz.difal.responsavel_recolhimento === 'emitente_verticalparts' ? Number(pz.difal.valor_difal) || 0 : 0;
       previa = PM.previaMargem({
-        E, baseInputs, res, alvo, difalAtualRs, margemMinimaPct,
+        E, baseInputs, res, alvo, difalAtualRs,
         extras: {
           modoFormacaoPreco: 'planilha',
-          margemDesejadaPct: pz.margem_desejada_pct != null ? pz.margem_desejada_pct : (params.margemMinimaPct || 0.2),
+          margemDesejadaPct: pz.margem_desejada_pct != null ? pz.margem_desejada_pct : 0,
           contingenciaValor: pz.contingencia_valor,
           outrosCustosNaoRecuperaveisRs: pz.outros_custos_nao_recuperaveis_rs,
         },
@@ -58,11 +57,6 @@ function PZRevisaoValor({ numeroCotacao, res, onAplicar, pz, onAplicarColuna }) 
   }
   const margemAtualPct = res && res.precificacao && res.precificacao.margemEfetivaPct != null ? Number(res.precificacao.margemEfetivaPct) : null;
   const lucroAtualRs = res && res.precificacao && res.precificacao.lucroFinal != null ? Number(res.precificacao.lucroFinal) : null;
-  const avisoMinima = (
-    <div style={{ color: '#991b1b', marginTop: 4 }}>
-      ⚠ Abaixo da margem mínima ({pct(margemMinimaPct)}): ao aprovar a precificação o sistema pede confirmação, e a compra pode exigir a aprovação do CEO.
-    </div>
-  );
 
   /* Segunda opção (coluna "Alterar valor"): a diferença de cada equipamento é o valor pedido MENOS o que a coluna
      "VLR Proposta" mostra aqui (e não o valor da proposta, que pode estar defasado — caso VPPR-0993). */
@@ -119,13 +113,11 @@ function PZRevisaoValor({ numeroCotacao, res, onAplicar, pz, onAplicarColuna }) 
         <div style={{ marginTop: 8 }}>
           Margem resultante nesse total: <b>{pct(previa.margemPct)}</b> · lucro <b>{A.brl(previa.lucroRs)}</b>
           <span className="small muted"> (prévia; o DIFAL é estimado — o valor exato sai ao clicar em Calcular)</span>
-          {previa.abaixoDaMinima && avisoMinima}
         </div>
       )}
       {jaAlcanca && margemAtualPct != null && (
         <div style={{ marginTop: 8 }}>
           Margem no cálculo atual: <b>{pct(margemAtualPct)}</b>{lucroAtualRs != null && <> · lucro <b>{A.brl(lucroAtualRs)}</b></>}
-          {margemMinimaPct > 0 && margemAtualPct < margemMinimaPct && avisoMinima}
         </div>
       )}
       {colunaPatch && (

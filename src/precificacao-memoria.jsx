@@ -56,7 +56,10 @@ function PZMemoriaCalculo({ pz }) {
   }, [pz]);
 
   /* O mark-up é o do campo "MARK-UP" das Alavancas do Financeiro (margem sobre o PREÇO de venda). */
-  const markEff = Number(pz.mark_up_pct) || 0;
+  /* 13/11/2026 — com a coluna "Alterar valor" aplicada no último Calcular, o preço salvo fecha com o mark-up EFETIVO (conta inversa
+     do motor, resultado_v2.ajustes.markUpEfetivo), não com o digitado; a Memória usa o efetivo para bater com o preço do card. */
+  const aj = pz.resultado_v2 && pz.resultado_v2.ajustes;
+  const markEff = aj && aj.markUpEfetivo != null && isFinite(Number(aj.markUpEfetivo)) ? Number(aj.markUpEfetivo) : (Number(pz.mark_up_pct) || 0);
   const r = React.useMemo(() => {
     if (!base.r0) return null;
     try { return E.calcularPlanilha({ ...base.baseInputs, ...base.extras, markUpPct: markEff }); } catch (e) { return null; }

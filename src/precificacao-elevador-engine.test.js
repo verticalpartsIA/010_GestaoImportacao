@@ -317,9 +317,13 @@ test('Método da planilha — golden 963: reproduz o Excel (preço, impostos, co
   closeTo(r.precificacao.precoVendaProposta, 8961402.51, 0.02, 'Preço de venda (S66)');
   closeTo(r.precificacao.precoVendaPorEquipamento, 331903.80, 0.01, 'Preço por equipamento (U70)');
   closeTo(r.precificacao.impostosPagarProdutoRs, 447002.90, 0.02, 'Impostos a pagar produto (S49, sinal positivo = custo)');
-  closeTo(r.precificacao.totalComissaoRs, 179228.05, 0.02, 'Total comissões (U60)');
-  closeTo(r.precificacao.lucroFinal, 2629480.45, 0.02, 'Lucro da venda (S72)');
-  closeTo(r.precificacao.margemEfetivaPct, 0.29342287, 0.000001, 'Percentual de lucro líquido (U79)');
+  /* 13/11/2026 — comissão sobre o valor LÍQUIDO de impostos (decisão do Gelson; a planilha calcula sobre o bruto: U60 = 179.228,05,
+     S72 = 2.629.480,45). Tudo acima continua igual ao Excel; só comissões e lucro mudam, e o lucro muda exatamente pela diferença. */
+  const pv = r.precificacao;
+  closeTo(pv.baseComissaoRs, pv.precoVendaProposta - pv.impostosVendaProdutoBrutosRs, 0.005, 'base da comissão = preço − impostos de produto brutos');
+  closeTo(pv.totalComissaoRs, pv.baseComissaoRs * 0.02, 0.005, 'comissões = 2% (vendedor + indicação) da base líquida');
+  assert.ok(pv.totalComissaoRs < 179228.05, 'comissão sobre o líquido é menor que a do Excel (bruto)');
+  closeTo(pv.lucroFinal, 2629480.45 + (179228.05 - pv.totalComissaoRs), 0.02, 'Lucro = lucro do Excel + (comissão do Excel − comissão sobre o líquido)');
 });
 
 test('Método da planilha — o mark-up é margem sobre o PREÇO (divisor), e preço-alvo por equipamento fecha ao contrário', () => {
@@ -501,9 +505,13 @@ test('Método da planilha — golden 1048 (com 30% de serviços): reproduz o Exc
   closeTo(r.precificacao.precoVendaProduto, 780326.91, 0.01, 'Parcela de produto (S67)');
   closeTo(r.precificacao.impostosPagarProdutoRs, 6920.99, 0.01, 'Impostos a pagar produto líquidos de crédito (S49, positivo = custo)');
   closeTo(r.precificacao.impostosPagarServicosRs, 53508.13, 0.01, 'Impostos sobre serviços (S50)');
-  closeTo(r.precificacao.totalComissaoRs, 22295.05, 0.01, 'Total comissões (U60)');
-  closeTo(r.precificacao.lucroFinal, 163977.46, 0.01, 'Lucro (S72/S78)');
-  closeTo(r.precificacao.margemEfetivaPct, 0.1471, 1e-4, 'Margem = lucro ÷ preço (14,71%)');
+  // Comissão sobre o LÍQUIDO (decisão do Gelson, 13/11/2026): a planilha dá U60 = 22.295,05 e lucro 163.977,46 (comissão sobre o bruto).
+  const pv = r.precificacao;
+  closeTo(pv.impostosVendaProdutoBrutosRs, 78126.33, 0.01, 'Impostos de produto brutos (S39:S45 sem o crédito)');
+  closeTo(pv.baseComissaoRs, 1114752.73 - 78126.33, 0.02, 'Base da comissão = preço − impostos de produto (serviços não saem)');
+  closeTo(pv.totalComissaoRs, 20732.53, 0.01, 'Total comissões (2% da base líquida)');
+  closeTo(pv.lucroFinal, 163977.46 + (22295.05 - pv.totalComissaoRs), 0.01, 'Lucro = lucro do Excel + diferença da comissão');
+  closeTo(pv.margemEfetivaPct, pv.lucroFinal / pv.precoVendaProposta, 1e-9, 'Margem = lucro ÷ preço');
 });
 
 test('alavancaParaPreco — com serviços, o inverso do preço devolve o mark-up digitado (mesmo divisor do motor)', () => {
