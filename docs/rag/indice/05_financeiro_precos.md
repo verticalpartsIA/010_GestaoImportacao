@@ -5,8 +5,8 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/05_financeiro_precos.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `980586c`)
-- **Palavras:** 21870 · **blocos:** 369 · **seções com selo próprio:** 58 de 84
-- **Origem do selo dos blocos:** próprio 89 · da seção 180 · da seção-pai 0 · do cabeçalho 64 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 36
+- **Palavras:** 22010 · **blocos:** 369 · **seções com selo próprio:** 58 de 84
+- **Origem do selo dos blocos:** próprio 90 · da seção 179 · da seção-pai 0 · do cabeçalho 64 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 36
 - **Selo efetivo dos blocos:** Conferido 244 · Herdado 25 · Não verificado 64
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
@@ -38,7 +38,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 5.2.7 Dados — o que lê e o que grava | `docs/modulos/05_financeiro_precos.md#527-dados--o-que-lê-e-o-que-grava` | 3 | Conferido (uniforme) | 1 | b1 |
 | 5.2.8 Regras e armadilhas | `docs/modulos/05_financeiro_precos.md#528-regras-e-armadilhas` | 3 | — | 11 | c11 |
 | 5.2.9 Testes | `docs/modulos/05_financeiro_precos.md#529-testes` | 3 | Conferido (uniforme) | 7 | b1 s6 |
-| 5.2.10 Pendências e decisões | `docs/modulos/05_financeiro_precos.md#5210-pendências-e-decisões` | 3 | Não verificado (misto (vale o mais fraco)) | 20 | b4 s16 |
+| 5.2.10 Pendências e decisões | `docs/modulos/05_financeiro_precos.md#5210-pendências-e-decisões` | 3 | Não verificado (misto (vale o mais fraco)) | 20 | b5 s15 |
 | 5.2.11 Histórico | `docs/modulos/05_financeiro_precos.md#5211-histórico` | 3 | Não verificado (selo explícito da seção) | 2 | b1 s1 |
 | 5.3 Aval Financeiro | `docs/modulos/05_financeiro_precos.md#53-aval-financeiro` | 2 | — | 0 | — |
 | 5.3.1 O que é | `docs/modulos/05_financeiro_precos.md#531-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |

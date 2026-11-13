@@ -99,12 +99,20 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
   const comCeo = !!onCeo;
   const pvRes = res && res.precificacao ? res.precificacao : null;
   const P0 = pvRes ? Number(pvRes.precoVendaProposta) || 0 : 0;
-  const lucroTotal = pvRes ? Number(pvRes.lucroFinal) || 0 : 0;
+  const lucroTotalSalvo = pvRes ? Number(pvRes.lucroFinal) || 0 : 0; // lucro do ÚLTIMO Calcular (preço salvo P0)
   const comPct = pvRes && P0 > 0 ? ((Number(pvRes.comissaoConsultoriaRs) || 0) + (Number(pvRes.comissaoVendedorRs) || 0) + (Number(pvRes.comissaoIndicacaoRs) || 0)) / P0 : 0;
   /* 12/11/2026 — quanto de cada R$ de preço vira lucro: conta do motor (E.margemMarginal), que inclui imposto de serviços e DIFAL.
      A conta antiga (1 − % impostos de produto − % comissões) dava ~88% quando o real é ~72% e a tela prometia um lucro que o cálculo não entregava. */
   const m = pvRes ? (E && E.margemMarginal ? E.margemMarginal(pvRes) : 1 - (Number(pvRes.impostosPagarProdutoPct) || 0) - comPct) : 0;
   const totalCalc = linhas.reduce((s, l) => s + (Number(l.valor) || 0), 0);
+  /* 13/11/2026 — lucro e preços na MESMA base. Os preços das linhas já trazem as diferenças de "Alterar valor" digitadas e ainda não
+     calculadas (totalCalc), mas o lucro vinha do último Calcular: o líquido de cada equipamento, o desconto do CEO e o "Preço p/ Venda"
+     saíam de um lucro velho repartido por preços novos. Agora o lucro é projetado para o preço da tela (lucro salvo + m × diferença de
+     preço — conta exata, conferida contra o motor); sem diferença pendente é o lucro salvo, como antes. */
+  const ajPendente = Math.abs(totalCalc - P0) >= 0.005;
+  const lucroTotal = AJ && AJ.lucroProjetado
+    ? AJ.lucroProjetado({ lucroSalvo: lucroTotalSalvo, margemMarginal: m, precoSalvo: P0, precoAtual: totalCalc })
+    : lucroTotalSalvo;
   const valCeo = (l) => { const v = ceo ? ceo[l.keyCeo] : null; return v === undefined || v === null || v === '' ? null : Number(v); };
   /* Líquido de cada equipamento: rateio por participação no preço, exceto a mão de obra, que cada um paga a sua
      (E.ratearLucroPorEquipamento — a soma fecha SEMPRE no lucro total). */
@@ -192,6 +200,11 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
           </tbody>
         </table>
       </div>
+      {ajPendente && comCeo && (
+        <div className="pl-note" style={{ marginTop: 8 }}>
+          Lucro <b>projetado</b> para o total da tela ({fmtBRL2(totalCalc)}), com as diferenças digitadas em "Alterar valor": {fmtBRL2(lucroTotal)} (no último cálculo era {fmtBRL2(lucroTotalSalvo)}). Conta exata do motor; clique em <b>Calcular</b> para gravar.
+        </div>
+      )}
       {ajusteComCeo && (
         <div className="pl-note" style={{ marginTop: 8, color: '#991b1b' }}>
           ⚠ Há equipamento com "Alterar valor" e com "Lucro líquido desejado (CEO)" ao mesmo tempo. Use um só em cada equipamento.
