@@ -772,6 +772,59 @@
     return { destravada_em: now, destravada_por: por };
   }
 
+  /* Pedido de destrave (13/11/2026): o vendedor não destrava; pede aos Líderes (alçada propostas.destravar_aprovada). */
+  async function pedirDestrave(id, motivo) {
+    const txt = String(motivo || '').trim();
+    if (txt.length < 10) throw new Error('Explique o que precisa mudar e por quê (mínimo 10 letras).');
+    const c = sb(); if (!c) throw new Error('Supabase indisponível');
+    const { data: row } = await c.from('propostas').select('numero_documento, numero_cotacao').eq('id', id).maybeSingle();
+    const { data: lideres } = await c.from('alcadas_capacidade').select('perfil_id').eq('modulo', 'propostas').eq('capacidade', 'destravar_aprovada');
+    const ids = [...new Set((lideres || []).map((l) => l.perfil_id))];
+    let emails = [];
+    if (ids.length) { const { data: ps } = await c.from('perfis').select('email').in('id', ids); emails = (ps || []).map((p) => p.email).filter(Boolean); }
+    if (!emails.length) throw new Error('Nenhum Líder tem a alçada de destrave cadastrada. Avise o administrador.');
+    const por = (window.__VP_USER || {}).email || 'Um vendedor';
+    for (const em of emails) {
+      const { error } = await c.from('alertas').insert({
+        id: `prop-pedido-destrave-${id}-${em}-${Date.now()}`, level: 'warning', module: 'Comercial', resolved: false,
+        title: `Pedido de destrave — proposta ${row?.numero_documento || ''}`, sub: `${por} pede para editar: ${txt}`,
+        destinatario_email: em, rota: '/comercial/proposta-editor/' + encodeURIComponent(String(id)),
+      });
+      if (error) throw error;
+    }
+    try { window.VPLog?.registrar({ modulo: 'Propostas', acao: 'Pediu destrave da proposta', alvo: 'Proposta', alvo_id: id, detalhe: { motivo: txt, cotacao: row?.numero_cotacao || null } }); } catch (_) {}
+    return emails.length;
+  }
+
+  /* Divergência do fornecedor (13/11/2026): Aceitar / Recusar / Reabrir. Grava só `data_json.divergencias`, que NÃO é
+     campo travado — por isso vale com a proposta travada. Recusar avisa quem precisa pedir nova revisão da cotação. */
+  async function decidirDivergencia(id, divId, decisao) {
+    const PC = window.PropostaCotado; if (!PC) throw new Error('Módulo de divergências não carregado.');
+    const c = sb(); if (!c) throw new Error('Supabase indisponível');
+    const { data: row, error: e0 } = await c.from('propostas').select('data_json, numero_documento, numero_cotacao, log').eq('id', id).maybeSingle();
+    if (e0) throw e0; if (!row) throw new Error('Proposta não encontrada.');
+    const por = (window.__VP_USER || {}).email || null;
+    const dj = row.data_json || {};
+    const divs = PC.decidir(dj.divergencias, divId, decisao, por);
+    const alvo = divs.find((d) => d.id === divId);
+    const log = Array.isArray(row.log) ? row.log.slice() : [];
+    log.push({ status: 'divergencia_' + decisao, at: new Date().toISOString(), meta: { por, campo: alvo && alvo.rotulo, pedido: alvo && alvo.pedido, cotado: alvo && alvo.cotado } });
+    const { error } = await c.from('propostas').update({ data_json: { ...dj, divergencias: divs }, log }).eq('id', id);
+    if (error) throw error;
+    try { window.VPLog?.registrar({ modulo: 'Propostas', acao: 'Divergência do fornecedor: ' + decisao, alvo: 'Proposta', alvo_id: id, detalhe: { campo: alvo && alvo.rotulo, pedido: alvo && alvo.pedido, cotado: alvo && alvo.cotado } }); } catch (_) {}
+    if (decisao === 'recusada' && alvo) {
+      try {
+        await c.from('alertas').insert({
+          id: `prop-div-recusada-${id}-${divId}-${Date.now()}`, level: 'warning', module: 'Comercial', resolved: false,
+          title: `Pedir nova revisão da cotação Nº ${row.numero_cotacao || ''} a ${alvo.fornecedor || 'o fornecedor'}`,
+          sub: `${alvo.rotulo}: pedido "${alvo.pedido}", o fornecedor cotou "${alvo.cotado}". Proposta ${row.numero_documento || ''} segue bloqueada para envio.`,
+          rota: '/comercial/proposta-editor/' + encodeURIComponent(String(id)),
+        });
+      } catch (_) {}
+    }
+    return divs;
+  }
+
   /* Quem pode ocultar/reexibir equipamento na proposta (23/10/2026): o DONO (vendedor_id da proposta) ou quem tem a
      alçada de líder (propostas.destravar_aprovada — Regiane; Administrador passa). Proposta ainda não salva = do próprio
      usuário. Checagem de interface (RLS aberta, issue #571) — a trava de status continua em salvar(). */
@@ -837,10 +890,18 @@
       let destravadaAgora = false;
       let numeroFixo = null; // número da proposta que já existe: nunca é trocado por salvar()
       if (editId) {
-        const { data: atual } = await c.from('propostas').select('status, destravada_em, numero_documento').eq('id', editId).maybeSingle();
+        const { data: atual } = await c.from('propostas').select('status, destravada_em, numero_documento, numero_cotacao, precificacao_id, proposal_type, data_json').eq('id', editId).maybeSingle();
         numeroFixo = (atual && atual.numero_documento) || null;
         if (atual && STATUS_TRAVADOS.includes(atual.status) && !atual.destravada_em) {
           return { erro: 'Proposta enviada ao cliente está travada para edição. Peça o destrave ao Líder (informando o motivo).' };
+        }
+        /* REGRA (Gelson, 13/11/2026): proposta que nasceu da cotação (tem Nº de cotação e Precificação) não muda o que foi
+           cotado — especificações e acabamentos — sem o destrave do Líder, nem em rascunho. Conferido aqui, não só na tela. */
+        if (atual && !atual.destravada_em && eq === 'elevador' && window.PropostaCotado && window.PropostaCotado.ehCotada(atual)) {
+          const alteradas = window.PropostaCotado.alteracoesProtegidas((atual.data_json || {}).elevador, (data || {}).elevador);
+          if (alteradas.length) {
+            return { erro: `Esta proposta nasceu da cotação e o que foi cotado está travado (${alteradas.join(' e ')}). Peça o destrave ao Líder (informando o motivo).` };
+          }
         }
         if (atual && atual.destravada_em) destravadaAgora = true;
       }
@@ -1029,6 +1090,6 @@
     salvar, numeroPadrao,
     resolverEscopoVisibilidade, resetEscopoVisibilidadeCache,
     resolverPerfilAtual, temCapacidade, podeConcederAlcadas, resetAlcadasCache,
-    listarAlcadas, concederAlcada, destravar, excluir, podeOcultarEquipamento,
+    listarAlcadas, concederAlcada, destravar, pedirDestrave, decidirDivergencia, excluir, podeOcultarEquipamento,
   };
 }());

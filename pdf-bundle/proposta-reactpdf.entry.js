@@ -478,7 +478,7 @@ function PgAcabamento(S, data) {
           b.nome ? h(Text, { style: S.subTitle, key: 'st' }, OPa.tituloPerfil(b)) : null,
           Tabela2(S, [{ label: 'Item', flex: 1 }, { label: b.rotulo, flex: 1 }], b.linhas, 't'),
         ].filter(Boolean)))
-      : [Vazio(S, 'Preencha os acabamentos na aba "Acabamentos".')]),
+      : [Vazio(S)]),
     PdfFooter(S),
   ]);
 }
