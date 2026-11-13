@@ -29,34 +29,30 @@ const calcula = (difalCustoRs) => E.calcularV2({ ...BASE, difalCustoRs, ...EXTRA
 test('previaMargem — o total pedido vira o preço e a margem é a efetiva do motor oficial (sem DIFAL)', () => {
   const res = calcula(0);
   const alvo = res.precificacao.precoVendaProposta * 1.05;
-  const p = M.previaMargem({ E, baseInputs: BASE, extras: EXTRAS, res, alvo, difalAtualRs: 0, margemMinimaPct: 0.15 });
+  const p = M.previaMargem({ E, baseInputs: BASE, extras: EXTRAS, res, alvo, difalAtualRs: 0 });
   closeTo(p.precoRs, alvo, 0.05, 'o preço da prévia fecha no total pedido');
   assert.ok(p.markUpPct > BASE.markUpPct, 'pedir mais exige mark-up maior');
   assert.ok(p.margemPct > res.precificacao.margemEfetivaPct, 'e a margem sobe');
-  assert.equal(p.abaixoDaMinima, false);
   // é exatamente o que o motor devolve com esse mark-up
   const direto = E.calcularV2({ ...BASE, difalCustoRs: 0, ...EXTRAS, markUpPct: p.markUpPct });
   closeTo(p.margemPct, direto.precificacao.margemEfetivaPct, 1e-12, 'mesma margem do motor');
   closeTo(p.lucroRs, direto.precificacao.lucroFinal, 1e-6, 'mesmo lucro do motor');
 });
 
-test('previaMargem — pedido que reduz o preço abaixo do mínimo sinaliza "abaixo da mínima"', () => {
+test('previaMargem — pedido que reduz o preço reduz a margem (não existe "margem mínima": 13/11/2026)', () => {
   const res = calcula(0);
   const base = res.precificacao.precoVendaProposta;
-  // margem mínima exigida acima da margem atual (≈29%): qualquer total vira "abaixo da mínima"
-  const p = M.previaMargem({ E, baseInputs: BASE, extras: EXTRAS, res, alvo: base * 0.93, difalAtualRs: 0, margemMinimaPct: 0.5 });
-  assert.equal(p.abaixoDaMinima, true);
+  const p = M.previaMargem({ E, baseInputs: BASE, extras: EXTRAS, res, alvo: base * 0.93, difalAtualRs: 0 });
   assert.ok(p.margemPct < res.precificacao.margemEfetivaPct, 'preço menor, margem menor');
-  const semMinimo = M.previaMargem({ E, baseInputs: BASE, extras: EXTRAS, res, alvo: base * 0.93, difalAtualRs: 0, margemMinimaPct: 0 });
-  assert.equal(semMinimo.abaixoDaMinima, false, 'sem margem mínima cadastrada não há alerta');
+  assert.equal(p.abaixoDaMinima, undefined, 'a prévia não carrega mais o sinal de "abaixo da mínima"');
 });
 
 test('previaMargem — o DIFAL da VerticalParts acompanha o preço e reduz a margem', () => {
   const comDifalAtual = 1433824.4;
   const res = calcula(comDifalAtual);
   const alvo = res.precificacao.precoVendaProposta * 1.05;
-  const semDifal = M.previaMargem({ E, baseInputs: BASE, extras: EXTRAS, res: calcula(0), alvo, difalAtualRs: 0, margemMinimaPct: 0.15 });
-  const comDifal = M.previaMargem({ E, baseInputs: BASE, extras: EXTRAS, res, alvo, difalAtualRs: comDifalAtual, margemMinimaPct: 0.15 });
+  const semDifal = M.previaMargem({ E, baseInputs: BASE, extras: EXTRAS, res: calcula(0), alvo, difalAtualRs: 0 });
+  const comDifal = M.previaMargem({ E, baseInputs: BASE, extras: EXTRAS, res, alvo, difalAtualRs: comDifalAtual });
   assert.ok(comDifal.margemPct < semDifal.margemPct, 'com DIFAL a margem é menor');
   closeTo(comDifal.precoRs, alvo, 0.05, 'e o preço ainda fecha no total pedido');
   // o custo do DIFAL cresce com o preço (razão custo/equipamento constante): lucro cai mais do que sem acompanhar
@@ -66,7 +62,7 @@ test('previaMargem — o DIFAL da VerticalParts acompanha o preço e reduz a mar
 
 test('previaMargem — sem alavanca válida (total abaixo do custo) ou sem dados, devolve null', () => {
   const res = calcula(0);
-  assert.equal(M.previaMargem({ E, baseInputs: BASE, extras: EXTRAS, res, alvo: 1000, difalAtualRs: 0, margemMinimaPct: 0.15 }), null);
+  assert.equal(M.previaMargem({ E, baseInputs: BASE, extras: EXTRAS, res, alvo: 1000, difalAtualRs: 0 }), null);
   assert.equal(M.previaMargem({ E, baseInputs: BASE, extras: EXTRAS, res: null, alvo: 5e6, difalAtualRs: 0 }), null);
   assert.equal(M.previaMargem({ E: null, baseInputs: BASE, extras: EXTRAS, res, alvo: 5e6, difalAtualRs: 0 }), null);
 });

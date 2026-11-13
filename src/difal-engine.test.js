@@ -46,23 +46,23 @@ test('calcular — uso/consumo sem informar contribuinte, pede antes de decidir 
 });
 
 test('calcular — Base Única: DIFAL = valor × (aliq interna − aliq interestadual)', () => {
-  const r = D.calcular({ ufOrigem: 'SP', ufFaturamento: 'RJ', finalidadeCompra: 'uso_consumo_ativo', contribuinteIcms: true, valorOperacao: 1000, origemMercadoria: 'Estrangeira', estadoDestino: estadoBaseUnica });
+  const r = D.calcular({ ufOrigem: 'SP', ufFaturamento: 'RJ', finalidadeCompra: 'uso_consumo_ativo', contribuinteIcms: false, valorOperacao: 1000, origemMercadoria: 'Estrangeira', estadoDestino: estadoBaseUnica });
   assert.equal(r.difal_aplicavel, true);
   assert.ok(Math.abs(r.valor_difal - 140) < 0.01);
 });
 
 test('calcular — Base Única com FCP soma o fundo de combate à pobreza', () => {
-  const r = D.calcular({ ufOrigem: 'SP', ufFaturamento: 'RJ', finalidadeCompra: 'uso_consumo_ativo', contribuinteIcms: true, valorOperacao: 1000, origemMercadoria: 'Estrangeira', estadoDestino: estadoBaseUnicaFcp });
+  const r = D.calcular({ ufOrigem: 'SP', ufFaturamento: 'RJ', finalidadeCompra: 'uso_consumo_ativo', contribuinteIcms: false, valorOperacao: 1000, origemMercadoria: 'Estrangeira', estadoDestino: estadoBaseUnicaFcp });
   assert.ok(Math.abs(r.valor_difal - 160) < 0.01);
 });
 
 test('calcular — Base Dupla Simples', () => {
-  const r = D.calcular({ ufOrigem: 'SP', ufFaturamento: 'RJ', finalidadeCompra: 'uso_consumo_ativo', contribuinteIcms: true, valorOperacao: 1000, origemMercadoria: 'Estrangeira', estadoDestino: estadoBaseDuplaSimples });
+  const r = D.calcular({ ufOrigem: 'SP', ufFaturamento: 'RJ', finalidadeCompra: 'uso_consumo_ativo', contribuinteIcms: false, valorOperacao: 1000, origemMercadoria: 'Estrangeira', estadoDestino: estadoBaseDuplaSimples });
   assert.ok(Math.abs(r.valor_difal - 163.9024390) < 0.01);
 });
 
 test('calcular — Base Dupla Composta', () => {
-  const r = D.calcular({ ufOrigem: 'SP', ufFaturamento: 'RJ', finalidadeCompra: 'uso_consumo_ativo', contribuinteIcms: true, valorOperacao: 1000, origemMercadoria: 'Estrangeira', estadoDestino: estadoBaseDuplaComposta });
+  const r = D.calcular({ ufOrigem: 'SP', ufFaturamento: 'RJ', finalidadeCompra: 'uso_consumo_ativo', contribuinteIcms: false, valorOperacao: 1000, origemMercadoria: 'Estrangeira', estadoDestino: estadoBaseDuplaComposta });
   assert.ok(Math.abs(r.valor_difal - 170.7317073) < 0.01);
 });
 
@@ -71,6 +71,10 @@ test('calcular — contribuinte=true: DIFAL é responsabilidade do cliente, sem 
   assert.equal(r.responsavel_recolhimento, 'destinatario_cliente');
   assert.equal(r.exige_gnre_emitente, false);
   assert.equal(r.bloqueio_faturamento, false);
+  // 13/11/2026 (Gelson): cliente contribuinte = DIFAL R$ 0,00 para a VerticalParts (como a planilha); o devido ao cliente fica só de referência
+  assert.equal(r.valor_difal, 0);
+  assert.equal(r.difal_aplicavel, false);
+  assert.ok(r.detalhe.valor_referencia_cliente > 0);
 });
 
 // Regressão do caso mais delicado do motor: cliente não-contribuinte —

@@ -29,6 +29,19 @@ window.BoletosAvisosStore = (() => {
     return data || [];
   }
 
+  /* Todos os boletos em aberto (para o resumo financeiro). Lê de 1.000 em 1.000: passando disso não corta em silêncio. */
+  async function boletosAbertos() {
+    const PAG = 1000; const out = [];
+    for (let off = 0; ; off += PAG) {
+      const { data, error } = await sb().from('boletos_avisos_boletos')
+        .select('codigo_lancamento_omie,codigo_cliente_omie,data_vencimento,valor').eq('aberto', true).order('codigo_lancamento_omie').range(off, off + PAG - 1);
+      if (error) throw new Error(error.message);
+      out.push(...(data || []));
+      if (!data || data.length < PAG) break;
+    }
+    return out;
+  }
+
   /* Log de envios do cliente + a resposta dele (e-mail de entrada ligado ao envio pelo read-inbox) */
   async function logDoCliente(cod) {
     const { data: envios, error } = await sb().from('boletos_avisos_envios').select('*').eq('codigo_cliente_omie', cod).order('criado_em', { ascending: false }).limit(100);
@@ -78,5 +91,5 @@ window.BoletosAvisosStore = (() => {
   }
   async function simularAutomatico() { return chamar('automatico', { simular: true }); }
 
-  return { pode, listarClientes, boletosDoCliente, logDoCliente, config, salvarConfig, sincronizar, enviarAviso, simularAutomatico, quem };
+  return { pode, listarClientes, boletosAbertos, boletosDoCliente, logDoCliente, config, salvarConfig, sincronizar, enviarAviso, simularAutomatico, quem };
 })();

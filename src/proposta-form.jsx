@@ -750,53 +750,11 @@ function S_RepText({ items, setItems, addLabel, placeholder, single = false }) {
   );
 }
 
-/* ---- Desconto por equipamento (Frentes B + C do estudo do editor de
-   Proposta) — só aparece quando a cotação tem mais de 1 equipamento
-   (v.itens existe, ver proposta-heranca.js). Pedido de desconto vira uma
-   decisão pendente na Central de Decisões (≤7% Gestor Comercial, >7% só
-   CEO) — nada muda de preço até alguém com a alçada certa aprovar. ---- */
-function S_ItemDescontoModal({ item, onClose, onSolicitar }) {
-  const [tipo, setTipo] = React.useState("percentual");
-  const [valor, setValor] = React.useState("");
-  const [motivo, setMotivo] = React.useState("");
-  const [saving, setSaving] = React.useState(false);
-  const engine = window.PropostaDesconto;
-  const pct = engine ? engine.pctDoDesconto(item, tipo, valor) : 0;
-  const papel = engine ? engine.papelParaPct(pct) : null;
-  const submit = async () => {
-    setSaving(true);
-    try { await onSolicitar({ tipo, valor, motivo }); onClose(); }
-    catch (e) { window.toast?.("Erro: " + (e.message || e), "error"); }
-    finally { setSaving(false); }
-  };
-  return (
-    <Modal title={`Solicitar desconto — ${item.id || item.equipamento}`} onClose={onClose} width={440}
-      footer={<>
-        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button variant="primary" onClick={submit} disabled={saving || !(Number(valor) > 0)}>{saving ? "Enviando…" : "Enviar para aprovação"}</Button>
-      </>}>
-      <div className="stack" style={{ gap: 12 }}>
-        <PEField label="Tipo de desconto">
-          <select className="pe-input" value={tipo} onChange={(e) => setTipo(e.target.value)}>
-            <option value="percentual">Percentual (%)</option>
-            <option value="valor">Valor fixo (R$)</option>
-          </select>
-        </PEField>
-        <PEField label={tipo === "percentual" ? "Desconto (%)" : "Desconto (R$)"}>
-          <PETextInput value={valor} onChange={setValor} placeholder={tipo === "percentual" ? "5" : "15.000,00"}/>
-        </PEField>
-        <PEField label="Motivo"><PETextarea rows={2} value={motivo} onChange={setMotivo} placeholder="Ex.: pedido do cliente na revisão da proposta"/></PEField>
-        {Number(valor) > 0 && (
-          <div className="small muted" style={{ padding: "8px 10px", background: "var(--vp-gray-50)", borderRadius: 6 }}>
-            Equivale a {(pct * 100).toFixed(1)}% do valor original — precisa de aprovação do{" "}
-            <b>{papel === "ceo" ? "CEO (acima de 7%)" : "Gestor Comercial"}</b>.
-          </div>
-        )}
-      </div>
-    </Modal>
-  );
-}
-
+/* ---- Desconto por equipamento: desde 13/11/2026 é um PEDIDO ao Financeiro (Gelson: "desconto se comporta igual ao Alterar valor, só que
+   para baixo"). O Comercial não aplica nem aprova desconto na proposta: pede o valor menor (S_AumentoModal modo="desconto"), o Financeiro
+   aceita (ajusta e calcula na Precificação; o preço novo chega à proposta) ou recusa com motivo, o gestor só é avisado e a proposta fica
+   travada para envio enquanto o pedido estiver aberto. O modal antigo (aprovação por alçada na Central de Decisões, ≤7% Gestor / >7% CEO)
+   foi removido; S_ItemDescontoLog continua mostrando o histórico dos descontos já aplicados. ---- */
 function S_ItemDescontoLog({ log }) {
   const [aberto, setAberto] = React.useState(false);
   if (!log || !log.length) return null;
@@ -825,12 +783,13 @@ function S_ItemDescontoLog({ log }) {
    pedido volta ao Financeiro (Precificação), que recalcula impostos/DIFAL juntos;
    depois o dono/Líder clica em "Herdar Dados". Regras em proposta-aumento-calc.js,
    gravação e avisos em proposta-aumento-store.js. Vale com a proposta travada. ---- */
-function S_AumentoModal({ titulo, valorAtual, onClose, onEnviar }) {
+function S_AumentoModal({ titulo, valorAtual, onClose, onEnviar, modo = "aumento" }) {
   const [valor, setValor] = React.useState("");
   const [motivo, setMotivo] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const A = window.PropostaAumento;
-  const v = valor.trim() ? A.validarPedido(valorAtual, valor) : null;
+  const desc = modo === "desconto";
+  const v = valor.trim() ? A.validarPedido(valorAtual, valor, modo) : null;
   const submit = async () => {
     setSaving(true);
     try { await onEnviar({ valorPedido: A.parseNum(valor), motivo }); onClose(); }
@@ -838,26 +797,28 @@ function S_AumentoModal({ titulo, valorAtual, onClose, onEnviar }) {
     finally { setSaving(false); }
   };
   return (
-    <Modal title={`Alterar valor — ${titulo}`} onClose={onClose} width={460}
+    <Modal title={`${desc ? "Solicitar desconto" : "Alterar valor"} — ${titulo}`} onClose={onClose} width={460}
       footer={<>
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>
         <Button variant="primary" onClick={submit} disabled={saving || !(v && v.ok)}>{saving ? "Enviando…" : "Enviar ao Financeiro"}</Button>
       </>}>
       <div className="stack" style={{ gap: 12 }}>
         <div className="small muted" style={{ padding: "8px 10px", background: "var(--vp-gray-50)", borderRadius: 6 }}>
-          O valor não muda na proposta agora. O Financeiro ajusta na Precificação (impostos e encargos recalculam juntos) e avisa você para clicar em <b>Herdar Dados</b>.
+          {desc
+            ? <>O valor não muda na proposta agora. O <b>Financeiro avalia na Precificação</b> (impostos e encargos recalculam juntos) e <b>aceita ou recusa</b> com motivo. <b>Enquanto o pedido estiver aberto, a proposta fica travada para envio ao cliente.</b></>
+            : <>O valor não muda na proposta agora. O Financeiro ajusta na Precificação (impostos e encargos recalculam juntos) e avisa você para clicar em <b>Herdar Dados</b>.</>}
         </div>
         <div>Valor atual: <b>{A.brl(valorAtual)}</b></div>
-        <PEField label="Novo valor desejado">
-          <PETextInput value={valor} onChange={setValor} placeholder="232.501,04"/>
+        <PEField label={desc ? "Novo valor desejado (menor que o atual)" : "Novo valor desejado"}>
+          <PETextInput value={valor} onChange={setValor} placeholder={desc ? "200.000,00" : "232.501,04"}/>
         </PEField>
         {v && !v.ok && <div className="small" style={{ color: "#b00020" }}>{v.erro}</div>}
         {v && v.ok && (
           <div className="small muted" style={{ padding: "8px 10px", background: "var(--vp-gray-50)", borderRadius: 6 }}>
-            Aumento de <b>{A.brl(v.variacaoRs)}</b> ({(v.variacaoPct * 100).toFixed(1)}%).
+            {desc ? "Desconto" : "Aumento"} de <b>{A.brl(v.variacaoRs)}</b> ({(v.variacaoPct * 100).toFixed(1)}%).
           </div>
         )}
-        <PEField label="Motivo (opcional)"><PETextarea rows={2} value={motivo} onChange={setMotivo} placeholder="Ex.: cliente aceitou pagar mais pela entrega mais rápida"/></PEField>
+        <PEField label={desc ? "Motivo (ajuda o Financeiro a decidir)" : "Motivo (opcional)"}><PETextarea rows={2} value={motivo} onChange={setMotivo} placeholder={desc ? "Ex.: cliente fecha hoje com este valor" : "Ex.: cliente aceitou pagar mais pela entrega mais rápida"}/></PEField>
       </div>
     </Modal>
   );
@@ -870,7 +831,8 @@ function S_AumentoPendente({ alvo, onCancelar, podePedir }) {
   return (
     <div className="row gap-2" style={{ alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
       <span className="pe-tag" style={{ background: "var(--vp-warning-tint, #f8eed7)" }}>
-        Aguardando Financeiro — pedido de {A.brl(p.valorPedido)} (hoje {A.brl(p.valorAtual)})
+        {p.tipo === "desconto" ? "Desconto pedido ao Financeiro" : "Aguardando Financeiro"} — pedido de {A.brl(p.valorPedido)} (hoje {A.brl(p.valorAtual)})
+        {p.tipo === "desconto" ? " · proposta travada para envio até a resposta" : ""}
       </span>
       {podePedir && <button type="button" className="pe-acab-addfield" style={{ marginTop: 0 }} onClick={onCancelar}>Cancelar pedido</button>}
     </div>
@@ -881,10 +843,13 @@ function S_AumentoLog({ log }) {
   const [aberto, setAberto] = React.useState(false);
   const A = window.PropostaAumento;
   if (!log || !log.length) return null;
-  const ROT = { solicitado: "Aumento pedido", cancelado: "Pedido cancelado", atendido: "Financeiro alterou" };
+  const ROT = { solicitado: "Aumento pedido", cancelado: "Pedido cancelado", atendido: "Financeiro alterou", recusado: "Financeiro recusou" };
+  const rotulo = (l) => (l.acao === "solicitado" && l.tipo === "desconto" ? "Desconto pedido" : (ROT[l.acao] || l.acao));
   const linha = (l) => l.acao === "atendido"
     ? `${A.brl(l.valorAnterior)} → ${A.brl(l.valorNovo)} (pedido: ${A.brl(l.valorPedido)})`
-    : `${A.brl(l.valorAtual)} → ${A.brl(l.valorPedido)}${l.motivo ? ` (${l.motivo})` : ""}`;
+    : l.acao === "recusado"
+      ? `${A.brl(l.valorAtual)} → ${A.brl(l.valorPedido)} recusado${l.motivo ? ` — motivo: ${l.motivo}` : ""}`
+      : `${A.brl(l.valorAtual)} → ${A.brl(l.valorPedido)}${l.motivo ? ` (${l.motivo})` : ""}`;
   return (
     <div style={{ marginTop: 4 }}>
       <button type="button" className="pe-acab-addfield" style={{ marginTop: 0, fontSize: 11 }} onClick={() => setAberto((x) => !x)}>
@@ -893,7 +858,7 @@ function S_AumentoLog({ log }) {
       {aberto && (
         <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 11.5, color: "var(--fg2)" }}>
           {log.slice().reverse().map((l, i) => (
-            <li key={i}>{ROT[l.acao] || l.acao} por <b>{l.por || "—"}</b> em {l.em ? new Date(l.em).toLocaleString("pt-BR") : "—"} — {linha(l)}</li>
+            <li key={i}>{rotulo(l)} por <b>{l.por || "—"}</b> em {l.em ? new Date(l.em).toLocaleString("pt-BR") : "—"} — {linha(l)}</li>
           ))}
         </ul>
       )}
@@ -902,8 +867,8 @@ function S_AumentoLog({ log }) {
 }
 
 function S_ItensValores({ eq, itens, onChangeItens, proposta, ocultos, onToggleOculto, bloqueioOcultar, ocupado, podeOcultarMais, onAplicarLocal, podePedirAumento }) {
-  const [modalItem, setModalItem] = React.useState(null);
   const [modalAumento, setModalAumento] = React.useState(null);
+  const [modalDesconto, setModalDesconto] = React.useState(null); // 13/11/2026: desconto = pedido ao Financeiro (não aprova mais por alçada)
   const ocSet = new Set(ocultos || []);
   const engine = window.PropostaDesconto;
   const fmt = (n) => "R$ " + (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -924,23 +889,20 @@ function S_ItensValores({ eq, itens, onChangeItens, proposta, ocultos, onToggleO
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const solicitar = async (item, payload) => {
-    const atualizado = await engine.solicitar(proposta, item, payload);
-    onChangeItens(itens.map((it) => (it.id === item.id ? atualizado : it)));
-    window.toast?.("Pedido de desconto enviado para aprovação.", "success");
-  };
   const remover = (item) => {
     const atualizado = engine.removerDesconto(item);
     onChangeItens(itens.map((it) => (it.id === item.id ? atualizado : it)));
   };
   const AUM = window.PropostaAumentoStore;
-  const pedirAumento = async (item, { valorPedido, motivo }) => {
-    const r = await AUM.solicitar({ propostaId: proposta.id, nivel: "equipamento", itemId: item.id, valorAtual: engine.parseNum(item.valorUnit), valorPedido, motivo });
+  const pedirAumento = async (item, { valorPedido, motivo }, modo = "aumento") => {
+    const r = await AUM.solicitar({ propostaId: proposta.id, nivel: "equipamento", itemId: item.id, valorAtual: engine.parseNum(item.valorUnit), valorPedido, motivo, modo });
     onAplicarLocal(r.data_json[eq].valores.itens);
-    window.toast?.("Pedido enviado ao Financeiro. Você será avisado quando a Precificação for atualizada.", "success");
+    window.toast?.(modo === "desconto"
+      ? "Desconto pedido ao Financeiro. A proposta fica travada para envio até a resposta."
+      : "Pedido enviado ao Financeiro. Você será avisado quando a Precificação for atualizada.", "success");
   };
   const cancelarAumento = async (item) => {
-    if (!window.confirm(`Cancelar o pedido de aumento de ${item.id}?`)) return;
+    if (!window.confirm(`Cancelar o pedido de ${item.aumentoPendente && item.aumentoPendente.tipo === "desconto" ? "desconto" : "aumento"} de ${item.id}?`)) return;
     try {
       const r = await AUM.cancelar({ propostaId: proposta.id, nivel: "equipamento", itemId: item.id });
       onAplicarLocal(r.data_json[eq].valores.itens);
@@ -975,9 +937,11 @@ function S_ItensValores({ eq, itens, onChangeItens, proposta, ocultos, onToggleO
               {it.descontoPendente && <span className="pe-tag" style={{ background: "var(--vp-warning-tint, #f8eed7)" }}>Aguardando aprovação ({it.descontoPendente.papel === "ceo" ? "CEO" : "Gestor Comercial"})</span>}
             </div>
             <div className="row gap-2" style={{ marginTop: 8 }}>
-              {!it.descontoPendente && (
-                <button type="button" className="pe-acab-addfield" onClick={() => setModalItem(it)}>
-                  {temDesconto ? "Alterar desconto" : "Solicitar desconto"}
+              {AUM && podePedirAumento && !oculto && !it.aumentoPendente && !it.descontoPendente && (
+                <button type="button" className="pe-acab-addfield" disabled={!proposta.id || qtd !== 1}
+                  title={!proposta.id ? "Salve a proposta antes de pedir desconto" : qtd !== 1 ? "Linha com mais de um equipamento: peça pela proposta inteira" : "Pede ao Financeiro um valor menor para este equipamento; ele aceita ou recusa na Precificação"}
+                  onClick={() => setModalDesconto(it)}>
+                  Solicitar desconto
                 </button>
               )}
               {temDesconto && !it.descontoPendente && (
@@ -1005,8 +969,9 @@ function S_ItensValores({ eq, itens, onChangeItens, proposta, ocultos, onToggleO
           </React.Fragment>
         );
       })}
-      {modalItem && (
-        <S_ItemDescontoModal item={modalItem} onClose={() => setModalItem(null)} onSolicitar={(payload) => solicitar(modalItem, payload)}/>
+      {modalDesconto && (
+        <S_AumentoModal modo="desconto" titulo={modalDesconto.id || modalDesconto.equipamento} valorAtual={engine.parseNum(modalDesconto.valorUnit)}
+          onClose={() => setModalDesconto(null)} onEnviar={(payload) => pedirAumento(modalDesconto, payload, "desconto")}/>
       )}
       {modalAumento && (
         <S_AumentoModal titulo={modalAumento.id || modalAumento.equipamento} valorAtual={engine.parseNum(modalAumento.valorUnit)}
@@ -1162,15 +1127,18 @@ As parcelas serão recalculadas.`;
   /* Pedido de aumento da proposta INTEIRA (valor total) — o do equipamento fica em cada card. */
   const AUM = window.PropostaAumentoStore;
   const [modalAumentoTotal, setModalAumentoTotal] = React.useState(false);
+  const [modalDescontoTotal, setModalDescontoTotal] = React.useState(false);
   const aplicarItensLocal = (novos) => set(`${eq}.valores.itens`, novos);
-  const pedirAumentoTotal = async ({ valorPedido, motivo }) => {
-    const r = await AUM.solicitar({ propostaId: recordId, nivel: "proposta", valorAtual: totalEq, valorPedido, motivo });
+  const pedirAumentoTotal = async ({ valorPedido, motivo }, modo = "aumento") => {
+    const r = await AUM.solicitar({ propostaId: recordId, nivel: "proposta", valorAtual: totalEq, valorPedido, motivo, modo });
     set("aumentoPendente", r.data_json.aumentoPendente);
     set("aumentoLog", r.data_json.aumentoLog);
-    window.toast?.("Pedido enviado ao Financeiro. Você será avisado quando a Precificação for atualizada.", "success");
+    window.toast?.(modo === "desconto"
+      ? "Desconto pedido ao Financeiro. A proposta fica travada para envio até a resposta."
+      : "Pedido enviado ao Financeiro. Você será avisado quando a Precificação for atualizada.", "success");
   };
   const cancelarAumentoTotal = async () => {
-    if (!window.confirm("Cancelar o pedido de aumento do valor total?")) return;
+    if (!window.confirm(`Cancelar o pedido de ${d.aumentoPendente && d.aumentoPendente.tipo === "desconto" ? "desconto" : "aumento"} do valor total?`)) return;
     try {
       const r = await AUM.cancelar({ propostaId: recordId, nivel: "proposta" });
       set("aumentoPendente", null);
@@ -1197,6 +1165,11 @@ As parcelas serão recalculadas.`;
                 title={recordId ? "Pede ao Financeiro um valor total maior (o valor atual fica no histórico)" : "Salve a proposta antes de pedir alteração de valor"}
                 onClick={() => setModalAumentoTotal(true)}>Alterar valor da proposta</button>
             )}
+            {!d.aumentoPendente && (
+              <button type="button" className="pe-acab-addfield" style={{ marginTop: 0 }} disabled={!recordId}
+                title={recordId ? "Pede ao Financeiro um valor total menor; ele aceita ou recusa na Precificação" : "Salve a proposta antes de pedir desconto"}
+                onClick={() => setModalDescontoTotal(true)}>Solicitar desconto da proposta</button>
+            )}
           </div>
           <S_AumentoPendente alvo={d} podePedir={podeOcultar} onCancelar={cancelarAumentoTotal}/>
           <S_AumentoLog log={d.aumentoLog}/>
@@ -1205,6 +1178,10 @@ As parcelas serão recalculadas.`;
       {modalAumentoTotal && (
         <S_AumentoModal titulo="valor total da proposta" valorAtual={totalEq}
           onClose={() => setModalAumentoTotal(false)} onEnviar={pedirAumentoTotal}/>
+      )}
+      {modalDescontoTotal && (
+        <S_AumentoModal modo="desconto" titulo="valor total da proposta" valorAtual={totalEq}
+          onClose={() => setModalDescontoTotal(false)} onEnviar={(payload) => pedirAumentoTotal(payload, "desconto")}/>
       )}
       {temItens ? (
         <S_ItensValores
