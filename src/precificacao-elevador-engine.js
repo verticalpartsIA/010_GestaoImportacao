@@ -145,10 +145,12 @@
     const K57_comissaoIndicacaoPct = Number(inputs.comissaoIndicacaoPct ?? p.comissaoIndicacaoPct) || 0;
 
     const K50_impostosPagarProdutoPct = K39_icmsVendaPct + K40_ipiVendaPct + K41_pisVendaPct + K42_cofinsVendaPct + K43_irpjVendaPct + K44_csllVendaPct + K45_irpjAdicionalPct;
-    /* 19/10/2026 — REGRA do Financeiro: ICMS, IPI, PIS, COFINS, IRPJ, CSLL e o restante incidem SÓ sobre o preço do PRODUTO;
-       os impostos de serviços (16%) incidem SÓ sobre o preço dos SERVIÇOS. A formação do preço usa a mesma regra (antes os impostos
-       de produto valiam sobre 100% do preço e os de serviços não entravam). Sem serviços (% = 0) o resultado é o de sempre. */
-    const K63_subTotalPct = (1 - percentualServicos) * K50_impostosPagarProdutoPct + percentualServicos * K51_impostosServicosPct + K53_markUpPct;
+    /* 13/11/2026 — DECISÃO do Gelson: "o cálculo é o da planilha, sempre". O divisor da planilha (K64 = K49 + K52, K66 = 100% − K64)
+       soma os impostos de PRODUTO (K49) e o MARK-UP sobre 100% do preço; o imposto de SERVIÇOS (K50) NÃO entra no divisor — ele só
+       aparece depois, na apuração do lucro (S50 = −parcela de serviços × K50). Isto REVOGA a ponderação de 19/10/2026 (que usava
+       (1 − serv)×impostos de produto + serv×impostos de serviços no divisor e elevava o preço ~3,9% no caso 1048 com 30% de serviços).
+       A apuração do lucro abaixo continua separando produto × serviços (impostos de produto só nos 70%, de serviços só nos 30%). */
+    const K63_subTotalPct = K50_impostosPagarProdutoPct + K53_markUpPct;
     const K65_precoVendaPct = 1 - K63_subTotalPct;
 
     const S65_precoVendaProposta = K65_precoVendaPct > 0 ? U35_custoTotalMercadorias / K65_precoVendaPct : 0;

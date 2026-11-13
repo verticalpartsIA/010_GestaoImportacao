@@ -472,3 +472,42 @@ test('margemMarginal — sem campos detalhados cai na conta simples; sem preço 
   assert.equal(E.margemMarginal({ precoVendaProposta: 0 }), 0);
   assert.equal(E.margemMarginal(null), 0);
 });
+
+/* 13/11/2026 — golden 1048 (planilha "JA - COTAÇÃO N° 1048 - 1 EL - CONDOMINIO SALVADOR PRIME", aba FIN - ELEV 12.11.2026): o 1º
+   caso golden COM SERVIÇOS (30%). Decisão do Gelson: o divisor é o da planilha (impostos de produto + mark-up sobre 100% do preço;
+   o imposto de serviços só entra na apuração do lucro). Valores lidos do xlsx (células S66, U35, K12, S49, S50, U60, S72).
+   A planilha tem 2 equipamentos (a cotação do fornecedor veio com 2; o formulário do vendedor tinha 1 — o certo é 1). */
+const GOLDEN_1048_PLANILHA = {
+  vmleUsd: 65380, seguroUsd: 0, freteSeguroCapataziaUsd: 3937.05, siscomexRs: 214.5, txCambial: 5.67, outrasDespesasImportacaoRs: 0,
+  despachanteDesembaracoRs: 954.95, demurrageRs: 0, freteInternoRs: 42450, armazenagemRs: 1988.85,
+  itensInstalacaoMontagem: [{ descricao: 'Instalação e montagem', valor: 138205 }],
+  containers: [], containerRateioDivisor: 1, itensDespesasExtras: [],
+  quantidadeEquipamentos: 2, percentualServicos: 0.3, difalCustoRs: 161886.79, modelos: [],
+  markUpPct: 0.43, comissaoConsultoriaPct: 0, comissaoVendedorPct: 0.01, comissaoIndicacaoPct: 0.01,
+  modoFormacaoPreco: 'planilha',
+  parametros: GOLDEN_963.parametros,
+};
+
+test('Método da planilha — golden 1048 (com 30% de serviços): reproduz o Excel (divisor sem ponderar serviços)', () => {
+  const r = E.calcularV2(GOLDEN_1048_PLANILHA);
+  closeTo(r.importacao.vmldRs, 393027.67, 0.01, 'VMLD (S23)');
+  closeTo(r.importacao.afrmm, 1785.85, 0.01, 'AFRMM (D11)');
+  closeTo(r.importacao.custoTotalMercadorias, 522172.47, 0.01, 'Custo p/ precificação (U35)');
+  closeTo(r.importacao.despesasExtrasTotal, 183991.83, 0.01, 'Despesas nacionais (K12/U32)');
+  closeTo(r.precificacao.subTotalPct, 0.53158, 1e-9, 'Sub-total K64 = impostos de produto + mark-up');
+  closeTo(r.precificacao.precoVendaPct, 0.46842, 1e-9, 'Divisor K66');
+  closeTo(r.precificacao.precoVendaProposta, 1114752.73, 0.01, 'Preço de venda (S66)');
+  closeTo(r.precificacao.precoVendaServicos, 334425.82, 0.01, 'Parcela de serviços (S68)');
+  closeTo(r.precificacao.precoVendaProduto, 780326.91, 0.01, 'Parcela de produto (S67)');
+  closeTo(r.precificacao.impostosPagarProdutoRs, 6920.99, 0.01, 'Impostos a pagar produto líquidos de crédito (S49, positivo = custo)');
+  closeTo(r.precificacao.impostosPagarServicosRs, 53508.13, 0.01, 'Impostos sobre serviços (S50)');
+  closeTo(r.precificacao.totalComissaoRs, 22295.05, 0.01, 'Total comissões (U60)');
+  closeTo(r.precificacao.lucroFinal, 163977.46, 0.01, 'Lucro (S72/S78)');
+  closeTo(r.precificacao.margemEfetivaPct, 0.1471, 1e-4, 'Margem = lucro ÷ preço (14,71%)');
+});
+
+test('alavancaParaPreco — com serviços, o inverso do preço devolve o mark-up digitado (mesmo divisor do motor)', () => {
+  const r = E.calcularV2(GOLDEN_1048_PLANILHA);
+  const al = E.alavancaParaPreco(r, r.precificacao.precoVendaProposta);
+  closeTo(al.valor, 0.43, 1e-9, 'mark-up de volta');
+});
