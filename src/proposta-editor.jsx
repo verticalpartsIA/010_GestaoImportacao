@@ -108,19 +108,17 @@ function makeDefaultProposta() {
       condicoesPagto: {
         venda: "De acordo com os valores acima, forma de pagamento será à vista e parcelas conforme tabela de preços. A partir da data do pagamento efetivo do sinal, a cada 30 dias, vencem as parcelas subsequentes.",
         impostos: "A parcela correspondente a serviços será de 30% (trinta por cento) do preço total do fornecimento. Os impostos serão lançados na época de sua exigibilidade, e serão calculados e lançados em função do objeto e/ou serviço fornecido, na forma legal própria.",
-        ajusteFrete: "O valor do frete marítimo considerado nesta proposta é de USD 6.000 por contêiner. Caso o custo do frete marítimo aumente em mais de 8% em relação ao valor inicial estipulado, o comprador será responsável por arcar com o aumento proporcional do custo de frete. O ajuste será realizado com base no valor indicado no Bill of Lading (BL) fornecido pelo armador responsável pelo transporte no momento do embarque.",
-        reajuste: "Em caso de pagamento em prazo superior a 12 (doze) meses, conforme previsão na Lei 10.192/01, o preço do(s) equipamento(s) será reajustado com base nos índices de variação do IGP-DI coluna 2 (Índice Geral de Preços - Disponibilidade Interna), apurado e divulgado pela Fundação Getúlio Vargas, a partir do penúltimo mês anterior ao mês estabelecido para a data-base ajustada no Contrato e o penúltimo mês anterior ao mês estabelecido para o vencimento da prestação, obedecida a periodicidade mínima permitida legalmente. O preço do(s) equipamento(s) não inclui qualquer custo financeiro ou expectativa de inflação.",
       },
       ajustes: { preset: "sp", cambio: "", faturamento: "",
         // Distintos de `cambio` (taxa numérica) e `faturamento` (select) acima —
         // são os parágrafos jurídicos da página "Ajustes e Impostos" do PDF.
-        clausulaCambial: "O valor total desta proposta está baseado na taxa de câmbio (dólar americano x real) vigente na data da assinatura deste contrato. No caso de variação superior a 10% na taxa de câmbio, será realizado um ajuste proporcional no valor final do contrato.",
+        clausulaCambial: "",
         faturamentoTexto: "Venda de Equipamentos serão faturadas pela empresa VerticalParts – Indústria e Comércio Ltda, com sede na Rua Armandina Braga de Almeida, 383 - Guarulhos – SP - CEP: 07141-003.",
-        reajuste: "Reajuste anual conforme IPCA acumulado.",
+        reajuste: "",
         taxasIn: "II, IPI, PIS/COFINS sobre importação. ICMS interestadual.",
         taxasOut: "Taxa CREA/CAU.",
         taxasInclusas: "Inclusos no preço todos os impostos decorrentes de Emissão de Notas Fiscais de Venda/Serviços, Montagem, Instalação dos Equipamentos, bem como ART'S.",
-        taxasExcluidas: "Não estão inclusos no preço taxas de alvará de funcionamento ou outras licenças de qualquer natureza vinculadas às obrigações do COMPRADOR. Caso, após a assinatura desta proposta, sejam criados ou majorados tributos incidentes sobre a venda dos equipamentos ou sobre os serviços, o preço será revisto na proporção do impacto comprovado.",
+        taxasExcluidas: "Não estão inclusos no preço taxas de alvará de funcionamento ou outras licenças de qualquer natureza vinculadas às obrigações do COMPRADOR. Caso, após a assinatura deste Contrato, sejam criados ou majorados tributos incidentes sobre a venda dos equipamentos ou sobre os serviços objeto deste Contrato, a exemplo do DIFAL de ICMS, o preço será revisto na proporção do impacto comprovado.",
       },
       prazo: { prazo: "prazo de 120 (cento e vinte) a 150 (cento e cinquenta) dias", condCovid: "Os prazos poderão ser revisados em caso de eventos extraordinários relacionados a pandemia, escassez global de semicondutores ou bloqueios portuários." },
       responsabilidades: {
@@ -310,6 +308,32 @@ function deepMergeProposta(base, prefill) {
     }
   });
   return out;
+}
+
+/* Painel de divergências do fornecedor (13/11/2026): o que o fornecedor cotou diferente do pedido. A proposta herda o
+   COTADO; o vendedor aceita ou recusa (recusar = pedir nova revisão da cotação; a proposta fica bloqueada para envio). */
+function PEDivergencias({ divs, onDecidir }) {
+  return (
+    <div className="pe-hint" style={{ marginTop: 12, border: '1px solid var(--vp-yellow, #e0b000)', padding: 10, borderRadius: 6 }}>
+      <b>O fornecedor cotou diferente do que foi pedido</b>
+      <div style={{ fontSize: 12, margin: '4px 0 8px' }}>A proposta herdou o valor cotado. Aceite ou recuse cada item; a proposta só pode ser enviada ao cliente depois.</div>
+      {divs.map((d) => (
+        <div key={d.id} style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', padding: '6px 0', borderTop: '1px solid #0001' }}>
+          <div style={{ flex: '1 1 260px' }}>
+            <div><b>{d.rotulo}</b>{d.identificador ? ' · ' + d.identificador : ''}</div>
+            <div style={{ fontSize: 12 }}>Pedido: <b>{d.pedido || '—'}</b> → Cotado por {d.fornecedor || 'o fornecedor'}: <b>{d.cotado}</b></div>
+          </div>
+          {d.status === 'aceita' && <span>✓ Aceita{d.decididoPor ? ' por ' + d.decididoPor : ''}</span>}
+          {d.status === 'recusada' && <span>✕ Recusada — aguardando nova cotação</span>}
+          {d.status === 'pendente' && (<>
+            <button type="button" className="btn btn--sm btn--primary" onClick={() => onDecidir(d.id, 'aceita')}>Aceitar</button>
+            <button type="button" className="btn btn--sm" onClick={() => onDecidir(d.id, 'recusada')}>Recusar</button>
+          </>)}
+          {d.status !== 'pendente' && <button type="button" className="btn btn--sm" onClick={() => onDecidir(d.id, 'pendente')}>Reabrir</button>}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /* Merge da HERANÇA: diferente do prefill de proposta nova, aqui o vendedor
@@ -639,12 +663,36 @@ function PropostaEditor({ setRoute, subsel }) {
   const [podeDestravar, setPodeDestravar] = React.useState(false);
   const [destravando, setDestravando] = React.useState(false);
   const travada = ['enviada','visualizada','revisao_solicitada','aprovada'].includes(meta?.status) && !meta?.destravada_em;
+  /* REGRA (Gelson, 13/11/2026): proposta que nasceu da cotação (Nº de cotação + Precificação) não muda o que foi cotado
+     (Especificações e Acabamentos) sem o destrave do Líder, nem em rascunho. O `salvar` do store confere de novo. */
+  const cotadaTravada = !!(recordId && eq === 'elevador' && data.numeroCotacao && data.precificacaoId && !meta?.destravada_em && window.PropostaCotado);
   React.useEffect(() => {
-    if (!travada) { setPodeDestravar(false); return; }
+    if (!travada && !cotadaTravada) { setPodeDestravar(false); return; }
     let cancelado = false;
     window.PropostaStore.temCapacidade('propostas', 'destravar_aprovada').then((v) => { if (!cancelado) setPodeDestravar(v); });
     return () => { cancelado = true; };
-  }, [travada]);
+  }, [travada, cotadaTravada]);
+  const [pedindoDestrave, setPedindoDestrave] = React.useState(false);
+  const pedirDestraveAgora = async () => {
+    if (!recordId) return;
+    const motivo = window.prompt('O que precisa mudar e por quê? (mínimo 10 letras) — o pedido vai para a Regiane, o Gelson e o Diego:');
+    if (motivo == null) return;
+    setPedindoDestrave(true);
+    try {
+      const n = await window.PropostaStore.pedirDestrave(recordId, motivo);
+      window.toast?.(`Pedido de destrave enviado a ${n} líder(es).`, 'success');
+    } catch (e) {
+      window.toast?.('Erro ao pedir destrave: ' + (e.message || e), 'error');
+    } finally { setPedindoDestrave(false); }
+  };
+  const decidirDivergencia = async (divId, decisao) => {
+    if (!recordId) return;
+    try {
+      const divs = await window.PropostaStore.decidirDivergencia(recordId, divId, decisao);
+      setData((d) => ({ ...d, divergencias: divs }));
+      window.toast?.(decisao === 'aceita' ? 'Divergência aceita.' : decisao === 'recusada' ? 'Divergência recusada — avisamos para pedir nova revisão da cotação.' : 'Decisão reaberta.', 'success');
+    } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
+  };
   const destravarAgora = async () => {
     if (!recordId) return;
     const motivo = window.prompt('Motivo do destrave (obrigatório — mínimo 10 letras):');
@@ -739,6 +787,14 @@ function PropostaEditor({ setRoute, subsel }) {
     if (!window.PropostaStore) { window.toast?.('Store de assinatura não carregado.', 'error'); return; }
     if (window.PropostaOpcoes?.semEquipamentoVisivel(data, eq)) { window.toast?.('Todos os equipamentos estão ocultos — reexiba ao menos um antes de enviar.', 'warning'); return; }
     const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(data.numeroCotacao) ?? null;
+    /* 13/11/2026: divergência do fornecedor sem decisão (ou recusada, aguardando nova cotação) trava o envio ao cliente. */
+    if (window.PropostaCotado) {
+      const pd = window.PropostaCotado.pendentes(data);
+      if (pd.length) {
+        window.toast?.(`Há divergência do fornecedor sem resolver (${pd.map((x) => x.rotulo).join(', ')}). Aceite ou recuse antes de enviar ao cliente.`, 'warning');
+        return;
+      }
+    }
     /* 13/11/2026 (Gelson, 3A): pedido de DESCONTO aberto trava o envio ao cliente até o Financeiro responder (aceitar = o preço novo chega
        sozinho à proposta; recusar = ela volta a poder ser enviada). O pedido de AUMENTO não trava. */
     if (window.PropostaAumento) {
@@ -898,6 +954,8 @@ function PropostaEditor({ setRoute, subsel }) {
            Escada/Esteira herdamos o que é comum (nº da cotação, cliente, obra)
            e a quantidade das unidades DAQUELE tipo no Formulário. */
         let prefill = r.prefill;
+        /* Divergências do fornecedor só nascem com a proposta nova; proposta já salva não ganha bloqueio de envio por herdar de novo. */
+        if (recordId && prefill && prefill.divergencias) { const { divergencias: _dv, ...semDiv } = prefill; prefill = semDiv; }
         if (eq === 'escada' || eq === 'esteira') {
           const { elevador: _descartado, ...comum } = prefill;
           prefill = comum;
@@ -935,7 +993,7 @@ function PropostaEditor({ setRoute, subsel }) {
     } finally {
       setHerdando(false);
     }
-  }, [data.numeroCotacao, data.elevador, eq]);
+  }, [data.numeroCotacao, data.elevador, eq, recordId]);
 
   /* Auto-herda uma vez ao abrir — pedido do usuário 19/08: "conforme os
      inputs forem acontecendo a proposta vai se auto preenchendo". Uma
@@ -949,6 +1007,7 @@ function PropostaEditor({ setRoute, subsel }) {
   React.useEffect(() => {
     if (autoHerdadoRef.current || loadingExisting || !data.numeroCotacao) return;
     autoHerdadoRef.current = true;
+    if (cotadaTravada) return; // o que foi cotado está travado: nada é preenchido sozinho (só com destrave)
     herdar();
   }, [loadingExisting, data.numeroCotacao, herdar]);
 
@@ -1085,7 +1144,15 @@ function PropostaEditor({ setRoute, subsel }) {
       if (recordId && window.PropostaAumentoStore && window.PropostaAumentoStore.temContrato) {
         try { temContrato = await window.PropostaAumentoStore.temContrato(recordId); } catch (_) { temContrato = false; }
       }
-      const achados = window.PropostaConferir.conferir(data, eq, { travada, temContrato });
+      let achados = window.PropostaConferir.conferir(data, eq, { travada, temContrato });
+      /* FR06 (13/11/2026): proposta × Unidade × resposta do fornecedor. Só avisa. Falha ao ler as fontes não derruba a conferência. */
+      if (eq === 'elevador' && window.PropostaCotado) {
+        let fontes = {};
+        if (data.numeroCotacao && window.PropostaHeranca) {
+          try { const r = await window.PropostaHeranca.buscarFontes(data.numeroCotacao, { precificacaoId: data.precificacaoId || undefined }); if (r && r.encontrado) fontes = r; } catch (_) { fontes = {}; }
+        }
+        achados = achados.concat(window.PropostaCotado.compararComProposta(data, fontes));
+      }
       setConferencia({ achados, em: Date.now() });
       try { window.VPLog?.registrar({ modulo: "Propostas", acao: "Conferiu a proposta (checagens exatas)", alvo: "Proposta", alvo_id: recordId || null, detalhe: window.PropostaConferir.resumo(achados) }); } catch (_) {}
     } finally { setConferindo(false); }
@@ -1170,9 +1237,14 @@ function PropostaEditor({ setRoute, subsel }) {
           </div>
 
           <div className="pe-top__actions">
-            {travada && podeDestravar && (
+            {(travada || cotadaTravada) && podeDestravar && (
               <Button variant="outline" size="sm" icon="warning" disabled={destravando} onClick={destravarAgora}>
                 {destravando ? "Destravando…" : "Destravar"}
+              </Button>
+            )}
+            {(travada || cotadaTravada) && !podeDestravar && recordId && (
+              <Button variant="outline" size="sm" icon="warning" disabled={pedindoDestrave} onClick={pedirDestraveAgora}>
+                {pedindoDestrave ? "Enviando…" : "Pedir destrave"}
               </Button>
             )}
             <button className="pe-top__ghost pe-top__ghost--preview" onClick={() => setShowPreview((v) => !v)}
@@ -1342,7 +1414,22 @@ function PropostaEditor({ setRoute, subsel }) {
                   fill={f}
                   collapsed={isCollapsed}
                   onToggle={() => setCollapsed((c) => ({ ...c, [s.id]: !c[s.id] }))}>
-                  {renderSection(s.id, eq, data, set, { herdar, herdando, heranca, recordId, travada })}
+                  {cotadaTravada && (s.id === 'espec' || s.id === 'acabamentos') ? (
+                    <>
+                      <div className="pe-hint" style={{ marginBottom: 8 }}>
+                        🔒 Esta proposta nasceu da cotação: o que foi cotado não pode ser editado sem o destrave do Líder.
+                        {podeDestravar
+                          ? ' Use o botão Destravar no topo.'
+                          : <> <button type="button" className="pe-link" disabled={pedindoDestrave} onClick={pedirDestraveAgora} style={{ textDecoration: 'underline', background: 'none', border: 0, cursor: 'pointer', color: 'inherit' }}>Pedir destrave</button></>}
+                      </div>
+                      <fieldset disabled style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+                        {renderSection(s.id, eq, data, set, { herdar, herdando, heranca, recordId, travada })}
+                      </fieldset>
+                    </>
+                  ) : renderSection(s.id, eq, data, set, { herdar, herdando, heranca, recordId, travada })}
+                  {s.id === 'acabamentos' && Array.isArray(data.divergencias) && data.divergencias.length > 0 && (
+                    <PEDivergencias divs={data.divergencias} onDecidir={decidirDivergencia}/>
+                  )}
                 </PESection>
               );
             })}

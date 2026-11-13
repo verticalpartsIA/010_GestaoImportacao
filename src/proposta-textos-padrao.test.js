@@ -11,11 +11,19 @@ test('texto-padrão: serviços valem 30% fixo do preço total', () => {
   assert.ok(!editor.includes('pode chegar em até 30%'));
 });
 
-test('texto-padrão: exclusões não citam DIFAL (a proposta nunca mostra DIFAL)', () => {
+test('texto-padrão: exclusões usam o texto aprovado (cita o DIFAL como exemplo de tributo novo)', () => {
   const m = /taxasExcluidas: "([^"]*)"/.exec(editor);
   assert.ok(m, 'taxasExcluidas padrão existe');
-  assert.ok(!/difal/i.test(m[1]));
-  assert.ok(m[1].includes('o preço será revisto na proporção do impacto comprovado'));
+  assert.ok(m[1].includes('a exemplo do DIFAL de ICMS, o preço será revisto na proporção do impacto comprovado'));
+});
+
+test('texto-padrão: câmbio, ajuste de frete e reajuste saíram do padrão da proposta de elevador', () => {
+  const elev = editor.slice(editor.indexOf('condicoesPagto: {'), editor.indexOf('prazo: { prazo:'));
+  assert.ok(!/ajusteFrete: "[^"]+"/.test(elev));
+  assert.ok(!/clausulaCambial: "[^"]+"/.test(elev));
+  assert.ok(/clausulaCambial: ""/.test(elev));
+  assert.ok(!/Em caso de pagamento em prazo superior a 12/.test(elev));
+  assert.ok(!/IPCA acumulado/.test(elev));
 });
 
 test('texto-padrão: itens de exemplo não nascem dentro de proposta real', () => {

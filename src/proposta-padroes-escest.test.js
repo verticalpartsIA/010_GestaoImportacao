@@ -21,11 +21,14 @@ test('semDifal: tira DIFAL dos textos jurídicos antigos sem quebrar a frase', (
   assert.ok(!/difal/i.test(O.semDifal('incluindo DIFAL.')));
 });
 
-test('blocosAjustes e blocosCondicoes nunca devolvem DIFAL', () => {
+test('blocosAjustes e blocosCondicoes não devolvem DIFAL, salvo na cláusula de exclusões (texto aprovado pelo Gelson em 13/11/2026)', () => {
   const { PropostaOpcoes: O } = carregar();
-  const ed = { ajustes: { taxasExcluidas: 'a exemplo de DIFAL de ICMS e de tributos', taxasOut: 'ICMS final destino (DIFAL x).' }, condicoesPagto: { impostos: 'Inclui DIFAL de ICMS.' } };
-  const todos = [...O.blocosAjustes(ed), ...O.blocosCondicoes(ed)].map(([, v]) => v).join(' ');
-  assert.ok(!/difal/i.test(todos));
+  const ed = { ajustes: { taxasExcluidas: 'a exemplo do DIFAL de ICMS, o preço será revisto', taxasInclusas: 'Inclui DIFAL.', taxasOut: 'ICMS final destino (DIFAL x).' }, condicoesPagto: { impostos: 'Inclui DIFAL de ICMS.' } };
+  const aj = O.blocosAjustes(ed);
+  const excl = aj.find(([t]) => t === 'Taxas e Impostos Excluídos');
+  assert.ok(excl && /DIFAL de ICMS/.test(excl[1]), 'a cláusula de exclusões mantém o DIFAL');
+  const resto = [...aj.filter(([t]) => t !== 'Taxas e Impostos Excluídos'), ...O.blocosCondicoes(ed)].map(([, v]) => v).join(' ');
+  assert.ok(!/difal/i.test(resto), 'os demais blocos continuam sem DIFAL');
 });
 
 test('padrões de escada: 18 acabamentos, 4 características, instalação e responsabilidades, sem DIFAL', () => {
