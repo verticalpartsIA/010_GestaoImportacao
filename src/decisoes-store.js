@@ -472,7 +472,9 @@
      Margem desconhecida (sem precificação finalizada pra essa cotação)
      mantém o CEO no circuito por segurança, igual ao comportamento
      anterior. */
-  const LIMITE_MARGEM_SEM_CEO = 0.15;
+  /* 13/11/2026 — DECISÃO do Gelson ("Confirmo remover"): o gate do CEO por margem (< 15%) saiu. Não existe "margem mínima" na
+     Precificação (não consta da planilha) e o CEO deixa de entrar por margem no envio da proposta, na compra e no Aval Financeiro.
+     Decisões `envio_proposta_ceo`/`compra_equipamento_ceo` já criadas antes continuam visíveis na Central, mas não travam mais. */
 
   async function margemEfetivaDaCotacao(numeroCotacao) {
     const c = sb(); if (!c) return null;
@@ -492,9 +494,9 @@
      por AvalFinanceiroStore.podeIniciarCompra e pela tela Aval Financeiro
      (29/09: a mesma regra dos 15% vale pra compra na China). */
   async function precisaAprovacaoCeo(numeroCotacao) {
-    if (numeroCotacao == null) return { precisa: true, margem: null };
-    const margem = await margemEfetivaDaCotacao(numeroCotacao);
-    return { precisa: margem == null || margem < LIMITE_MARGEM_SEM_CEO, margem };
+    // Sem gate por margem (13/11/2026): o CEO nunca é exigido por margem. A margem segue devolvida só como informação.
+    const margem = numeroCotacao == null ? null : await margemEfetivaDaCotacao(numeroCotacao);
+    return { precisa: false, margem };
   }
 
   /* Envio de proposta exige Gestor Comercial (Regiane OU Guilherme) sempre
@@ -512,17 +514,9 @@
       gestor = await criarDecisaoSeNaoExiste({ tipo: 'envio_proposta_gestor', papelRequerido: 'gestor_comercial', numeroCotacao, contexto: await contextoDaCotacao(numeroCotacao) });
     }
     gestor = await garantirAtiva(gestor);
-    ceo = await garantirAtiva(ceo);
     if (gestor.status === 'reprovada') return { ok: false, motivo: `Envio reprovado pelo Gestor Comercial (${gestor.decidido_por || ''}): ${gestor.motivo || 'sem motivo informado'}.` };
     if (gestor.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do Gestor Comercial (Regiane ou Guilherme) para enviar a proposta.' };
-    if (!ceo) {
-      const margem = await margemEfetivaDaCotacao(numeroCotacao);
-      const precisaCeo = margem == null || margem < LIMITE_MARGEM_SEM_CEO;
-      if (!precisaCeo) return { ok: true };
-      ceo = await criarDecisaoSeNaoExiste({ tipo: 'envio_proposta_ceo', papelRequerido: 'ceo', numeroCotacao, dependeDe: [gestor.id], contexto: await contextoDaCotacao(numeroCotacao, { margem_efetiva_pct: margem }) });
-    }
-    if (ceo.status === 'reprovada') return { ok: false, motivo: `Envio reprovado pelo CEO (${ceo.decidido_por || ''}): ${ceo.motivo || 'sem motivo informado'}.` };
-    if (ceo.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para enviar a proposta — a margem desta proposta ficou abaixo da regra de 15%.' };
+    // 13/11/2026: o CEO não entra mais por margem — só o Gestor Comercial decide o envio (decisão do Gelson).
     return { ok: true };
   }
 

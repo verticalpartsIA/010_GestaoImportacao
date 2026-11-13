@@ -18,8 +18,8 @@
      extras: { modoFormacaoPreco, margemDesejadaPct, contingenciaValor, outrosCustosNaoRecuperaveisRs } (mesmos do Calcular)
      res: resultado V2 salvo (para a conta inversa e para a razão do DIFAL)
      alvo: total pedido (R$); difalAtualRs: custo do DIFAL no cálculo atual (0 se não for da VerticalParts)
-     margemMinimaPct: da precificação (snapshot dos parâmetros fiscais) */
-  function previaMargem({ E, baseInputs, extras, res, alvo, difalAtualRs, margemMinimaPct }) {
+     (13/11/2026: a "margem mínima" saiu da precificação — não consta da planilha) */
+  function previaMargem({ E, baseInputs, extras, res, alvo, difalAtualRs }) {
     if (!E || !res || !res.precificacao || !baseInputs) return null;
     const al = E.alavancaParaPreco(res, alvo);
     // só o método da planilha (mark-up sobre o preço); sem alavanca válida não há prévia
@@ -38,14 +38,11 @@
     }
 
     const margemPct = Number(r.precificacao.margemEfetivaPct) || 0;
-    const minima = Number(margemMinimaPct) || 0;
     return {
       markUpPct: al.valor,
       precoRs: Number(r.precificacao.precoVendaProposta) || 0,
       lucroRs: Number(r.precificacao.lucroFinal) || 0,
       margemPct,
-      margemMinimaPct: minima,
-      abaixoDaMinima: minima > 0 && margemPct < minima,
     };
   }
 

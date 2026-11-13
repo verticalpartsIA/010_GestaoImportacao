@@ -12,14 +12,15 @@ function carregar() {
 
 const AGORA = '2026-11-06T12:00:00.000Z';
 
-test('validarPedido: aceita só valor maior que o atual', () => {
+test('validarPedido: no modo aumento aceita só valor maior que o atual', () => {
   const A = carregar();
-  const ok = A.validarPedido('217501,04', '232501,04');
+  const ok = A.validarPedido('217501,04', '232501,04', 'aumento');
+  assert.strictEqual(ok.tipo, 'aumento');
   assert.strictEqual(ok.ok, true);
   assert.strictEqual(ok.variacaoRs, 15000);
   assert.ok(Math.abs(ok.variacaoPct - 15000 / 217501.04) < 1e-9);
   assert.strictEqual(A.validarPedido(217501.04, 217501.04).ok, false);
-  const menor = A.validarPedido(217501.04, 200000);
+  const menor = A.validarPedido(217501.04, 200000, 'aumento');
   assert.strictEqual(menor.ok, false);
   assert.match(menor.erro, /desconto/i);
   assert.strictEqual(A.validarPedido(100, '').ok, false);
@@ -246,4 +247,80 @@ test('aplicarNovosValores: pagamento à vista continua à vista, sem parcelas', 
     { id: 'E2', quantidade: '1', valorUnit: '200000', valorOriginal: '200000' },
   ] }, { agora: AGORA });
   assert.deepStrictEqual([r.valores.formaTipo, r.valores.parcelas.length, r.valores.forma], ['vista', 0, '100% à vista']);
+});
+
+
+/* ---------- 13/11/2026 — DESCONTO como pedido ao Financeiro (decisão do Gelson: 1A, 2A, 3A) ---------- */
+test('validarPedido: no modo desconto aceita só valor MENOR; sem modo infere a direção', () => {
+  const A = carregar();
+  const d = A.validarPedido(100000, 90000, 'desconto');
+  assert.strictEqual(d.ok, true);
+  assert.strictEqual(d.tipo, 'desconto');
+  assert.strictEqual(d.variacaoRs, 10000);
+  assert.ok(Math.abs(d.variacaoPct - 0.1) < 1e-9);
+  const maior = A.validarPedido(100000, 110000, 'desconto');
+  assert.strictEqual(maior.ok, false);
+  assert.match(maior.erro, /Alterar valor/);
+  assert.strictEqual(A.validarPedido(100000, 90000).tipo, 'desconto');
+  assert.strictEqual(A.validarPedido(100000, 110000).tipo, 'aumento');
+});
+
+test('solicitar desconto: grava o tipo no pedido e no histórico e não muda o preço', () => {
+  const A = carregar();
+  const alvo = { id: 'E1', valorUnit: '100000' };
+  const r = A.solicitar(alvo, { valorAtual: 100000, valorPedido: 92000, motivo: 'cliente pediu', por: 'ana@x', modo: 'desconto' }, {});
+  assert.strictEqual(r.aumentoPendente.tipo, 'desconto');
+  assert.strictEqual(r.aumentoLog[0].tipo, 'desconto');
+  assert.strictEqual(r.valorUnit, '100000');
+  assert.throws(() => A.solicitar(alvo, { valorAtual: 100000, valorPedido: 120000, modo: 'desconto' }, {}), /Alterar valor/);
+});
+
+test('recusar: exige motivo, limpa o pedido, não mexe no preço e guarda quem recusou e por quê', () => {
+  const A = carregar();
+  const aberto = A.solicitar({ id: 'E1', valorUnit: '100000' }, { valorAtual: 100000, valorPedido: 90000, por: 'ana@x', modo: 'desconto' }, {});
+  assert.throws(() => A.recusar(aberto, { motivo: ' ', por: 'fin@x' }), /motivo/i);
+  assert.throws(() => A.recusar({ id: 'E2' }, { motivo: 'sem pedido', por: 'fin@x' }), /Não há pedido/);
+  const r = A.recusar(aberto, { motivo: 'Margem não comporta', por: 'fin@x', agora: '2026-11-13T12:00:00Z' });
+  assert.strictEqual(r.aumentoPendente, null);
+  assert.strictEqual(r.valorUnit, '100000');
+  const ult = r.aumentoLog[r.aumentoLog.length - 1];
+  assert.deepStrictEqual([ult.acao, ult.tipo, ult.por, ult.motivo, ult.valorPedido], ['recusado', 'desconto', 'fin@x', 'Margem não comporta', 90000]);
+});
+
+test('pendentesDeDesconto: só pedido de desconto trava o envio; aumento não trava', () => {
+  const A = carregar();
+  const itDesc = { id: 'E1', aumentoPendente: { tipo: 'desconto', valorPedido: 90, valorAtual: 100 } };
+  const itAum = { id: 'E2', aumentoPendente: { tipo: 'aumento', valorPedido: 110, valorAtual: 100 } };
+  const itAntigo = { id: 'E3', aumentoPendente: { valorPedido: 110, valorAtual: 100 } }; // sem `tipo` = aumento
+  assert.strictEqual(A.pendentesDeDesconto({}, [itDesc, itAum, itAntigo]).length, 1);
+  assert.strictEqual(A.pendentesDeDesconto({}, [itAum, itAntigo]).length, 0);
+  assert.strictEqual(A.pendentesDeDesconto({ aumentoPendente: { tipo: 'desconto' } }, []).length, 1); // pedido da proposta inteira
+});
+
+test('atender e aplicarNovosValores: desconto atendido quando a Precificação baixou; o aviso diz que o desconto foi alcançado', () => {
+  const A = carregar();
+  const pedido = A.solicitar({ id: 'E1', valorUnit: '100000' }, { valorAtual: 100000, valorPedido: 90000, por: 'ana@x', modo: 'desconto', precificacaoBase: 100000 }, {});
+  const r = A.atender(pedido, 90000, 'sistema');
+  assert.strictEqual(r.atendido, true);
+  assert.strictEqual(r.tipo, 'desconto');
+  const sem = A.atender(pedido, 100000, 'sistema'); // Calcular sem mudar o preço não atende
+  assert.strictEqual(sem.atendido, false);
+  const ok = A.montarAviso('volta', { cliente: 'X', itens: [{ id: 'E1', tipo: 'desconto', valorNovo: 90000, valorPedido: 90000 }] });
+  assert.match(ok.sub, /atingiu o valor pedido/);
+  const menor = A.montarAviso('volta', { cliente: 'X', itens: [{ id: 'E1', tipo: 'desconto', valorNovo: 95000, valorPedido: 90000 }] });
+  assert.match(menor.sub, /desconto ficou menor que o pedido/);
+});
+
+test('montarAviso: pedido de desconto e de aumento têm títulos diferentes; a recusa leva o motivo', () => {
+  const A = carregar();
+  const d = A.montarAviso('ida', { cliente: 'Cli', equipamento: 'E1', tipoPedido: 'desconto', por: 'Ana', valorAtual: 100000, valorPedido: 90000, motivo: 'fechar hoje', numeroCotacao: 1048 });
+  const a = A.montarAviso('ida', { cliente: 'Cli', equipamento: 'E1', tipoPedido: 'aumento', por: 'Ana', valorAtual: 100000, valorPedido: 110000, numeroCotacao: 1048 });
+  assert.match(d.titulo, /Desconto pedido/);
+  assert.match(a.titulo, /Revisão de valor pedida/);
+  assert.notStrictEqual(d.titulo, a.titulo);
+  assert.match(d.sub, /travada para envio/);
+  const rc = A.montarAviso('recusa', { cliente: 'Cli', equipamento: 'E1', valorAtual: 100000, valorPedido: 90000, motivo: 'Margem não comporta', por: 'Juliana' });
+  assert.match(rc.titulo, /Desconto recusado/);
+  assert.match(rc.sub, /Margem não comporta/);
+  assert.match(rc.sub, /já pode ser enviada/);
 });

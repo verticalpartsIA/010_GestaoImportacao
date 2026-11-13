@@ -262,11 +262,10 @@
     const precificacaoV2 = pz.resultado_v2 && pz.resultado_v2.precificacao;
     const precoVenda = Number((precificacaoV2 || (pz.resultado || {}).precificacao || {}).precoVendaProposta) || 0;
     if (!precoVenda) return null;
-    const margemMinima = Number((pz.parametros_fiscais_snapshot || {}).margem_minima_pct) || 0;
-    const custoTeto = precoVenda * (1 - margemMinima);
+    /* 13/11/2026 (Gelson): não existe "margem mínima" — o teto de custo é o próprio preço de venda, e pronto. */
     return {
-      custo_teto: custoTeto,
-      margem_aceita: precoVenda - custoTeto,
+      custo_teto: precoVenda,
+      margem_aceita: 0,
     };
   }
 

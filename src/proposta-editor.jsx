@@ -739,6 +739,16 @@ function PropostaEditor({ setRoute, subsel }) {
     if (!window.PropostaStore) { window.toast?.('Store de assinatura não carregado.', 'error'); return; }
     if (window.PropostaOpcoes?.semEquipamentoVisivel(data, eq)) { window.toast?.('Todos os equipamentos estão ocultos — reexiba ao menos um antes de enviar.', 'warning'); return; }
     const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(data.numeroCotacao) ?? null;
+    /* 13/11/2026 (Gelson, 3A): pedido de DESCONTO aberto trava o envio ao cliente até o Financeiro responder (aceitar = o preço novo chega
+       sozinho à proposta; recusar = ela volta a poder ser enviada). O pedido de AUMENTO não trava. */
+    if (window.PropostaAumento) {
+      const pend = window.PropostaAumento.pendentesDeDesconto(data, data?.[eq]?.valores?.itens || []);
+      if (pend.length) {
+        const onde = pend.map((x) => (x.nivel === 'proposta' ? 'valor total' : (x.item && x.item.id) || 'equipamento')).join(', ');
+        window.toast?.(`Há pedido de desconto aguardando o Financeiro (${onde}). A proposta só pode ser enviada ao cliente depois da resposta da Precificação.`, 'warning');
+        return;
+      }
+    }
     if (window.DecisoesStore && numeroCotacao != null) {
       const gate = await window.DecisoesStore.podeEnviarProposta(numeroCotacao);
       if (!gate.ok) { window.toast?.(gate.motivo, 'warning'); return; }

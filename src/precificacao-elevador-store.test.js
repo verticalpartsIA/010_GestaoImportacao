@@ -546,9 +546,12 @@ test('difalPendente — só "falta informar se o cliente é contribuinte" é pen
 });
 
 /* Fake com a tabela das alçadas (select().eq().eq().limit()) e a da precificação (select().eq().single(), update().eq()). */
-function makeFakeSbAlcada(row, { concessoes = [], erroAlcada = null } = {}) {
+function makeFakeSbAlcada(row, { concessoes = [], erroAlcada = null, unidadesFormulario = [{ id: 'u1', identificador: 'U1', quantidade: 1 }] } = {}) {
   return {
     from(tabela) {
+      if (tabela === 'formularios_elevador_unidades') {
+        return { select() { return { eq: async () => ({ data: unidadesFormulario, error: null }) }; } };
+      }
       if (tabela === 'alcadas_capacidade') {
         return { select() { const q = { eq() { return q; }, limit: async () => ({ data: erroAlcada ? null : concessoes, error: erroAlcada }) }; return q; } };
       }
@@ -577,21 +580,32 @@ test('aprovar — DIFAL pendente recusa, com marca própria, e NÃO grava nada (
   const antigoSb = window.__VP_SB;
   window.__VP_SB = { sb: makeFakeSbAlcada(row) }; comAlcada(true);
   try {
-    await assert.rejects(() => window.PrecificacaoElevadorStore.aprovar('pz-dif', { forcarAbaixoMinima: true }),
+    await assert.rejects(() => window.PrecificacaoElevadorStore.aprovar('pz-dif'),
       (e) => e.difalPendente === true && /Contribuinte de ICMS/.test(e.message));
     assert.equal(row.status, 'calculado', 'a precificação continua não aprovada');
     assert.equal(row.aprovado_em, undefined);
   } finally { window.__VP_SB = antigoSb; }
 });
 
-test('aprovar — com o contribuinte informado o DIFAL deixa de bloquear (segue para as demais conferências)', async () => {
-  // margem mínima acima da margem do resultado: se o DIFAL não bloqueasse, o erro seria o da margem (e não o do DIFAL)
+test('aprovar — com o contribuinte informado o DIFAL deixa de bloquear e a precificação é aprovada (sem margem mínima)', async () => {
+  // 13/11/2026: a "margem mínima" saiu (Gelson). Mesmo com mínima de 90% no snapshot e margem de 30%, nada trava por margem.
   const row = linhaParaAprovar({ mensagem: 'DIFAL de R$ 1,00 é responsabilidade da VerticalParts.', contribuinte_icms: false }, 0.9);
   const antigoSb = window.__VP_SB;
   window.__VP_SB = { sb: makeFakeSbAlcada(row) }; comAlcada(true);
   try {
+    await window.PrecificacaoElevadorStore.aprovar('pz-dif');
+    assert.equal(row.status, 'finalizado');
+  } finally { window.__VP_SB = antigoSb; }
+});
+
+test('aprovar — quantidade diferente do Formulário (por unidade) recusa e NÃO grava nada; o Formulário manda', async () => {
+  const row = linhaParaAprovar({ mensagem: 'ok', contribuinte_icms: false }, 0.15);
+  row.modelos = [{ unidadeId: 'u1', identificador: 'VPEL-EL1048-1', quantidade: 2 }]; // fornecedor cotou 2
+  const antigoSb = window.__VP_SB;
+  window.__VP_SB = { sb: makeFakeSbAlcada(row, { unidadesFormulario: [{ id: 'u1', identificador: 'VPEL-EL1048-1', quantidade: 1 }] }) }; comAlcada(true);
+  try {
     await assert.rejects(() => window.PrecificacaoElevadorStore.aprovar('pz-dif'),
-      (e) => e.margemAbaixoMinima === true && !e.difalPendente);
+      (e) => Array.isArray(e.quantidadeDivergente) && e.quantidadeDivergente.length === 1 && /Formulário manda/.test(e.message));
     assert.equal(row.status, 'calculado');
   } finally { window.__VP_SB = antigoSb; }
 });
@@ -640,8 +654,26 @@ test('aprovar e calcularEsalvar — sem a alçada (ativa) recusam com marca pró
     await assert.rejects(() => S.calcularEsalvar('pz-dif'), (e) => e.semAlcada === true && /Calcular a precificação/.test(e.message));
     assert.equal(row.status, 'calculado', 'nada foi gravado');
     assert.equal(row.aprovado_em, undefined);
-    // com a alçada, segue para as demais conferências (aqui: a margem, de propósito acima do resultado)
-    row.parametros_fiscais_snapshot = { margem_minima_pct: 0.9 }; comAlcada(true);
-    await assert.rejects(() => S.aprovar('pz-dif'), (e) => e.margemAbaixoMinima === true && !e.semAlcada);
+    // com a alçada, segue para as demais conferências (aqui: a quantidade diverge do Formulário, de propósito)
+    row.modelos = [{ unidadeId: 'u1', identificador: 'U1', quantidade: 3 }]; comAlcada(true);
+    await assert.rejects(() => S.aprovar('pz-dif'), (e) => Array.isArray(e.quantidadeDivergente) && !e.semAlcada);
   } finally { window.__VP_SB = antigoSb; window.PropostaStore = antigoPS; }
+});
+
+/* 13/11/2026 — o Formulário do vendedor manda na quantidade (decisão do Gelson). Confere unidade a unidade, nunca por total. */
+test('divergenciasQuantidade — fornecedor cotou 2 e o Formulário tem 1: divergência da unidade', () => {
+  const d = window.PrecificacaoElevadorStore.divergenciasQuantidade(
+    [{ unidadeId: 'U1', identificador: 'VPEL-EL1048-1', quantidade: 2 }],
+    [{ id: 'U1', identificador: 'VPEL-EL1048-1', quantidade: 1 }]);
+  assert.equal(d.length, 1);
+  assert.equal(d[0].quantidadePrecificacao, 2);
+  assert.equal(d[0].quantidadeFormulario, 1);
+});
+test('divergenciasQuantidade — cotação PARCIAL (só algumas unidades, quantidades iguais) não diverge', () => {
+  const form = [{ id: 'U1', quantidade: 5 }, { id: 'U2', quantidade: 8 }]; // formulário soma 13
+  assert.deepEqual(window.PrecificacaoElevadorStore.divergenciasQuantidade([{ unidadeId: 'U1', quantidade: 5 }], form), []);
+});
+test('divergenciasQuantidade — equipamento acrescentado à mão (id avulso-) e lista vazia não entram', () => {
+  assert.deepEqual(window.PrecificacaoElevadorStore.divergenciasQuantidade([{ unidadeId: 'avulso-1', quantidade: 3 }], [{ id: 'U1', quantidade: 1 }]), []);
+  assert.deepEqual(window.PrecificacaoElevadorStore.divergenciasQuantidade(null, null), []);
 });
