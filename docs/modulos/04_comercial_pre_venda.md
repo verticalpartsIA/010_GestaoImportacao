@@ -618,7 +618,7 @@ Criada em 30/09/2026 (o item novo do menu abria o Dashboard por causa do cache d
 - **Limite honesto:** é checagem do navegador (RLS aberta, issue #571). Quem chama o banco direto passa pela trava.
 
 ## PC-5 Regras de preço que atravessam as telas
-- **Margem e CEO:** o Gestor Comercial sempre aprova o envio; o CEO só se a **margem efetiva** da precificação ficar abaixo de **15%** ou for desconhecida (`LIMITE_MARGEM_SEM_CEO` em `decisoes-store.js`). A mesma regra vale para a decisão de compra (`compra_equipamento_ceo`).
+**[Atualizado em 13/11/2026: o gate do CEO por margem foi REMOVIDO (decisão do Gelson); o Gestor Comercial decide sozinho o envio. O texto abaixo é o histórico.]** - **Margem e CEO:** o Gestor Comercial sempre aprova o envio; o CEO só se a **margem efetiva** da precificação ficar abaixo de **15%** ou for desconhecida (`LIMITE_MARGEM_SEM_CEO` em `decisoes-store.js`). A mesma regra vale para a decisão de compra (`compra_equipamento_ceo`).
 - **Finalidade da compra e Contribuinte de ICMS** definem se há DIFAL e quem recolhe; viram obrigatórios para **enviar** a cotação (10/10/2026). O cálculo é da Precificação (5); a proposta **não mostra o DIFAL**.
 - **Master ID de ativo:** `VPEL-EL<Nº>-<índice>` (e letra de revisão quando existe) identifica cada equipamento desde o Formulário até o Contrato; o número do documento da cotação a fornecedor, da precificação e da proposta usa o **mesmo inteiro da cotação** com prefixo próprio.
 - **Dólar e câmbio:** ficam na Precificação; o fornecedor responde em sua moeda e o câmbio do dia da resposta é congelado.

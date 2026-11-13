@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/01_geral.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `fd5cf97`)
-- **Palavras:** 24557 · **blocos:** 510 · **seções com selo próprio:** 13 de 75
-- **Origem do selo dos blocos:** próprio 34 · da seção 113 · da seção-pai 0 · do cabeçalho 319 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 44
-- **Selo efetivo dos blocos:** Conferido 407 · Herdado 0 · Não verificado 59
+- **Palavras:** 24605 · **blocos:** 509 · **seções com selo próprio:** 13 de 75
+- **Origem do selo dos blocos:** próprio 34 · da seção 112 · da seção-pai 0 · do cabeçalho 319 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 44
+- **Selo efetivo dos blocos:** Conferido 406 · Herdado 0 · Não verificado 59
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -49,7 +49,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 1.3.5 Botões e controles | `docs/modulos/01_geral.md#135-botões-e-controles` | 3 | — | 5 | c5 |
 | 1.3.6 Comportamento | `docs/modulos/01_geral.md#136-comportamento` | 3 | — | 7 | c7 |
 | 1.3.7 Dados — o que lê e o que grava | `docs/modulos/01_geral.md#137-dados--o-que-lê-e-o-que-grava` | 3 | — | 5 | c5 |
-| 1.3.8 Regras e armadilhas | `docs/modulos/01_geral.md#138-regras-e-armadilhas` | 3 | Conferido (uniforme) | 20 | b1 s19 |
+| 1.3.8 Regras e armadilhas | `docs/modulos/01_geral.md#138-regras-e-armadilhas` | 3 | Conferido (uniforme) | 19 | b1 s18 |
 | 1.3.9 Testes | `docs/modulos/01_geral.md#139-testes` | 3 | — | 2 | c2 |
 | 1.3.10 Pendências e decisões | `docs/modulos/01_geral.md#1310-pendências-e-decisões` | 3 | — | 14 | c14 |
 | 1.3.11 Histórico (só o que ainda ensina) | `docs/modulos/01_geral.md#1311-histórico-só-o-que-ainda-ensina` | 3 | Conferido (uniforme) | 10 | b1 s9 |

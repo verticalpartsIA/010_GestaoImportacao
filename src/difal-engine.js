@@ -128,10 +128,13 @@
     }
 
     if (contribuinte === true) {
+      /* 13/11/2026 (Gelson, "Confirmo"; planilha: DIFAL = 0 se o cliente de outro estado é contribuinte): quem recolhe é o próprio
+         cliente, então para a VerticalParts o DIFAL é R$ 0,00 — nada a pagar, nada a abater do lucro, nada a mostrar como valor.
+         O que o cliente deve fica só como referência interna em detalhe.valor_referencia_cliente (não é custo nem aparece como DIFAL). */
       return {
-        ...base, difal_aplicavel: true, valor_difal: valorDifal, detalhe,
+        ...base, difal_aplicavel: false, valor_difal: 0, detalhe: { ...detalhe, valor_referencia_cliente: valorDifal },
         responsavel_recolhimento: 'destinatario_cliente', exige_gnre_emitente: false, bloqueio_faturamento: false,
-        mensagem: `DIFAL de ${fmtMoeda(valorDifal)} é devido, mas o recolhimento é responsabilidade do próprio cliente (Contribuinte de ICMS) no estado de destino (${ufDestino}). Não é custo da VerticalParts.`,
+        mensagem: `Cliente Contribuinte de ICMS em ${ufDestino}: o DIFAL é recolhido pelo próprio cliente. DIFAL para a VerticalParts: ${fmtMoeda(0)}.`,
       };
     }
 

@@ -19,7 +19,7 @@
 5. **Financeiro & Preços**
    5.1 Atualização de Custos (seis abas: Instalação — Elevadores, Instalação — Escada/Esteira, Containers, Frete interno, DIFAL, Regras de ICMS)
    &nbsp;&nbsp;&nbsp;5.1.1 O que é · 5.1.2 Rota e arquivos · 5.1.3 Perfil e acesso · 5.1.4 O que a tela mostra · 5.1.5 Botões e controles · 5.1.6 Comportamento · 5.1.7 Dados (lê/grava) · 5.1.8 Regras e armadilhas · 5.1.9 Testes · 5.1.10 Pendências e decisões · 5.1.11 Histórico
-   5.2 Precificação (fila, detalhe de cálculo, Memória de cálculo e modo "Outros projetos")
+   5.2 Precificação (fila, detalhe de cálculo, Memória de cálculo e Memória de cálculo; o modo "Outros projetos" foi removido em 13/11/2026)
    &nbsp;&nbsp;&nbsp;5.2.1 O que é · 5.2.2 Rota e arquivos · 5.2.3 Perfil e acesso · 5.2.4 O que a tela mostra · 5.2.5 Botões e controles · 5.2.6 Comportamento · 5.2.7 Dados (lê/grava) · 5.2.8 Regras e armadilhas · 5.2.9 Testes · 5.2.10 Pendências e decisões · 5.2.11 Histórico
    5.3 Aval Financeiro (fila e cinco janelas)
    &nbsp;&nbsp;&nbsp;5.3.1 O que é · 5.3.2 Rota e arquivos · 5.3.3 Perfil e acesso · 5.3.4 O que a tela mostra · 5.3.5 Botões e controles · 5.3.6 Comportamento · 5.3.7 Dados (lê/grava) · 5.3.8 Regras e armadilhas · 5.3.9 Testes · 5.3.10 Pendências e decisões · 5.3.11 Histórico
@@ -52,7 +52,7 @@ Termos gerais (soft-delete, alerta, alçada, Nº da cotação) estão no glossá
 - **PTAX:** cotação oficial do dólar. A Precificação oferece a do dia da cotação (congelada) e a de agora.
 - **Aval de Pagamento / Aval de venda (score):** o **primeiro** é o que libera a compra (manual, depois do sinal). O **segundo** é uma consulta de crédito **opcional** que não bloqueia nada.
 - **Sinal:** pagamento inicial do cliente, confirmado pelo Financeiro.
-- **Teto de custo:** preço de venda × (1 − margem mínima), gravado quando o CEO aprova; os custos reais depois dele são comparados com ele.
+- **Teto de custo:** **preço de venda** (sem margem mínima, desde 13/11/2026), gravado quando o CEO aprova; os custos reais depois dele são comparados com ele.
 - **Conferência proposta × NF:** registro manual, na Emissão de NF, de que a nota confere com a proposta.
 - **Histórico (pedido):** pedido já entregue antes do sistema; não tem SLA.
 - **Boletos Avisos:** a tela dos avisos de boleto (5.5). Lista clientes com boleto em aberto no Omie e, desde 12/11/2026, também os títulos sem boleto (5.5.8).
@@ -177,7 +177,7 @@ A aba de DIFAL e a de Frete interno chegaram em 10/10/2026; a de Regras de ICMS 
 ## 5.2 Precificação
 
 ### 5.2.1 O que é
-A tela onde o Financeiro forma o **preço de venda** de uma cotação de elevador. Tem dois modos: **Elevadores** (o padrão e o real) e **Outros projetos** (uma calculadora antiga). No modo Elevadores há a **fila** (as cotações já respondidas pelo fornecedor, ou os formulários enviados direto) e o **detalhe de cálculo** de cada cotação (VPPC-<Nº>), que herda o Formulário, a resposta do fornecedor e as tabelas da 5.1, aplica o **método da planilha do Financeiro**, rateia o preço por equipamento e, ao **aprovar**, cria a Proposta. **Conferido** em `precificacao.jsx`, `precificacao-elevador.jsx`, `precificacao-elevador-store.js`, `precificacao-elevador-engine.js`, `precificacao-memoria.jsx` e no banco, 31/10/2026.
+A tela onde o Financeiro forma o **preço de venda** de uma cotação de elevador. Tinha dois modos: **Elevadores** (o padrão e o real) e **Outros projetos** (**removido em 13/11/2026**) (uma calculadora antiga). No modo Elevadores há a **fila** (as cotações já respondidas pelo fornecedor, ou os formulários enviados direto) e o **detalhe de cálculo** de cada cotação (VPPC-<Nº>), que herda o Formulário, a resposta do fornecedor e as tabelas da 5.1, aplica o **método da planilha do Financeiro**, rateia o preço por equipamento e, ao **aprovar**, cria a Proposta. **Conferido** em `precificacao.jsx`, `precificacao-elevador.jsx`, `precificacao-elevador-store.js`, `precificacao-elevador-engine.js`, `precificacao-memoria.jsx` e no banco, 31/10/2026.
 
 **Fora do escopo desta tela:** o Formulário e a Cotação a Fornecedor (4.1 e 4.3); editar e enviar a Proposta (4.5); os avais e a compra (5.3 e 4.3); as tabelas de custo (5.1); o cálculo de escada e esteira (não têm motor próprio; entram na fila com preço de venda lançado à mão, ver 5.2.6 e 5.2.11).
 
@@ -204,12 +204,12 @@ A tela onde o Financeiro forma o **preço de venda** de uma cotação de elevado
 9. **Formação do Preço** (texto do método) e, depois de calcular, **Preço de venda:** custo econômico completo, a tabela por equipamento (VLR Proposta; Lucro líquido por Equip.; Lucro líquido desejado (CEO); Desconto no preço; Preço p/ Venda), total da cotação, Equipamento × Mão de obra pelo "% de Serviços", Margem efetiva, Lucro final e os avisos de divisor inválido, margem negativa e abaixo da mínima.
 10. **Memória de cálculo — método da planilha** (só leitura, ao vivo) com as abas **Resumo, 1 · Importação (CIF), 2 · Impostos da importação, 3 · Instalação e despesas, 4 · Impostos e créditos da venda, 5 · Preço, comissões e lucro, 6 · Equipamentos, 7 · Containers e frete**.
 
-**Modo "Outros projetos"** (calculadora antiga): cabeçalho "Comercial · Precificação" / **Precificação**; três KPIs (Projetos convertidos, Com análise aprovada, Valor em pipeline); busca; tabela Projeto · Cliente · Valor · Status; e, ao clicar, a calculadora (FOB, câmbio, impostos, custos técnicos da Análise Técnica, despesas locais, margem + comissão), o "Resumo" e "Histórico de Versões".
+**[REMOVIDO em 13/11/2026 — decisão do Gelson "não utiliza, confirmo a remoção"]** **Modo "Outros projetos"** (calculadora antiga): cabeçalho "Comercial · Precificação" / **Precificação**; três KPIs (Projetos convertidos, Com análise aprovada, Valor em pipeline); busca; tabela Projeto · Cliente · Valor · Status; e, ao clicar, a calculadora (FOB, câmbio, impostos, custos técnicos da Análise Técnica, despesas locais, margem + comissão), o "Resumo" e "Histórico de Versões".
 
 ### 5.2.5 Botões e controles
 | Controle | O que faz |
 |---|---|
-| **Elevadores / Outros projetos** | Troca o modo |
+[Removido em 13/11/2026] | **Elevadores / Outros projetos** | Troca o modo |
 | Linha da fila / **Abrir** | Abre a precificação existente, ou **cria** uma nova (herança do Formulário e do fornecedor) |
 | **Voltar** (detalhe) | Volta à fila e limpa a URL |
 | **Salvar rascunho** | Grava sem calcular |
@@ -231,7 +231,7 @@ A tela onde o Financeiro forma o **preço de venda** de uma cotação de elevado
 | **Ver/editar parâmetros fiscais** | Mostra os 12 percentuais do snapshot desta precificação |
 | **Devolver ao Vendas para completar o cadastro** | Avisa o vendedor dono da cotação (alerta individual com link para o cliente) |
 | Abas da Memória de cálculo | Trocam o passo mostrado |
-| "Outros projetos": **Exportar planilhas**, **Nova precificação**, **Versões**, **Duplicar** (os dois últimos **desabilitados**), **Gerar proposta** | Exporta CSV; abre a calculadora; só navega ao editor |
+[Removido em 13/11/2026] | "Outros projetos": **Exportar planilhas**, **Nova precificação**, **Versões**, **Duplicar** (os dois últimos **desabilitados**), **Gerar proposta** | Exporta CSV; abre a calculadora; só navega ao editor |
 
 ### 5.2.6 Comportamento
 **Conferido** no código.
@@ -289,12 +289,12 @@ A tela onde o Financeiro forma o **preço de venda** de uma cotação de elevado
 7. **"Lucro líquido desejado (CEO)"** é o lucro REAL (depois de custos, encargos, impostos, comissões, despesas e DIFAL): o motor já o entrega pela `margemMarginal` (12/11/2026). A Memória de cálculo passou a usar o mark-up efetivo do "Alterar valor". **Pendente:** o lucro por equipamento e o "Preço p/ Venda" misturam resultado salvo com ajustes ainda não calculados.
 8. **Container, capatazia, GRI e taxa de porto entram no CIF** (nota de 10/10/2026 do `CLAUDE.md`, igual à planilha), supera a nota de 01/10.
 9. **DIFAL:** cliente contribuinte = custo 0 (recolhe o próprio cliente); não contribuinte = a VerticalParts absorve, abatido do lucro, só aparece na tela. **Pendente:** mostrar R$ 0,00 para contribuinte (exige "Confirmo" em `difal-engine.js`).
-10. **Pendências abertas:** fonte do câmbio deve ser a **PTAX** do Banco Central (hoje é o `bid` da AwesomeAPI; mexer em `cambio-api.js` afeta o recálculo de Containers, área blindada); frete interno e as tabelas de mão de obra e FCP do Financeiro (Atualização de Custos, travada por "Confirmo"); aba "Outros projetos" (`precificacao.jsx`) com calculadora paralela fora do motor.
-1. **Ajuda "?" desatualizada:** o texto de `precificacao` diz "Só libera depois da Análise Técnica aprovada", o que vale **só para o modo "Outros projetos"**; o modo Elevadores não exige Análise Técnica (Conferido). **Achado, sem correção.**
+10. **Feito depois, no mesmo dia (13/11/2026):** (a) **DIFAL de cliente contribuinte = R$ 0,00** para a VerticalParts (`difal-engine.js`, com "Confirmo"; o devido ao cliente fica só em `detalhe.valor_referencia_cliente`); (b) aba "Outros projetos" **removida**; (c) **gate do CEO por margem removido** (`DecisoesStore.precisaAprovacaoCeo` devolve sempre `precisa: false`; envio de proposta só com o Gestor Comercial; compra sem CEO) e **teto de custo = preço de venda** (`AvalFinanceiroStore`); decisões do CEO já criadas continuam na Central mas não travam; (d) **câmbio = PTAX de COMPRA do Banco Central** (`cambio-api.js`, API Olinda; antes era o `bid` da AwesomeAPI; fim de semana/feriado/antes das 13h vale a PTAX do último dia útil; o cálculo de Containers, que usa o mesmo câmbio, passa a usar a PTAX). **Pendentes:** (e) **desconto da Proposta deve se comportar como "Alterar valor"** (para baixo em vez de para cima): os dois voltam para a Precificação, que recalcula tudo e **pode barrar** o desconto (decisão do Gelson; **não implementado**, precisa de Specify/Clarify); (f) frete interno e mão de obra: o Gelson vai trabalhar (as faixas sobrepostas de mão de obra e o FCP **ficam como estão**, decisão dele); (g) VPPC-0990 (unidade -3: 3 no preço, 2 no formulário, finalizada) sem decisão.
+**[Parcialmente resolvido em 13/11/2026: o modo "Outros projetos" saiu.]** 1. **Ajuda "?" desatualizada:** o texto de `precificacao` diz "Só libera depois da Análise Técnica aprovada", o que vale **só para o modo "Outros projetos"**; o modo Elevadores não exige Análise Técnica (Conferido). **Achado, sem correção.**
 2. **Texto do Copiloto** (`vp_copiloto_docs`, linhas `rota:precificacao` e `rota:cadastro-custos`, de 10/10/2026): fala de "ICMS venda (%) (4%)" sem a regra por UF, não cita a linha AFRMM do Resumo de Custos, o Ad - Valorem, a devolução ao Vendas nem a aba Regras de ICMS, e lista cinco abas em vez de seis. **Não existem linhas** para `aval-financeiro`, `emissao-nf` nem `comissoes` (Conferido por SELECT). A correção é um UPDATE nas linhas (sem redeploy). **Pendência.**
 3. **A aprovação barra DIFAL pendente (resolvido em 07/11/2026, pedido do Gelson, com "Confirmo").** A spec de 15/10/2026 (PC-11) previa alerta e bloqueio de aprovar e de gerar Proposta; agora `aprovar()` recusa e a tela desabilita o botão (ver 5.2.6 item 10). Como a Proposta nasce ao aprovar, o bloqueio já cobre a geração. **Conferido:** testes do store e a tela aberta no navegador com precificação simulada (alerta e botão desabilitado com o DIFAL pendente; sem alerta e botão habilitado com o contribuinte informado; precificação já aprovada não mostra alerta). **Não verificado:** com uma precificação real em produção e o fluxo completo "devolver ao Vendas → Vendas completa o cadastro → Calcular → aprovar". Ver também 4.1.10 item 10.
 4. **Alçadas de Calcular e Aprovar (resolvido em 07/11/2026, pedido do Gelson, com "Confirmo" para o código).** Duas ações novas no catálogo do módulo `precificacao` (`calcular` e `aprovar`, em `colaboradores-admin-store.js`), conferidas na tela (botões desabilitados com o motivo) e no store (`calcularEsalvar` e `aprovar` recusam com `semAlcada`; o Calcular confere **antes** de gravar). **Regra de transição** (para ninguém perder o acesso no deploy): sem nenhuma concessão da ação, a conferência fica desligada; com ao menos uma, vale para todos; falha ao consultar a alçada **recusa** (nunca libera por erro). **Quem concede é o Gelson, em vpsistema.com/administracao** (o hub não grava alçada); a carga **não** foi feita por SQL. Proposta de concessão levantada em leitura em 07/11/2026: `calcular` para a gestora e as duas analistas do Adm/Financeiro e `aprovar` só para a gestora (os 5 Administradores sempre passam); hoje só a gestora e dois Administradores têm `ver/criar/editar` do módulo, que a tela não conferia. **Atenção:** a **primeira** concessão de cada ação liga a conferência para todos; conceda a todos de uma vez. **Conferido:** testes do store e a tela aberta no navegador com uma pessoa comum simulada nos três cenários (sem concessão: habilitado; com concessão e sem a alçada: desabilitado com o motivo; com a alçada: habilitado). **Não verificado:** o aparecimento das duas ações novas na tela de Administração do vpsistema (depende do catálogo de lá; o precedente de `lista-fios` e `etiquetas` indica que aparecem, sem confirmação para estas duas) e o uso com concessão real. **Limite honesto:** a trava é do front; o banco segue aberto até a #571.
-5. **O modo "Outros projetos"** tem "Versões" e "Duplicar" desabilitados "em desenvolvimento", um histórico de versões fixo (v1), valores iniciais fixos (câmbio 5,20; II 14%; IPI 8%; PIS+COFINS 11,75%; ICMS 18%…) que não são os do motor oficial, não grava nada e o botão "Gerar proposta" só navega. **Decisão do Gelson:** manter ou aposentar.
+**[Resolvido em 13/11/2026: o modo "Outros projetos" foi removido.]** 5. **O modo "Outros projetos"** tem "Versões" e "Duplicar" desabilitados "em desenvolvimento", um histórico de versões fixo (v1), valores iniciais fixos (câmbio 5,20; II 14%; IPI 8%; PIS+COFINS 11,75%; ICMS 18%…) que não são os do motor oficial, não grava nada e o botão "Gerar proposta" só navega. **Decisão do Gelson:** manter ou aposentar.
 6. **Dois motores gravados:** `calcular` (V1) grava `resultado` e `calcularV2` (modo planilha) grava `resultado_v2`; a aprovação e as telas leem o V2 (V1 só de reserva). Duplicidade herdada. **Achado, sem correção.**
 7. **Leituras sem paginação:** `listarPendentes` lê `precificacoes_elevador` e `cotacoes_elevador_fornecedor` inteiras (37 linhas hoje). Sem risco hoje.
 8. **Realtime:** a tabela está publicada e a tela não escuta; a fila só atualiza ao reabrir (resposta ao ponto aberto de 4 PC-7).
@@ -335,14 +335,14 @@ Cabeçalho "Financeiro · Aval de Vendas" / **Aval Financeiro** / subtítulo "Ab
 | **Dar aval** | status "Aguardando aval" | Abre **Dar aval — liberar venda** (mostra a consulta; observações opcionais) → **Confirmar aval** |
 | **Confirmar sinal** | sem sinal pago e não reprovado | Abre **Confirmar sinal pago** (Valor recebido (R$); Data do pagamento) → **Confirmar sinal** |
 | **Dar Aval de Pagamento** | sem Aval de Pagamento; **habilitado só com o sinal pago** | Abre **Dar Aval de Pagamento** (observações) → **Dar Aval de Pagamento** |
-| **Aprovação CEO (Diego) — margem X** | margem abaixo de 15% ou desconhecida e sem aprovação | Registra a aprovação do CEO nesta tela (e fecha a decisão da Central, se for o aprovador) |
+**[13/11/2026: o CEO não entra mais por margem; esta linha não se aplica]** | **Aprovação CEO (Diego) — margem X** | margem abaixo de 15% ou desconhecida e sem aprovação | Registra a aprovação do CEO nesta tela (e fecha a decisão da Central, se for o aprovador) |
 
 ### 5.3.6 Comportamento
 **Conferido.**
 1. **Abrir a fila cria o registro de aval** de toda proposta aprovada que ainda não tem (`garantirRegistro`); na prática o gatilho do banco já o criou na aprovação (PC-7).
 2. **Valem os avais da revisão vigente:** a fila só traz propostas aprovadas com vigência `vigente` ou `pendente_aditivo`; `getByNumeroCotacao` prefere o aval da proposta vigente da cotação e, sem vigente com aval, cai no mais recente.
 3. **Cada ação** grava no registro, registra em `vp_logs` (módulo "Aval Financeiro") e emite um evento de fluxo: `FINANCEIRO_CONSULTOU_SCORE`, `FINANCEIRO_APROVOU_VENDA` / `FINANCEIRO_REPROVOU_VENDA`, `SINAL_PAGO`, `AVAL_PAGAMENTO_CONFIRMADO` e `FINANCEIRO_APROVOU_CEO`. Cada evento cria ou fecha etapas na cadeia da cotação (motor do módulo 1).
-4. **Teto de custo:** quando o CEO aprova, grava `custo_teto` = preço de venda (V2) × (1 − margem mínima) da precificação finalizada. Custos reais posteriores (`registrarCustoReal`) são somados e, se passarem do teto, geram um alerta de estouro (sem bloquear). Sem precificação finalizada, não há teto.
+4. **Teto de custo:** quando o CEO aprova, grava `custo_teto` = preço de venda (V2) da precificação finalizada (sem margem mínima, desde 13/11/2026). Custos reais posteriores (`registrarCustoReal`) são somados e, se passarem do teto, geram um alerta de estouro (sem bloquear). Sem precificação finalizada, não há teto.
 5. **CEO por duas portas:** aprovar nesta tela grava também a decisão `compra_equipamento_ceo` da Central; aprovar na Central grava aqui. Os dois gates aceitam qualquer das duas.
 6. **O aval de score e o aval de venda não bloqueiam o contrato** (`podeEnviarContrato` devolve sempre `ok`); **reprovar** só muda o selo e esconde os botões de avaliação (e dispara um evento).
 
@@ -361,7 +361,7 @@ Cabeçalho "Financeiro · Aval de Vendas" / **Aval Financeiro** / subtítulo "Ab
 
 **Cenários de aceitação**
 1. *Dado* margem de 25,9%, Aval de Pagamento e Aval Jurídico dados e projeto assinado, *quando* se consulta o gate, *então* a compra está liberada e o CEO não aparece (`aval-financeiro-store`).
-2. *Dado* margem abaixo de 15%, *quando* o CEO ainda não aprovou, *então* o gate bloqueia e cita a margem.
+**[13/11/2026: cenário revogado — não há gate do CEO por margem]** 2. *Dado* margem abaixo de 15%, *quando* o CEO ainda não aprovou, *então* o gate bloqueia e cita a margem.
 3. *Dado* uma cotação com revisão A vigente, *quando* se lista a fila, *então* só aparece a revisão vigente (`aval-financeiro-store`).
 
 ### 5.3.10 Pendências e decisões
@@ -598,7 +598,7 @@ O motor de regras por origem da venda nasceu na issue #68; a fila de "propostas 
 | Cotação a fornecedor (4.3) → Precificação | preço unitário em US$, modelo, VMLE, frete internacional, containers, câmbio do dia da resposta | 4.3 → 5.2 |
 | Atualização de Custos → Precificação | mão de obra, preço/capatazia/GRI/taxa de porto do container (por ID-TAG), frete sugerido, DIFAL, ICMS da venda | 5.1 → 5.2 |
 | Precificação → Proposta (4.5) | preço de venda por equipamento (rateado), códigos, MO por equipamento, forma de pagamento; **sem DIFAL**; a proposta nasce sozinha ao aprovar | 5.2 → 4.5 |
-| Precificação → Central de Decisões (1.3) | margem efetiva: abaixo de 15% ou desconhecida chama o CEO | 5.2 → 1.3 |
+**[13/11/2026: o gate do CEO por margem saiu]** | Precificação → Central de Decisões (1.3) | margem efetiva: abaixo de 15% ou desconhecida chama o CEO | 5.2 → 1.3 |
 | Proposta aprovada → Aval Financeiro e Aval Jurídico | o gatilho do banco abre os dois registros e uma notificação | 4.5 → 5.3, 6 |
 | Aval Financeiro → "Decidir comprar" (4.3) e P.I. (7) | `podeIniciarCompra`: três avais, mais o CEO se a margem exige | 5.3 → 4.3, 7 |
 | Aval Engenharia (8, 9) → Aval Financeiro | projeto de instalação assinado vira o terceiro aval | 8/9 → 5.3 |
@@ -636,7 +636,7 @@ Há três coisas com o mesmo nome. **Não se somam e não se ligam entre si** no
 Esta divergência de origem é conhecida; **decisão do Gelson** sobre unificar ou manter separadas fica em 5.6.10.
 
 ## PC-5 Imposto e margem: ICMS, DIFAL e a regra dos 15%
-- **Margem e CEO:** a constante `LIMITE_MARGEM_SEM_CEO` (15%, em `decisoes-store.js`) vale para o envio da proposta (4.5), para a decisão de compra (`compra_equipamento_ceo`) e para o selo do Aval Financeiro. A **margem mínima** do parâmetro padrão (15%) **não é mais usada pela Precificação** (13/11/2026); o teto de custo do Aval Financeiro (`aval-financeiro-store.js`) ainda a lê — pendente de decisão do Gelson.
+**[Atualizado em 13/11/2026: o gate do CEO por margem (`LIMITE_MARGEM_SEM_CEO`) e a margem mínima foram REMOVIDOS por decisão do Gelson; o texto abaixo é o histórico.]** - **Margem e CEO:** a constante `LIMITE_MARGEM_SEM_CEO` (15%, em `decisoes-store.js`) vale para o envio da proposta (4.5), para a decisão de compra (`compra_equipamento_ceo`) e para o selo do Aval Financeiro. A **margem mínima** do parâmetro padrão (15%) **não é mais usada pela Precificação** (13/11/2026); o teto de custo do Aval Financeiro (`aval-financeiro-store.js`) ainda a lê — pendente de decisão do Gelson.
 - **ICMS da venda** vem da regra por UF de destino (5.1, aba Regras de ICMS): SP→SP importado a 12% (Herdado: o Gelson pediu conferir com o contador o RICMS/SP vigente); sem regra, cai no ICMS venda global do parâmetro (4%) e a Memória de cálculo avisa.
 - **DIFAL:** UF origem fixa SP; destino = UF da obra, senão a do cliente; mesma UF ou finalidade "Revenda" = sem DIFAL; "Uso e consumo / Ativo imobilizado" = devido. Cliente **contribuinte** recolhe (não é custo da VerticalParts); **não contribuinte** = guia GNRE da VerticalParts, que abate do lucro. Base: o preço do equipamento. Sem "Contribuinte de ICMS" respondido, o DIFAL não calcula e a tela oferece **devolver ao Vendas**. A proposta **não mostra** o DIFAL (4.5).
 - **Regime tributário:** Presumido (parâmetro padrão); o Simples não aproveita crédito (o motor trata).
@@ -719,7 +719,7 @@ Busca feita em `CLAUDE.md`, raiz, `docs/`, `docs/superpowers/specs/`, `docs/supe
 | `TreinamentoVP/financeiro-precos/*` | PC-10 | Tutoriais gerados por outra sessão (fora do Git); só apontados |
 | `README.md`, `AUDITORIA_FORENSE_E2E_SCORE.md`, `docs/PROJETO_INCRIVEL.md`, `.claude/agents/*`, `.claude/2026_*_relatorio.md` | — | Citam precificação de passagem; sem trecho que valha concatenar. Ficam como histórico |
 | `docs/eventos/`, `docs/relatorios/`, `handoffs/` | outros módulos | Sem relação direta encontrada; ficam |
-| **Parecem obsoletos — decisão do Gelson** | — | O modo "Outros projetos" da Precificação (código, 5.2.10 item 5); `aprovarComoOwner`/`isOwner` (5.3.10 item 2). O `salvarParametrosFiscais` e o `salvarRegra` **sem tela** (5.1.10 item 1 e 5.6.10 item 2) não são obsoletos: são lacunas |
+**[Resolvido em 13/11/2026: removido.]** | **Parecem obsoletos — decisão do Gelson** | — | O modo "Outros projetos" da Precificação (código, 5.2.10 item 5); `aprovarComoOwner`/`isOwner` (5.3.10 item 2). O `salvarParametrosFiscais` e o `salvarRegra` **sem tela** (5.1.10 item 1 e 5.6.10 item 2) não são obsoletos: são lacunas |
 
 ## PC-12 Benefícios trocados com os outros módulos
 

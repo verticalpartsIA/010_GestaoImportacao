@@ -393,7 +393,7 @@ function ordenarFiltrarPendentes(pendentes, busca, ord) {
 }
 
 /* ---------- Lista — cotações de fornecedor já respondidas ---------- */
-function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }) {
+function PrecificacaoElevadorPage({ setRoute, setSubsel, subsel }) {
   const [pendentes, setPendentes] = React.useState(null);
   /* 23/10 (pedido do usuário) — busca + ordenação por coluna na fila. Hooks
      declarados aqui, ANTES do early return de pzId abaixo (regra do React:
@@ -475,7 +475,6 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
           <h1 className="page-head__title">Precificação — Equipamentos</h1>
           <p className="page-head__sub">Cotações já respondidas pelo fornecedor, ou formulários enviados direto (preço já combinado por fora) — prontas para calcular o preço de venda.</p>
         </div>
-        <div className="page-head__r"><PrecificacaoModoTabs modo={modo} setModo={setModo}/></div>
       </div>
 
       <div style={{ display: 'flex', gap: 8, margin: '0 0 12px', flexWrap: 'wrap' }}>
