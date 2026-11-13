@@ -529,7 +529,7 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, subsel }) {
                   {item.revisaoValor && item.revisaoValor.length > 0 && (() => {
                     const A = window.PropostaAumento;
                     const dica = item.revisaoValor.map((p) => `${p.nivel === 'proposta' ? 'Valor total' : p.itemId}: de ${A.brl(p.pedido.valorAtual)} para ${A.brl(p.pedido.valorPedido)}${p.pedido.motivo ? ' — ' + p.pedido.motivo : ''}`).join('\n');
-                    return <div><span className="pe-tag" style={{ background: 'var(--vp-warning-tint, #f8eed7)', marginTop: 4, display: 'inline-block' }} title={dica}>Revisão de valor pedida ({item.revisaoValor.length})</span></div>;
+                    return <div><span className="pe-tag" style={{ background: 'var(--vp-warning-tint, #f8eed7)', marginTop: 4, display: 'inline-block' }} title={dica}>{item.revisaoValor.every((p) => p.pedido && p.pedido.tipo === 'desconto') ? 'Desconto pedido' : 'Revisão de valor pedida'} ({item.revisaoValor.length})</span></div>;
                   })()}
                 </td>
                 <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>

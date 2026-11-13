@@ -115,7 +115,7 @@
   }
 
   /* nivel: 'equipamento' (itemId) | 'proposta' (valor total). */
-  async function solicitar({ propostaId, nivel, itemId, valorAtual, valorPedido, motivo }) {
+  async function solicitar({ propostaId, nivel, itemId, valorAtual, valorPedido, motivo, modo }) {
     const c = sb(); if (!c) throw new Error('Sem conexão com o sistema.');
     if (!A()) throw new Error('Regras do pedido não carregadas — recarregue a página.');
     if (!(await pode(propostaId))) throw new Error('Só o dono da proposta ou o Líder pode pedir alteração de valor.');
@@ -127,14 +127,14 @@
     const precificacaoBase = await precoNaPrecificacao(row.numero_cotacao, nivel, itemId, ocultosAtuais);
     let novoDj; let alvoAtual; let rotulo = null;
     if (nivel === 'proposta') {
-      alvoAtual = A().solicitar(dj, { valorAtual, valorPedido, motivo, por, precificacaoBase }, ctx);
+      alvoAtual = A().solicitar(dj, { valorAtual, valorPedido, motivo, por, precificacaoBase, modo }, ctx);
       novoDj = { ...dj, aumentoPendente: alvoAtual.aumentoPendente, aumentoLog: alvoAtual.aumentoLog };
     } else {
       const achado = acharItem(dj, itemId);
       if (!achado) throw new Error('Equipamento não encontrado na proposta.');
       const ocultos = (dj[achado.eq].valores.ocultos || []);
       const item = { ...achado.itens[achado.idx], oculto: ocultos.includes(itemId) };
-      alvoAtual = A().solicitar(item, { valorAtual, valorPedido, motivo, por, precificacaoBase }, ctx);
+      alvoAtual = A().solicitar(item, { valorAtual, valorPedido, motivo, por, precificacaoBase, modo }, ctx);
       const itensNovos = achado.itens.slice();
       itensNovos[achado.idx] = { ...achado.itens[achado.idx], aumentoPendente: alvoAtual.aumentoPendente, aumentoLog: alvoAtual.aumentoLog };
       novoDj = { ...dj, [achado.eq]: { ...dj[achado.eq], valores: { ...dj[achado.eq].valores, itens: itensNovos } } };
@@ -142,7 +142,7 @@
     }
     const { error } = await c.from('propostas').update({ data_json: novoDj, atualizado_em: new Date().toISOString() }).eq('id', propostaId);
     if (error) throw new Error('Não foi possível gravar o pedido: ' + error.message);
-    try { window.VPLog?.registrar({ modulo: 'Propostas', acao: 'Pediu aumento de valor ao Financeiro', alvo: 'Proposta', alvo_id: propostaId, detalhe: { nivel, item: itemId || null, valor_atual: valorAtual, valor_pedido: valorPedido, motivo: motivo || '' } }); } catch (_) {}
+    try { window.VPLog?.registrar({ modulo: 'Propostas', acao: (alvoAtual.aumentoPendente && alvoAtual.aumentoPendente.tipo === 'desconto') ? 'Pediu desconto ao Financeiro' : 'Pediu aumento de valor ao Financeiro', alvo: 'Proposta', alvo_id: propostaId, detalhe: { nivel, item: itemId || null, valor_atual: valorAtual, valor_pedido: valorPedido, motivo: motivo || '' } }); } catch (_) {}
     try {
       const emails = A().destinatarios({
         financeiro: await emailsFinanceiro(c), gestores: await emailsGestores(c), dono: await emailDono(c, row.vendedor_id),
@@ -150,8 +150,9 @@
       const aviso = A().montarAviso('ida', {
         cliente: (dj.cliente && dj.cliente.nome) || row.numero_documento, equipamento: rotulo, por: (window.__VP_USER || {}).nome || por,
         valorAtual, valorPedido, motivo, numeroCotacao: row.numero_cotacao,
+        tipoPedido: alvoAtual.aumentoPendente ? alvoAtual.aumentoPendente.tipo : 'aumento',
       });
-      await enviarAvisos(c, emails, aviso, 'aumento-ida', row.precificacao_id ? `${ROTA_PRECIFICACAO}/${row.precificacao_id}` : ROTA_PRECIFICACAO, 'warning');
+      await enviarAvisos(c, emails, aviso, (alvoAtual.aumentoPendente && alvoAtual.aumentoPendente.tipo === 'desconto') ? 'desconto-ida' : 'aumento-ida', row.precificacao_id ? `${ROTA_PRECIFICACAO}/${row.precificacao_id}` : ROTA_PRECIFICACAO, 'warning');
     } catch (e) { console.warn('[PropostaAumentoStore] avisos de ida falharam', e); }
     return { data_json: novoDj, alvo: alvoAtual };
   }
@@ -176,6 +177,44 @@
     const { error } = await c.from('propostas').update({ data_json: novoDj, atualizado_em: new Date().toISOString() }).eq('id', propostaId);
     if (error) throw new Error('Não foi possível cancelar o pedido: ' + error.message);
     try { window.VPLog?.registrar({ modulo: 'Propostas', acao: 'Cancelou pedido de aumento de valor', alvo: 'Proposta', alvo_id: propostaId, detalhe: { nivel, item: itemId || null } }); } catch (_) {}
+    return { data_json: novoDj };
+  }
+
+  /* O Financeiro RECUSA o pedido (13/11/2026: "a Precificação pode barrar o desconto"). Quem recusa precisa da alçada de CALCULAR a
+     precificação (é quem decide o preço); motivo obrigatório. O preço da proposta não muda; o pedido some, o histórico guarda o
+     motivo e o Comercial (dono + gestor + Financeiro) recebe o aviso — a proposta volta a poder ser enviada. */
+  async function recusar({ propostaId, nivel, itemId, motivo }) {
+    const c = sb(); if (!c) throw new Error('Sem conexão com o sistema.');
+    if (!A()) throw new Error('Regras do pedido não carregadas — recarregue a página.');
+    if (window.PrecificacaoElevadorStore && window.PrecificacaoElevadorStore.exigirAlcada) await window.PrecificacaoElevadorStore.exigirAlcada('calcular');
+    const row = await lerProposta(c, propostaId);
+    const dj = row.data_json || {};
+    const por = meuEmail();
+    let novoDj; let pedido; let rotulo = null;
+    if (nivel === 'proposta') {
+      pedido = dj.aumentoPendente;
+      const r = A().recusar(dj, { motivo, por });
+      novoDj = { ...dj, aumentoPendente: null, aumentoLog: r.aumentoLog };
+    } else {
+      const achado = acharItem(dj, itemId);
+      if (!achado) throw new Error('Equipamento não encontrado na proposta.');
+      pedido = achado.itens[achado.idx].aumentoPendente;
+      const r = A().recusar(achado.itens[achado.idx], { motivo, por });
+      const itensNovos = achado.itens.slice(); itensNovos[achado.idx] = r;
+      novoDj = { ...dj, [achado.eq]: { ...dj[achado.eq], valores: { ...dj[achado.eq].valores, itens: itensNovos } } };
+      rotulo = itemId;
+    }
+    const { error } = await c.from('propostas').update({ data_json: novoDj, atualizado_em: new Date().toISOString() }).eq('id', propostaId);
+    if (error) throw new Error('Não foi possível gravar a recusa: ' + error.message);
+    try { window.VPLog?.registrar({ modulo: 'Propostas', acao: 'Recusou pedido de ' + ((pedido && pedido.tipo) === 'desconto' ? 'desconto' : 'valor'), alvo: 'Proposta', alvo_id: propostaId, detalhe: { nivel, item: itemId || null, motivo: (motivo || '').trim() } }); } catch (_) {}
+    try {
+      const emails = A().destinatarios({ financeiro: await emailsFinanceiro(c), gestores: await emailsGestores(c), dono: await emailDono(c, row.vendedor_id) });
+      const aviso = A().montarAviso('recusa', {
+        cliente: (dj.cliente && dj.cliente.nome) || row.numero_documento, equipamento: rotulo, por: (window.__VP_USER || {}).nome || por,
+        valorAtual: pedido && pedido.valorAtual, valorPedido: pedido && pedido.valorPedido, motivo,
+      });
+      await enviarAvisos(c, emails, aviso, 'desconto-recusa', `/comercial/proposta-editor/${propostaId}`, 'warning');
+    } catch (e) { console.warn('[PropostaAumentoStore] avisos de recusa falharam', e); }
     return { data_json: novoDj };
   }
 
@@ -275,7 +314,7 @@
         const dono = await emailDono(c, row.vendedor_id);
         if (res.atendidos.length) {
           const emails = A().destinatarios({ financeiro: await emailsFinanceiro(c), gestores: await emailsGestores(c), dono });
-          const aviso = A().montarAviso('volta', { cliente, itens: res.atendidos.map((a) => ({ id: a.id === 'proposta' ? null : a.id, valorNovo: a.valorNovo, valorPedido: a.valorPedido })) });
+          const aviso = A().montarAviso('volta', { cliente, itens: res.atendidos.map((a) => ({ id: a.id === 'proposta' ? null : a.id, tipo: a.tipo, valorNovo: a.valorNovo, valorPedido: a.valorPedido })) });
           await enviarAvisos(c, emails, aviso.sub ? { titulo: aviso.titulo, sub: aviso.sub.replace(' Abra a proposta e clique em Herdar Dados.', ' A proposta já está com o preço novo.') } : aviso, 'aumento-volta', `/comercial/proposta-editor/${row.id}`, 'info');
           if (await temContrato(c, row.id)) {
             const aviso2 = A().montarAviso('contrato', { cliente, numeroCotacao: row.numero_cotacao, valorAnterior: res.totalAnterior, valorNovo: res.total });
@@ -299,5 +338,5 @@
     return temContrato(c, propostaId);
   }
 
-  window.PropostaAumentoStore = { solicitar, cancelar, pode, pendentesPorCotacao, aoSalvarPrecificacao, sincronizarPreco, temContrato: temContratoDaProposta };
+  window.PropostaAumentoStore = { solicitar, cancelar, recusar, pode, pendentesPorCotacao, aoSalvarPrecificacao, sincronizarPreco, temContrato: temContratoDaProposta };
 }());
