@@ -5,7 +5,7 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `CLAUDE.md#âncora`. Em divergência vale a origem.
 
 - **Selo:** não se aplica (CLAUDE.md não é documento de módulo; o Art. 6 vale para `docs/modulos/`).
-- **Palavras:** 87387 · **blocos:** 1332
+- **Palavras:** 87585 · **blocos:** 1332
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
