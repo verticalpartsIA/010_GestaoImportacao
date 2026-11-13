@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/04_comercial_pre_venda.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `746db79`)
-- **Palavras:** 20523 · **blocos:** 328 · **seções com selo próprio:** 50 de 85
-- **Origem do selo dos blocos:** próprio 96 · da seção 145 · da seção-pai 10 · do cabeçalho 52 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
-- **Selo efetivo dos blocos:** Conferido 192 · Herdado 74 · Não verificado 37
+- **Palavras:** 21280 · **blocos:** 331 · **seções com selo próprio:** 50 de 85
+- **Origem do selo dos blocos:** próprio 97 · da seção 147 · da seção-pai 10 · do cabeçalho 52 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
+- **Selo efetivo dos blocos:** Conferido 194 · Herdado 74 · Não verificado 38
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -24,10 +24,10 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 4.1.5 Botões e controles | `docs/modulos/04_comercial_pre_venda.md#415-botões-e-controles` | 3 | Conferido (uniforme) | 9 | b1 s8 |
 | 4.1.6 Comportamento | `docs/modulos/04_comercial_pre_venda.md#416-comportamento` | 3 | Herdado (misto (vale o mais fraco)) | 21 | b5 s16 |
 | 4.1.7 Dados — o que lê e o que grava | `docs/modulos/04_comercial_pre_venda.md#417-dados--o-que-lê-e-o-que-grava` | 3 | — | 5 | p5 |
-| 4.1.8 Regras e armadilhas | `docs/modulos/04_comercial_pre_venda.md#418-regras-e-armadilhas` | 3 | Herdado (misto (vale o mais fraco)) | 12 | b3 s9 |
+| 4.1.8 Regras e armadilhas | `docs/modulos/04_comercial_pre_venda.md#418-regras-e-armadilhas` | 3 | Herdado (misto (vale o mais fraco)) | 13 | b4 s9 |
 | 4.1.9 Testes | `docs/modulos/04_comercial_pre_venda.md#419-testes` | 3 | Herdado (misto (vale o mais fraco)) | 2 | b1 s1 |
-| 4.1.10 Pendências e decisões | `docs/modulos/04_comercial_pre_venda.md#4110-pendências-e-decisões` | 3 | Não verificado (misto (vale o mais fraco)) | 14 | b8 s6 |
-| 4.1.11 Histórico | `docs/modulos/04_comercial_pre_venda.md#4111-histórico` | 3 | Conferido (uniforme) | 4 | b1 s3 |
+| 4.1.10 Pendências e decisões | `docs/modulos/04_comercial_pre_venda.md#4110-pendências-e-decisões` | 3 | Não verificado (misto (vale o mais fraco)) | 15 | b8 s7 |
+| 4.1.11 Histórico | `docs/modulos/04_comercial_pre_venda.md#4111-histórico` | 3 | Conferido (uniforme) | 5 | b1 s4 |
 | 4.2 Controle de Cotações | `docs/modulos/04_comercial_pre_venda.md#42-controle-de-cotações` | 2 | — | 0 | — |
 | 4.2.1 O que é | `docs/modulos/04_comercial_pre_venda.md#421-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 4.2.2 Rota e arquivos | `docs/modulos/04_comercial_pre_venda.md#422-rota-e-arquivos` | 3 | Conferido (uniforme) | 2 | b1 s1 |

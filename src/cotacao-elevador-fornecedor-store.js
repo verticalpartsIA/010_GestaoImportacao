@@ -197,6 +197,14 @@
     return v;
   }
 
+  /* 12/11/2026 — acabamento das portas com VIDRO por pavimento/lado (regra em portas-vidro-calc.js). Sem vidro devolve o
+     aço da coluna, como sempre. No portal (i18n) já sai nos três idiomas "PT / EN / 中文". */
+  function cefPortaAcab(u, alvo, i18n) {
+    const PV = (typeof window !== 'undefined') && window.PortasVidro;
+    if (PV && PV.ativo(u, alvo)) return PV.descricao(u, alvo, i18n ? 'tri' : 'pt');
+    return u['acabamento_porta_' + alvo];
+  }
+
   const CEF_SPEC_DEFS = [
     { key: 'numero_elevador', pt: 'Número do elevador', en: 'Lift No.', secao: 'A', get: (u) => u.identificador },
     { key: 'qtd_unidades', pt: 'Quantidade de unidades idênticas', en: 'Lift Units (Quantity)', secao: 'A', get: (u) => u.quantidade || 1 },
@@ -225,8 +233,8 @@
     { key: 'porta_modelo', pt: 'Modelo de porta', en: 'Door Model', secao: 'C', get: (u) => u.porta_modelo },
     { key: 'porta_largura', pt: 'Largura da porta', en: 'Door Width', secao: 'C', get: (u) => cefMm(u.porta_largura_mm) },
     { key: 'porta_altura', pt: 'Altura da porta', en: 'Door Height', secao: 'C', get: (u) => cefMm(u.porta_altura_mm) },
-    { key: 'acabamento_porta_cabina', pt: 'Acabamento porta cabina', en: 'Car Door Finish', secao: 'C', get: (u) => u.acabamento_porta_cabina },
-    { key: 'acabamento_porta_pavimento', pt: 'Acabamento porta pavimento', en: 'Landing Door Finish', secao: 'C', get: (u) => u.acabamento_porta_pavimento },
+    { key: 'acabamento_porta_cabina', pt: 'Acabamento porta cabina', en: 'Car Door Finish', secao: 'C', get: (u, i18n) => cefPortaAcab(u, 'cabina', i18n) },
+    { key: 'acabamento_porta_pavimento', pt: 'Acabamento porta pavimento', en: 'Landing Door Finish', secao: 'C', get: (u, i18n) => cefPortaAcab(u, 'pavimento', i18n) },
     { key: 'classe_corta_fogo', pt: 'Classe corta-fogo', en: 'Fire Rating', secao: 'C', get: (u) => u.classe_corta_fogo },
 
     { key: 'botoeira_cabine', pt: 'Botoeira de cabine (COP)', en: 'COP Type', secao: 'D', get: (u) => u.botoeira_cabine },
@@ -326,7 +334,7 @@
     const porSecao = {};
     defs.forEach((d) => {
       if (d.onlyElevator && !isElevator) return;
-      const valor = d.get(u);
+      const valor = d.get(u, i18n);
       /* i18n: a linha ganha o rótulo em chinês (5º item) e o valor conhecido
          é traduzido; sem i18n nada muda (visão interna). */
       const linha = i18n
@@ -442,6 +450,8 @@
         porta_largura_mm: u.porta_largura_mm, porta_altura_mm: u.porta_altura_mm,
         acabamento_porta_cabina: u.acabamento_porta_cabina, acabamento_porta_pavimento: u.acabamento_porta_pavimento,
         classe_corta_fogo: u.classe_corta_fogo,
+        /* 12/11/2026 — vidro por pavimento/lado vive aqui (portas_vidro); o portal lê pelo PortasVidro. */
+        especificacoes: (u.especificacoes && u.especificacoes.portas_vidro) ? { portas_vidro: u.especificacoes.portas_vidro } : undefined,
         botoeira_cabine: u.botoeira_cabine, botoeira_pavimento: u.botoeira_pavimento,
         ard: u.ard, camera: u.camera, anuncio_voz: u.anuncio_voz, exigencias_especiais: u.exigencias_especiais,
       })),

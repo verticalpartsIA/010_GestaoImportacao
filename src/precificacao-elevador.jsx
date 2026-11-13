@@ -99,10 +99,20 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
   const comCeo = !!onCeo;
   const pvRes = res && res.precificacao ? res.precificacao : null;
   const P0 = pvRes ? Number(pvRes.precoVendaProposta) || 0 : 0;
-  const lucroTotal = pvRes ? Number(pvRes.lucroFinal) || 0 : 0;
+  const lucroTotalSalvo = pvRes ? Number(pvRes.lucroFinal) || 0 : 0; // lucro do ÚLTIMO Calcular (preço salvo P0)
   const comPct = pvRes && P0 > 0 ? ((Number(pvRes.comissaoConsultoriaRs) || 0) + (Number(pvRes.comissaoVendedorRs) || 0) + (Number(pvRes.comissaoIndicacaoRs) || 0)) / P0 : 0;
-  const m = pvRes ? 1 - (Number(pvRes.impostosPagarProdutoPct) || 0) - comPct : 0; // quanto de cada R$ de preço vira lucro
+  /* 12/11/2026 — quanto de cada R$ de preço vira lucro: conta do motor (E.margemMarginal), que inclui imposto de serviços e DIFAL.
+     A conta antiga (1 − % impostos de produto − % comissões) dava ~88% quando o real é ~72% e a tela prometia um lucro que o cálculo não entregava. */
+  const m = pvRes ? (E && E.margemMarginal ? E.margemMarginal(pvRes) : 1 - (Number(pvRes.impostosPagarProdutoPct) || 0) - comPct) : 0;
   const totalCalc = linhas.reduce((s, l) => s + (Number(l.valor) || 0), 0);
+  /* 13/11/2026 — lucro e preços na MESMA base. Os preços das linhas já trazem as diferenças de "Alterar valor" digitadas e ainda não
+     calculadas (totalCalc), mas o lucro vinha do último Calcular: o líquido de cada equipamento, o desconto do CEO e o "Preço p/ Venda"
+     saíam de um lucro velho repartido por preços novos. Agora o lucro é projetado para o preço da tela (lucro salvo + m × diferença de
+     preço — conta exata, conferida contra o motor); sem diferença pendente é o lucro salvo, como antes. */
+  const ajPendente = Math.abs(totalCalc - P0) >= 0.005;
+  const lucroTotal = AJ && AJ.lucroProjetado
+    ? AJ.lucroProjetado({ lucroSalvo: lucroTotalSalvo, margemMarginal: m, precoSalvo: P0, precoAtual: totalCalc })
+    : lucroTotalSalvo;
   const valCeo = (l) => { const v = ceo ? ceo[l.keyCeo] : null; return v === undefined || v === null || v === '' ? null : Number(v); };
   /* Líquido de cada equipamento: rateio por participação no preço, exceto a mão de obra, que cada um paga a sua
      (E.ratearLucroPorEquipamento — a soma fecha SEMPRE no lucro total). */
@@ -190,6 +200,11 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
           </tbody>
         </table>
       </div>
+      {ajPendente && comCeo && (
+        <div className="pl-note" style={{ marginTop: 8 }}>
+          Lucro <b>projetado</b> para o total da tela ({fmtBRL2(totalCalc)}), com as diferenças digitadas em "Alterar valor": {fmtBRL2(lucroTotal)} (no último cálculo era {fmtBRL2(lucroTotalSalvo)}). Conta exata do motor; clique em <b>Calcular</b> para gravar.
+        </div>
+      )}
       {ajusteComCeo && (
         <div className="pl-note" style={{ marginTop: 8, color: '#991b1b' }}>
           ⚠ Há equipamento com "Alterar valor" e com "Lucro líquido desejado (CEO)" ao mesmo tempo. Use um só em cada equipamento.
@@ -206,7 +221,7 @@ function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal, ceo, onCeo, res,
       {algumCeo && (
         <div className="pl-note" style={{ marginTop: 8 }}>
           Com o líquido que o CEO quer, o preço da proposta passa de <b>{fmtBRL2(totalCalc)}</b> para <b>{fmtBRL2(novoTotal)}</b> ({dinheiroSinal(-descontoTotal)}) e o lucro total fica em <b style={{ color: lucroNovo < 0 ? '#b91c1c' : undefined }}>{fmtBRL2(lucroNovo)}</b> ({fmtPct2(novoTotal > 0 ? lucroNovo / novoTotal : 0)}).
-          <div className="small muted" style={{ marginTop: 2 }}>O desconto no preço é um pouco maior que a queda do líquido porque {fmtPct2(1 - m)} de cada R$ do preço vai para impostos e comissões.</div>
+          <div className="small muted" style={{ marginTop: 2 }}>O desconto no preço é um pouco maior que a queda do líquido porque {fmtPct2(1 - m)} de cada R$ do preço vai para impostos, comissões e DIFAL.</div>
           {alav && alav.valido && (
             <div className="row gap-2" style={{ alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
               <span>Para o cálculo chegar nesse preço: <b>{alav.campo === 'mark_up_pct' ? 'Mark-up' : 'Margem desejada'} = {fmtPct2(alav.valor)}</b>.</span>
@@ -391,7 +406,7 @@ function ordenarFiltrarPendentes(pendentes, busca, ord) {
 }
 
 /* ---------- Lista — cotações de fornecedor já respondidas ---------- */
-function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }) {
+function PrecificacaoElevadorPage({ setRoute, setSubsel, subsel }) {
   const [pendentes, setPendentes] = React.useState(null);
   /* 23/10 (pedido do usuário) — busca + ordenação por coluna na fila. Hooks
      declarados aqui, ANTES do early return de pzId abaixo (regra do React:
@@ -473,7 +488,6 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
           <h1 className="page-head__title">Precificação — Equipamentos</h1>
           <p className="page-head__sub">Cotações já respondidas pelo fornecedor, ou formulários enviados direto (preço já combinado por fora) — prontas para calcular o preço de venda.</p>
         </div>
-        <div className="page-head__r"><PrecificacaoModoTabs modo={modo} setModo={setModo}/></div>
       </div>
 
       <div style={{ display: 'flex', gap: 8, margin: '0 0 12px', flexWrap: 'wrap' }}>
@@ -515,7 +529,7 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
                   {item.revisaoValor && item.revisaoValor.length > 0 && (() => {
                     const A = window.PropostaAumento;
                     const dica = item.revisaoValor.map((p) => `${p.nivel === 'proposta' ? 'Valor total' : p.itemId}: de ${A.brl(p.pedido.valorAtual)} para ${A.brl(p.pedido.valorPedido)}${p.pedido.motivo ? ' — ' + p.pedido.motivo : ''}`).join('\n');
-                    return <div><span className="pe-tag" style={{ background: 'var(--vp-warning-tint, #f8eed7)', marginTop: 4, display: 'inline-block' }} title={dica}>Revisão de valor pedida ({item.revisaoValor.length})</span></div>;
+                    return <div><span className="pe-tag" style={{ background: 'var(--vp-warning-tint, #f8eed7)', marginTop: 4, display: 'inline-block' }} title={dica}>{item.revisaoValor.every((p) => p.pedido && p.pedido.tipo === 'desconto') ? 'Desconto pedido' : 'Revisão de valor pedida'} ({item.revisaoValor.length})</span></div>;
                   })()}
                 </td>
                 <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
@@ -1040,30 +1054,25 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
      compartilhado, dividido por 2 com 1 equipamento). O card/cálculo de 90 dias (container exclusivo) saiu. */
   const difal = pz.difal && pz.difal.mensagem ? pz.difal : null;
   const params = pz.parametros_fiscais_snapshot || {};
-  const margemMinima = Number(params.margem_minima_pct) || 0;
   // V2 é o motor oficial (decisão 29/08) — a trava de aprovação usa a
   // margem dele; cai pro V1 só quando ainda não existe resultado_v2
   // (precificação nunca recalculada desde a migração).
   const margemOficialPct = pz.resultado_v2 && pz.resultado_v2.precificacao ? pz.resultado_v2.precificacao.margemEfetivaPct : (resultado ? resultado.margemFinalPct : null);
-  const margemAbaixoMinima = margemOficialPct != null && margemOficialPct < margemMinima;
+  // 13/11/2026 (Gelson): não existe "margem mínima" na precificação (não consta da planilha). Desconto = pedir reprecificação.
   const aprovado = pz.status === 'finalizado';
   const semAlcadaCalcular = !!alcada && !alcada.calcular.pode;
   const semAlcadaAprovar = !!alcada && !alcada.aprovar.pode;
   // DIFAL pendente (07/11/2026): cadastro do cliente sem "Contribuinte de ICMS" => não aprova (nem gera a Proposta).
   const difalPendente = window.PrecificacaoElevadorStore.difalPendente(pz.difal);
 
-  const aprovar = async (forcar) => {
+  const aprovar = async () => {
     setAprovando(true);
     try {
-      await window.PrecificacaoElevadorStore.aprovar(pz.id, { forcarAbaixoMinima: forcar });
+      await window.PrecificacaoElevadorStore.aprovar(pz.id);
       await carregar();
       window.toast?.('Precificação aprovada.', 'success');
     } catch (e) {
-      if (e.margemAbaixoMinima) {
-        if (window.confirm(`${e.message}\n\nAprovar mesmo assim?`)) return aprovar(true);
-      } else {
-        window.toast?.('Erro ao aprovar: ' + e.message, 'error');
-      }
+      window.toast?.('Erro ao aprovar: ' + e.message, 'error');
     } finally {
       setAprovando(false);
     }
@@ -1102,7 +1111,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
           <Button variant="outline" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar rascunho'}</Button>
           <Button variant="primary" icon="calculator" onClick={calcular} disabled={calculando || semAlcadaCalcular} title={semAlcadaCalcular ? alcada.calcular.motivo : undefined}>{calculando ? 'Calculando…' : 'Calcular'}</Button>
           {resultado && !aprovado && (
-            <Button variant="outline" icon="check" onClick={() => aprovar(false)} disabled={aprovando || difalPendente || semAlcadaAprovar} title={difalPendente ? window.PrecificacaoElevadorStore.MOTIVO_DIFAL_PENDENTE : (semAlcadaAprovar ? alcada.aprovar.motivo : undefined)}>{aprovando ? 'Aprovando…' : 'Aprovar precificação'}</Button>
+            <Button variant="outline" icon="check" onClick={() => aprovar()} disabled={aprovando || difalPendente || semAlcadaAprovar} title={difalPendente ? window.PrecificacaoElevadorStore.MOTIVO_DIFAL_PENDENTE : (semAlcadaAprovar ? alcada.aprovar.motivo : undefined)}>{aprovando ? 'Aprovando…' : 'Aprovar precificação'}</Button>
           )}
           {aprovado && (
             <span className="badge" style={{ background: 'var(--vp-success)', color: '#fff', display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>
@@ -1591,7 +1600,6 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
           <PZField label="Comissão consultoria (%) — 0 a 5%" obrigatorio faltando={f('comissao_consultoria_pct')} aviso="Obrigatório: digite de 0% a 5% (0 vale)." ><PZPercentInput value={pz.comissao_consultoria_pct} onChange={set('comissao_consultoria_pct')}/></PZField>
           <PZField label="Comissão vendedor (%)" obrigatorio faltando={f('comissao_vendedor_pct')}><PZPercentInput value={pz.comissao_vendedor_pct} onChange={set('comissao_vendedor_pct')}/></PZField>
           <PZField label="Comissão indicação (%)"><PZPercentInput value={pz.comissao_indicacao_pct} onChange={set('comissao_indicacao_pct')}/></PZField>
-          <PZField label="Margem mínima (%)"><PZPercentInput value={params.margem_minima_pct} onChange={setParam('margem_minima_pct')}/></PZField>
         </div>
 
         <Button variant="ghost" size="sm" style={{ marginTop: 12 }} onClick={() => setMostrarParametros((v) => !v)}>
@@ -1668,8 +1676,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
               <div className="row gap-3">
                 <div>
                   <span className="up-eyebrow muted">Margem efetiva</span>
-                  <div className="cell-money" style={{ fontSize: 16, color: margemAbaixoMinima ? 'var(--vp-warning-ink)' : 'var(--vp-success)' }}>{fmtPct2(resultadoV2.precificacao.margemEfetivaPct)}</div>
-                  {margemMinima > 0 && <div className="small muted" style={{ marginTop: 2 }}>mínima {fmtPct2(margemMinima)}</div>}
+                  <div className="cell-money" style={{ fontSize: 16, color: resultadoV2.precificacao.margemEfetivaPct < 0 ? 'var(--vp-warning-ink)' : 'var(--vp-success)' }}>{fmtPct2(resultadoV2.precificacao.margemEfetivaPct)}</div>
                 </div>
                 <div><span className="up-eyebrow muted">Lucro final</span><div className="cell-money" style={{ fontSize: 16, color: resultadoV2.precificacao.lucroFinal >= 0 ? 'var(--vp-success)' : 'var(--vp-warning-ink)' }}>{fmtBRL2(resultadoV2.precificacao.lucroFinal)}</div></div>
               </div>
@@ -1682,11 +1689,6 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
             {resultadoV2.divisorValido && margemEfetivaV2Negativa && (
               <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
                 ⚠ Margem efetiva negativa — este cenário não deveria ser aprovado como está. Revise custos operacionais, markup/margem ou comissões.
-              </p>
-            )}
-            {resultadoV2.divisorValido && !margemEfetivaV2Negativa && margemAbaixoMinima && (
-              <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
-                ⚠ Margem efetiva ({fmtPct2(resultadoV2.precificacao.margemEfetivaPct)}) abaixo da mínima configurada ({fmtPct2(margemMinima)}). É possível aprovar mesmo assim, com confirmação.
               </p>
             )}
           </Card>

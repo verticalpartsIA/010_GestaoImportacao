@@ -58,12 +58,13 @@ function hojeBrasil(agora) { return new Date((agora || Date.now()) - 3 * 3600e3)
     const d = diasDesdeVencimento(vencISO, hojeISO);
     return d > 0 ? 'atrasado' : d === 0 ? 'vence_hoje' : 'em_dia';
   }
-  function etapaDevida(vencISO, hojeISO, jaEnviadas) {
+  function etapaDevida(vencISO, hojeISO, jaEnviadas, semBoleto) {
     const d = diasDesdeVencimento(vencISO, hojeISO);
     const segunda = new Date(hojeISO + 'T12:00:00Z').getUTCDay() === 1;
     let achada = null;
     for (const e of ETAPAS) {
-      const atraso = d - e.dias;
+      const dias = (e.cod === 'D+1' && semBoleto) ? 2 : e.dias;   // sem boleto a conciliação é manual: o aviso de atraso sai no 2º dia
+      const atraso = d - dias;
       if (atraso === 0 || (segunda && (atraso === 1 || atraso === 2))) achada = e;
     }
     if (!achada || (jaEnviadas || []).includes(achada.cod)) return null;
@@ -73,24 +74,38 @@ function hojeBrasil(agora) { return new Date((agora || Date.now()) - 3 * 3600e3)
   function moedaBR(v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function montarAviso(razao, boletos, etapa) {
     const plural = boletos.length > 1;
-    const intro = {
+    const algumSem = boletos.some((b) => b.tem_boleto === false);
+    const intro = (algumSem ? {
+      'D-5': 'Este é um lembrete: ' + (plural ? 'os pagamentos abaixo estão para vencer.' : 'o pagamento abaixo está para vencer.'),
+      'D-1': (plural ? 'Os pagamentos abaixo vencem' : 'O pagamento abaixo vence') + ' amanhã.',
+      'D0': (plural ? 'Os pagamentos abaixo vencem' : 'O pagamento abaixo vence') + ' hoje.',
+      'D+1': 'Identificamos que ' + (plural ? 'os pagamentos abaixo venceram e ainda não constam como recebidos.' : 'o pagamento abaixo venceu e ainda não consta como recebido.'),
+      'manual': (plural ? 'Seguem os pagamentos' : 'Segue o pagamento') + ' em aberto da sua empresa.',
+    } : {
       'D-5': 'Este é um lembrete: ' + (plural ? 'os boletos abaixo estão para vencer.' : 'o boleto abaixo está para vencer.'),
       'D-1': (plural ? 'Os boletos abaixo vencem' : 'O boleto abaixo vence') + ' amanhã.',
       'D0': (plural ? 'Os boletos abaixo vencem' : 'O boleto abaixo vence') + ' hoje.',
       'D+1': 'Identificamos que ' + (plural ? 'os boletos abaixo venceram e ainda não constam como pagos.' : 'o boleto abaixo venceu e ainda não consta como pago.'),
       'manual': (plural ? 'Seguem os boletos' : 'Segue o boleto') + ' em aberto da sua empresa.',
-    }[etapa] || 'Seguem os boletos em aberto da sua empresa.';
-    const assunto = {
+    })[etapa] || (algumSem ? 'Seguem os pagamentos em aberto da sua empresa.' : 'Seguem os boletos em aberto da sua empresa.');
+    const assunto = (algumSem ? {
+      'D-5': 'Lembrete: pagamento próximo do vencimento',
+      'D-1': 'Seu pagamento vence amanhã',
+      'D0': 'Seu pagamento vence hoje',
+      'D+1': 'Pagamento vencido — regularize',
+      'manual': 'Pagamentos em aberto',
+    } : {
       'D-5': 'Lembrete: boleto próximo do vencimento',
       'D-1': 'Seu boleto vence amanhã',
       'D0': 'Seu boleto vence hoje',
       'D+1': 'Boleto vencido — regularize o pagamento',
       'manual': 'Boletos em aberto',
-    }[etapa] + ' — ' + razao;
+    })[etapa] + ' — ' + razao;
     const linhas = boletos.map((b) => {
       let l = '• ' + [b.numero_documento ? 'NF ' + b.numero_documento : null, b.numero_parcela ? 'parcela ' + b.numero_parcela : null].filter(Boolean).join(' · ')
         + ' — vencimento ' + dataBR(b.data_vencimento) + ' — ' + moedaBR(b.valor);
-      if (b.linha_digitavel) l += '\n  Linha digitável: ' + b.linha_digitavel;
+      if (b.tem_boleto === false) l += '\n  Sem boleto — pague pela forma combinada.';
+      else if (b.linha_digitavel) l += '\n  Linha digitável: ' + b.linha_digitavel;
       return l;
     });
     const texto = 'Olá,\n\n' + intro + '\n\n' + linhas.join('\n') + '\n\n'
@@ -164,25 +179,44 @@ function listaEmails(s) {
 }
 function decodificar(s) { return String(s || "").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">"); }
 
+/* Título SEM boleto (cliente que paga por depósito/transferência) também entra, marcado tem_boleto=false.
+   Para não trazer dívida antiga e esquecida (o "A VENCER" do Omie vai pela data de previsão, não pelo vencimento),
+   o sem-boleto só entra até este atraso em dias. Boleto gerado entra sempre, como antes. */
+const LIMITE_SEM_BOLETO_DIAS = 180;
+/* Empresas com corte MAIOR (decisão do Gelson, 12/11/2026): Escamax, do grupo, paga por depósito. Tem título de 2024
+   e 2025 no Omie (R$ 523 mil), então o corte dela é de 365 dias, não 180.
+   Casa pela RAIZ do CNPJ (8 primeiros dígitos) dos clientes já resolvidos em boletos_avisos_clientes, mais os códigos
+   Omie das filiais já conhecidas (garante a 1ª leitura de um cliente ainda não resolvido). */
+const RAIZES_CNPJ_SEM_CORTE = ["24845692", "42689068"];
+const LIMITE_ESCAMAX_DIAS = 365;
+const CODIGOS_SEM_CORTE = [9171897422, 709496211, 9189022146, 9156116333, 8907119881, 8970602418];
+
 async function sincronizar() {
   const vistos = new Map();
+  const hojeSync = hojeBrasil();
+  const semCorte = new Set(CODIGOS_SEM_CORTE);
+  for (const c of await pgSelectTudo("boletos_avisos_clientes", "select=codigo_cliente_omie,cnpj")) {
+    if (RAIZES_CNPJ_SEM_CORTE.includes(String(c.cnpj || "").replace(/\D/g, "").slice(0, 8))) semCorte.add(Number(c.codigo_cliente_omie));
+  }
   for (const status of ["AVENCER", "VENCEHOJE", "ATRASADO"]) {
     let pagina = 1, total = 1;
     while (pagina <= total) {
       const r = await omiePost("financas/contareceber", "ListarContasReceber", { pagina, registros_por_pagina: 100, apenas_importado_api: "N", filtrar_por_status: status });
       total = r.total_de_paginas || 1;
       for (const t of r.conta_receber_cadastro || []) {
-        if (t.boleto?.cGerado !== "S") continue;
+        const temBoleto = t.boleto?.cGerado === "S";
         if (/RECEBIDO|CANCELADO|LIQUIDADO/i.test(t.status_titulo || "")) continue;
         const venc = isoDeBR(t.data_vencimento);
         if (!venc) continue;
+        if (!temBoleto && diasDesdeVencimento(venc, hojeSync) > (semCorte.has(Number(t.codigo_cliente_fornecedor)) ? LIMITE_ESCAMAX_DIAS : LIMITE_SEM_BOLETO_DIAS)) continue;
         vistos.set(t.codigo_lancamento_omie, {
           codigo_lancamento_omie: t.codigo_lancamento_omie,
           codigo_cliente_omie: t.codigo_cliente_fornecedor,
           numero_documento: t.numero_documento_fiscal || null,
           numero_parcela: t.numero_parcela || null,
-          numero_boleto: t.boleto?.cNumBoleto || null,
-          linha_digitavel: t.codigo_barras_ficha_compensacao || null,
+          numero_boleto: temBoleto ? (t.boleto?.cNumBoleto || null) : null,
+          linha_digitavel: temBoleto ? (t.codigo_barras_ficha_compensacao || null) : null,
+          tem_boleto: temBoleto,
           data_vencimento: venc,
           valor: t.valor_documento ?? null,
           status_omie: t.status_titulo || null,
@@ -230,7 +264,7 @@ async function sincronizar() {
     await esperar(300);
   }
   await pgPatch("boletos_avisos_config", "id=eq.true", { sincronizado_em: new Date().toISOString() });
-  return { boletosAbertos: linhas.length, encerrados: sumiram.length, clientes: codigos.length, emailsResolvidos: resolvidos, clientesSemEmailResolvido: Math.max(0, pendentes.length - resolvidos) };
+  return { boletosAbertos: linhas.length, semBoleto: linhas.filter((l) => !l.tem_boleto).length, encerrados: sumiram.length, clientes: codigos.length, emailsResolvidos: resolvidos, clientesSemEmailResolvido: Math.max(0, pendentes.length - resolvidos) };
 }
 
 /* ---------- Microsoft Graph (igual ao send-email) ---------- */
@@ -328,7 +362,7 @@ async function automatico(simular) {
 
   const grupos = new Map();
   for (const b of boletos) {
-    const etapa = etapaDevida(b.data_vencimento, hoje, jaPorBoleto.get(b.codigo_lancamento_omie) || []);
+    const etapa = etapaDevida(b.data_vencimento, hoje, jaPorBoleto.get(b.codigo_lancamento_omie) || [], b.tem_boleto === false);
     if (!etapa) continue;
     if (!grupos.has(b.codigo_cliente_omie)) grupos.set(b.codigo_cliente_omie, { boletos: [], etapaPorBoleto: {} });
     const g = grupos.get(b.codigo_cliente_omie);
@@ -371,8 +405,8 @@ async function avisarJuliana(boletos, porCliente, hoje) {
   const [, m, d] = hoje.split("-");
   await pgUpsert("alertas", "id", [{
     id: `boletos-atraso-${hoje}`, level: "warning", module: "Financeiro", rota: "/adm-financeiro/boletos-avisos", resolved: false, destinatario_email: JULIANA,
-    title: `Boletos em atraso — ${dow}, ${d}/${m}: ${porCli.size} cliente(s)`,
-    sub: `${atrasados.length} boleto(s) vencido(s), ${moedaBR(total)} no total. Mais antigos: ${maiores}. Veja em Boletos Avisos.`.slice(0, 330),
+    title: `Títulos em atraso — ${dow}, ${d}/${m}: ${porCli.size} cliente(s)`,
+    sub: `${atrasados.length} título(s) vencido(s), ${moedaBR(total)} no total. Mais antigos: ${maiores}. Veja em Boletos Avisos.`.slice(0, 330),
   }], "resolution=ignore-duplicates,return=minimal");
   return `alerta para a Juliana: ${porCli.size} cliente(s)`;
 }

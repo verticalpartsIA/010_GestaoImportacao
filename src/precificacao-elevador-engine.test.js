@@ -317,9 +317,13 @@ test('Método da planilha — golden 963: reproduz o Excel (preço, impostos, co
   closeTo(r.precificacao.precoVendaProposta, 8961402.51, 0.02, 'Preço de venda (S66)');
   closeTo(r.precificacao.precoVendaPorEquipamento, 331903.80, 0.01, 'Preço por equipamento (U70)');
   closeTo(r.precificacao.impostosPagarProdutoRs, 447002.90, 0.02, 'Impostos a pagar produto (S49, sinal positivo = custo)');
-  closeTo(r.precificacao.totalComissaoRs, 179228.05, 0.02, 'Total comissões (U60)');
-  closeTo(r.precificacao.lucroFinal, 2629480.45, 0.02, 'Lucro da venda (S72)');
-  closeTo(r.precificacao.margemEfetivaPct, 0.29342287, 0.000001, 'Percentual de lucro líquido (U79)');
+  /* 13/11/2026 — comissão sobre o valor LÍQUIDO de impostos (decisão do Gelson; a planilha calcula sobre o bruto: U60 = 179.228,05,
+     S72 = 2.629.480,45). Tudo acima continua igual ao Excel; só comissões e lucro mudam, e o lucro muda exatamente pela diferença. */
+  const pv = r.precificacao;
+  closeTo(pv.baseComissaoRs, pv.precoVendaProposta - pv.impostosVendaProdutoBrutosRs, 0.005, 'base da comissão = preço − impostos de produto brutos');
+  closeTo(pv.totalComissaoRs, pv.baseComissaoRs * 0.02, 0.005, 'comissões = 2% (vendedor + indicação) da base líquida');
+  assert.ok(pv.totalComissaoRs < 179228.05, 'comissão sobre o líquido é menor que a do Excel (bruto)');
+  closeTo(pv.lucroFinal, 2629480.45 + (179228.05 - pv.totalComissaoRs), 0.02, 'Lucro = lucro do Excel + (comissão do Excel − comissão sobre o líquido)');
 });
 
 test('Método da planilha — o mark-up é margem sobre o PREÇO (divisor), e preço-alvo por equipamento fecha ao contrário', () => {
@@ -425,4 +429,93 @@ test('ratearLucroPorEquipamento — golden 963 (V2 oficial): soma dos 27 líquid
   const linhas = Array.from({ length: 27 }, (_, i) => ({ preco: r.precificacao.precoVendaProposta / 27, mo: 20000 + i * 500 }));
   const lucros = E.ratearLucroPorEquipamento({ lucroTotal: r.precificacao.lucroFinal, precoTotal: r.precificacao.precoVendaProposta, linhas });
   closeTo(lucros.reduce((s, v) => s + v, 0), r.precificacao.lucroFinal, 0.01, 'soma');
+});
+
+/* 12/11/2026 — campo "Lucro líquido desejado (CEO)": margemMarginal = quanto de cada R$ de preço vira lucro.
+   Caso 1048: com serviços (30%) e DIFAL proporcional ao preço do produto, a conta antiga (1 − impostos − comissões)
+   prometia R$ 80.000 e o motor entregava R$ 70.834. */
+function rodarComDifalProporcional(base, mk, aliqDifalSobreProduto) {
+  let difal = 0; let r;
+  for (let i = 0; i < 60; i++) {
+    r = E.calcularV2({ ...base, markUpPct: mk, difalCustoRs: difal });
+    const novo = r.precificacao.precoVendaProduto * aliqDifalSobreProduto;
+    if (Math.abs(novo - difal) < 0.001) break;
+    difal = novo;
+  }
+  return r.precificacao;
+}
+const CASO_1048 = {
+  vmleUsd: 32690, seguroUsd: 98.07, freteSeguroCapataziaUsd: 0, siscomexRs: 214.5, txCambial: 5.67, outrasDespesasImportacaoRs: 0,
+  despachanteDesembaracoRs: 954.95, demurrageRs: 0, freteInternoRs: 42450, armazenagemRs: 1988.85,
+  itensInstalacaoMontagem: [{ descricao: 'Instalação e montagem', valor: 72205 }],
+  containers: [{ quantidade: 1, preco_rs: 19295.5, capatazia_rs: 1755.78, gri_rs: 0, taxa_porto_rs: 0 }], containerRateioDivisor: 2, itensDespesasExtras: [],
+  quantidadeEquipamentos: 1, percentualServicos: 0.3, modelos: [{ unidadeId: 'U', quantidade: 1, valorUnitarioUsd: 32690 }],
+  comissaoConsultoriaPct: 0, comissaoVendedorPct: 0.01, comissaoIndicacaoPct: 0.01, modoFormacaoPreco: 'planilha',
+  parametros: GOLDEN_963.parametros,
+};
+
+test('margemMarginal — prevê exatamente o lucro de um novo preço (serviços + DIFAL proporcional ao preço)', () => {
+  const A = 0.2075471698; // DIFAL BA sobre o preço do produto (base dupla composta)
+  const p0 = rodarComDifalProporcional(CASO_1048, 0.38, A);
+  const m = E.margemMarginal(p0);
+  assert.ok(m > 0.70 && m < 0.73, `m deveria ficar perto de 71,7% e veio ${m}`);
+  // a conta antiga (88%) erra: confirma que é bem diferente
+  assert.ok(Math.abs(m - (1 - p0.impostosPagarProdutoPct - 0.02)) > 0.1);
+  const lucroAlvo = 80000;
+  const novoPreco = p0.precoVendaProposta + (lucroAlvo - p0.lucroFinal) / m;
+  // mark-up que fecha nesse preço (conta inversa do próprio motor) e lucro REAL do motor nele
+  let lo = 0.1, hi = 0.7;
+  for (let i = 0; i < 80; i++) { const k = (lo + hi) / 2; if (rodarComDifalProporcional(CASO_1048, k, A).precoVendaProposta < novoPreco) lo = k; else hi = k; }
+  const real = rodarComDifalProporcional(CASO_1048, lo, A);
+  closeTo(real.precoVendaProposta, novoPreco, 0.05, 'preço');
+  closeTo(real.lucroFinal, lucroAlvo, 0.5, 'o lucro real do motor é o desejado');
+});
+
+test('margemMarginal — sem campos detalhados cai na conta simples; sem preço devolve 0', () => {
+  closeTo(E.margemMarginal({ precoVendaProposta: 1000, impostosPagarProdutoPct: 0.1, comissaoVendedorRs: 20 }), 0.88, 1e-9, 'fallback');
+  assert.equal(E.margemMarginal({ precoVendaProposta: 0 }), 0);
+  assert.equal(E.margemMarginal(null), 0);
+});
+
+/* 13/11/2026 — golden 1048 (planilha "JA - COTAÇÃO N° 1048 - 1 EL - CONDOMINIO SALVADOR PRIME", aba FIN - ELEV 12.11.2026): o 1º
+   caso golden COM SERVIÇOS (30%). Decisão do Gelson: o divisor é o da planilha (impostos de produto + mark-up sobre 100% do preço;
+   o imposto de serviços só entra na apuração do lucro). Valores lidos do xlsx (células S66, U35, K12, S49, S50, U60, S72).
+   A planilha tem 2 equipamentos (a cotação do fornecedor veio com 2; o formulário do vendedor tinha 1 — o certo é 1). */
+const GOLDEN_1048_PLANILHA = {
+  vmleUsd: 65380, seguroUsd: 0, freteSeguroCapataziaUsd: 3937.05, siscomexRs: 214.5, txCambial: 5.67, outrasDespesasImportacaoRs: 0,
+  despachanteDesembaracoRs: 954.95, demurrageRs: 0, freteInternoRs: 42450, armazenagemRs: 1988.85,
+  itensInstalacaoMontagem: [{ descricao: 'Instalação e montagem', valor: 138205 }],
+  containers: [], containerRateioDivisor: 1, itensDespesasExtras: [],
+  quantidadeEquipamentos: 2, percentualServicos: 0.3, difalCustoRs: 161886.79, modelos: [],
+  markUpPct: 0.43, comissaoConsultoriaPct: 0, comissaoVendedorPct: 0.01, comissaoIndicacaoPct: 0.01,
+  modoFormacaoPreco: 'planilha',
+  parametros: GOLDEN_963.parametros,
+};
+
+test('Método da planilha — golden 1048 (com 30% de serviços): reproduz o Excel (divisor sem ponderar serviços)', () => {
+  const r = E.calcularV2(GOLDEN_1048_PLANILHA);
+  closeTo(r.importacao.vmldRs, 393027.67, 0.01, 'VMLD (S23)');
+  closeTo(r.importacao.afrmm, 1785.85, 0.01, 'AFRMM (D11)');
+  closeTo(r.importacao.custoTotalMercadorias, 522172.47, 0.01, 'Custo p/ precificação (U35)');
+  closeTo(r.importacao.despesasExtrasTotal, 183991.83, 0.01, 'Despesas nacionais (K12/U32)');
+  closeTo(r.precificacao.subTotalPct, 0.53158, 1e-9, 'Sub-total K64 = impostos de produto + mark-up');
+  closeTo(r.precificacao.precoVendaPct, 0.46842, 1e-9, 'Divisor K66');
+  closeTo(r.precificacao.precoVendaProposta, 1114752.73, 0.01, 'Preço de venda (S66)');
+  closeTo(r.precificacao.precoVendaServicos, 334425.82, 0.01, 'Parcela de serviços (S68)');
+  closeTo(r.precificacao.precoVendaProduto, 780326.91, 0.01, 'Parcela de produto (S67)');
+  closeTo(r.precificacao.impostosPagarProdutoRs, 6920.99, 0.01, 'Impostos a pagar produto líquidos de crédito (S49, positivo = custo)');
+  closeTo(r.precificacao.impostosPagarServicosRs, 53508.13, 0.01, 'Impostos sobre serviços (S50)');
+  // Comissão sobre o LÍQUIDO (decisão do Gelson, 13/11/2026): a planilha dá U60 = 22.295,05 e lucro 163.977,46 (comissão sobre o bruto).
+  const pv = r.precificacao;
+  closeTo(pv.impostosVendaProdutoBrutosRs, 78126.33, 0.01, 'Impostos de produto brutos (S39:S45 sem o crédito)');
+  closeTo(pv.baseComissaoRs, 1114752.73 - 78126.33, 0.02, 'Base da comissão = preço − impostos de produto (serviços não saem)');
+  closeTo(pv.totalComissaoRs, 20732.53, 0.01, 'Total comissões (2% da base líquida)');
+  closeTo(pv.lucroFinal, 163977.46 + (22295.05 - pv.totalComissaoRs), 0.01, 'Lucro = lucro do Excel + diferença da comissão');
+  closeTo(pv.margemEfetivaPct, pv.lucroFinal / pv.precoVendaProposta, 1e-9, 'Margem = lucro ÷ preço');
+});
+
+test('alavancaParaPreco — com serviços, o inverso do preço devolve o mark-up digitado (mesmo divisor do motor)', () => {
+  const r = E.calcularV2(GOLDEN_1048_PLANILHA);
+  const al = E.alavancaParaPreco(r, r.precificacao.precoVendaProposta);
+  closeTo(al.valor, 0.43, 1e-9, 'mark-up de volta');
 });

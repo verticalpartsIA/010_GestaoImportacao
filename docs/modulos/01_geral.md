@@ -374,9 +374,9 @@ Em 31/10/2026 havia **72 decisões**: 7 pendentes, 3 bloqueadas por dependência
 | Tipo | Quem decide (papel) | O que trava |
 |---|---|---|
 | `envio_proposta_gestor` | Gestor Comercial | enviar a proposta ao cliente |
-| `envio_proposta_ceo` | CEO | enviar a proposta, **só se a margem efetiva < 15% ou desconhecida** (depende da decisão do gestor) |
+| `envio_proposta_ceo` | CEO | enviar a proposta, **só se a margem efetiva < 15% ou desconhecida** (depende da decisão do gestor) | **[13/11/2026: gate removido — o CEO não entra mais por margem; decisões já criadas continuam na lista mas não travam.]**
 | `desconto_proposta` | definido em `proposta-desconto.js` | aplicar o desconto |
-| `compra_equipamento_ceo` | CEO | início da compra, **só se a margem < 15% ou desconhecida** |
+| `compra_equipamento_ceo` | CEO | início da compra, **só se a margem < 15% ou desconhecida** | **[13/11/2026: gate removido — a compra não exige mais o CEO por margem.]**
 | `contratacao_mao_obra_ceo` | Juliana (papel `aval_instalador`) | envio do Contrato do Instalador (com cotação ou avulso, pelo id do contrato) |
 | `montador_entra_obra_rh` | Supervisor de Obra | montador entrar numa obra (chave: dossiê + parceiro) |
 | `pagamento_instalador_parcela` | Gestor Comercial | marcar a parcela como paga (uma decisão por parcela) |
@@ -390,7 +390,7 @@ Em 31/10/2026 havia **72 decisões**: 7 pendentes, 3 bloqueadas por dependência
 - **Aprovadores recalculados ao ler:** o retrato `aprovadores_esperados` fica velho se o responsável do papel muda; a leitura recalcula. Falha ao ler as alçadas **mantém** os aprovadores gravados (não tira ninguém).
 - **`criarDecisaoSeNaoExiste`** usa `.is` para Nº nulo (`.eq` com null não casa) e pega a primeira existente (antes `maybeSingle` falhava com duas e criava mais uma).
 - **`pedirDecisaoInbox`** grava **sem** `numero_cotacao` de propósito (com ele o "Ver documento" abriria o formulário da cotação, não o e-mail); o Nº vai em `contexto`. O papel `inbox_decisao` não existe na lista fixa, então os aprovadores escolhidos ficam como estão.
-- **CEO só em discrepância:** `LIMITE_MARGEM_SEM_CEO = 0,15`; margem desconhecida mantém o CEO no circuito. Não troque por "sem precificação libera".
+**[Revogado em 13/11/2026 por decisão do Gelson: `LIMITE_MARGEM_SEM_CEO` foi removido; `precisaAprovacaoCeo` devolve sempre `precisa: false`.]** - **CEO só em discrepância:** `LIMITE_MARGEM_SEM_CEO = 0,15`; margem desconhecida mantém o CEO no circuito. Não troque por "sem precificação libera".
 - **Aval do instalador é da Juliana — regra do Gelson, reafirmada em 31/10/2026 (este documento vale; o código segue o documento).** É a **Juliana** quem recebe a mensagem no WhatsApp e quem dá o aval (responde SIM ou NÃO, ou decide pela Central); o **Diego não dá esse aval**. Depois do SIM, o Diego só **assina** o Contrato do Instalador como "Contratante — CEO", junto com Juliana e Maurício (`_ci_disparar`). O papel é `aval_instalador`, separado de `ceo` para as alçadas do CEO não entrarem; `reenviarAvalWhatsApp` reenvia ou reabre o pedido. **Conferido no banco em 31/10/2026:** `decisao_whatsapp_numeros` ativo tem `juliana@` como `aprovador` e `mauricio.araujo@` como `ciente` (recebe o aviso do resultado); não há número do Diego.
 - Mexeu em arquivo desta tela: suba o `?v=` no `index.html` (hoje `decisoes-store.js` v29 e `decisoes.jsx` v10).
 

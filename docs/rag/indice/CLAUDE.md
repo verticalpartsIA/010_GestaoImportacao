@@ -5,7 +5,7 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `CLAUDE.md#âncora`. Em divergência vale a origem.
 
 - **Selo:** não se aplica (CLAUDE.md não é documento de módulo; o Art. 6 vale para `docs/modulos/`).
-- **Palavras:** 87495 · **blocos:** 1331
+- **Palavras:** 87585 · **blocos:** 1332
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -54,7 +54,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 🔒 ÁREA BLINDADA — Sistema de E-mail / Inbox (lei permanente; a regra completa mora em docs/modulos/01_geral.md §1.5) | `CLAUDE.md#-área-blindada--sistema-de-e-mail--inbox-lei-permanente-a-regra-completa-mora-em-docsmodulos01_geralmd-15` | 2 | — | 8 | m8 |
 | Edge Functions: órfãs apagadas, funções do Omie/webhook endurecidas e como redeployar (01–02/10/2026) → módulos 7 e 14 (NÃO é do Geral) | `CLAUDE.md#edge-functions-órfãs-apagadas-funções-do-omiewebhook-endurecidas-e-como-redeployar-0102102026--módulos-7-e-14-não-é-do-geral` | 2 | — | 5 | m5 |
 | 🔒 ÁREA BLINDADA — Central de Decisões · botão "Ver documento" (lei permanente; a regra completa mora em docs/modulos/01_geral.md §1.3.8) | `CLAUDE.md#-área-blindada--central-de-decisões--botão-ver-documento-lei-permanente-a-regra-completa-mora-em-docsmodulos01_geralmd-138` | 2 | — | 6 | m6 |
-| 🔒 ÁREA BLINDADA — Preço (R$) de Containers: câmbio + herança na Precificação (28/09/2026) | `CLAUDE.md#-área-blindada--preço-r-de-containers-câmbio--herança-na-precificação-28092026` | 2 | — | 13 | m13 |
+| 🔒 ÁREA BLINDADA — Preço (R$) de Containers: câmbio + herança na Precificação (28/09/2026) | `CLAUDE.md#-área-blindada--preço-r-de-containers-câmbio--herança-na-precificação-28092026` | 2 | — | 14 | m14 |
 | 🔒🔒 TRAVA POR "CONFIRMO" — Atualização de Custos, TODAS as tabelas (13/10/2026, pedido do usuário) | `CLAUDE.md#-trava-por-confirmo--atualização-de-custos-todas-as-tabelas-13102026-pedido-do-usuário` | 2 | — | 14 | m14 |
 | 🔒 ÁREA BLINDADA — Mão de obra × quantidade > 1 + Trocar/Remover/Acrescentar equipamento (28/09/2026) | `CLAUDE.md#-área-blindada--mão-de-obra--quantidade--1--trocarremoveracrescentar-equipamento-28092026` | 2 | — | 15 | m15 |
 | Envio de Proposta ao Cliente — investigação + correção de erro engolido (28/09/2026, PR #464 / issue #465) | `CLAUDE.md#envio-de-proposta-ao-cliente--investigação--correção-de-erro-engolido-28092026-pr-464--issue-465` | 2 | — | 7 | m7 |

@@ -52,5 +52,20 @@
     return c2((Number(valorPedido) || 0) - (Number(vlrNaPrecificacao) || 0));
   }
 
-  window.PrecificacaoAjustes = { normalizar, soma, totalComAjustes, precoDoEquipamento, diferencaParaPedido, num };
+  /* Lucro PROJETADO para o preço que está na tela (13/11/2026, pedido do Gelson: "corrija o lucro por equipamento e o Preço p/ Venda").
+     As colunas por equipamento misturavam dois estados: o lucro total vinha do último Calcular (preço salvo) e os preços das linhas
+     já traziam as diferenças digitadas em "Alterar valor" e ainda não calculadas — o lucro de cada equipamento saía de um lucro velho
+     repartido por preços novos. O lucro é LINEAR no preço (custos e créditos não mudam; impostos, serviços, comissões e DIFAL são
+     proporcionais ao preço — é o que `margemMarginal` mede), então:  lucro(preço atual) = lucro salvo + margemMarginal × (atual − salvo).
+     Sem diferença pendente devolve o lucro salvo, idêntico ao de antes. Exato (confere com o motor no teste). */
+  function lucroProjetado({ lucroSalvo, margemMarginal, precoSalvo, precoAtual }) {
+    const L = Number(lucroSalvo) || 0;
+    const m = Number(margemMarginal) || 0;
+    const Ps = Number(precoSalvo) || 0;
+    const Pa = Number(precoAtual) || 0;
+    if (!(Ps > 0) || !(m > 0) || Math.abs(Pa - Ps) < 0.005) return L;
+    return L + m * (Pa - Ps);
+  }
+
+  window.PrecificacaoAjustes = { normalizar, soma, totalComAjustes, precoDoEquipamento, diferencaParaPedido, lucroProjetado, num };
 }());
