@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "test": "node scripts/run-tests.js",
     "test:e2e": "playwright test",
+    "a11y:relatorio": "node scripts/a11y-relatorio.js",
     "tutoriais:conferir": "node scripts/conferir-tutoriais.mjs",
     "rag": "node scripts/gerar-rag.js",
     "rag:conferir": "node scripts/gerar-rag.js --conferir",
@@ -28,6 +29,7 @@
     "node": ">=18.0.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.10.2",
     "@playwright/test": "1.56.1",
     "@react-pdf/renderer": "^4.6.1",
     "@vitejs/plugin-react": "^6.1.0",
