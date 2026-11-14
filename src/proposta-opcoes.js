@@ -364,7 +364,7 @@
       ['Reajuste', a.reajuste],
       ['Taxas e Impostos Inclusos', a.taxasInclusas || a.taxasIn],
       ['Taxas e Impostos Excluídos', a.taxasExcluidas || a.taxasOut],
-    ].map(([t, v]) => [t, semDifal(v)]).filter(([, v]) => v && String(v).trim());
+    ].map(([t, v]) => [t, t === 'Taxas e Impostos Excluídos' ? v : semDifal(v)]).filter(([, v]) => v && String(v).trim());
   }
 
   /* Modelos distintos da proposta, na ordem dos códigos: "GEP / GEP-MRL" (título da página do equipamento). */

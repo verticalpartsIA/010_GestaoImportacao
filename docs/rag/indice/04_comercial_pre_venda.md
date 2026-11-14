@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/04_comercial_pre_venda.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `746db79`)
-- **Palavras:** 21280 · **blocos:** 331 · **seções com selo próprio:** 50 de 85
-- **Origem do selo dos blocos:** próprio 97 · da seção 147 · da seção-pai 10 · do cabeçalho 52 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
-- **Selo efetivo dos blocos:** Conferido 194 · Herdado 74 · Não verificado 38
+- **Palavras:** 22891 · **blocos:** 333 · **seções com selo próprio:** 50 de 85
+- **Origem do selo dos blocos:** próprio 99 · da seção 147 · da seção-pai 10 · do cabeçalho 52 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
+- **Selo efetivo dos blocos:** Conferido 202 · Herdado 74 · Não verificado 32
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -74,7 +74,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 4.5.7 Dados — o que lê e o que grava | `docs/modulos/04_comercial_pre_venda.md#457-dados--o-que-lê-e-o-que-grava` | 3 | — | 3 | c3 |
 | 4.5.8 Regras e armadilhas | `docs/modulos/04_comercial_pre_venda.md#458-regras-e-armadilhas` | 3 | Herdado (misto (vale o mais fraco)) | 11 | b6 s5 |
 | 4.5.9 Testes | `docs/modulos/04_comercial_pre_venda.md#459-testes` | 3 | — | 7 | c7 |
-| 4.5.10 Pendências e decisões | `docs/modulos/04_comercial_pre_venda.md#4510-pendências-e-decisões` | 3 | Não verificado (misto (vale o mais fraco)) | 15 | b8 s7 |
+| 4.5.10 Pendências e decisões | `docs/modulos/04_comercial_pre_venda.md#4510-pendências-e-decisões` | 3 | Conferido (selo explícito da seção) | 16 | b9 s7 |
 | 4.5.11 Histórico | `docs/modulos/04_comercial_pre_venda.md#4511-histórico` | 3 | Conferido (uniforme) | 4 | b3 s1 |
 | 4.6 Contratos Social | `docs/modulos/04_comercial_pre_venda.md#46-contratos-social` | 2 | — | 0 | — |
 | 4.6.1 O que é | `docs/modulos/04_comercial_pre_venda.md#461-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
@@ -91,7 +91,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-1 Mapa de ligações | `docs/modulos/04_comercial_pre_venda.md#pc-1-mapa-de-ligações` | 2 | Conferido (uniforme) | 2 | b1 s1 |
 | PC-2 Como nasce uma cotação (Nº, dono e linha do tempo) | `docs/modulos/04_comercial_pre_venda.md#pc-2-como-nasce-uma-cotação-nº-dono-e-linha-do-tempo` | 2 | — | 5 | c5 |
 | PC-3 RFQ ao fornecedor: idiomas, letra de revisão e e-mail | `docs/modulos/04_comercial_pre_venda.md#pc-3-rfq-ao-fornecedor-idiomas-letra-de-revisão-e-e-mail` | 2 | Herdado (misto (vale o mais fraco)) | 4 | b2 s2 |
-| PC-4 Trava, destrave e revisões comerciais | `docs/modulos/04_comercial_pre_venda.md#pc-4-trava-destrave-e-revisões-comerciais` | 2 | Herdado (uniforme) | 4 | b1 s3 |
+| PC-4 Trava, destrave e revisões comerciais | `docs/modulos/04_comercial_pre_venda.md#pc-4-trava-destrave-e-revisões-comerciais` | 2 | Herdado (misto (vale o mais fraco)) | 5 | b2 s3 |
 | PC-5 Regras de preço que atravessam as telas | `docs/modulos/04_comercial_pre_venda.md#pc-5-regras-de-preço-que-atravessam-as-telas` | 2 | — | 4 | c4 |
 | PC-6 Identidade, alçadas e segurança | `docs/modulos/04_comercial_pre_venda.md#pc-6-identidade-alçadas-e-segurança` | 2 | Conferido (uniforme) | 6 | b1 s5 |
 | PC-7 Gatilhos e rotinas | `docs/modulos/04_comercial_pre_venda.md#pc-7-gatilhos-e-rotinas` | 2 | Conferido (uniforme) | 5 | b3 s2 |

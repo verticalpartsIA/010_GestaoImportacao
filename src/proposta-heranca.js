@@ -276,22 +276,19 @@
       (Array.isArray(e.codigos) ? e.codigos : []).forEach((c) => { if (!g.codigos.includes(c)) g.codigos.push(c); });
     });
     if (grupos.size < 2) return [];
-    const dim = (l, a) => ((l || a) ? `${l || '?'} x ${a || '?'}mm` : '');
+    const divsCotacao = window.PropostaCotado ? window.PropostaCotado.detectarDivergencias(fontes) : [];
     return [...grupos.entries()].map(([chave, g]) => {
       const u = g.unidade || {};
-      const abertura = String(u.porta_tipo_abertura || '').trim();
-      const legado = {
-        modeloCabine: u.modelo || '',
-        acabamentoMat: u.aco_cabina || '',
-        subTeto: u.teto_falso || '',
-        painelOperacao: u.botoeira_cabine || '',
-        pisoCabina: u.piso_cabina || '',
-        modeloPorta: abertura ? `Automática ${abertura}` : '',
-        dimPortaCabine: dim(u.porta_largura_mm, u.porta_altura_mm),
-        /* 12/11/2026 — com porta de vidro, o texto diz onde (portas-vidro-calc.js); sem vidro = o aço da coluna. */
-        acabPortaCabine: (window.PortasVidro ? window.PortasVidro.descricao(u, 'cabina', 'pt') : u.acabamento_porta_cabina) || '',
-        portasPavimento: (window.PortasVidro ? window.PortasVidro.descricao(u, 'pavimento', 'pt') : u.acabamento_porta_pavimento) || '',
-        botoeirasPavimento: u.botoeira_pavimento || '',
+      const PC = window.PropostaCotado;
+      const tecU = envio.find((x) => x.unidade_id === (u.id || u.unidade_id)) || {};
+      /* 13/11/2026 — o que vale é o COTADO (resposta do fornecedor > snapshot enviado > Unidade). Porta de vidro continua
+         pela descrição própria (portas-vidro-calc.js). */
+      const legado = PC ? PC.legadoDaUnidade(u, tecU, divsCotacao, {
+        descricaoPorta: (un, lado) => (window.PortasVidro ? window.PortasVidro.descricao(un, lado, 'pt') : ''),
+      }) : {
+        modeloCabine: u.modelo || '', acabamentoMat: u.aco_cabina || '', subTeto: u.teto_falso || '', painelOperacao: u.botoeira_cabine || '',
+        pisoCabina: u.piso_cabina || '', modeloPorta: u.porta_tipo_abertura ? `Automática ${u.porta_tipo_abertura}` : '',
+        acabPortaCabine: u.acabamento_porta_cabina || '', portasPavimento: u.acabamento_porta_pavimento || '', botoeirasPavimento: u.botoeira_pavimento || '',
       };
       return {
         id: 'perfil_' + chave.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
@@ -379,7 +376,11 @@
     // V2 (nunca recalculada desde a migração).
     const resultado = (precificacao && precificacao.resultado_v2 && precificacao.resultado_v2.precificacao)
       || (precificacao && precificacao.resultado && precificacao.resultado.precificacao) || null;
-    const especificacoes = montarEspecificacoes(fontes);
+    /* 13/11/2026 — a proposta herda o que foi realmente COTADO: o que o fornecedor propôs diferente do pedido
+       (`respostas.itens[].divergencias`) vale, e fica registrado em `divergencias` para o vendedor aceitar ou recusar. */
+    const PC = window.PropostaCotado;
+    const divergencias = PC ? PC.detectarDivergencias(fontes) : [];
+    const especificacoes = PC ? PC.aplicarNasEspecs(montarEspecificacoes(fontes), divergencias) : montarEspecificacoes(fontes);
 
     const qtdTotal = especificacoes.reduce((s, e) => s + (Number(e.qtd) || 0), 0) || 1;
     const equipamentos = [...new Set(especificacoes.map((e) => e.modelo).filter(Boolean))].join(', ');
@@ -531,8 +532,20 @@
       if (especificacoes.length) prefill.elevador.especificacoes = especificacoes;
       const perfis = montarPerfis(fontes, especificacoes);
       if (perfis.length) prefill.elevador.perfis = perfis;
+      /* Cotação de UM tipo só: antes os acabamentos não vinham de lugar nenhum (o vendedor digitava). Agora vêm do cotado. */
+      if (!perfis.length && PC) {
+        const envioU = (cotacao && cotacao.dados_envio && cotacao.dados_envio.unidades) || [];
+        const u0 = (fontes.unidades || [])[0] || (envioU[0] ? { ...envioU[0], id: envioU[0].unidade_id } : null);
+        if (u0) {
+          const tec0 = envioU.find((x) => x.unidade_id === (u0.id || u0.unidade_id)) || {};
+          prefill.elevador.acabamentos = PC.legadoDaUnidade(u0, tec0, divergencias, {
+            descricaoPorta: (un, lado) => (window.PortasVidro ? window.PortasVidro.descricao(un, lado, 'pt') : ''),
+          });
+        }
+      }
       if (Object.keys(valores).length) prefill.elevador.valores = valores;
     }
+    if (divergencias.length) prefill.divergencias = divergencias;
     return prefill;
   }
 
