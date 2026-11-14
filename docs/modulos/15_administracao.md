@@ -97,6 +97,7 @@ Item de menu com `restrict: ["admin"]`. **Não verificado** se a página bloquei
 
 ### 15.2.4 O que a tela mostra
 - **Administração:** colaboradores por departamento (foto real, nome, cargo, líder) e as alçadas de cada pessoa. **Somente leitura** desde 09/10/2026; aviso na tela aponta o vpsistema.com/administracao. **Dado real** (`colaboradores_vpsistema`, 51; `alcadas_capacidade`, 1.834).
+- **Administração › detalhe da pessoa — bloco "Valores R$ (só leitura)" (14/11/2026):** mostra `valores_acesso` (modo todos/nenhum, liberados, escondidos, atualizado em) como veio do vpsistema.com/administracao. **Hoje não esconde nada nas telas do hub** (o desfoque do plano de 13/10 não foi implementado no front). Leitura que falha mostra o erro, nunca "sem valores". **Conferido** (código + `valores_acesso`: 45 linhas, 41 `nenhum`, 4 `todos`, em 14/11/2026). **Não testado com clique real.**
 - **Usuários & Perfis:** lista de `usuarios` e convites pendentes. **Dado real** (tabela `usuarios`, 34 linhas; `convites`, 0).
 - **Permissões (RLS):** a seção de alçadas de proposta e, abaixo, uma **matriz de referência** com perfis (Admin, Comercial Sr., Pleno, Engenharia, Jurídico, Financeiro, Instalação) × 11 módulos (`rwx`). A própria tela diz que é o **"modelo de acesso planejado"** e que o controle por linha **não** é gerido por ela. **Texto fixo no código.**
 - **Parâmetros:** duas cartas (Financeiros: câmbio R$ 5,18, margem mínima 22%, margem padrão 32%, comissão 4%, ICMS SP 18%, II 14%; Operacionais: SLAs, tempo médio de importação 55 dias, validade e garantia). **Texto fixo no código, não é lido do banco nem gravável.**
@@ -126,6 +127,8 @@ A aba é espelhada na URL com `replace` (não lota o histórico). A aba Administ
 ### 15.2.10 Pendências e decisões
 - **Achado, sem correção:** abas Permissões, Parâmetros, Integrações e Buckets são decorativas; decidir entre **ligar ao dado real** (listar `storage.buckets`, ler `parametros_*`, status real das integrações) ou **remover**.
 - **Achado, sem correção:** buckets públicos além do decidido (15.2.8).
+- **Divergência a decidir pelo Gelson (Art. 12), conferida em 14/11/2026:** o texto de 15.2.4 diz "somente leitura desde 09/10/2026", mas o código tem o **modo manual** por pessoa (`perfis.acesso_manual`, migration de 14/10/2026; RPCs `hub_set_acesso_manual`/`hub_set_alcada_manual`, só Administrador) e **31 de 50 perfis estão em modo manual**; 326 linhas de alçada desses perfis têm `concedido_em` a partir de 14/10. Qual vale: o doc ou o código? **Não corrigi nenhum dos dois.**
+- **Achado, sem correção:** "Valores R$" (`valores_acesso`) vem do vpsistema para 45 pessoas, mas nenhuma tela do hub os usa; `vp_valores_piloto` só tem o Gelson. O modo manual não cobre esse dado (a sincronia continua atualizando, inclusive de perfis manuais). Decidir: editar no hub, parar a sincronia para manuais, ou manter só no vpsistema.
 - Decidir o destino de `usuarios`/`convites` (pessoas convidadas ao VP Gestão) diante do login único do vpsistema. **Herdado.**
 - O módulo `estoque` ainda não consta no catálogo de alçadas do front (`CATALOGO_MODULOS`) — **Herdado**, não reconferi.
 
