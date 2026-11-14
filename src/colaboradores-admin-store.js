@@ -385,6 +385,15 @@
     const { data } = await c.from('perfis').select('acesso_manual').eq('id', perfilId).maybeSingle();
     return !!(data && data.acesso_manual);
   }
+  /* "Valores R$" da pessoa (modo todos/nenhum + liberar/esconder por etiqueta
+     modulo.etiqueta). Só LEITURA: quem grava é o vpsistema.com/administracao
+     (vpsistema-sync). Falha de leitura NÃO vira "sem valores": devolve { erro }. */
+  async function valoresAcessoDe(perfilId) {
+    const c = sb(); if (!c) return { erro: 'Supabase não carregado' };
+    const { data, error } = await c.from('valores_acesso').select('modo, liberar, esconder, atualizado_em').eq('perfil_id', perfilId).maybeSingle();
+    if (error) return { erro: error.message || 'Não foi possível ler os valores.' };
+    return { dados: data || null };
+  }
   async function rpcManual(nome, args) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { data, error } = await c.rpc(nome, args);
@@ -431,6 +440,6 @@
     alocar, desalocar, removerTodasAlocacoes, enriquecerUsuarioLogado,
     ACOES_PADRAO, CATALOGO_MODULOS, listarCapacidadesConcedidas, concederCapacidade,
     MODULOS_POR_GRUPO_SIDEBAR, capacidadesDoGrupo, concederGrupoInteiro,
-    acessoManual, definirAcessoManual, definirAlcadaManual,
+    acessoManual, definirAcessoManual, definirAlcadaManual, valoresAcessoDe,
   };
 }());

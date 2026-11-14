@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/15_administracao.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 01/11/2026 (origin/main `c0d5db5`)
-- **Palavras:** 3946 · **blocos:** 78 · **seções com selo próprio:** 31 de 36
-- **Origem do selo dos blocos:** próprio 45 · da seção 11 · da seção-pai 0 · do cabeçalho 3 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 19
-- **Selo efetivo dos blocos:** Conferido 37 · Herdado 14 · Não verificado 8
+- **Palavras:** 4140 · **blocos:** 81 · **seções com selo próprio:** 31 de 36
+- **Origem do selo dos blocos:** próprio 46 · da seção 13 · da seção-pai 0 · do cabeçalho 3 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 19
+- **Selo efetivo dos blocos:** Conferido 38 · Herdado 16 · Não verificado 8
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -32,13 +32,13 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 15.2.1 O que é | `docs/modulos/15_administracao.md#1521-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 15.2.2 Rota e arquivos | `docs/modulos/15_administracao.md#1522-rota-e-arquivos` | 3 | Conferido (uniforme) | 1 | b1 |
 | 15.2.3 Perfil e acesso | `docs/modulos/15_administracao.md#1523-perfil-e-acesso` | 3 | Não verificado (misto (vale o mais fraco)) | 1 | b1 |
-| 15.2.4 O que a tela mostra | `docs/modulos/15_administracao.md#1524-o-que-a-tela-mostra` | 3 | Conferido (uniforme) | 6 | b1 s5 |
+| 15.2.4 O que a tela mostra | `docs/modulos/15_administracao.md#1524-o-que-a-tela-mostra` | 3 | Conferido (uniforme) | 7 | b2 s5 |
 | 15.2.5 Botões e controles | `docs/modulos/15_administracao.md#1525-botões-e-controles` | 3 | Conferido (uniforme) | 1 | b1 |
 | 15.2.6 Comportamento | `docs/modulos/15_administracao.md#1526-comportamento` | 3 | Conferido (uniforme) | 1 | b1 |
 | 15.2.7 Dados | `docs/modulos/15_administracao.md#1527-dados` | 3 | Conferido (uniforme) | 1 | b1 |
 | 15.2.8 Regras e armadilhas | `docs/modulos/15_administracao.md#1528-regras-e-armadilhas` | 3 | Não verificado (misto (vale o mais fraco)) | 6 | b6 |
 | 15.2.9 Testes | `docs/modulos/15_administracao.md#1529-testes` | 3 | Conferido (uniforme) | 1 | b1 |
-| 15.2.10 Pendências e decisões | `docs/modulos/15_administracao.md#15210-pendências-e-decisões` | 3 | Herdado (uniforme) | 4 | b2 s2 |
+| 15.2.10 Pendências e decisões | `docs/modulos/15_administracao.md#15210-pendências-e-decisões` | 3 | Herdado (uniforme) | 6 | b2 s4 |
 | 15.2.11 Histórico | `docs/modulos/15_administracao.md#15211-histórico` | 3 | Herdado (uniforme) | 1 | b1 |
 | PC-1 Mapa de ligações | `docs/modulos/15_administracao.md#pc-1-mapa-de-ligações` | 2 | Herdado (selo explícito da seção) | 1 | b1 |
 | PC-2 Pessoas, perfis e alçadas de ponta a ponta | `docs/modulos/15_administracao.md#pc-2-pessoas-perfis-e-alçadas-de-ponta-a-ponta` | 2 | Conferido (uniforme) | 2 | b2 |
