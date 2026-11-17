@@ -50,6 +50,17 @@ window.BoletosAvisosStore = (() => {
     return out;
   }
 
+  /* Dias sem expediente (calendario_feriados; regra em BoletosAvisosCalc.conjuntoSemExpediente). Guarda o último lido:
+     o detalhe do cliente usa o mesmo. Falha de leitura não derruba a tela: fica só o fim de semana. */
+  let _feriados = new Set();
+  async function feriados() {
+    const { data, error } = await sb().from('calendario_feriados').select('data,descricao,bloqueia_envio,ativo').eq('ativo', true);
+    if (error) { console.warn('[BoletosAvisos] calendario_feriados indisponível — vale só o fim de semana', error.message); return _feriados; }
+    _feriados = window.BoletosAvisosCalc.conjuntoSemExpediente(data || []);
+    return _feriados;
+  }
+  const feriadosCache = () => _feriados;
+
   /* Log de envios do cliente + a resposta dele (e-mail de entrada ligado ao envio pelo read-inbox) */
   async function logDoCliente(cod) {
     const { data: envios, error } = await sb().from('boletos_avisos_envios').select('*').eq('codigo_cliente_omie', cod).order('criado_em', { ascending: false }).limit(100);
@@ -99,5 +110,5 @@ window.BoletosAvisosStore = (() => {
   }
   async function simularAutomatico() { return chamar('automatico', { simular: true }); }
 
-  return { pode, podeGerir, listarClientes, boletosAbertos, boletosDoCliente, logDoCliente, config, salvarConfig, sincronizar, enviarAviso, simularAutomatico, quem };
+  return { pode, podeGerir, feriados, feriadosCache, listarClientes, boletosAbertos, boletosDoCliente, logDoCliente, config, salvarConfig, sincronizar, enviarAviso, simularAutomatico, quem };
 })();

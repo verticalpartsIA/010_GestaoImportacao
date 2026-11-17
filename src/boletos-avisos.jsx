@@ -41,7 +41,7 @@ function BavDetalhe({ cliente }) {
             {boletos === null && <tr><td colSpan={5}>Carregando…</td></tr>}
             {(boletos || []).map(b => (
               <tr key={b.codigo_lancamento_omie}>
-                <td><BavSemaforo situacao={C.situacaoDoBoleto(b.data_vencimento, hoje)} dias={C.diasDesdeVencimento(b.data_vencimento, hoje)}/></td>
+                <td><BavSemaforo situacao={C.situacaoDoBoleto(b.data_vencimento, hoje, S.feriadosCache())} dias={C.diasDeAtraso(b.data_vencimento, hoje, S.feriadosCache())}/></td>
                 <td>{[b.numero_documento, b.numero_parcela].filter(Boolean).join(' · ') || '—'}</td>
                 <td>{C.dataBR(b.data_vencimento)}</td>
                 <td>{C.moedaBR(b.valor)}</td>
@@ -90,6 +90,7 @@ function BoletosAvisosPage() {
   const [gerir, setGerir] = React.useState(false); // só os 3 fixos; quem tem só a alçada "ver" consulta, sem botões de ação
   const [lista, setLista] = React.useState(null);
   const [abertos, setAbertos] = React.useState([]);
+  const [feriados, setFeriados] = React.useState(new Set());
   const [cfg, setCfg] = React.useState(null);
   const [erro, setErro] = React.useState(null);
   const [busy, setBusy] = React.useState(null);
@@ -99,8 +100,8 @@ function BoletosAvisosPage() {
 
   const carregar = React.useCallback(async () => {
     try {
-      const [l, c, b] = await Promise.all([S.listarClientes(), S.config(), S.boletosAbertos()]);
-      setLista(l); setCfg(c); setAbertos(b); setErro(null);
+      const [l, c, b, f] = await Promise.all([S.listarClientes(), S.config(), S.boletosAbertos(), S.feriados()]);
+      setLista(l); setCfg(c); setAbertos(b); setFeriados(f); setErro(null);
     } catch (e) { setErro(e.message); setLista([]); }
   }, []);
   React.useEffect(() => {
@@ -159,9 +160,9 @@ function BoletosAvisosPage() {
   /* Os cards acompanham a busca e o filtro: somam só os títulos dos clientes que estão na lista */
   const filtrando = !!q || soSem;
   const codigosFiltrados = new Set(filtrada.map(c => c.codigo_cliente_omie));
-  const fin = C.resumoFinanceiro(filtrando ? abertos.filter(b => codigosFiltrados.has(b.codigo_cliente_omie)) : abertos, C.hojeBrasil());
+  const fin = C.resumoFinanceiro(filtrando ? abertos.filter(b => codigosFiltrados.has(b.codigo_cliente_omie)) : abertos, C.hojeBrasil(), feriados);
   const atrasadoDoCliente = new Map();
-  for (const b of abertos) { if (C.situacaoDoBoleto(b.data_vencimento, C.hojeBrasil()) === 'atrasado') atrasadoDoCliente.set(b.codigo_cliente_omie, Math.round(((atrasadoDoCliente.get(b.codigo_cliente_omie) || 0) + Number(b.valor || 0)) * 100) / 100); }
+  for (const b of abertos) { if (C.situacaoDoBoleto(b.data_vencimento, C.hojeBrasil(), feriados) === 'atrasado') atrasadoDoCliente.set(b.codigo_cliente_omie, Math.round(((atrasadoDoCliente.get(b.codigo_cliente_omie) || 0) + Number(b.valor || 0)) * 100) / 100); }
   const tot = filtrada.reduce((a, c) => { a.boletos += Number(c.qtd_boletos || 0); a.sem += Number(c.qtd_sem_boleto || 0); if (c.situacao === 'atrasado') a.atr++; if (c.situacao === 'vence_hoje') a.hoje++; if (!(c.emails || []).length) a.semEmail++; return a; }, { boletos: 0, sem: 0, atr: 0, hoje: 0, semEmail: 0 });
 
   return (

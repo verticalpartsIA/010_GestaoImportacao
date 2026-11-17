@@ -6,9 +6,10 @@
    republique a função.
 
    Etapas dos avisos automáticos (decisão do Gelson, 11/11/2026): 5 dias antes (D-5),
-   1 dia antes (D-1), no dia (D0) e 1 dia depois (D+1). A etapa só vale NA data dela. A rotina
-   roda de segunda a sexta; na segunda-feira também sai o que caiu no sábado/domingo (a mais
-   recente prevalece). Se a rotina falhar num dia, a etapa daquele dia não é recuperada depois.
+   1 dia antes (D-1), no dia (D0) e 1 dia depois (D+1). A etapa só vale NA data dela.
+   Desde 17/11/2026: nada sai em sábado, domingo ou feriado (calendario_feriados); o vencimento que
+   vale é o próximo dia útil (regra bancária) e cada etapa cai sempre num dia útil (datasDasEtapas).
+   Se a rotina falhar num dia, a etapa daquele dia não é recuperada depois.
    Dia = data de Brasília (AAAA-MM-DD).
    ============================================================ */
 window.BoletosAvisosCalc = (() => {
@@ -24,35 +25,79 @@ window.BoletosAvisosCalc = (() => {
     const b = Date.UTC(+hojeISO.slice(0, 4), +hojeISO.slice(5, 7) - 1, +hojeISO.slice(8, 10));
     return Math.round((b - a) / 86400000);
   }
-  function situacaoDoBoleto(vencISO, hojeISO) {
-    const d = diasDesdeVencimento(vencISO, hojeISO);
+  /* Dia sem expediente (17/11/2026, decisão do Gelson): sábado, domingo e os feriados do calendário do hub que
+     bloqueiam envio (nacionais, estaduais de SP e municipais de Guarulhos) + segunda e terça de Carnaval (banco fechado).
+     feriados = Set de 'AAAA-MM-DD' (conjuntoSemExpediente); sem o Set, vale só o fim de semana. */
+  function conjuntoSemExpediente(linhas) {
+    return new Set((linhas || []).filter((l) => l.ativo !== false && (l.bloqueia_envio === true || /^carnaval/i.test(l.descricao || ''))).map((l) => l.data));
+  }
+  function somarDias(iso, n) {
+    return new Date(Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) + n * 86400000).toISOString().slice(0, 10);
+  }
+  function diaUtil(iso, feriados) {
+    const w = new Date(iso + 'T12:00:00Z').getUTCDay();
+    return w !== 0 && w !== 6 && !(feriados && feriados.has(iso));
+  }
+  function proximoDiaUtil(iso, feriados) {
+    let d = iso;
+    for (let i = 0; i < 60 && !diaUtil(d, feriados); i++) d = somarDias(d, 1);
+    return d;
+  }
+  function diaUtilAnterior(iso, feriados) {
+    let d = somarDias(iso, -1);
+    for (let i = 0; i < 60 && !diaUtil(d, feriados); i++) d = somarDias(d, -1);
+    return d;
+  }
+  /* Boleto que vence em dia sem expediente pode ser pago no próximo dia útil sem encargos: é esse o vencimento que vale. */
+  function vencimentoEfetivo(vencISO, feriados) { return proximoDiaUtil(vencISO, feriados); }
+  /* Data (sempre dia útil) de cada etapa. D-1 é o dia útil ANTES do vencimento efetivo; as demais vão para o próximo
+     dia útil. Sem boleto o aviso de atraso sai no 2º dia útil (conciliação manual). */
+  function datasDasEtapas(vencISO, semBoleto, feriados) {
+    const efetivo = vencimentoEfetivo(vencISO, feriados);
+    const atraso1 = proximoDiaUtil(somarDias(efetivo, 1), feriados);
+    return {
+      'D-5': proximoDiaUtil(somarDias(vencISO, -5), feriados),
+      'D-1': diaUtilAnterior(efetivo, feriados),
+      'D0': efetivo,
+      'D+1': semBoleto ? proximoDiaUtil(somarDias(atraso1, 1), feriados) : atraso1,
+    };
+  }
+  function situacaoDoBoleto(vencISO, hojeISO, feriados) {
+    const d = diasDesdeVencimento(vencimentoEfetivo(vencISO, feriados), hojeISO);
     return d > 0 ? 'atrasado' : d === 0 ? 'vence_hoje' : 'em_dia';
   }
-  function etapaDevida(vencISO, hojeISO, jaEnviadas, semBoleto) {
-    const d = diasDesdeVencimento(vencISO, hojeISO);
-    const segunda = new Date(hojeISO + 'T12:00:00Z').getUTCDay() === 1;
+  function diasDeAtraso(vencISO, hojeISO, feriados) {
+    return Math.max(0, diasDesdeVencimento(vencimentoEfetivo(vencISO, feriados), hojeISO));
+  }
+  /* Em dia sem expediente nada sai. Num dia útil sai a etapa cuja data é hoje (a mais adiantada, se coincidirem). */
+  function etapaDevida(vencISO, hojeISO, jaEnviadas, semBoleto, feriados) {
+    if (!diaUtil(hojeISO, feriados)) return null;
+    const datas = datasDasEtapas(vencISO, semBoleto, feriados);
     let achada = null;
     for (const e of ETAPAS) {
-      const dias = (e.cod === 'D+1' && semBoleto) ? 2 : e.dias;   // sem boleto a conciliação é manual: o aviso de atraso sai no 2º dia
-      const atraso = d - dias;
-      if (atraso === 0 || (segunda && (atraso === 1 || atraso === 2))) achada = e;
+      if (e.cod === 'D-5' && datas['D-5'] >= datas['D-1']) continue;   // feriado longo: o D-1 já cobre
+      if (datas[e.cod] === hojeISO) achada = e.cod;
     }
-    if (!achada || (jaEnviadas || []).includes(achada.cod)) return null;
-    return achada.cod;
+    if (!achada || (jaEnviadas || []).includes(achada)) return null;
+    return achada;
   }
   function dataBR(iso) { return iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : ''; }
   function moedaBR(v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-  function montarAviso(razao, boletos, etapa) {
+  function montarAviso(razao, boletos, etapa, feriados) {
     // Textos aprovados pelo Gelson em 17/11/2026 (mantém "encargos"; sem telefone e sem dados bancários).
     const plural = boletos.length > 1;
     const algumSem = boletos.some((b) => b.tem_boleto === false);
     const pl = (sing, plur) => (plural ? plur : sing);
     const item = algumSem ? pl('pagamento', 'pagamentos') : pl('boleto', 'boletos');
     const vence = pl('vence', 'vencem');
+    const vencEmDiaSemExpediente = boletos.every((b) => !diaUtil(b.data_vencimento, feriados));
     const intro = {
       'D-5': 'Olá, tudo bem?\n\nPassando para lembrar que ' + pl('o ', 'os ') + item + ' abaixo ' + vence + ' em 5 dias:',
       'D-1': 'Olá,\n\n' + pl('O ', 'Os ') + item + ' abaixo ' + vence + ' amanhã:',
-      'D0': 'Olá,\n\n' + pl('O ', 'Os ') + item + ' abaixo ' + vence + ' hoje:',
+      'D0': 'Olá,\n\n' + pl('O ', 'Os ') + item + ' abaixo ' + (vencEmDiaSemExpediente
+        ? pl('venceu', 'venceram') + ' em dia sem expediente bancário e ' + pl('pode', 'podem') + ' ser '
+          + (algumSem ? pl('feito', 'feitos') : pl('pago', 'pagos')) + ' hoje sem encargos:'
+        : vence + ' hoje:'),
       'D+1': 'Olá,\n\n' + (algumSem
         ? 'Até o momento ' + pl('o pagamento abaixo, já vencido, ainda não consta como recebido:', 'os pagamentos abaixo, já vencidos, ainda não constam como recebidos:')
         : 'Até o momento não identificamos o pagamento ' + pl('do boleto abaixo, já vencido:', 'dos boletos abaixo, já vencidos:')),
@@ -106,11 +151,11 @@ window.BoletosAvisosCalc = (() => {
 
   /* Impacto financeiro (só da tela; não está na Edge Function): dinheiro em aberto por situação do BOLETO.
      Soma em centavos para não acumular erro de ponto flutuante. Atrasado se divide em 1–30 dias e mais de 30. */
-  function resumoFinanceiro(boletos, hojeISO) {
+  function resumoFinanceiro(boletos, hojeISO, feriados) {
     const vazio = () => ({ centavos: 0, boletos: 0, clientes: new Set() });
     const b = { aVencer: vazio(), venceHoje: vazio(), atrasado30: vazio(), atrasadoMais30: vazio() };
     for (const x of boletos || []) {
-      const d = diasDesdeVencimento(x.data_vencimento, hojeISO);
+      const d = diasDesdeVencimento(vencimentoEfetivo(x.data_vencimento, feriados), hojeISO);
       const k = d < 0 ? 'aVencer' : d === 0 ? 'venceHoje' : d <= 30 ? 'atrasado30' : 'atrasadoMais30';
       b[k].centavos += Math.round(Number(x.valor || 0) * 100);
       b[k].boletos++;
@@ -134,5 +179,6 @@ window.BoletosAvisosCalc = (() => {
   return {
     ETAPAS, SITUACOES, ETAPA_ROTULO,
     diasDesdeVencimento, situacaoDoBoleto, etapaDevida, montarAviso, dataBR, moedaBR, hojeBrasil, resumoFinanceiro,
+    conjuntoSemExpediente, diaUtil, vencimentoEfetivo, datasDasEtapas, diasDeAtraso,
   };
 })();
