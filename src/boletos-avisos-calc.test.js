@@ -25,13 +25,15 @@ test('etapa já enviada não se repete', () => {
   assert.equal(C.etapaDevida('2026-11-16', '2026-11-11', ['D-5']), null);
   assert.equal(C.etapaDevida('2026-11-11', '2026-11-11', ['D-5', 'D-1']), 'D0');
 });
-test('segunda-feira recupera a etapa que caiu no fim de semana (D-5 de um boleto de quinta)', () => {
+test('etapa que cairia no fim de semana vai para o próximo dia útil (D-5 de um boleto de quinta)', () => {
   // 19/11 (quinta): o D-5 cai no sábado 14/11; a rotina só roda de segunda a sexta
   assert.equal(C.etapaDevida('2026-11-19', '2026-11-16', []), 'D-5');
 });
-test('boleto de domingo: na segunda sai o D+1 (a mais recente vence a do fim de semana)', () => {
-  assert.equal(C.etapaDevida('2026-11-15', '2026-11-16', []), 'D+1');
-  assert.equal(C.etapaDevida('2026-11-14', '2026-11-16', []), 'D+1');
+test('boleto que vence no fim de semana: o vencimento vale na segunda (D0), o atraso só na terça', () => {
+  assert.equal(C.etapaDevida('2026-11-15', '2026-11-16', []), 'D0');
+  assert.equal(C.etapaDevida('2026-11-14', '2026-11-16', []), 'D0');
+  assert.equal(C.etapaDevida('2026-11-14', '2026-11-17', []), 'D+1');
+  assert.equal(C.etapaDevida('2026-11-14', '2026-11-13', []), 'D-1');   // sexta antes
 });
 test('fora da segunda-feira não há recuperação: o que passou do dia não é cobrado depois', () => {
   assert.equal(C.etapaDevida('2026-11-10', '2026-11-12', []), null);   // quinta, D+1 era quarta
@@ -134,7 +136,7 @@ test('resumo financeiro separa a vencer, vence hoje e atrasado (1–30 e mais de
     { codigo_cliente_omie: 1, data_vencimento: '2026-11-11', valor: 500.05 },    // vence hoje
     { codigo_cliente_omie: 2, data_vencimento: '2026-11-01', valor: 250 },       // 10 dias
     { codigo_cliente_omie: 3, data_vencimento: '2026-10-12', valor: 300 },       // 30 dias (ainda até 30)
-    { codigo_cliente_omie: 3, data_vencimento: '2026-10-11', valor: 400.40 },    // 31 dias
+    { codigo_cliente_omie: 3, data_vencimento: '2026-10-09', valor: 400.40 },    // 33 dias (sexta; domingo 11/10 valeria na segunda)
   ];
   const r = C.resumoFinanceiro(bs, hoje);
   assert.equal(r.aVencer.valor, 1000.10);
@@ -198,5 +200,64 @@ test('sem boleto: D-5, D-1 e D0 continuam iguais; sexta vencida cai na segunda (
   assert.equal(C.etapaDevida('2026-11-16', '2026-11-11', [], true), 'D-5');
   assert.equal(C.etapaDevida('2026-11-12', '2026-11-11', [], true), 'D-1');
   assert.equal(C.etapaDevida('2026-11-11', '2026-11-11', [], true), 'D0');
-  assert.equal(C.etapaDevida('2026-11-13', '2026-11-16', [], true), 'D+1');   // vence sexta, 2º dia = domingo, sai na segunda
+  assert.equal(C.etapaDevida('2026-11-13', '2026-11-16', [], true), null);    // vence sexta: 1º dia útil = segunda
+  assert.equal(C.etapaDevida('2026-11-13', '2026-11-17', [], true), 'D+1');   // 2º dia útil = terça
+});
+
+// ---- dia sem expediente: fim de semana, feriados e Carnaval (17/11/2026) ----
+const FER = C.conjuntoSemExpediente([
+  { data: '2026-11-20', descricao: 'Consciência Negra', bloqueia_envio: true, ativo: true },
+  { data: '2027-02-08', descricao: 'Carnaval (segunda)', bloqueia_envio: false, ativo: true },
+  { data: '2027-02-09', descricao: 'Carnaval (terça)', bloqueia_envio: false, ativo: true },
+  { data: '2027-01-25', descricao: 'Aniversário de São Paulo (cidade)', bloqueia_envio: false, ativo: true },
+  { data: '2026-12-08', descricao: 'Aniversário de Guarulhos', bloqueia_envio: true, ativo: false },
+]);
+test('o calendário sem expediente leva feriado que bloqueia envio e Carnaval; fica fora o que não bloqueia e o inativo', () => {
+  assert.deepEqual([...FER].sort(), ['2026-11-20', '2027-02-08', '2027-02-09']);
+});
+test('em feriado e fim de semana nenhum aviso sai', () => {
+  assert.equal(C.etapaDevida('2026-11-25', '2026-11-20', [], false, FER), null);   // sexta 20/11 feriado
+  assert.equal(C.etapaDevida('2026-11-26', '2026-11-21', [], false, FER), null);   // sábado
+  assert.equal(C.diaUtil('2026-11-20', FER), false);
+  assert.equal(C.diaUtil('2026-11-19', FER), true);
+});
+test('exemplo do Gelson: boleto de sábado 21/11 com feriado na sexta 20/11', () => {
+  assert.deepEqual(C.datasDasEtapas('2026-11-21', false, FER), { 'D-5': '2026-11-16', 'D-1': '2026-11-19', 'D0': '2026-11-23', 'D+1': '2026-11-24' });
+  assert.equal(C.datasDasEtapas('2026-11-21', true, FER)['D+1'], '2026-11-25');   // sem boleto: 2º dia útil
+  assert.equal(C.etapaDevida('2026-11-21', '2026-11-19', [], false, FER), 'D-1');
+  assert.equal(C.etapaDevida('2026-11-21', '2026-11-23', [], false, FER), 'D0');
+  assert.equal(C.etapaDevida('2026-11-21', '2026-11-24', [], false, FER), 'D+1');
+});
+test('boleto que vence no feriado vale no dia útil seguinte: semáforo em dia antes, sem atraso no dia', () => {
+  assert.equal(C.vencimentoEfetivo('2026-11-20', FER), '2026-11-23');
+  assert.equal(C.situacaoDoBoleto('2026-11-20', '2026-11-23', FER), 'vence_hoje');
+  assert.equal(C.situacaoDoBoleto('2026-11-20', '2026-11-24', FER), 'atrasado');
+  assert.equal(C.diasDeAtraso('2026-11-20', '2026-11-24', FER), 1);
+  assert.equal(C.diasDeAtraso('2026-11-20', '2026-11-23', FER), 0);
+});
+test('Carnaval: boleto da segunda de Carnaval vale na quarta de cinzas', () => {
+  assert.equal(C.vencimentoEfetivo('2027-02-08', FER), '2027-02-10');
+  assert.equal(C.etapaDevida('2027-02-08', '2027-02-05', [], false, FER), 'D-1');   // sexta antes
+  assert.equal(C.etapaDevida('2027-02-08', '2027-02-10', [], false, FER), 'D0');
+  assert.equal(C.etapaDevida('2027-02-08', '2027-02-11', [], false, FER), 'D+1');
+});
+test('resumo financeiro não conta como atrasado o boleto que venceu no feriado e vale hoje', () => {
+  const r = C.resumoFinanceiro([{ codigo_cliente_omie: 1, data_vencimento: '2026-11-21', valor: 100 }], '2026-11-23', FER);
+  assert.equal(r.venceHoje.valor, 100);
+  assert.equal(r.atrasado.valor, 0);
+});
+test('aviso no dia de boleto que venceu em dia sem expediente diz que pode pagar hoje sem encargos', () => {
+  const sab = { ...b1, data_vencimento: '2026-11-21' };
+  assert.match(C.montarAviso('ACME', [sab], 'D0', FER).texto, /O boleto abaixo venceu em dia sem expediente bancário e pode ser pago hoje sem encargos:/);
+  assert.match(C.montarAviso('ACME', [sab, sab], 'D0', FER).texto, /Os boletos abaixo venceram em dia sem expediente bancário e podem ser pagos hoje sem encargos:/);
+  assert.match(C.montarAviso('X', [{ ...sab, tem_boleto: false }], 'D0', FER).texto, /O pagamento abaixo venceu em dia sem expediente bancário e pode ser feito hoje sem encargos:/);
+  assert.match(C.montarAviso('ACME', [{ ...b1, data_vencimento: '2026-11-23' }], 'D0', FER).texto, /O boleto abaixo vence hoje:/);
+});
+test('a função lê o calendário de feriados e não envia em dia sem expediente', () => {
+  const f = ler('supabase/functions/boletos-avisos/index.ts');
+  assert.match(f, /conjuntoSemExpediente\(await pgSelectTudo\("calendario_feriados"/);
+  assert.match(f, /if \(!diaUtil\(hoje, feriados\)\) return/);
+  const sql = ler('supabase/migrations/20261117100000_boletos_avisos_dia_util.sql');
+  assert.match(sql, /f\.bloqueia_envio or f\.descricao ilike 'Carnaval%'/);
+  assert.match(sql, /boletos_avisos_venc_efetivo\(b\.data_vencimento\)/);
 });

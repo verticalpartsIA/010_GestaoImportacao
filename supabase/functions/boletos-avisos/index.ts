@@ -54,35 +54,79 @@ function hojeBrasil(agora) { return new Date((agora || Date.now()) - 3 * 3600e3)
     const b = Date.UTC(+hojeISO.slice(0, 4), +hojeISO.slice(5, 7) - 1, +hojeISO.slice(8, 10));
     return Math.round((b - a) / 86400000);
   }
-  function situacaoDoBoleto(vencISO, hojeISO) {
-    const d = diasDesdeVencimento(vencISO, hojeISO);
+  /* Dia sem expediente (17/11/2026, decisão do Gelson): sábado, domingo e os feriados do calendário do hub que
+     bloqueiam envio (nacionais, estaduais de SP e municipais de Guarulhos) + segunda e terça de Carnaval (banco fechado).
+     feriados = Set de 'AAAA-MM-DD' (conjuntoSemExpediente); sem o Set, vale só o fim de semana. */
+  function conjuntoSemExpediente(linhas) {
+    return new Set((linhas || []).filter((l) => l.ativo !== false && (l.bloqueia_envio === true || /^carnaval/i.test(l.descricao || ''))).map((l) => l.data));
+  }
+  function somarDias(iso, n) {
+    return new Date(Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) + n * 86400000).toISOString().slice(0, 10);
+  }
+  function diaUtil(iso, feriados) {
+    const w = new Date(iso + 'T12:00:00Z').getUTCDay();
+    return w !== 0 && w !== 6 && !(feriados && feriados.has(iso));
+  }
+  function proximoDiaUtil(iso, feriados) {
+    let d = iso;
+    for (let i = 0; i < 60 && !diaUtil(d, feriados); i++) d = somarDias(d, 1);
+    return d;
+  }
+  function diaUtilAnterior(iso, feriados) {
+    let d = somarDias(iso, -1);
+    for (let i = 0; i < 60 && !diaUtil(d, feriados); i++) d = somarDias(d, -1);
+    return d;
+  }
+  /* Boleto que vence em dia sem expediente pode ser pago no próximo dia útil sem encargos: é esse o vencimento que vale. */
+  function vencimentoEfetivo(vencISO, feriados) { return proximoDiaUtil(vencISO, feriados); }
+  /* Data (sempre dia útil) de cada etapa. D-1 é o dia útil ANTES do vencimento efetivo; as demais vão para o próximo
+     dia útil. Sem boleto o aviso de atraso sai no 2º dia útil (conciliação manual). */
+  function datasDasEtapas(vencISO, semBoleto, feriados) {
+    const efetivo = vencimentoEfetivo(vencISO, feriados);
+    const atraso1 = proximoDiaUtil(somarDias(efetivo, 1), feriados);
+    return {
+      'D-5': proximoDiaUtil(somarDias(vencISO, -5), feriados),
+      'D-1': diaUtilAnterior(efetivo, feriados),
+      'D0': efetivo,
+      'D+1': semBoleto ? proximoDiaUtil(somarDias(atraso1, 1), feriados) : atraso1,
+    };
+  }
+  function situacaoDoBoleto(vencISO, hojeISO, feriados) {
+    const d = diasDesdeVencimento(vencimentoEfetivo(vencISO, feriados), hojeISO);
     return d > 0 ? 'atrasado' : d === 0 ? 'vence_hoje' : 'em_dia';
   }
-  function etapaDevida(vencISO, hojeISO, jaEnviadas, semBoleto) {
-    const d = diasDesdeVencimento(vencISO, hojeISO);
-    const segunda = new Date(hojeISO + 'T12:00:00Z').getUTCDay() === 1;
+  function diasDeAtraso(vencISO, hojeISO, feriados) {
+    return Math.max(0, diasDesdeVencimento(vencimentoEfetivo(vencISO, feriados), hojeISO));
+  }
+  /* Em dia sem expediente nada sai. Num dia útil sai a etapa cuja data é hoje (a mais adiantada, se coincidirem). */
+  function etapaDevida(vencISO, hojeISO, jaEnviadas, semBoleto, feriados) {
+    if (!diaUtil(hojeISO, feriados)) return null;
+    const datas = datasDasEtapas(vencISO, semBoleto, feriados);
     let achada = null;
     for (const e of ETAPAS) {
-      const dias = (e.cod === 'D+1' && semBoleto) ? 2 : e.dias;   // sem boleto a conciliação é manual: o aviso de atraso sai no 2º dia
-      const atraso = d - dias;
-      if (atraso === 0 || (segunda && (atraso === 1 || atraso === 2))) achada = e;
+      if (e.cod === 'D-5' && datas['D-5'] >= datas['D-1']) continue;   // feriado longo: o D-1 já cobre
+      if (datas[e.cod] === hojeISO) achada = e.cod;
     }
-    if (!achada || (jaEnviadas || []).includes(achada.cod)) return null;
-    return achada.cod;
+    if (!achada || (jaEnviadas || []).includes(achada)) return null;
+    return achada;
   }
   function dataBR(iso) { return iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : ''; }
   function moedaBR(v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-  function montarAviso(razao, boletos, etapa) {
+  function montarAviso(razao, boletos, etapa, feriados) {
     // Textos aprovados pelo Gelson em 17/11/2026 (mantém "encargos"; sem telefone e sem dados bancários).
     const plural = boletos.length > 1;
     const algumSem = boletos.some((b) => b.tem_boleto === false);
     const pl = (sing, plur) => (plural ? plur : sing);
     const item = algumSem ? pl('pagamento', 'pagamentos') : pl('boleto', 'boletos');
     const vence = pl('vence', 'vencem');
+    const vencEmDiaSemExpediente = boletos.every((b) => !diaUtil(b.data_vencimento, feriados));
     const intro = {
       'D-5': 'Olá, tudo bem?\n\nPassando para lembrar que ' + pl('o ', 'os ') + item + ' abaixo ' + vence + ' em 5 dias:',
       'D-1': 'Olá,\n\n' + pl('O ', 'Os ') + item + ' abaixo ' + vence + ' amanhã:',
-      'D0': 'Olá,\n\n' + pl('O ', 'Os ') + item + ' abaixo ' + vence + ' hoje:',
+      'D0': 'Olá,\n\n' + pl('O ', 'Os ') + item + ' abaixo ' + (vencEmDiaSemExpediente
+        ? pl('venceu', 'venceram') + ' em dia sem expediente bancário e ' + pl('pode', 'podem') + ' ser '
+          + (algumSem ? pl('feito', 'feitos') : pl('pago', 'pagos')) + ' hoje sem encargos:'
+        : vence + ' hoje:'),
       'D+1': 'Olá,\n\n' + (algumSem
         ? 'Até o momento ' + pl('o pagamento abaixo, já vencido, ainda não consta como recebido:', 'os pagamentos abaixo, já vencidos, ainda não constam como recebidos:')
         : 'Até o momento não identificamos o pagamento ' + pl('do boleto abaixo, já vencido:', 'dos boletos abaixo, já vencidos:')),
@@ -319,13 +363,13 @@ async function enviarGraph(para, assunto, texto) {
 }
 
 /* ---------- envio de um cliente (log + Inbox) ---------- */
-async function enviarParaCliente({ cliente, boletos, etapaPorBoleto, etapaAssunto, origem, enviadoPor, config, simular }) {
+async function enviarParaCliente({ cliente, boletos, etapaPorBoleto, etapaAssunto, origem, enviadoPor, config, simular, feriados }) {
   const modoTeste = !!config.destino_teste;
   const reais = (cliente.emails || []).filter((e) => EMAIL_RE.test(e)).slice(0, 10);
   const para = modoTeste ? [config.destino_teste] : reais;
   if (!para.length) return { ok: false, motivo: "sem_email" };
   const razao = cliente.razao_social || `Cliente ${cliente.codigo_cliente_omie}`;
-  const msg = montarAviso(razao, boletos, etapaAssunto);
+  const msg = montarAviso(razao, boletos, etapaAssunto, feriados);
   const assunto = (modoTeste ? "[MODO TESTE] " : "") + msg.assunto;
   const texto = (modoTeste ? `[MODO TESTE — este aviso iria para: ${reais.join(", ") || "nenhum e-mail"}]\n\n` : "") + msg.texto;
   if (simular) return { ok: true, simulado: true, para, assunto, texto };
@@ -358,13 +402,16 @@ async function carregarBase() {
   const boletos = await pgSelectTudo("boletos_avisos_boletos", "select=*&aberto=eq.true");
   const clientes = await pgSelectTudo("boletos_avisos_clientes", "select=*");
   const porCliente = new Map(clientes.map((c) => [c.codigo_cliente_omie, c]));
-  return { config, boletos, porCliente };
+  // sem o calendário não há como saber se hoje é feriado: o erro sobe e nada é enviado
+  const feriados = conjuntoSemExpediente(await pgSelectTudo("calendario_feriados", "select=data,descricao,bloqueia_envio,ativo&ativo=is.true"));
+  return { config, boletos, porCliente, feriados };
 }
 
 async function automatico(simular) {
-  const { config, boletos, porCliente } = await carregarBase();
+  const { config, boletos, porCliente, feriados } = await carregarBase();
   if (!config?.envio_automatico && !simular) return { pulado: "envio automático desligado" };
   const hoje = hojeBrasil();
+  if (!diaUtil(hoje, feriados)) return { hoje, pulado: "dia sem expediente (fim de semana ou feriado): nenhum aviso sai hoje" };
   const ids = boletos.map((b) => b.codigo_lancamento_omie);
   const itens = ids.length ? await pgSelectTudo("boletos_avisos_envio_itens", "select=codigo_lancamento_omie,etapa&etapa=neq.manual") : [];
   const jaPorBoleto = new Map();
@@ -372,7 +419,7 @@ async function automatico(simular) {
 
   const grupos = new Map();
   for (const b of boletos) {
-    const etapa = etapaDevida(b.data_vencimento, hoje, jaPorBoleto.get(b.codigo_lancamento_omie) || [], b.tem_boleto === false);
+    const etapa = etapaDevida(b.data_vencimento, hoje, jaPorBoleto.get(b.codigo_lancamento_omie) || [], b.tem_boleto === false, feriados);
     if (!etapa) continue;
     if (!grupos.has(b.codigo_cliente_omie)) grupos.set(b.codigo_cliente_omie, { boletos: [], etapaPorBoleto: {} });
     const g = grupos.get(b.codigo_cliente_omie);
@@ -387,25 +434,25 @@ async function automatico(simular) {
     const cliente = porCliente.get(cod) || { codigo_cliente_omie: cod, emails: [] };
     const ordem = ["D-5", "D-1", "D0", "D+1"];
     const etapaAssunto = Object.values(g.etapaPorBoleto).sort((a, b) => ordem.indexOf(b) - ordem.indexOf(a))[0];
-    const r = await enviarParaCliente({ cliente, boletos: g.boletos, etapaPorBoleto: g.etapaPorBoleto, etapaAssunto, origem: "automatico", enviadoPor: null, config: config || {}, simular });
+    const r = await enviarParaCliente({ cliente, boletos: g.boletos, etapaPorBoleto: g.etapaPorBoleto, etapaAssunto, origem: "automatico", enviadoPor: null, config: config || {}, simular, feriados });
     if (r.motivo === "sem_email") { resultado.semEmail++; continue; }
     n++;
     if (simular) resultado.simulados.push({ cliente: cliente.razao_social || cod, etapa: etapaAssunto, para: r.para, assunto: r.assunto });
     else if (r.ok) resultado.enviados++; else resultado.erros++;
     await esperar(700);
   }
-  if (!simular && !modoTeste) resultado.avisoJuliana = await avisarJuliana(boletos, porCliente, hoje);
+  if (!simular && !modoTeste) resultado.avisoJuliana = await avisarJuliana(boletos, porCliente, hoje, feriados);
   return resultado;
 }
 
 const DIAS = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
-async function avisarJuliana(boletos, porCliente, hoje) {
-  const atrasados = boletos.filter((b) => b.data_vencimento < hoje);
+async function avisarJuliana(boletos, porCliente, hoje, feriados) {
+  const atrasados = boletos.filter((b) => diasDeAtraso(b.data_vencimento, hoje, feriados) > 0);
   if (!atrasados.length) return "nenhum atraso";
   const porCli = new Map();
   for (const b of atrasados) {
     const c = porCli.get(b.codigo_cliente_omie) || { dias: 0, valor: 0, qtd: 0 };
-    c.dias = Math.max(c.dias, diasDesdeVencimento(b.data_vencimento, hoje)); c.valor += Number(b.valor || 0); c.qtd++;
+    c.dias = Math.max(c.dias, diasDeAtraso(b.data_vencimento, hoje, feriados)); c.valor += Number(b.valor || 0); c.qtd++;
     porCli.set(b.codigo_cliente_omie, c);
   }
   const maiores = [...porCli.entries()].sort((a, b) => b[1].dias - a[1].dias).slice(0, 3)
@@ -422,11 +469,11 @@ async function avisarJuliana(boletos, porCliente, hoje) {
 }
 
 async function enviarManual(codigo, email, simular) {
-  const { config, boletos, porCliente } = await carregarBase();
+  const { config, boletos, porCliente, feriados } = await carregarBase();
   const cliente = porCliente.get(Number(codigo));
   const doCliente = boletos.filter((b) => b.codigo_cliente_omie === Number(codigo));
   if (!cliente || !doCliente.length) return { status: 404, corpo: { error: "Cliente sem boleto em aberto." } };
-  const r = await enviarParaCliente({ cliente, boletos: doCliente, etapaPorBoleto: {}, etapaAssunto: "manual", origem: "manual", enviadoPor: email, config: config || {}, simular });
+  const r = await enviarParaCliente({ cliente, boletos: doCliente, etapaPorBoleto: {}, etapaAssunto: "manual", origem: "manual", enviadoPor: email, config: config || {}, simular, feriados });
   if (r.motivo === "sem_email") return { status: 400, corpo: { error: "Este cliente não tem e-mail válido no Omie (campo e-mail de faturamento ou e-mail)." } };
   if (!r.ok) return { status: 502, corpo: { error: "Não foi possível enviar: " + r.motivo, envioId: r.envioId } };
   return { status: 200, corpo: r };
