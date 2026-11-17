@@ -50,7 +50,7 @@ const NAV_GROUPS = [
     { id: "precificacao", label: "Precificação", icon: "calculator", restrict: ["financeiro", "admin"] },
     { id: "aval-financeiro", label: "Aval Financeiro", icon: "shield", restrict: ["financeiro", "admin"] },
     { id: "emissao-nf", label: "Emissão de NF", icon: "fileText", restrict: ["financeiro", "admin"] },
-    { id: "boletos-avisos", label: "Boletos Avisos", icon: "mail", emails: ["gelson.simoes@verticalparts.com.br", "diego@verticalparts.com.br", "juliana@verticalparts.com.br"] },
+    { id: "boletos-avisos", label: "Boletos Avisos", icon: "mail", emails: ["gelson.simoes@verticalparts.com.br", "diego@verticalparts.com.br", "juliana@verticalparts.com.br"], restrict: ["financeiro"] },
     { id: "comissoes", label: "Comissões", icon: "award", restrict: ["financeiro", "admin"] },
   ]},
   { label: "Contratos & Jurídico", items: [
@@ -194,7 +194,11 @@ const GROUPS_LS_KEY = "vp_sidebar_collapsed_groups";
 function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
   const emailLogado = String((window.__VP_USER || {}).email || "").toLowerCase();
   /* "emails": item visível só para esses e-mails (organização do menu; a trava de verdade está no banco, Art. 25) */
-  const filterVisible = (item) => (!item.restrict || item.restrict.includes(role)) && (!item.emails || item.emails.includes(emailLogado));
+  /* Item com `emails` E `restrict` (Boletos Avisos, 17/11/2026): aparece para a lista de e-mails OU para o perfil;
+     quem decide o acesso de verdade é o banco (boletos_avisos_pode) e a tela confere de novo. */
+  const filterVisible = (item) => (item.emails && item.restrict)
+    ? (item.emails.includes(emailLogado) || item.restrict.includes(role))
+    : ((!item.restrict || item.restrict.includes(role)) && (!item.emails || item.emails.includes(emailLogado)));
   /* Badge de decisões pendentes — o dado já existia em DecisoesStore
      (listarPendentesParaMim, usado por decisoes.jsx), só nunca tinha sido
      plugado no nav. Sidebar já re-renderiza a cada navegação (recebe

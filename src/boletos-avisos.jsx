@@ -87,6 +87,7 @@ function BavDetalhe({ cliente }) {
 function BoletosAvisosPage() {
   const S = window.BoletosAvisosStore, C = window.BoletosAvisosCalc;
   const [acesso, setAcesso] = React.useState(null);
+  const [gerir, setGerir] = React.useState(false); // só os 3 fixos; quem tem só a alçada "ver" consulta, sem botões de ação
   const [lista, setLista] = React.useState(null);
   const [abertos, setAbertos] = React.useState([]);
   const [cfg, setCfg] = React.useState(null);
@@ -105,6 +106,7 @@ function BoletosAvisosPage() {
   React.useEffect(() => {
     let vivo = true;
     S.pode().then(ok => { if (vivo) { setAcesso(ok); if (ok) carregar(); } });
+    S.podeGerir().then(ok => { if (vivo) setGerir(ok); });
     const t = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
     return () => { vivo = false; clearInterval(t); };
   }, [carregar]);
@@ -168,7 +170,7 @@ function BoletosAvisosPage() {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro &amp; Preços · Boletos Avisos</div>
           <h1 className="page-head__title">Boletos Avisos</h1>
-          <p className="page-head__sub">Clientes com título em aberto no Omie (com boleto ou, para quem paga por depósito, sem boleto até 180 dias de atraso). O sistema avisa por e-mail 5 dias antes, 1 dia antes, no dia e, se atrasar, 1 dia depois (boleto) ou 2 dias depois (sem boleto, que o financeiro concilia à mão); a Juliana é avisada dos atrasos. Tela restrita: Gelson, Diego e Juliana.</p>
+          <p className="page-head__sub">Clientes com título em aberto no Omie (com boleto ou, para quem paga por depósito, sem boleto até 180 dias de atraso). O sistema avisa por e-mail 5 dias antes, 1 dia antes, no dia e, se atrasar, 1 dia depois (boleto) ou 2 dias depois (sem boleto, que o financeiro concilia à mão); a Juliana é avisada dos atrasos. Tela restrita: Gelson, Diego e Juliana gerenciam; quem recebeu a alçada só consulta.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <Button size="sm" variant="outline" disabled={busy === 'sync'} onClick={sincronizar}>{busy === 'sync' ? 'Lendo o Omie…' : 'Atualizar do Omie'}</Button>
@@ -179,10 +181,10 @@ function BoletosAvisosPage() {
       <Card>
         <div style={{ padding: '12px 16px', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
           <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 600 }}>
-            <input type="checkbox" checked={!!(cfg && cfg.envio_automatico)} disabled={busy === 'auto'} onChange={alternarAutomatico}/>
+            <input type="checkbox" checked={!!(cfg && cfg.envio_automatico)} disabled={!gerir || busy === 'auto'} onChange={alternarAutomatico}/>
             Envio automático {cfg && cfg.envio_automatico ? 'LIGADO' : 'desligado'}
           </label>
-          <span className="small">Modo teste: {cfg && cfg.destino_teste ? <b>{cfg.destino_teste}</b> : <span className="muted">desligado (vai para os clientes)</span>} · <a href="#" onClick={e => { e.preventDefault(); definirTeste(); }}>alterar</a></span>
+          <span className="small">Modo teste: {cfg && cfg.destino_teste ? <b>{cfg.destino_teste}</b> : <span className="muted">desligado (vai para os clientes)</span>}{gerir && <> · <a href="#" onClick={e => { e.preventDefault(); definirTeste(); }}>alterar</a></>}</span>
           <span className="small muted">Última leitura do Omie: {cfg && cfg.sincronizado_em ? new Date(cfg.sincronizado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'nunca'}</span>
         </div>
         <div style={{ padding: '4px 16px 12px', display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
@@ -229,7 +231,7 @@ function BoletosAvisosPage() {
                       <td>{semEmail ? <Badge variant="warning">sem e-mail</Badge> : <span className="small" title={c.emails.join(', ')}>{c.emails[0]}{c.emails.length > 1 ? ` +${c.emails.length - 1}` : ''}</span>}</td>
                       <td className="small">{c.ultimo_aviso_em ? <>{new Date(c.ultimo_aviso_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · {C.ETAPA_ROTULO[c.ultimo_aviso_etapa] || c.ultimo_aviso_etapa}{c.ultimo_aviso_status === 'erro' ? ' (erro)' : ''}</> : <span className="muted">—</span>}</td>
                       <td onClick={e => e.stopPropagation()}>
-                        <Button size="sm" variant="primary" disabled={semEmail || busy === 'env' + id} onClick={() => enviar(c)}>{busy === 'env' + id ? 'Enviando…' : 'Enviar aviso'}</Button>
+                        {gerir && <Button size="sm" variant="primary" disabled={semEmail || busy === 'env' + id} onClick={() => enviar(c)}>{busy === 'env' + id ? 'Enviando…' : 'Enviar aviso'}</Button>}
                       </td>
                     </tr>
                     {isOpen && <tr><td colSpan={8} style={{ padding: 0 }}><BavDetalhe cliente={c}/></td></tr>}
