@@ -59,16 +59,34 @@ test('assunto e texto do aviso D-1 citam o cliente, a NF, o vencimento e o valor
   assert.equal(m.assunto, 'Seu boleto vence amanhã — ACME LTDA');
   assert.match(m.texto, /NF 00021398 · parcela 004\/004 — vencimento 11\/11\/2026 — R\$\s4\.815,27/);
   assert.match(m.texto, /Linha digitável: 34191\.09008 00015\.387582/);
-  assert.match(m.texto, /responda este e-mail com o comprovante/);
+  assert.match(m.texto, /Para evitar encargos por atraso/);
+  assert.match(m.texto, /Atenciosamente,\nFinanceiro — VerticalParts$/);
 });
 test('o aviso fala no plural quando há mais de um boleto', () => {
   const m = C.montarAviso('ACME LTDA', [b1, { ...b1, numero_parcela: '003/004' }], 'D+1');
-  assert.match(m.texto, /os boletos abaixo venceram e ainda não constam como pagos/);
-  assert.equal(m.assunto, 'Boleto vencido — regularize o pagamento — ACME LTDA');
+  assert.match(m.texto, /não identificamos o pagamento dos boletos abaixo, já vencidos:/);
+  assert.match(m.texto, /Se já pagou: responda este e-mail com o comprovante para darmos baixa/);
+  assert.equal(m.assunto, 'Boletos em aberto — vencidos — ACME LTDA');
 });
 test('boleto sem linha digitável não imprime a linha vazia', () => {
   const m = C.montarAviso('ACME LTDA', [{ ...b1, linha_digitavel: null }], 'D0');
   assert.doesNotMatch(m.texto, /Linha digitável/);
+});
+test('as 4 etapas têm os textos aprovados em 17/11/2026 (boleto)', () => {
+  assert.equal(C.montarAviso('ACME', [b1], 'D-5').assunto, 'Lembrete: boleto vence em 5 dias — ACME');
+  assert.match(C.montarAviso('ACME', [b1], 'D-5').texto, /^Olá, tudo bem\?\n\nPassando para lembrar que o boleto abaixo vence em 5 dias:/);
+  assert.match(C.montarAviso('ACME', [b1], 'D-5').texto, /Precisa da 2ª via ou tem alguma dúvida\? É só responder esta mensagem\./);
+  assert.match(C.montarAviso('ACME', [b1], 'D-1').texto, /O boleto abaixo vence amanhã:/);
+  assert.match(C.montarAviso('ACME', [b1], 'D0').texto, /Se o pagamento já foi feito, obrigado e desconsidere esta mensagem\./);
+  assert.match(C.montarAviso('ACME', [b1], 'D+1').texto, /2ª via atualizada ou de uma nova data/);
+  assert.equal(C.montarAviso('ACME', [b1], 'D+1').assunto, 'Boleto em aberto — vencido — ACME');
+});
+test('aviso de atraso sem boleto pede o comprovante do depósito e não fala em 2ª via', () => {
+  const m = C.montarAviso('ESCAMAX', [{ numero_documento: '1', data_vencimento: '2026-11-10', valor: 5, tem_boleto: false }], 'D+1');
+  assert.equal(m.assunto, 'Pagamento em aberto — vencido — ESCAMAX');
+  assert.match(m.texto, /o pagamento abaixo, já vencido, ainda não consta como recebido:/);
+  assert.match(m.texto, /comprovante do depósito ou da transferência/);
+  assert.doesNotMatch(m.texto, /2ª via/);
 });
 test('aviso manual não promete data', () => {
   const m = C.montarAviso('ACME LTDA', [b1], 'manual');
@@ -144,10 +162,11 @@ test('aviso com título sem boleto fala em pagamento, não em boleto, e não tra
   const m = C.montarAviso('ESCAMAX', [{ numero_documento: '123', numero_parcela: '1/1', data_vencimento: '2026-11-12', valor: 750, tem_boleto: false }], 'D0');
   assert.match(m.assunto, /Seu pagamento vence hoje — ESCAMAX/);
   assert.match(m.texto, /O pagamento abaixo vence hoje/);
-  assert.match(m.texto, /Sem boleto — pague pela forma combinada/);
+  assert.match(m.texto, /Forma de pagamento: depósito\/transferência, conforme combinado/);
+  assert.doesNotMatch(m.texto, /2ª via/);
   assert.doesNotMatch(m.texto, /Linha digitável/);
 });
-test('aviso só com boletos continua igual ao de antes', () => {
+test('aviso só com boletos fala em boleto e traz a linha digitável', () => {
   const m = C.montarAviso('ACME', [{ numero_documento: '9', data_vencimento: '2026-11-12', valor: 10, linha_digitavel: '123', tem_boleto: true }], 'D0');
   assert.match(m.assunto, /Seu boleto vence hoje/);
   assert.match(m.texto, /Linha digitável: 123/);
