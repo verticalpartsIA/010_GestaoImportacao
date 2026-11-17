@@ -99,6 +99,28 @@
     };
   }
 
+  /* Dados do cliente (Cadastro) no formato da Proposta. 17/11/2026: pessoa física herda o CPF em campo próprio
+     (`cpf` + `tipo_pessoa`); antes só existia `cnpj` e o CPF era digitado ali dentro como "CPF: …".
+     O Contrato de Venda lê estes campos (CV.documentoDoCliente). */
+  function clienteParaProposta(cliente) {
+    cliente = cliente || {};
+    return {
+      nome: cliente.razao_social || '',
+      cnpj: cliente.cnpj || '',
+      tipo_pessoa: cliente.tipo_pessoa === 'PF' ? 'PF' : 'PJ',
+      cpf: cliente.cpf || '',
+      responsavel: cliente.contato || '',
+      endereco: cliente.endereco_logradouro || '',
+      numero: '',
+      bairro: cliente.endereco_bairro || '',
+      cidade: cliente.endereco_cidade || '',
+      uf: cliente.endereco_estado || '',
+      cep: cliente.endereco_cep || '',
+      email: cliente.email || '',
+      telefone: cliente.telefone || '',
+    };
+  }
+
   /* ---------- Especificações técnicas por equipamento ----------
      Combina o que foi coletado na Unidade com o snapshot congelado que foi
      enviado ao fornecedor (dados_envio), e carimba o código do ativo
@@ -391,19 +413,7 @@
       masterId: cotacao ? cotacao.numero_documento : null,
       precificacaoId: precificacao ? precificacao.id : null,
       ativos: montarAtivos(fontes),
-      cliente: {
-        nome: cliente.razao_social || '',
-        cnpj: cliente.cnpj || '',
-        responsavel: cliente.contato || '',
-        endereco: cliente.endereco_logradouro || '',
-        numero: '',
-        bairro: cliente.endereco_bairro || '',
-        cidade: cliente.endereco_cidade || '',
-        uf: cliente.endereco_estado || '',
-        cep: cliente.endereco_cep || '',
-        email: cliente.email || '',
-        telefone: cliente.telefone || '',
-      },
+      cliente: clienteParaProposta(cliente),
       obra: {
         nome: formulario.local_obra_cidade || '',
         endereco: formulario.endereco_obra_logradouro || formulario.endereco_logradouro || '',
@@ -634,5 +644,5 @@
     return partes.join(' · ');
   }
 
-  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes, montarAtivos, montarEspecificacoes, montarPerfis, perfisAPartirDaProposta, dividirPerfisPorEquipamento, montarBlocoEscadaEsteira };
+  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes, montarAtivos, montarEspecificacoes, clienteParaProposta, montarPerfis, perfisAPartirDaProposta, dividirPerfisPorEquipamento, montarBlocoEscadaEsteira };
 }());

@@ -22,6 +22,8 @@ async function preparar(page, st) {
     const json = (s, b) => route.fulfill({ status: s, contentType: 'application/json', body: JSON.stringify(b) });
     st.chamadas.push({ m, tabela, url: req.url(), body: req.postData() });
     if (tabela === 'clientes') {
+      /* Conferência de documento único (cpf=eq./cnpj=eq.): o simulador não tem duplicatas. */
+      if (m === 'GET' && /[?&](cpf|cnpj)=eq\./.test(url.search)) return json(200, []);
       if (m === 'GET') return json(200, st.clientes);
       if (m === 'PATCH') { st.patch = JSON.parse(req.postData()); return json(200, { ...LEGADO, ...st.patch }); }
     }
@@ -58,6 +60,24 @@ test.describe('Cadastros › Clientes', () => {
     expect(st.patch.cidade).toBe('Guarulhos');
     expect(st.patch.estado).toBe('SP');
     expect(st.patch.endereco).toContain('Rua Velha 10');
+  });
+
+  test('PJ guarda também o CPF do responsável (opcional) e CPF inválido é recusado antes de gravar', async ({ page }) => {
+    const st = { clientes: [{ ...LEGADO, cnpj: '11222333000181' }], leads: [], chamadas: [], patch: null };
+    await preparar(page, st);
+    await abrir(page, '/cadastros/cadastro-clientes/' + LEGADO.id);
+    await expect(page.getByText('Editar cliente VPCLI-0100')).toBeVisible();
+    const campo = page.locator('label', { hasText: 'CPF do responsável (opcional)' }).locator('..').locator('input');
+    await campo.fill('111.111.111-11');
+    await page.getByRole('button', { name: 'Salvar alterações' }).click();
+    await page.waitForTimeout(800);
+    expect(st.patch).toBeNull();
+    await campo.fill('227.295.968-79');
+    await page.getByRole('button', { name: 'Salvar alterações' }).click();
+    await expect.poll(() => st.patch).not.toBeNull();
+    expect(st.patch.cnpj).toBe('11222333000181');
+    expect(st.patch.cpf).toBe('22729596879');
+    expect(st.patch.tipo_pessoa).toBe('PJ');
   });
 
   test('histórico consulta só leads não excluídos (filtra excluido_em)', async ({ page }) => {

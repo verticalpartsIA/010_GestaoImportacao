@@ -750,7 +750,7 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
         tipoPessoa: docCli.tipoPessoa,
         razao: cli.nome || prev.comprador.razao,
         cnpj: docCli.tipoPessoa === 'PF' ? '' : ((docCli.cnpj && window.CV.maskCNPJ(docCli.cnpj)) || prev.comprador.cnpj),
-        repCpf: docCli.tipoPessoa === 'PF' ? (window.CV.maskCPF(docCli.cpf) || prev.comprador.repCpf) : prev.comprador.repCpf,
+        repCpf: (window.CV.maskCPF(docCli.cpf) || prev.comprador.repCpf),
         rep: docCli.tipoPessoa === 'PF' ? (cli.nome || prev.comprador.razao || '') : (cli.responsavel || prev.comprador.rep),
         repCargo: cli.cargo || cli.responsavel_cargo || prev.comprador.repCargo,
         email: cli.email || prev.comprador.email,
