@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/05_financeiro_precos.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `980586c`)
-- **Palavras:** 22697 · **blocos:** 377 · **seções com selo próprio:** 58 de 84
-- **Origem do selo dos blocos:** próprio 93 · da seção 184 · da seção-pai 0 · do cabeçalho 64 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 36
-- **Selo efetivo dos blocos:** Conferido 239 · Herdado 25 · Não verificado 77
+- **Palavras:** 23524 · **blocos:** 382 · **seções com selo próprio:** 58 de 84
+- **Origem do selo dos blocos:** próprio 95 · da seção 186 · da seção-pai 0 · do cabeçalho 65 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 36
+- **Selo efetivo dos blocos:** Conferido 242 · Herdado 25 · Não verificado 79
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -72,10 +72,10 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 5.5.5 Botões e controles | `docs/modulos/05_financeiro_precos.md#555-botões-e-controles` | 3 | — | 1 | c1 |
 | 5.5.6 Comportamento | `docs/modulos/05_financeiro_precos.md#556-comportamento` | 3 | Conferido (uniforme) | 6 | b2 s4 |
 | 5.5.7 Dados — o que lê e o que grava | `docs/modulos/05_financeiro_precos.md#557-dados--o-que-lê-e-o-que-grava` | 3 | — | 1 | c1 |
-| 5.5.8 Regras e armadilhas | `docs/modulos/05_financeiro_precos.md#558-regras-e-armadilhas` | 3 | Conferido (uniforme) | 9 | b2 s7 |
+| 5.5.8 Regras e armadilhas | `docs/modulos/05_financeiro_precos.md#558-regras-e-armadilhas` | 3 | Conferido (uniforme) | 11 | b4 s7 |
 | 5.5.9 Testes | `docs/modulos/05_financeiro_precos.md#559-testes` | 3 | Não verificado (misto (vale o mais fraco)) | 7 | b2 s5 |
-| 5.5.10 Pendências e decisões | `docs/modulos/05_financeiro_precos.md#5510-pendências-e-decisões` | 3 | Não verificado (misto (vale o mais fraco)) | 9 | b3 s6 |
-| 5.5.11 Histórico | `docs/modulos/05_financeiro_precos.md#5511-histórico` | 3 | — | 1 | c1 |
+| 5.5.10 Pendências e decisões | `docs/modulos/05_financeiro_precos.md#5510-pendências-e-decisões` | 3 | Não verificado (misto (vale o mais fraco)) | 11 | b3 s8 |
+| 5.5.11 Histórico | `docs/modulos/05_financeiro_precos.md#5511-histórico` | 3 | — | 2 | c2 |
 | 5.6 Comissões | `docs/modulos/05_financeiro_precos.md#56-comissões` | 2 | — | 0 | — |
 | 5.6.1 O que é | `docs/modulos/05_financeiro_precos.md#561-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 5.6.2 Rota e arquivos | `docs/modulos/05_financeiro_precos.md#562-rota-e-arquivos` | 3 | Conferido (uniforme) | 2 | b1 s1 |
