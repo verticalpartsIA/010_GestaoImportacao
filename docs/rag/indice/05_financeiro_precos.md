@@ -5,7 +5,7 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/05_financeiro_precos.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `980586c`)
-- **Palavras:** 24727 · **blocos:** 394 · **seções com selo próprio:** 60 de 84
+- **Palavras:** 24762 · **blocos:** 394 · **seções com selo próprio:** 60 de 84
 - **Origem do selo dos blocos:** próprio 99 · da seção 197 · da seção-pai 0 · do cabeçalho 62 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 36
 - **Selo efetivo dos blocos:** Conferido 241 · Herdado 25 · Não verificado 92
 
@@ -71,7 +71,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 5.5.4 O que a tela mostra | `docs/modulos/05_financeiro_precos.md#554-o-que-a-tela-mostra` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 5.5.5 Botões e controles | `docs/modulos/05_financeiro_precos.md#555-botões-e-controles` | 3 | — | 1 | c1 |
 | 5.5.6 Comportamento | `docs/modulos/05_financeiro_precos.md#556-comportamento` | 3 | Conferido (uniforme) | 6 | b2 s4 |
-| 5.5.7 Dados — o que lê e o que grava | `docs/modulos/05_financeiro_precos.md#557-dados--o-que-lê-e-o-que-grava` | 3 | Não verificado (uniforme) | 1 | b1 |
+| 5.5.7 Dados — o que lê e o que grava | `docs/modulos/05_financeiro_precos.md#557-dados--o-que-lê-e-o-que-grava` | 3 | Não verificado (misto (vale o mais fraco)) | 1 | b1 |
 | 5.5.8 Regras e armadilhas | `docs/modulos/05_financeiro_precos.md#558-regras-e-armadilhas` | 3 | Conferido (uniforme) | 11 | b4 s7 |
 | 5.5.9 Testes | `docs/modulos/05_financeiro_precos.md#559-testes` | 3 | Não verificado (misto (vale o mais fraco)) | 12 | b3 s9 |
 | 5.5.10 Pendências e decisões | `docs/modulos/05_financeiro_precos.md#5510-pendências-e-decisões` | 3 | Não verificado (misto (vale o mais fraco)) | 14 | b3 s11 |
