@@ -4,7 +4,7 @@
 //
 // Ações (corpo JSON {"acao": ...}):
 //   sincronizar  (cron) lê do Omie os boletos em aberto + o e-mail de cada cliente (SÓ LEITURA no Omie)
-//   automatico   (cron) manda os avisos D-5 / D-1 / D0 / D+1 pela caixa hub@ e avisa a Juliana dos atrasos
+//   automatico   (cron) manda os avisos D-5 / D-1 / D0 / D+1 pela caixa hub@ e avisa o financeiro (Joice e Maximira) dos atrasos
 //                       (só age se boletos_avisos_config.envio_automatico = true)
 //   enviar       (tela) aviso manual de um cliente {codigo_cliente_omie}
 //   sincronizar também pode ser pedido pela tela. Os três e-mails da lista (ver migration) são os únicos
@@ -27,7 +27,9 @@ const omieKey = Deno.env.get("OMIE_API_KEY") || "";
 const omieSecret = Deno.env.get("OMIE_API_SECRET") || "";
 const SENDER = (Deno.env.get("SENDER_EMAIL") ?? "").trim().toLowerCase();
 const FROM_NAME = Deno.env.get("SMTP_FROM_NAME") || "VerticalParts";
-const JULIANA = "juliana@verticalparts.com.br";
+/* Quem recebe o alerta diário de títulos em atraso (Gelson, 17/11/2026: Joice e Maximira no lugar da Juliana).
+   As duas usam o mesmo WhatsApp corporativo; o gi-avisos junta os avisos iguais do mesmo número numa mensagem só. */
+const ALERTA_ATRASO_PARA = ["joice.duarte@verticalparts.com.br", "maximira.ribeiro@verticalparts.com.br"];
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -441,12 +443,12 @@ async function automatico(simular) {
     else if (r.ok) resultado.enviados++; else resultado.erros++;
     await esperar(700);
   }
-  if (!simular && !modoTeste) resultado.avisoJuliana = await avisarJuliana(boletos, porCliente, hoje, feriados);
+  if (!simular && !modoTeste) resultado.avisoFinanceiro = await avisarFinanceiro(boletos, porCliente, hoje, feriados);
   return resultado;
 }
 
 const DIAS = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
-async function avisarJuliana(boletos, porCliente, hoje, feriados) {
+async function avisarFinanceiro(boletos, porCliente, hoje, feriados) {
   const atrasados = boletos.filter((b) => diasDeAtraso(b.data_vencimento, hoje, feriados) > 0);
   if (!atrasados.length) return "nenhum atraso";
   const porCli = new Map();
@@ -460,12 +462,12 @@ async function avisarJuliana(boletos, porCliente, hoje, feriados) {
   const total = atrasados.reduce((s, b) => s + Number(b.valor || 0), 0);
   const dow = DIAS[new Date(hoje + "T12:00:00Z").getUTCDay()];
   const [, m, d] = hoje.split("-");
-  await pgUpsert("alertas", "id", [{
-    id: `boletos-atraso-${hoje}`, level: "warning", module: "Financeiro", rota: "/adm-financeiro/boletos-avisos", resolved: false, destinatario_email: JULIANA,
+  await pgUpsert("alertas", "id", ALERTA_ATRASO_PARA.map((para) => ({
+    id: `boletos-atraso-${hoje}-${para.split("@")[0]}`, level: "warning", module: "Financeiro", rota: "/adm-financeiro/boletos-avisos", resolved: false, destinatario_email: para,
     title: `Títulos em atraso — ${dow}, ${d}/${m}: ${porCli.size} cliente(s)`,
     sub: `${atrasados.length} título(s) vencido(s), ${moedaBR(total)} no total. Mais antigos: ${maiores}. Veja em Boletos Avisos.`.slice(0, 330),
-  }], "resolution=ignore-duplicates,return=minimal");
-  return `alerta para a Juliana: ${porCli.size} cliente(s)`;
+  })), "resolution=ignore-duplicates,return=minimal");
+  return `alerta de atraso para ${ALERTA_ATRASO_PARA.length} pessoa(s): ${porCli.size} cliente(s)`;
 }
 
 async function enviarManual(codigo, email, simular) {
