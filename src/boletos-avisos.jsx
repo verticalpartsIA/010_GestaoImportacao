@@ -97,6 +97,7 @@ function BoletosAvisosPage() {
   const [aberto, setAberto] = window.useRotaId ? window.useRotaId('boletos-avisos') : React.useState(null);
   const [soSem, setSoSem] = React.useState(false);
   const [q, setQ] = window.useQueryParam ? window.useQueryParam('q', '') : React.useState('');
+  const sc = window.useBoletosScores ? window.useBoletosScores() : { map: new Map() };   // classe A–D de cada cliente (boletos-score.jsx)
 
   const carregar = React.useCallback(async () => {
     try {
@@ -121,6 +122,9 @@ function BoletosAvisosPage() {
       </div>
     );
   }
+
+  // /adm-financeiro/boletos-avisos/score[/<cliente>]: "score" é palavra reservada do 2º segmento (o resto é o código de um cliente)
+  if (aberto === 'score' && window.BoletosConsultaCliente) return <window.BoletosConsultaCliente voltar={() => setAberto(null)} gerir={gerir}/>;
 
   const rodar = async (chave, fn, msgOk) => {
     setBusy(chave);
@@ -174,10 +178,13 @@ function BoletosAvisosPage() {
           <p className="page-head__sub">Clientes com título em aberto no Omie (com boleto ou, para quem paga por depósito, sem boleto até 180 dias de atraso). O sistema avisa por e-mail 5 dias antes, 1 dia antes, no dia e, se atrasar, 1 dia depois (boleto) ou 2 dias depois (sem boleto, que o financeiro concilia à mão); a Joice e a Maximira são avisadas dos atrasos. Tela restrita: Gelson, Diego e Juliana gerenciam; quem recebeu a alçada só consulta.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-          <Button size="sm" variant="outline" disabled={busy === 'sync'} onClick={sincronizar}>{busy === 'sync' ? 'Lendo o Omie…' : 'Atualizar do Omie'}</Button>
-          <Button size="sm" variant="outline" disabled={busy === 'sim'} onClick={simular}>Simular envio de hoje</Button>
+          <Button size="sm" variant="primary" onClick={() => setAberto('score')}>Consultar cliente (score)</Button>
+          {gerir && <Button size="sm" variant="outline" disabled={busy === 'sync'} onClick={sincronizar}>{busy === 'sync' ? 'Lendo o Omie…' : 'Atualizar do Omie'}</Button>}
+          {gerir && <Button size="sm" variant="outline" disabled={busy === 'sim'} onClick={simular}>Simular envio de hoje</Button>}
         </div>
       </div>
+
+      {window.BoletosIndiceCard && <window.BoletosIndiceCard/>}
 
       <Card>
         <div style={{ padding: '12px 16px', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -214,10 +221,10 @@ function BoletosAvisosPage() {
         {erro && <div style={{ padding: 16, color: 'var(--vp-danger)' }}>{erro}</div>}
         <div className="table-wrap">
           <table className="t pcp-grid">
-            <thead><tr><th style={{ width: 28 }}></th><th>Situação</th><th>Razão Social</th><th style={{ textAlign: 'right' }}>Qtd de títulos</th><th style={{ textAlign: 'right' }}>Valor em aberto</th><th>E-mail</th><th>Último aviso</th><th></th></tr></thead>
+            <thead><tr><th style={{ width: 28 }}></th><th>Situação</th><th>Razão Social</th><th>Score</th><th style={{ textAlign: 'right' }}>Qtd de títulos</th><th style={{ textAlign: 'right' }}>Valor em aberto</th><th>E-mail</th><th>Último aviso</th><th></th></tr></thead>
             <tbody>
-              {lista === null && <tr><td colSpan={8}>Carregando…</td></tr>}
-              {lista && !filtrada.length && <tr><td colSpan={8} className="muted">{(lista || []).length ? 'Nenhum cliente encontrado.' : 'Nenhum boleto em aberto lido do Omie ainda. Clique em "Atualizar do Omie".'}</td></tr>}
+              {lista === null && <tr><td colSpan={9}>Carregando…</td></tr>}
+              {lista && !filtrada.length && <tr><td colSpan={9} className="muted">{(lista || []).length ? 'Nenhum cliente encontrado.' : 'Nenhum boleto em aberto lido do Omie ainda. Clique em "Atualizar do Omie".'}</td></tr>}
               {filtrada.map(c => {
                 const id = String(c.codigo_cliente_omie), isOpen = aberto === id;
                 const semEmail = !(c.emails || []).length;
@@ -227,6 +234,7 @@ function BoletosAvisosPage() {
                       <td>{isOpen ? '▾' : '▸'}</td>
                       <td><BavSemaforo situacao={c.situacao} dias={c.dias_atraso}/></td>
                       <td><b>{c.razao_social}</b>{c.cnpj ? <span className="muted small"> · {c.cnpj}</span> : null}</td>
+                      <td onClick={e => { e.stopPropagation(); if (window.VpRouter) window.VpRouter.navigate('boletos-avisos', 'score', id); }} style={{ cursor: 'pointer' }}>{window.BsChip ? <window.BsChip r={sc.map.get(Number(c.codigo_cliente_omie)) ? sc.map.get(Number(c.codigo_cliente_omie)).cls : (sc.cfg ? window.BoletosScoreCalc.classificar({}, sc.cfg) : null)}/> : null}</td>
                       <td style={{ textAlign: 'right' }}>{c.qtd_boletos}{Number(c.qtd_sem_boleto) > 0 && <div className="small muted">{c.qtd_sem_boleto} sem boleto</div>}</td>
                       <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><b>{C.moedaBR(c.valor_total)}</b>{atrasadoDoCliente.get(c.codigo_cliente_omie) > 0 && <div className="small" style={{ color: '#dc2626' }}>{C.moedaBR(atrasadoDoCliente.get(c.codigo_cliente_omie))} atrasado</div>}</td>
                       <td>{semEmail ? <Badge variant="warning">sem e-mail</Badge> : <span className="small" title={c.emails.join(', ')}>{c.emails[0]}{c.emails.length > 1 ? ` +${c.emails.length - 1}` : ''}</span>}</td>
@@ -235,7 +243,7 @@ function BoletosAvisosPage() {
                         {gerir && <Button size="sm" variant="primary" disabled={semEmail || busy === 'env' + id} onClick={() => enviar(c)}>{busy === 'env' + id ? 'Enviando…' : 'Enviar aviso'}</Button>}
                       </td>
                     </tr>
-                    {isOpen && <tr><td colSpan={8} style={{ padding: 0 }}><BavDetalhe cliente={c}/></td></tr>}
+                    {isOpen && <tr><td colSpan={9} style={{ padding: 0 }}><BavDetalhe cliente={c}/></td></tr>}
                   </React.Fragment>
                 );
               })}
