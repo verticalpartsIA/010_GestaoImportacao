@@ -110,5 +110,59 @@ window.BoletosAvisosStore = (() => {
   }
   async function simularAutomatico() { return chamar('automatico', { simular: true }); }
 
-  return { pode, podeGerir, feriados, feriadosCache, listarClientes, boletosAbertos, boletosDoCliente, logDoCliente, config, salvarConfig, sincronizar, enviarAviso, simularAutomatico, quem };
+  /* ---- Índice de inadimplência e Consulta de cliente (score) — histórico em boletos_avisos_historico ---- */
+  async function indiceDoPeriodo(p) {
+    const { data, error } = await sb().rpc('boletos_avisos_indice', { p_de: p.de, p_ate: p.ate });
+    if (error) throw new Error(error.message);
+    return data || {};
+  }
+  async function scoreConfig() {
+    const { data, error } = await sb().from('boletos_avisos_score_config').select('*').eq('id', true).maybeSingle();
+    if (error) throw new Error(error.message);
+    return data || {};
+  }
+  async function salvarScoreConfig(patch) {
+    const { data, error } = await sb().from('boletos_avisos_score_config')
+      .update({ ...patch, atualizado_em: new Date().toISOString(), atualizado_por: quem() }).eq('id', true).select().maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error('Sem permissão para alterar os limites do score.');
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Boletos Avisos', acao: 'Mudou os limites do score de clientes', alvo: 'score_config', alvo_id: 'score_config', detalhe: patch });
+    return data;
+  }
+  /* Um cliente por linha (só quem já teve título vencido). Lê de 1.000 em 1.000: passando disso não corta em silêncio. */
+  async function listarScores() {
+    const PAG = 1000; const out = [];
+    for (let off = 0; ; off += PAG) {
+      const { data, error } = await sb().from('boletos_avisos_score_v').select('*').order('codigo_cliente_omie').range(off, off + PAG - 1);
+      if (error) throw new Error(error.message);
+      out.push(...(data || []));
+      if (!data || data.length < PAG) break;
+    }
+    return out;
+  }
+  async function titulosDoCliente(cod) {
+    const { data, error } = await sb().from('boletos_avisos_historico')
+      .select('codigo_lancamento_omie,numero_documento,numero_parcela,data_vencimento,data_pagamento,valor,valor_pago,pago,status_omie')
+      .eq('codigo_cliente_omie', cod).eq('cancelado', false).order('data_vencimento', { ascending: false }).limit(60);
+    if (error) throw new Error(error.message);
+    return data || [];
+  }
+  /* Clientes que o Omie conhece pelo histórico (mesmo sem título vencido), para a busca da consulta */
+  async function listarClientesHistorico() {
+    const PAG = 1000; const out = [];
+    for (let off = 0; ; off += PAG) {
+      const { data, error } = await sb().from('boletos_avisos_clientes').select('codigo_cliente_omie,razao_social,cnpj').order('codigo_cliente_omie').range(off, off + PAG - 1);
+      if (error) throw new Error(error.message);
+      out.push(...(data || []));
+      if (!data || data.length < PAG) break;
+    }
+    return out;
+  }
+  async function historicoAtualizadoEm() {
+    const { data } = await sb().from('boletos_avisos_historico').select('atualizado_em').order('atualizado_em', { ascending: false }).limit(1);
+    return data && data[0] ? data[0].atualizado_em : null;
+  }
+
+  return { pode, podeGerir, feriados, feriadosCache, listarClientes, boletosAbertos, boletosDoCliente, logDoCliente, config, salvarConfig, sincronizar, enviarAviso, simularAutomatico,
+    indiceDoPeriodo, scoreConfig, salvarScoreConfig, listarScores, titulosDoCliente, listarClientesHistorico, historicoAtualizadoEm, quem };
 })();
