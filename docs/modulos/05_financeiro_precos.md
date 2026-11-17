@@ -556,6 +556,8 @@ Nasceu em 11/11/2026 por pedido do Gelson. Antes, o levantamento no Omie (leitur
 **17/11/2026:** dia sem expediente (fim de semana, feriados e Carnaval) — nada sai nesses dias e o vencimento vale no próximo dia útil. **17/11/2026:** textos novos dos 4 avisos (D-5, D-1, D0, D+1), mais cordiais e com o que o cliente deve fazer; aprovados pelo Gelson ("mantém encargos, sem telefone, sem dados bancários").
 
 **17/11/2026:** Índice de inadimplência (Passado/Presente/Futuro) e Consulta de cliente com score A–D, a pedido do Gelson; regra, dados e pendências em 5.5.4, 5.5.7–5.5.10.
+
+**17/11/2026 (noite):** a lista de clientes ficou vazia com o erro "canceling statement due to statement timeout": a visão `boletos_avisos_resumo_v` levava 5,5 s porque `boletos_avisos_venc_efetivo()` (PR #1431) testava 61 dias por boleto. Corrigida em `20261117220000_boletos_avisos_venc_efetivo_rapido.sql`, **aplicada em produção em 17/11/2026 com "Confirmo"**: mesmo resultado nas 410 datas conferidas (0 diferenças) e a visão da lista caiu de 5,5 s para ~0,6 s medida como dono do banco (195 clientes, 72 atrasados, igual a antes). **Não verificado:** o tempo de quem está logado (com RLS) e a tela aberta depois da correção. **Achado, sem teste automático:** nenhum teste pega lentidão do banco; só o uso real com o limite de tempo do usuário logado mostrou o defeito.
 ---
 
 ## 5.6 Comissões
