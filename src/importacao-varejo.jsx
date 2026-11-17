@@ -304,6 +304,68 @@ function IVCestaIcone({ size = 16 }) {
   );
 }
 
+/* ---------- Modal: solicitação de compra do vendedor — itens + quantidade; o comprador trata depois ---------- */
+function IVModalSolicitacao({ itens, onClose, onFeito }) {
+  const S = window.SolicitacoesCompraStore; const C = window.SolicitacoesCompraCalc;
+  const [linhas, setLinhas] = React.useState(() => C.itensDaSelecao(itens));
+  const [justificativa, setJustificativa] = React.useState('');
+  const [urgencia, setUrgencia] = React.useState('normal');
+  const [dataDesejada, setDataDesejada] = React.useState('');
+  const [pedidoVenda, setPedidoVenda] = React.useState('');
+  const [cotacao, setCotacao] = React.useState('');
+  const [gravando, setGravando] = React.useState(false);
+  const setCampo = (cod, campo, v) => setLinhas((ls) => ls.map((l) => (l.codigo === cod ? { ...l, [campo]: v } : l)));
+  const confirmar = async () => {
+    const pronto = linhas.map((l) => ({ ...l, quantidade: Number(l.quantidade) }));
+    const v = C.validarEnvio(pronto);
+    if (!v.ok) { window.toast?.(v.erros[0], 'error'); return; }
+    setGravando(true);
+    try {
+      const r = await S.enviar(pronto, { justificativa, urgencia, data_desejada: dataDesejada || null, pedido_venda_numero: pedidoVenda, cotacao_numero: cotacao });
+      onFeito(r);
+    } catch (e) { window.toast?.('Erro ao enviar a solicitação: ' + C.mensagemErro(e), 'error'); }
+    finally { setGravando(false); }
+  };
+  return (
+    <Modal title={'Solicitação de compra — ' + linhas.length + ' produto(s)'} onClose={onClose} width={720}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" icon="send" onClick={confirmar} disabled={gravando}>{gravando ? 'Enviando…' : 'Enviar ao comprador'}</Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <p className="small">Informe só a quantidade que você precisa. Fornecedor e preço são com o comprador. Nada vai ao Omie.</p>
+        <div className="table-wrap" style={{ maxHeight: 260, overflowY: 'auto' }}>
+          <table className="t">
+            <thead><tr><th>Código</th><th>Descrição</th><th style={{ width: 110 }}>Quantidade</th><th>Observação</th></tr></thead>
+            <tbody>
+              {linhas.map((l) => (
+                <tr key={l.codigo}>
+                  <td className="mono small">{l.codigo}</td>
+                  <td className="small">{l.descricao || '—'}</td>
+                  <td><input className="input" type="number" min="0" step="any" value={l.quantidade} onChange={(e) => setCampo(l.codigo, 'quantidade', e.target.value)} style={{ borderColor: Number(l.quantidade) > 0 ? undefined : 'var(--vp-yellow, #f5b800)' }} /></td>
+                  <td><input className="input" value={l.obs} onChange={(e) => setCampo(l.codigo, 'obs', e.target.value)} placeholder="opcional" maxLength={200} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="grid-3" style={{ gap: 10 }}>
+          <div><label className="up-eyebrow muted">Urgência</label>
+            <select className="input" value={urgencia} onChange={(e) => setUrgencia(e.target.value)}>{C.URGENCIAS.map((u) => <option key={u.v} value={u.v}>{u.label}</option>)}</select></div>
+          <div><label className="up-eyebrow muted">Preciso para</label>
+            <input className="input" type="date" value={dataDesejada} onChange={(e) => setDataDesejada(e.target.value)} /></div>
+          <div><label className="up-eyebrow muted">Nº do pedido de venda</label>
+            <input className="input" value={pedidoVenda} onChange={(e) => setPedidoVenda(e.target.value)} placeholder="opcional" maxLength={40} /></div>
+          <div><label className="up-eyebrow muted">Nº da cotação/proposta</label>
+            <input className="input" value={cotacao} onChange={(e) => setCotacao(e.target.value)} placeholder="ex.: 31014" maxLength={40} /></div>
+        </div>
+        <div><label className="up-eyebrow muted">Por que precisa? (cliente, obra, motivo)</label>
+          <textarea className="input" rows={2} value={justificativa} onChange={(e) => setJustificativa(e.target.value)} maxLength={1000} /></div>
+      </div>
+    </Modal>
+  );
+}
+
 /* ---------- Modal: cesta — escolher o lote (novo ou um aberto) que recebe os produtos marcados ---------- */
 function IVModalCesta({ itens, emCotacao, onClose, onFeito }) {
   const S = window.CotacoesVarejoStore;
@@ -575,10 +637,14 @@ function ImportacaoVarejoPage({ setRoute }) {
   const [soRevisar, setSoRevisar] = React.useState(false);
   const [modalEnviar, setModalEnviar] = React.useState(false);
   const [podeGerenciar, setPodeGerenciar] = React.useState(false);
+  const [podeSolicitar, setPodeSolicitar] = React.useState(false);   // vendedor: escolhe e ENVIA solicitação (alçada compras.solicitar)
+  const podeSelecionar = podeGerenciar || podeSolicitar;
+  const [modalSolic, setModalSolic] = React.useState(false);
   const [sincronizando, setSincronizando] = React.useState(false);
 
   React.useEffect(() => {
     window.PropostaStore?.temCapacidade?.('compras', 'criar').then(setPodeGerenciar).catch(() => setPodeGerenciar(false));
+    window.SolicitacoesCompraStore?.podeSolicitar().then(setPodeSolicitar).catch(() => setPodeSolicitar(false));
   }, []);
 
   const carregar = React.useCallback(() => {
@@ -724,6 +790,14 @@ function ImportacaoVarejoPage({ setRoute }) {
     setRoute && setRoute('cotacoes-varejo');
   };
 
+  const solicitacaoFeita = (r) => {
+    setModalSolic(false);
+    window.toast?.('Solicitação ' + r.numero + ' enviada com ' + r.itens + ' produto(s). O comprador vai tratar em Pedidos › Solicitações.', 'success');
+    setSelecionados(new Set());
+    window.VpRouter.navigate('pedidos-acompanhamento');
+    setRoute && setRoute('pedidos-acompanhamento');
+  };
+
   const toggleSelecionado = (codigo) => setSelecionados((prev) => {
     const next = new Set(prev);
     if (next.has(codigo)) next.delete(codigo); else next.add(codigo);
@@ -856,6 +930,12 @@ function ImportacaoVarejoPage({ setRoute }) {
           </form>
         )}
         <div className="spacer" style={{ flex: 1 }} />
+        {podeSolicitar && selecionados.size > 0 && (
+          <Button variant={podeGerenciar ? 'outline' : 'primary'} size="sm" icon="send" onClick={() => setModalSolic(true)}
+            data-tip="Envia os produtos marcados como solicitação ao comprador (Pedidos › Solicitações). O comprador escolhe o fornecedor e aloca numa cotação; você acompanha o andamento por lá.">
+            {'Enviar solicitação (' + selecionados.size + ')'}
+          </Button>
+        )}
         {podeGerenciar && selecionados.size > 0 && (
           <Button variant="primary" size="sm" onClick={abrirCesta}
             data-tip="Coloca os produtos marcados na cesta: você escolhe um lote novo ou um já aberto. O lote só fecha quando você pedir a cotação aos fornecedores, em Cotações de Varejo. Nada vai ao Omie.">
@@ -921,7 +1001,7 @@ function ImportacaoVarejoPage({ setRoute }) {
 table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var(--vp-surface,#fff);box-shadow:0 1px 0 var(--vp-border,#e5e5e5)}`}</style>
         <table className="t pcp-grid iv-grid">
           <thead><tr>
-            {podeGerenciar && (
+            {podeSelecionar && (
               <th style={{ width: 32 }}>
                 <input
                   type="checkbox"
@@ -965,7 +1045,7 @@ table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var
               return (
                 <React.Fragment key={item.codigo}>
                   <tr style={IV_LINHA_STYLE[status]}>
-                    {podeGerenciar && (
+                    {podeSelecionar && (
                       <td><input type="checkbox" checked={selecionados.has(item.codigo)} onChange={() => toggleSelecionado(item.codigo)} /></td>
                     )}
                     <td className="mono small" style={{ whiteSpace: 'nowrap' }}>{item.codigo}</td>
@@ -1124,7 +1204,7 @@ table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var
           {filtrados.length > 0 && (
             <tfoot>
               <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border)' }}>
-                <td colSpan={podeGerenciar ? 5 : 4}>Total</td>
+                <td colSpan={podeSelecionar ? 5 : 4}>Total</td>
                 {/* Uma célula por coluna do cabeçalho (conferido em 16/10: o bloco em branco tinha 7 colunas para 6 e deslocava todos os totais). */}
                 <td className="text-right">{ivFmtNum(totais.estoqueFisico)}</td>
                 <td className="text-right">{ivFmtNum(totais.estoqueReservado)}</td>
@@ -1148,6 +1228,7 @@ table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var
       {modalComprado && <IVModalComprado item={modalComprado} onClose={fecharModalIv} onSaved={() => { fecharModalIv(); carregar(); }} />}
       {modalCaminho && <IVModalACaminho item={modalCaminho} onClose={fecharModalIv} />}
       {modalRevisao && <IVModalRevisao item={modalRevisao} onClose={fecharModalIv} onSaved={() => { fecharModalIv(); carregar(); }} />}
+      {modalSolic && <IVModalSolicitacao itens={itensSelecionados} onClose={() => setModalSolic(false)} onFeito={solicitacaoFeita} />}
       {modalCesta && <IVModalCesta itens={itensSelecionados} emCotacao={emCotacao} onClose={() => setModalCesta(false)} onFeito={cestaFeita} />}
       {modalEnviar && <IVModalEnviarOmie itens={itensSelecionados} onClose={() => setModalEnviar(false)} onEnviado={() => { setModalEnviar(false); setSelecionados(new Set()); carregar(); }} />}
     </div>

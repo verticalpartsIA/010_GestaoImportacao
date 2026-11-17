@@ -404,9 +404,11 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   React.useEffect(() => { window.PropostaStore?.temCapacidade?.('cotacoes-varejo', 'criar').then(setPodeGerenciar).catch(() => setPodeGerenciar(false)); }, []);
   React.useEffect(() => { S.fornecedoresCadastrados().then(setForn).catch(() => setForn([])); }, []);
 
+  const [origens, setOrigens] = React.useState({});   // item do lote → pedidos de vendedores que o originaram (Solicitações de Compra)
   const carregar = React.useCallback(async () => {
     try {
       const d = await S.obterLote(loteId);
+      if (d && window.SolicitacoesCompraStore) window.SolicitacoesCompraStore.origemDosItens(d.itens).then(setOrigens).catch(() => {});
       if (!d) { setErro('Lote não encontrado.'); return; }
       setDados(d);
       const m = {}; d.decisoes.forEach((x) => { m[x.item_id + '|' + x.convite_id] = String(x.quantidade); });
@@ -564,7 +566,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     if (!window.confirm('Remover esta foto do produto ' + item.codigo + ' neste lote?')) return;
     try { await S.atualizarItem(item.id, { [campo]: '' }); await carregar(); } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
   };
-  const editarItem = async (item, campo, valor) => { try { await S.atualizarItem(item.id, { [campo]: valor }); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
+  const editarItem = async (item, campo, valor) => { try { await S.atualizarItem(item.id, { [campo]: valor }); await carregar(); if (campo === 'quantidade_pedida') window.toast?.('Quantidade de ' + item.codigo + ' salva.', 'success'); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
   const tirarItem = (item) => setConfirmar({
     titulo: 'Tirar produto do lote', rotulo: 'Tirar produto',
     texto: 'Tirar ' + item.codigo + ' deste lote? Ele sai do mapa e da cotação; as respostas já dadas pelos fornecedores ficam guardadas no histórico.',
@@ -755,6 +757,11 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                     </td>
                     <td className="mono">{it.codigo}</td>
                     <td style={{ maxWidth: 260 }}>
+                      {(origens[it.id] || []).length > 0 && (
+                        <div className="small" style={{ margin: '4px 0', color: 'var(--vp-info, #1d6fd1)', fontWeight: 700 }} title="Este produto veio de pedido(s) de vendedor (Pedidos › Solicitações)">
+                          👤 {origens[it.id].map((o) => 'Pedido de ' + o.vendedor + ' (' + o.numero + ', ' + o.quantidade + ')').join(' · ')}
+                        </div>
+                      )}
                       {editavel
                         ? <>
                             <textarea key={it.obs_vp || ''} className="input" rows={(it.obs_vp || '').length > 90 ? 3 : 1} style={{ width: '100%', marginTop: 4, fontSize: 12 }} placeholder="Obs. VerticalParts (o fornecedor lê no portal)" defaultValue={it.obs_vp || ''} onBlur={(e) => { if ((e.target.value || '') !== (it.obs_vp || '')) editarItem(it, 'obs_vp', e.target.value || null); }} />

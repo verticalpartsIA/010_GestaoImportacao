@@ -214,7 +214,11 @@
       { modulo: 'ims-importacao', label: 'IMS' },
       { modulo: 'embarques-importacao', label: 'Embarques' },
       { modulo: 'gi-analise-precos', label: 'Análise de Preços' },
-      { modulo: 'compras', label: 'Importação Varejo' },
+      { modulo: 'compras', label: 'Importação Varejo', capacidades: [
+        ...ACOES_PADRAO,
+        { chave: 'solicitar', label: 'Envia solicitação de compra ao comprador (vendedor)' },
+        { chave: 'tratar_solicitacoes', label: 'Trata solicitações: aloca em cotação, devolve ao vendedor (comprador)' },
+      ]},
       { modulo: 'cotacoes-varejo', label: 'Cotações de Varejo' },
       { modulo: 'pedidos-acompanhamento', label: 'Pedidos' },
     ]},

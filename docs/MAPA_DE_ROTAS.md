@@ -87,7 +87,7 @@
 | Catálogo Siscomex | `ncm-catalogo` | `/gestao-importacao/ncm-catalogo[/<aba>]` | **produtos**, operadores, pedidos | — |
 | Importação Varejo | `compras` | `/logistica/compras` | — | — |
 | Cotações de Varejo | `cotacoes-varejo` | `/logistica/cotacoes-varejo` | — | — |
-| Pedidos | `pedidos-acompanhamento` | `/logistica/pedidos-acompanhamento[/<aba>]` | **Nacional**, Importação | — |
+| Pedidos | `pedidos-acompanhamento` | `/logistica/pedidos-acompanhamento[/<aba>]` | **Solicitacoes**, Nacional, Importação | — |
 
 ### Engenharia & Produto
 
@@ -200,7 +200,7 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | (? em central-documentos.jsx) | (acionado por um handler — ver o código) | `rh-homologacao` | `/rh/rh-homologacao` | `central-documentos.jsx:86` |
 | (App em app.jsx) | (acionado por um handler — ver o código) | `dashboard` | `/geral/dashboard` | `app.jsx:353` |
 | (CardContratoInstalador em dossier-obra.jsx) | Abrir no Jurídico → | `contrato-instalador` | `/juridico/contrato-instalador` | `dossier-obra.jsx:600` |
-| (CVDetalhe em cotacoes-varejo.jsx) | (acionado por um handler — ver o código) | `cadastro-fornecedores` | `/cadastros/cadastro-fornecedores` | `cotacoes-varejo.jsx:664` |
+| (CVDetalhe em cotacoes-varejo.jsx) | (acionado por um handler — ver o código) | `cadastro-fornecedores` | `/cadastros/cadastro-fornecedores` | `cotacoes-varejo.jsx:666` |
 | (CVLista em cotacoes-varejo.jsx) | Ir para Importação Varejo | `compras` | `/logistica/compras` | `cotacoes-varejo.jsx:60` |
 | (DetalheView em solicitacoes-produto.jsx) | (acionado por um handler — ver o código) | `ficha-tecnica` | `/engenharia/ficha-tecnica` | `solicitacoes-produto.jsx:955` |
 | (FtGenerator em ficha-tecnica.jsx) | (acionado por um handler — ver o código) | `solicitacoes-produto` | `/engenharia/solicitacoes-produto` | `ficha-tecnica.jsx:598` |
@@ -211,12 +211,13 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | (LeadDetailView em comercial.jsx) | Voltar para Leads | `leads` | `/crm/leads` | `comercial.jsx:1232` |
 | (NcmDashboardWidget em ncm-catalogo.jsx) | Ver todas | `ncm-kanban` | `/engenharia/ncm-kanban` | `ncm-catalogo.jsx:885` |
 | (OndeParouWidget em dashboard.jsx) | Ver Prazos & Pendências | `financeiro` | `/adm-financeiro/financeiro` | `dashboard.jsx:507` |
-| (PrecificacaoDetail em precificacao.jsx) | Gerar proposta | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:298` |
 | (RPPainelProducao em painel-producao-pcp.jsx) | (acionado por um handler — ver o código) | `pcp` | `/logistica/pcp` | `painel-producao-pcp.jsx:100` |
+| (SolicitacoesCompraTab em solicitacoes-compra.jsx) | (acionado por um handler — ver o código) | `cotacoes-varejo` | `/logistica/cotacoes-varejo` | `solicitacoes-compra.jsx:185` |
 | (TabEquipamentos em dossier-obra.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `dossier-obra.jsx:1166` |
 | cadastro-instaladores | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `cadastro-instaladores.jsx:105` |
-| compras | (acionado por um handler — ver o código) | `cotacoes-varejo` | `/logistica/cotacoes-varejo` | `importacao-varejo.jsx:724` |
-| compras | (acionado por um handler — ver o código) | `cotacoes-varejo` | `/logistica/cotacoes-varejo` | `importacao-varejo.jsx:975` |
+| compras | (acionado por um handler — ver o código) | `cotacoes-varejo` | `/logistica/cotacoes-varejo` | `importacao-varejo.jsx:790` |
+| compras | (acionado por um handler — ver o código) | `cotacoes-varejo` | `/logistica/cotacoes-varejo` | `importacao-varejo.jsx:1055` |
+| compras | (acionado por um handler — ver o código) | `pedidos-acompanhamento` | `/logistica/pedidos-acompanhamento` | `importacao-varejo.jsx:798` |
 | contrato-editor | Voltar para Contratos | `juridico` | `/juridico/juridico` | `contrato-editor.jsx:258` |
 | contrato-editor | Voltar | `juridico` | `/juridico/juridico` | `contrato-editor.jsx:387` |
 | controle-cotacoes | (acionado por um handler — ver o código) | `formulario-elevador` | `/comercial/formulario-elevador` | `controle-cotacoes.jsx:138` |
@@ -235,8 +236,8 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | engenharia | Abrir obras | `status-obras` | `/engenharia/status-obras` | `operacoes.jsx:273` |
 | engenharia | Abrir obras | `status-obras` | `/engenharia/status-obras` | `operacoes.jsx:322` |
 | expedicao | (acionado por um handler — ver o código) | `pcp` | `/logistica/pcp` | `expedicao.jsx:301` |
-| formulario-elevador, formulario-escada, formulario-esteira | (acionado por um handler — ver o código) | `controle-cotacoes` | `/comercial/controle-cotacoes` | `formulario-elevador.jsx:2145` |
-| formulario-elevador, formulario-escada, formulario-esteira | (acionado por um handler — ver o código) | `formularios` | `/comercial/formularios` | `formulario-elevador.jsx:2143` |
+| formulario-elevador, formulario-escada, formulario-esteira | (acionado por um handler — ver o código) | `controle-cotacoes` | `/comercial/controle-cotacoes` | `formulario-elevador.jsx:2233` |
+| formulario-elevador, formulario-escada, formulario-esteira | (acionado por um handler — ver o código) | `formularios` | `/comercial/formularios` | `formulario-elevador.jsx:2231` |
 | formulario-quadro-comando | (acionado por um handler — ver o código) | `formularios` | `/comercial/formularios` | `quadro-comando.jsx:1203` |
 | importacao | (acionado por um handler — ver o código) | `importacao-detail` | `/gestao-importacao/importacao-detail` | `logistica.jsx:496` |
 | importacao | (acionado por um handler — ver o código) | `importacao-detail` | `/gestao-importacao/importacao-detail` | `logistica.jsx:547` |
@@ -263,10 +264,10 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | ncm-detail | Voltar para Solicitações NCM | `ncm-kanban` | `/engenharia/ncm-kanban` | `ncm-catalogo.jsx:748` |
 | ncm-kanban | (acionado por um handler — ver o código) | `ncm-detail` | `/engenharia/ncm-detail` | `ncm-catalogo.jsx:664` |
 | ncm-kanban | (acionado por um handler — ver o código) | `ncm-detail` | `/engenharia/ncm-detail` | `ncm-catalogo.jsx:712` |
-| proposta-editor | (acionado por um handler — ver o código) | `propostas` | `/comercial/propostas` | `proposta-editor.jsx:1122` |
-| propostas | (acionado por um handler — ver o código) | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:596` |
-| propostas | (acionado por um handler — ver o código) | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:685` |
-| propostas | (acionado por um handler — ver o código) | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:686` |
+| proposta-editor | (acionado por um handler — ver o código) | `propostas` | `/comercial/propostas` | `proposta-editor.jsx:1199` |
+| propostas | (acionado por um handler — ver o código) | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:108` |
+| propostas | (acionado por um handler — ver o código) | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:197` |
+| propostas | (acionado por um handler — ver o código) | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:198` |
 | status-obras | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `dossier-obra.jsx:71` |
 
 ## Estados internos que ainda NÃO têm endereço
@@ -284,18 +285,18 @@ São abas de formulário/modal, filtros, modos de visualização e passos de ass
 | `dossier-obra.jsx:939` | TermoEntregaPanel | `modo` | `'self_service'` | `dossier-obra`, `status-obras` |
 | `dossier-obra.jsx:1622` | FormAdicionarItemTemplate | `etapa` | `''` | `dossier-obra`, `status-obras` |
 | `formulario-quadro-comando-publico.jsx:264` | ? | `passo` | `0` | (modal/componente interno) |
-| `importacao-varejo.jsx:312` | IVModalCesta | `modo` | `'novo'` | `compras` |
+| `importacao-varejo.jsx:374` | IVModalCesta | `modo` | `'novo'` | `compras` |
 | `ims.jsx:75` | IMSForm | `tab` | `'identificacao'` | `ims-importacao` |
 | `ims.jsx:342` | IMSPage | `activeTab` | `'todos'` | `ims-importacao` |
 | `lista-fios.jsx:46` | ListaFiosView | `aba` | `'fios'` | (modal/componente interno) |
 | `logistica.jsx:1927` | EmailInbox | `modoCompose` | `'responder'` | `inbox` |
 | `ncm-catalogo.jsx:574` | NcmKanbanPage | `view` | `"kanban"` | `ncm-kanban` |
 | `pi.jsx:451` | PIForm | `tab` | `'id'` | `pi-importacao` |
-| `precificacao-elevador.jsx:537` | ModalAcrescentarEquipamento | `modo` | `grupos.length ? 'identico' : '` | (modal/componente interno) |
+| `precificacao-elevador.jsx:551` | ModalAcrescentarEquipamento | `modo` | `grupos.length ? 'identico' : '` | (modal/componente interno) |
 | `precificacao-memoria.jsx:46` | PZMemoriaCalculo | `aba` | `'resumo'` | (modal/componente interno) |
-| `precificacao.jsx:20` | PrecificacaoPage | `modo` | `'elevador'` | `precificacao` |
-| `proposta-form.jsx:1455` | S_Conteudo | `aba` | `null` | (modal/componente interno) |
+| `proposta-form.jsx:1432` | S_Conteudo | `aba` | `null` | (modal/componente interno) |
 | `recibo-instalador-app.jsx:62` | ReciboApp | `modo` | `'assinar'` | (modal/componente interno) |
 | `rfq.jsx:22` | RFQForm | `modoGlobal` | `!!(initialData && initialData.` | `rfq-importacao` |
+| `solicitacoes-compra.jsx:18` | SCModalAlocar | `modo` | `'novo'` | (modal/componente interno) |
 | `solicitacoes-produto.jsx:16` | SolicitacoesProdutoPage | `view` | `solicitacaoId ? 'detalhe' : 'l` | `solicitacoes-produto` |
 | `termo-entrega-app.jsx:166` | ? | `passo` | `'cliente'` | (modal/componente interno) |
