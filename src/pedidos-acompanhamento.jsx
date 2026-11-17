@@ -51,11 +51,12 @@ function PedidoForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
   );
 }
 
-function PedidosAcompanhamentoPage() {
+function PedidosAcompanhamentoPage({ setRoute }) {
   const [items, setItems] = React.useState(null);
   const [showForm, setShowForm] = React.useState(false);
   const [editing, setEditing] = React.useState(null);
-  const [tab, setTab] = window.useRouteTab('pedidos-acompanhamento', 'Nacional', ['Nacional', 'Importação']);
+  /* 'Solicitacoes' = pedidos dos vendedores para o comprador alocar em cotação (nov/2026); Nacional/Importação = planilha manual de acompanhamento. */
+  const [tab, setTab] = window.useRouteTab('pedidos-acompanhamento', 'Solicitacoes', ['Solicitacoes', 'Nacional', 'Importação']);
   const [search, setSearch] = React.useState('');
   const [filterStatus, setFilterStatus] = React.useState('Todos');
   const [saving, setSaving] = React.useState(false);
@@ -82,6 +83,7 @@ function PedidosAcompanhamentoPage() {
     catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
   };
 
+  const emSolicitacoes = tab === 'Solicitacoes';
   if (items === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   const doSetor = items.filter((p) => p.setor === tab);
@@ -101,11 +103,11 @@ function PedidosAcompanhamentoPage() {
           <p className="page-head__sub">Acompanhamento de status de pedidos de compra — Nacional e Importação.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="primary" icon="plus" onClick={() => { setEditing({ setor: tab }); setShowForm(true); }}>Novo pedido</Button>
+          {!emSolicitacoes && <Button variant="primary" icon="plus" onClick={() => { setEditing({ setor: tab }); setShowForm(true); }}>Novo pedido</Button>}
         </div>
       </div>
 
-      {showForm && (
+      {showForm && !emSolicitacoes && (
         <div style={{ marginBottom: 20 }}>
           <PedidoForm initialData={editing && editing.id ? editing : { ...PED_EMPTY, setor: tab }} isEdit={!!(editing && editing.id)} saving={saving}
             onSubmit={salvar} onCancel={() => { setShowForm(false); setEditing(null); }}/>
@@ -113,10 +115,13 @@ function PedidosAcompanhamentoPage() {
       )}
 
       <Tabs tabs={[
+        { key: 'Solicitacoes', label: 'Solicitações' },
         { key: 'Nacional', label: 'Nacional', count: items.filter((p) => p.setor === 'Nacional').length },
         { key: 'Importação', label: 'Importação', count: items.filter((p) => p.setor === 'Importação').length },
       ]} active={tab} onChange={setTab}/>
 
+      {emSolicitacoes && <window.SolicitacoesCompraTab setRoute={setRoute}/>}
+      <div style={{ display: emSolicitacoes ? 'none' : undefined }}>
       <div className="row gap-2" style={{ margin: '14px 0' }}>
         <input className="input" style={{ flex: 1 }} placeholder="Buscar por nº, fornecedor ou descrição…" value={search} onChange={(e) => setSearch(e.target.value)}/>
         <select className="input" style={{ width: 180 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
@@ -149,6 +154,7 @@ function PedidosAcompanhamentoPage() {
             ))}
           </tbody>
         </table>
+      </div>
       </div>
     </div>
   );

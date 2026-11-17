@@ -447,7 +447,7 @@ function App() {
       case "embarques-importacao": return <window.EmbarquesImportacaoPage/>;
       case "gi-painel": return <window.GIPainelPage/>;
       case "gi-analise-precos": return <window.GIAnalisePrecosPage/>;
-      case "pedidos-acompanhamento": return <window.PedidosAcompanhamentoPage/>;
+      case "pedidos-acompanhamento": return <window.PedidosAcompanhamentoPage setRoute={setRoute}/>;
       case "cadastro-clientes": return <window.CadastroClientesPage/>;
       case "cadastro-fornecedores": return <window.CadastroFornecedoresPage/>;
       case "cadastro-materias-primas": return <window.CadastroMateriasPrimasPage setRoute={setRoute} setSubsel={setSubsel}/>;

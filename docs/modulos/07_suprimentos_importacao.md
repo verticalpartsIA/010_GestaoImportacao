@@ -439,8 +439,12 @@ Sem `restrict`. **Esta é uma das duas telas do módulo que confere alçada:** `
 Cabeçalho "LOGÍSTICA · IMPORTAÇÃO VAREJO" / **Importação Varejo** / "Estoque (sincronizado 4x/dia), vendas reais do Omie (atualizadas todo dia) e Sugestão de Compra dos produtos importados vendidos avulsos…". Alertas: "Erro ao consultar", "Catálogo vazio", "Contagens físicas indisponíveis", "N produto(s) com mercadoria por chegar" (**Ver quais**), "N produto(s) de venda esporádica aguardam revisão" (**Ver a fila**). **Cinco cartões:** Precisa comprar (clicável, filtra), Alerta (no mínimo) (clicável), Sugestão total, Curva D com estoque parado, **Valores a pagar (estimado)** (soma só os selecionados quando há seleção). Busca "Buscar por código, descrição ou fornecedor…", e chips: **Todas / Precisa comprar / Alerta / Ok**, **Curva A–D**, **⚑ Para revisar**, **⏰ Dia D**, **▲ Em alta**, **▼ Em baixa**, **📦 Comprado**, **🚢 A caminho**, **⚑ Chegou, falta a nota**, **Divergentes**, **Saldo não conferido**.
 **Tabela "Produtos importados"** (cabeçalho fixo): caixa de seleção (marca todos os filtrados), Código, Descrição, Endereço, Curva, Físico, Reservado, Disponível, Contado, Acuracidade, **Mín. Omie, Mín. sug., Máx. sug.**, Pendente, Comprado, A caminho, Sugestão, Dia D, Tendência (12 meses) com gráfico, Último Fornecedor (selo "exterior"; selo "P.I." quando vem de P.I.), Último Preço Unit.; no rodapé do cartão "Estoque sincronizado em …, Giro/Curva calculados em …, Acuracidade da contagem …".
 
+**Solicitação do vendedor (17/11/2026, em implementação):** quem tem `compras.solicitar` (ou `compras.criar`) também seleciona produtos, mas o botão dele é **Enviar solicitação (N)**, não a cesta. A alçada `compras.tratar_solicitacoes` (ou `cotacoes-varejo.criar`) é a do comprador que trata as solicitações em 7.11. Catálogo de alçadas: `colaboradores-admin-store.js`. **Não verificado** (código escrito; a migration ainda não foi aplicada).
+
 ### 7.9.5 Botões e controles
 No cabeçalho: **Sincronizar estoque agora**, **Forçar sincronização de catálogo/giro** (ambos só com alçada), **Atualizar**. Com itens marcados: **Adicionar à cesta (N)** (botão com ícone de cesta: a janela pergunta se é **lote novo** — com nome opcional — ou **um lote já aberto**; nada vai ao Omie; produto que já está em outro lote aberto só gera aviso) e **Comprar direto no Omie (N)** (janela "Enviar requisição de compra em massa", com fornecedor e preço editáveis por item e o valor total estimado). Por linha: editar **Endereço** (placeholder "ex.: R2I8 / R2H8 / H23", validado pela regra do galpão), digitar **Contado** ("contar"), editar mínimo/máximo e revisar ("Revisar lote de compra", com aprovar, ajustar ou "não repor" e motivo), lançar **Comprado**, configurar lote/múltiplo ("ex.: 700 (bobina)"), selo "em cotação" (clicável, abre o lote).
+
+**Enviar solicitação (N)** (17/11/2026): abre a janela com código, descrição, **quantidade** (da sugestão de compra, editável; obrigatória > 0), observação por item, urgência, "preciso para", nº do pedido de venda e da cotação/proposta (opcionais) e o motivo. Grava por `iv_solicitacao_enviar` e leva o vendedor a Pedidos › Solicitações. Nada vai ao Omie nem cria lote. **Não verificado.**
 
 ### 7.9.6 Comportamento
 - **Carga em uma chamada** (`iv_compras_carga()` no banco: itens + contagens + sugestões + revisões + "a caminho" + mínimo do Omie); se falhar, cai sozinho no caminho antigo (Edge Function `list-importacao-varejo` + 5 consultas). **Não apague** a Edge Function antiga nem o caminho de reserva.
@@ -518,6 +522,8 @@ Em 7.10.4. Na aprovação: **Voltar** e o botão que confirma; **Cancelar lote**
 ### 7.10.9 Testes
 `cotacoes-varejo-calc.test.js` (faixas, preço na quantidade, ordem das faixas e a cesta: `itensParaAdicionar`, `loteAceitaItens`). `npm test` 1083/1083 em 09/11/2026. Não rodei o e2e. **Cenário:** *Dado* faixas 1–99 a US$ 10 e 100+ a US$ 8, *quando* compro 100, *então* o preço é US$ 8 (teste de `precoNaQuantidade`).
 
+**Origem do vendedor (17/11/2026):** item que veio de uma solicitação mostra, abaixo da descrição, "Pedido de <vendedor> (SOL-xxxx, qtd)" (lido de `iv_solicitacao_itens.lote_item_id`; falha de leitura = sem selo). A quantidade pedida salva no `onBlur` agora avisa "Quantidade de X salva." **Achado (Conferido no banco em 17/11/2026):** salvar só com quantidade, sem fornecedor, já funcionava (COTV-0036: 2 itens, 10 un. cada, 0 convites); o que faltava era o aviso e a origem do pedido. **Não verificado** (selo depende da migration).
+
 ### 7.10.10 Pendências e decisões
 Não testados com clique real (Herdado): criar lote → convidar → responder pelo portal → aprovar → P.I./Proforma; IA com ficha colada; NPS gravando; importar CSV. Em aberto: unificar NPS com `fornecedores_avaliacoes`; modo da IA sem memória; guardar a ficha por produto; Excel de verdade (hoje CSV); resposta por e-mail preencher o mapa; alerta de lote parado; foto do Omie.
 
@@ -559,6 +565,8 @@ Nenhum. Não rodei o e2e.
 
 ### 7.11.10 Pendências e decisões
 Decidir se a tela continua manual ou passa a ler os Pedidos de Compra do Omie (que já são lidos em 7.9).
+
+**Aba Solicitações (17/11/2026, em implementação; rota `/logistica/pedidos-acompanhamento/Solicitacoes`, aba padrão):** o vendedor envia em 7.9; aqui o **vendedor** acompanha as suas (editar/cancelar enquanto nada foi alocado; **corrigir e reenviar** se devolvida) e o **comprador** vê todas, marca itens e **aloca em cotação** (lote novo ou rascunho já aberto; produto repetido soma a quantidade), **devolve ao vendedor** (motivo obrigatório; vendedor recebe aviso) e **realoca** enquanto o lote for rascunho. Status: enviada → em análise → alocada | devolvida | cancelada. Dados: `iv_solicitacoes`, `iv_solicitacao_itens`, `iv_solicitacao_hist` (tabelas **fechadas**; só as funções `iv_solicitacao_*` gravam e conferem alçada). Aviso ao comprador na Central de Notificações. Arquivos: `solicitacoes-compra-calc.js` (regras, com teste), `-store.js`, `solicitacoes-compra.jsx`. As abas Nacional e Importação (planilha manual) **não mudaram**. Limite: a RLS isola por `solicitante_email` só para quem fala pelo app autenticado (depende da #571 para o resto). **Não verificado** (migration `20261117100000` ainda não aplicada; só a regra pura tem teste).
 
 ### 7.11.11 Histórico
 Citada no menu desde a primeira organização de Suprimentos (**Herdado**). 1 pedido em produção.
@@ -602,6 +610,8 @@ Citada no menu desde a primeira organização de Suprimentos (**Herdado**). 1 pe
 
 ### PC-8 Tabelas
 `pi_importacao` (31), `rfq_importacao` (0), `ims_importacao` (1), `embarques_importacao` (11), `embarques` (8), `pedidos_acompanhamento` (1), `catalogo_produtos` (400), `operadores_estrangeiros` (3), `importacao_varejo_produtos` (1.883), `_giro`, `_estoque`, `_fornecedor`, `_comprado` (3), `_lote_config`, `_revisao`, `_contagem` (952) e `_contagem_hist`, `_sugestao_estoque` (1.877), `_mov`, `iv_cotacao_lotes` (20), `_itens` (38), `_convites` (22), `_respostas` (41), `_decisoes`, `_tratativas`, `produto_fotos`, `produto_descricoes_exportacao`, `fornecedor_avaliacoes`, `cambio_diario`; `pedidos_compra_varejo` (0, módulo 12). Contagens **Conferidas** por `count(*)` em 31/10/2026. **Realtime:** só `embarques`.
+
+**Solicitações de compra (17/11/2026):** `iv_solicitacoes`, `iv_solicitacao_itens`, `iv_solicitacao_hist` (migration `20261117100000`, fechadas) e a coluna `iv_cotacao_itens.solicitacao_item_id`. **Não verificado.**
 
 ### PC-9 Navegação, cache e testes
 Regras de URL, `?v=` e testes: `01_geral.md` PC-9. Específico: aba por `useRouteTab` (P.I. e Embarques: aba/registro na URL; Embarques não abre o formulário pela URL); `compras` divide o 2º segmento em `<ação>:<id>`. `node scripts/check-cache-bust.js origin/main`: **ok** em 31/10/2026. `npm test`: **931 passaram, 0 falharam**. e2e: **não rodei**.
