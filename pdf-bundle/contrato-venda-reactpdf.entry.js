@@ -315,7 +315,8 @@ function Assinaturas(doc, assinaturas) {
   const comp = a.comprador || {};
   const lista = Array.isArray(assinaturas) ? assinaturas : [];
   const razao = String(comp.razaoLabel || '').trim();
-  const razaoLtda = /ltda\.?$/i.test(razao) ? razao : `${razao} LTDA.`;
+  // Pessoa física (comp.pf) não leva "LTDA." depois do nome.
+  const razaoLtda = (comp.pf || /ltda\.?$/i.test(razao)) ? razao : `${razao} LTDA.`;
   const assinado = lista.length > 0;
   const bloco = (key, papel, nome, cpf) => h(View, { key, wrap: false, style: { marginBottom: 30 } }, assinado ? [
     h(Text, { key: 'r', style: S.assRole }, papel),

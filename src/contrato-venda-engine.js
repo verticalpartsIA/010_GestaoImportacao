@@ -79,6 +79,22 @@
     };
     return dv(d.slice(0, 9)) === parseInt(d[9], 10) && dv(d.slice(0, 10)) === parseInt(d[10], 10);
   }
+  /* Documento do cliente vindo da Proposta/Cadastro: decide PF × PJ.
+     PF quando tipo_pessoa/tipoPessoa = 'PF', quando há `cpf`, ou quando o campo
+     `cnpj` traz 11 dígitos / texto "CPF: ..." (jeito antigo de contornar a falta
+     de campo — ex.: cotação 1004). Devolve { tipoPessoa, cnpj, cpf } com CNPJ e
+     CPF só em dígitos (a máscara fica por conta da tela). */
+  function documentoDoCliente(cli) {
+    cli = cli || {};
+    const dCnpj = onlyDigits(cli.cnpj);
+    const dCpf = onlyDigits(cli.cpf);
+    const pf = String(cli.tipo_pessoa || cli.tipoPessoa || '').toUpperCase() === 'PF'
+      || (!!dCpf && dCnpj.length !== 14)
+      || /cpf/i.test(String(cli.cnpj || ''))
+      || (dCnpj.length === 11 && !dCpf);
+    if (pf) return { tipoPessoa: 'PF', cnpj: '', cpf: dCpf || (dCnpj.length === 11 ? dCnpj : '') };
+    return { tipoPessoa: 'PJ', cnpj: dCnpj, cpf: dCpf };
+  }
   /* Endereço completo no padrão do contrato ("Rua, nº, bairro, cidade/UF, CEP")
      a partir de {endereco, numero, bairro, cidade, uf, cep} — antes só
      logradouro + número herdavam da Proposta. Partes vazias são omitidas. */
@@ -278,6 +294,10 @@
       dossier_id: null,  // ISSUE #6: Vinculação ao Dossier da Obra
       masterId: null, propostaId: null,  // Master ID Fase 2 — herda da Proposta selecionada
       comprador: {
+        /* 'PJ' (padrão) ou 'PF'. PF: razao = nome completo, repCpf = CPF do
+           próprio comprador, sem representante/RG/estado civil (decisão do
+           Gelson, 17/11/2026: só endereço, CPF, e-mail e telefone). */
+        tipoPessoa: 'PJ',
         razao: '', cnpj: '', endereco: '',
         rep: '', repCargo: '', repCpf: '', email: '', tel: '',
         /* Qualificação do representante — cláusula do preâmbulo (minuta oficial) */
@@ -364,11 +384,12 @@
         }))
       : null;
 
-    const compRazao = c.razao || 'RAZÃO SOCIAL';
-    const compCnpj  = c.cnpj  || 'XX.XXX.XXX/XXXX-XX';
+    const ehPF      = c.tipoPessoa === 'PF';
+    const compRazao = c.razao || (ehPF ? 'NOME COMPLETO' : 'RAZÃO SOCIAL');
+    const compCnpj  = ehPF ? '' : (c.cnpj  || 'XX.XXX.XXX/XXXX-XX');
     const compEnd   = c.endereco || 'Rua XXX, nº XXX, bairro, cidade/estado, CEP XX.XXX-XX';
-    const compRep   = c.rep   || 'NOME DO RESPONSÁVEL';
-    const compCpf   = c.repCpf || 'XXX';
+    const compRep   = ehPF ? compRazao : (c.rep || 'NOME DO RESPONSÁVEL');
+    const compCpf   = c.repCpf || (ehPF ? 'XXX.XXX.XXX-XX' : 'XXX');
     const compNac   = c.repNacionalidade || 'nacionalidade';
     const compEstCivil = c.repEstadoCivil || 'estado civil';
     const compProf  = c.repProfissao || 'profissão';
@@ -384,7 +405,9 @@
       body: [
         p('Pelo presente instrumento particular e na melhor forma de direito, as partes a seguir nomeadas:'),
         p(`<b>VENDEDORA:</b> ${esc(V.razao)}, inscrita no CNPJ sob o nº ${esc(V.cnpj)}, com sede à ${esc(V.endereco)}, neste ato representada nos termos de seu Contrato social por <b>${esc(V.rep)}</b>, ${esc(V.repQualif)}, com escritório no endereço acima mencionado e;`, { html: true }),
-        p(`<b>COMPRADOR:</b> ${esc(compRazao)}, inscrito no CNPJ sob o nº ${esc(compCnpj)}, com sede à ${esc(compEnd)}, neste ato representada nos termos de seu ato constitutivo por <b>${esc(compRep)}</b>, ${esc(compNac)}, ${esc(compEstCivil)}, ${esc(compProf)}, portador da cédula de identidade RG de nº ${esc(compRg)}, inscrito no CPF nº ${esc(compCpf)}, residente e domiciliado na ${esc(compEndResp)}.`, { html: true }),
+        ehPF
+          ? p(`<b>COMPRADOR:</b> <b>${esc(compRazao)}</b>, inscrito(a) no CPF sob o nº ${esc(compCpf)}, residente e domiciliado(a) na ${esc(compEnd)}.`, { html: true })
+          : p(`<b>COMPRADOR:</b> ${esc(compRazao)}, inscrito no CNPJ sob o nº ${esc(compCnpj)}, com sede à ${esc(compEnd)}, neste ato representada nos termos de seu ato constitutivo por <b>${esc(compRep)}</b>, ${esc(compNac)}, ${esc(compEstCivil)}, ${esc(compProf)}, portador da cédula de identidade RG de nº ${esc(compRg)}, inscrito no CPF nº ${esc(compCpf)}, residente e domiciliado na ${esc(compEndResp)}.`, { html: true }),
         p('Têm, entre si, certo e ajustado o presente Contrato de compra e venda de equipamento, o qual se regerá pelas disposições do Código Civil e demais condições abaixo, às quais as partes mutuamente se obrigam.'),
       ],
     });
@@ -584,7 +607,7 @@
       sections,
       meta: { especial, longa, dist, descEq, numero, valor, compRazao, compRep, compCpf },
       contratante: V,
-      comprador: { razao: compRazao, cnpj: compCnpj, endereco: compEnd, rep: compRep, repCpf: compCpf, repCargo: c.repCargo },
+      comprador: { tipoPessoa: ehPF ? 'PF' : 'PJ', razao: compRazao, cnpj: compCnpj, endereco: compEnd, rep: compRep, repCpf: compCpf, repCargo: c.repCargo },
       titulo: 'CONTRATO DE COMPRA E VENDA DE EQUIPAMENTOS E PRESTAÇÃO DE SERVIÇOS DE INSTALAÇÃO',
       numero: numeroExib,
       numeroInterno: numero,
@@ -592,7 +615,7 @@
          não como cláusula numerada (mesma estrutura da minuta oficial). */
       assinatura: {
         vendedora: { nome: V.rep, cpf: V.repCpf },
-        comprador: { razaoLabel: compRazao, nome: c.rep || '', cpf: c.repCpf || '' },
+        comprador: { razaoLabel: compRazao, nome: ehPF ? (c.razao || '') : (c.rep || ''), cpf: c.repCpf || '', pf: ehPF },
       },
     };
   }
@@ -625,7 +648,7 @@
   /* ---------- Exporta tudo em window.CV ---------- */
   window.CV = {
     VENDEDORA, EQUIPAMENTOS, CONTATOS_VP,
-    onlyDigits, isCPFValid, montarEndereco, maskCNPJ, maskCPF, maskPhone, maskCEP, maskMoney, parseMoney, brl, dataBR,
+    onlyDigits, isCPFValid, documentoDoCliente, montarEndereco, maskCNPJ, maskCPF, maskPhone, maskCEP, maskMoney, parseMoney, brl, dataBR,
     descEquipamento, defaultState, numeroExibicao, propostaExibicao,
     buildContract,
     calcularD0, addDias,  // ISSUE #6

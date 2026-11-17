@@ -142,6 +142,24 @@ function CVStepCadastro({ form, setComp, errors, onSelecionarProposta }) {
         <small>CNPJ 15.822.325/0001-27 · Guarulhos/SP · Rep. Diego Yutaka Maeno</small>
       </div>
       <div className="cv-grid">
+        <CVSelect label="Tipo de pessoa do comprador" value={form.comprador.tipoPessoa || 'PJ'} onChange={(v) => setComp(v === 'PF' ? { tipoPessoa: 'PF', rep: form.comprador.razao || '' } : { tipoPessoa: 'PJ' })} options={[{ value: 'PJ', label: 'Pessoa Jurídica (CNPJ)' }, { value: 'PF', label: 'Pessoa Física (CPF)' }]}/>
+      </div>
+      {form.comprador.tipoPessoa === 'PF' ? (<>
+        <div className="cv-grid">
+          <CVField label="Nome completo" required width="full" value={form.comprador.razao} onChange={(v) => setComp({ razao: v, rep: v })} placeholder="Nome completo do comprador" error={errors.razao}/>
+        </div>
+        <div className="cv-grid">
+          <CVField label="CPF" required mask="maskCPF" mono value={form.comprador.repCpf} onChange={(v) => setComp({ repCpf: v })} placeholder="000.000.000-00" error={errors.repCpf}/>
+          <CVField label="Telefone" mask="maskPhone" mono value={form.comprador.tel} onChange={(v) => setComp({ tel: v })} placeholder="(11) 90000-0000"/>
+        </div>
+        <div className="cv-grid">
+          <CVField label="Endereço" required width="full" value={form.comprador.endereco} onChange={(v) => setComp({ endereco: v })} placeholder="Rua, nº, bairro, cidade/estado, CEP" hint="Vem do Cadastro de Clientes; no contrato é o endereço de residência e domicílio do comprador." error={errors.endereco}/>
+        </div>
+        <div className="cv-grid">
+          <CVField label="E-mail para assinatura" width="full" value={form.comprador.email} onChange={(v) => setComp({ email: v })} placeholder="contato@cliente.com.br" hint="Usado no envio do link de assinatura e como contato de comunicação (cláusula 10.1)."/>
+        </div>
+      </>) : (<>
+      <div className="cv-grid">
         <CVField label="Razão social" required width="full" value={form.comprador.razao} onChange={(v) => setComp({ razao: v })} placeholder="ex: Shopping Center Aricanduva Ltda." error={errors.razao}/>
       </div>
       <div className="cv-grid">
@@ -175,6 +193,7 @@ function CVStepCadastro({ form, setComp, errors, onSelecionarProposta }) {
           <CVField label="Endereço residencial do representante" required width="full" value={form.comprador.repEnderecoResidencial} onChange={(v) => setComp({ repEnderecoResidencial: v })} placeholder="Rua, nº, bairro, cidade/estado, CEP" hint="Onde o representante reside e é domiciliado — exigido pelo preâmbulo do contrato." error={errors.repEnderecoResidencial}/>
         </div>
       </div>
+      </>)}
     </div>
   );
 }
@@ -576,7 +595,12 @@ const CV_STEPS = [
 
 function validateStep(idx, s) {
   const e = {};
-  if (idx === 0) {
+  if (idx === 0 && s.comprador.tipoPessoa === 'PF') {
+    /* Pessoa física: só nome, CPF e endereço são obrigatórios (decisão de 17/11/2026). */
+    if (!s.comprador.razao || !s.comprador.razao.trim()) e.razao = 'Informe o nome completo.';
+    if (!window.CV.isCPFValid(s.comprador.repCpf)) e.repCpf = 'CPF inválido (confira os dígitos).';
+    if (!s.comprador.endereco || !String(s.comprador.endereco).trim()) e.endereco = 'Informe o endereço.';
+  } else if (idx === 0) {
     if (!s.comprador.razao || !s.comprador.razao.trim()) e.razao = 'Informe a razão social.';
     if (window.CV.onlyDigits(s.comprador.cnpj).length !== 14) e.cnpj = 'CNPJ incompleto (14 dígitos).';
     if (!s.comprador.rep || !s.comprador.rep.trim()) e.rep = 'Informe o representante.';
@@ -680,6 +704,7 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
        número herdavam, e o CEP da obra (que a cláusula 1 cita como base de
        reajuste) nunca chegava ao contrato. */
     const endCli = window.CV.montarEndereco(cli);
+    const docCli = window.CV.documentoDoCliente(cli); // PF × PJ (inclusive "CPF: …" digitado no campo CNPJ)
     const endObra = window.CV.montarEndereco(obra);
 
     /* Sinal/Parcelas: a Proposta já calcula isso (Sinal de 40% + N parcelas
@@ -722,9 +747,11 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
       parcelasDetalhe: parcelasDetalheInf,
       comprador: {
         ...prev.comprador,
+        tipoPessoa: docCli.tipoPessoa,
         razao: cli.nome || prev.comprador.razao,
-        cnpj: (cli.cnpj && window.CV.maskCNPJ(cli.cnpj)) || prev.comprador.cnpj,
-        rep: cli.responsavel || prev.comprador.rep,
+        cnpj: docCli.tipoPessoa === 'PF' ? '' : ((docCli.cnpj && window.CV.maskCNPJ(docCli.cnpj)) || prev.comprador.cnpj),
+        repCpf: (window.CV.maskCPF(docCli.cpf) || prev.comprador.repCpf),
+        rep: docCli.tipoPessoa === 'PF' ? (cli.nome || prev.comprador.razao || '') : (cli.responsavel || prev.comprador.rep),
         repCargo: cli.cargo || cli.responsavel_cargo || prev.comprador.repCargo,
         email: cli.email || prev.comprador.email,
         tel: cli.telefone || prev.comprador.tel,

@@ -179,6 +179,10 @@ function ClienteForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
           </div>
         </PIField>
         <PIField label="Inscrição estadual"><PIInput value={form.inscricao_estadual} onChange={set('inscricao_estadual')}/></PIField>
+        {/* 17/11/2026: o documento do OUTRO tipo é opcional (PJ: CPF do responsável; PF: CNPJ, ex. MEI) — o contrato herda daqui. */}
+        <PIField label={form.tipo_pessoa === 'PF' ? 'CNPJ (opcional — ex.: MEI)' : 'CPF do responsável (opcional)'}>
+          <PIInput value={form.tipo_pessoa === 'PF' ? form.cnpj : form.cpf} onChange={set(form.tipo_pessoa === 'PF' ? 'cnpj' : 'cpf')}/>
+        </PIField>
         <PIField label="Razão social / Nome *" span={2}><PIInput value={form.razao_social} onChange={set('razao_social')}/></PIField>
         <PIField label="Nome fantasia"><PIInput value={form.nome_fantasia} onChange={set('nome_fantasia')}/></PIField>
         <PIField label="E-mail"><PIInput value={form.email} onChange={set('email')}/></PIField>
