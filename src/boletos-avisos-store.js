@@ -17,6 +17,14 @@ window.BoletosAvisosStore = (() => {
     return data === true;
   }
 
+  /* Só os 3 fixos (Gelson, Diego, Juliana): enviar aviso, atualizar do Omie, envio automático. Quem só tem a alçada "ver" lê. */
+  async function podeGerir() {
+    const c = sb(); if (!c) return false;
+    const { data, error } = await c.rpc('boletos_avisos_pode_gerir');
+    if (error) return false;
+    return data === true;
+  }
+
   async function listarClientes() {
     const { data, error } = await sb().from('boletos_avisos_resumo_v').select('*').order('dias_atraso', { ascending: false }).order('razao_social').limit(2000);
     if (error) throw new Error(error.message);
@@ -91,5 +99,5 @@ window.BoletosAvisosStore = (() => {
   }
   async function simularAutomatico() { return chamar('automatico', { simular: true }); }
 
-  return { pode, listarClientes, boletosAbertos, boletosDoCliente, logDoCliente, config, salvarConfig, sincronizar, enviarAviso, simularAutomatico, quem };
+  return { pode, podeGerir, listarClientes, boletosAbertos, boletosDoCliente, logDoCliente, config, salvarConfig, sincronizar, enviarAviso, simularAutomatico, quem };
 })();
