@@ -73,44 +73,54 @@ function hojeBrasil(agora) { return new Date((agora || Date.now()) - 3 * 3600e3)
   function dataBR(iso) { return iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : ''; }
   function moedaBR(v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function montarAviso(razao, boletos, etapa) {
+    // Textos aprovados pelo Gelson em 17/11/2026 (mantém "encargos"; sem telefone e sem dados bancários).
     const plural = boletos.length > 1;
     const algumSem = boletos.some((b) => b.tem_boleto === false);
-    const intro = (algumSem ? {
-      'D-5': 'Este é um lembrete: ' + (plural ? 'os pagamentos abaixo estão para vencer.' : 'o pagamento abaixo está para vencer.'),
-      'D-1': (plural ? 'Os pagamentos abaixo vencem' : 'O pagamento abaixo vence') + ' amanhã.',
-      'D0': (plural ? 'Os pagamentos abaixo vencem' : 'O pagamento abaixo vence') + ' hoje.',
-      'D+1': 'Identificamos que ' + (plural ? 'os pagamentos abaixo venceram e ainda não constam como recebidos.' : 'o pagamento abaixo venceu e ainda não consta como recebido.'),
-      'manual': (plural ? 'Seguem os pagamentos' : 'Segue o pagamento') + ' em aberto da sua empresa.',
-    } : {
-      'D-5': 'Este é um lembrete: ' + (plural ? 'os boletos abaixo estão para vencer.' : 'o boleto abaixo está para vencer.'),
-      'D-1': (plural ? 'Os boletos abaixo vencem' : 'O boleto abaixo vence') + ' amanhã.',
-      'D0': (plural ? 'Os boletos abaixo vencem' : 'O boleto abaixo vence') + ' hoje.',
-      'D+1': 'Identificamos que ' + (plural ? 'os boletos abaixo venceram e ainda não constam como pagos.' : 'o boleto abaixo venceu e ainda não consta como pago.'),
-      'manual': (plural ? 'Seguem os boletos' : 'Segue o boleto') + ' em aberto da sua empresa.',
-    })[etapa] || (algumSem ? 'Seguem os pagamentos em aberto da sua empresa.' : 'Seguem os boletos em aberto da sua empresa.');
+    const pl = (sing, plur) => (plural ? plur : sing);
+    const item = algumSem ? pl('pagamento', 'pagamentos') : pl('boleto', 'boletos');
+    const vence = pl('vence', 'vencem');
+    const intro = {
+      'D-5': 'Olá, tudo bem?\n\nPassando para lembrar que ' + pl('o ', 'os ') + item + ' abaixo ' + vence + ' em 5 dias:',
+      'D-1': 'Olá,\n\n' + pl('O ', 'Os ') + item + ' abaixo ' + vence + ' amanhã:',
+      'D0': 'Olá,\n\n' + pl('O ', 'Os ') + item + ' abaixo ' + vence + ' hoje:',
+      'D+1': 'Olá,\n\n' + (algumSem
+        ? 'Até o momento ' + pl('o pagamento abaixo, já vencido, ainda não consta como recebido:', 'os pagamentos abaixo, já vencidos, ainda não constam como recebidos:')
+        : 'Até o momento não identificamos o pagamento ' + pl('do boleto abaixo, já vencido:', 'dos boletos abaixo, já vencidos:')),
+      'manual': 'Olá,\n\n' + pl('Segue o ', 'Seguem os ') + item + ' em aberto da sua empresa:',
+    }[etapa] || 'Olá,\n\n' + pl('Segue o ', 'Seguem os ') + item + ' em aberto da sua empresa:';
+    const fecho = {
+      'D-5': 'Se o pagamento já estiver programado, pode desconsiderar este e-mail.\n'
+        + (algumSem ? 'Tem alguma dúvida?' : 'Precisa da 2ª via ou tem alguma dúvida?') + ' É só responder esta mensagem.',
+      'D-1': 'Para evitar encargos por atraso, recomendamos o pagamento até a data do vencimento.\n'
+        + 'Se já foi pago ou programado, desconsidere este aviso.\nQualquer dúvida, é só responder este e-mail.',
+      'D0': 'Se o pagamento já foi feito, obrigado e desconsidere esta mensagem.'
+        + (algumSem ? '' : '\nSe precisar da 2ª via, responda este e-mail.'),
+      'D+1': 'Se já pagou: responda este e-mail com o comprovante' + (algumSem ? ' do depósito ou da transferência' : '') + ' para darmos baixa.\n'
+        + 'Se ainda não pagou: solicitamos a regularização imediata, sujeita aos encargos por atraso.'
+        + (algumSem ? '' : ' A 2ª via atualizada pode ser solicitada respondendo este e-mail.'),
+    }[etapa] || 'Se o pagamento já foi feito, responda este e-mail com o comprovante para darmos baixa.\nQualquer dúvida, é só responder esta mensagem.';
     const assunto = (algumSem ? {
-      'D-5': 'Lembrete: pagamento próximo do vencimento',
-      'D-1': 'Seu pagamento vence amanhã',
-      'D0': 'Seu pagamento vence hoje',
-      'D+1': 'Pagamento vencido — regularize',
+      'D-5': 'Lembrete: ' + pl('pagamento vence', 'pagamentos vencem') + ' em 5 dias',
+      'D-1': pl('Seu pagamento vence', 'Seus pagamentos vencem') + ' amanhã',
+      'D0': pl('Seu pagamento vence', 'Seus pagamentos vencem') + ' hoje',
+      'D+1': pl('Pagamento em aberto — vencido', 'Pagamentos em aberto — vencidos'),
       'manual': 'Pagamentos em aberto',
     } : {
-      'D-5': 'Lembrete: boleto próximo do vencimento',
-      'D-1': 'Seu boleto vence amanhã',
-      'D0': 'Seu boleto vence hoje',
-      'D+1': 'Boleto vencido — regularize o pagamento',
+      'D-5': 'Lembrete: ' + pl('boleto vence', 'boletos vencem') + ' em 5 dias',
+      'D-1': pl('Seu boleto vence', 'Seus boletos vencem') + ' amanhã',
+      'D0': pl('Seu boleto vence', 'Seus boletos vencem') + ' hoje',
+      'D+1': pl('Boleto em aberto — vencido', 'Boletos em aberto — vencidos'),
       'manual': 'Boletos em aberto',
     })[etapa] + ' — ' + razao;
     const linhas = boletos.map((b) => {
       let l = '• ' + [b.numero_documento ? 'NF ' + b.numero_documento : null, b.numero_parcela ? 'parcela ' + b.numero_parcela : null].filter(Boolean).join(' · ')
         + ' — vencimento ' + dataBR(b.data_vencimento) + ' — ' + moedaBR(b.valor);
-      if (b.tem_boleto === false) l += '\n  Sem boleto — pague pela forma combinada.';
+      if (b.tem_boleto === false) l += '\n  Forma de pagamento: depósito/transferência, conforme combinado.';
       else if (b.linha_digitavel) l += '\n  Linha digitável: ' + b.linha_digitavel;
       return l;
     });
-    const texto = 'Olá,\n\n' + intro + '\n\n' + linhas.join('\n') + '\n\n'
-      + 'Se o pagamento já foi feito, responda este e-mail com o comprovante. Em caso de dúvida, é só responder.\n\n'
-      + 'Financeiro — VerticalParts';
+    const texto = intro + '\n\n' + linhas.join('\n') + '\n\n' + fecho + '\n\n'
+      + 'Atenciosamente,\nFinanceiro — VerticalParts';
     return { assunto, texto };
   }
 // END CALC
