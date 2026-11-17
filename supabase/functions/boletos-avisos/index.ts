@@ -93,11 +93,11 @@ function hojeBrasil(agora) { return new Date((agora || Date.now()) - 3 * 3600e3)
         + (algumSem ? 'Tem alguma dúvida?' : 'Precisa da 2ª via ou tem alguma dúvida?') + ' É só responder esta mensagem.',
       'D-1': 'Para evitar encargos por atraso, recomendamos o pagamento até a data do vencimento.\n'
         + 'Se já foi pago ou programado, desconsidere este aviso.\nQualquer dúvida, é só responder este e-mail.',
-      'D0': 'Se o pagamento já foi feito, obrigado e desconsidere esta mensagem.\n'
-        + 'Se precisar de ' + (algumSem ? 'ajuda' : '2ª via') + ' ou tiver alguma dificuldade, responda este e-mail que ajudamos.',
+      'D0': 'Se o pagamento já foi feito, obrigado e desconsidere esta mensagem.'
+        + (algumSem ? '' : '\nSe precisar da 2ª via, responda este e-mail.'),
       'D+1': 'Se já pagou: responda este e-mail com o comprovante' + (algumSem ? ' do depósito ou da transferência' : '') + ' para darmos baixa.\n'
-        + 'Se ainda não pagou: pedimos que regularize o quanto antes. Se precisar de ' + (algumSem ? '' : '2ª via atualizada ou de ')
-        + 'uma nova data, responda esta mensagem que combinamos com você.',
+        + 'Se ainda não pagou: solicitamos a regularização imediata, sujeita aos encargos por atraso.'
+        + (algumSem ? '' : ' A 2ª via atualizada pode ser solicitada respondendo este e-mail.'),
     }[etapa] || 'Se o pagamento já foi feito, responda este e-mail com o comprovante para darmos baixa.\nQualquer dúvida, é só responder esta mensagem.';
     const assunto = (algumSem ? {
       'D-5': 'Lembrete: ' + pl('pagamento vence', 'pagamentos vencem') + ' em 5 dias',

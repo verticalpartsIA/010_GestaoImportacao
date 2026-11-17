@@ -78,7 +78,9 @@ test('as 4 etapas têm os textos aprovados em 17/11/2026 (boleto)', () => {
   assert.match(C.montarAviso('ACME', [b1], 'D-5').texto, /Precisa da 2ª via ou tem alguma dúvida\? É só responder esta mensagem\./);
   assert.match(C.montarAviso('ACME', [b1], 'D-1').texto, /O boleto abaixo vence amanhã:/);
   assert.match(C.montarAviso('ACME', [b1], 'D0').texto, /Se o pagamento já foi feito, obrigado e desconsidere esta mensagem\./);
-  assert.match(C.montarAviso('ACME', [b1], 'D+1').texto, /2ª via atualizada ou de uma nova data/);
+  assert.match(C.montarAviso('ACME', [b1], 'D0').texto, /Se precisar da 2ª via, responda este e-mail\./);
+  assert.match(C.montarAviso('ACME', [b1], 'D+1').texto, /solicitamos a regularização imediata, sujeita aos encargos por atraso\. A 2ª via atualizada pode ser solicitada respondendo este e-mail\./);
+  for (const e of ['D0', 'D+1']) assert.doesNotMatch(C.montarAviso('ACME', [b1], e).texto, /nova data|combinamos|ajudamos/);
   assert.equal(C.montarAviso('ACME', [b1], 'D+1').assunto, 'Boleto em aberto — vencido — ACME');
 });
 test('aviso de atraso sem boleto pede o comprovante do depósito e não fala em 2ª via', () => {
