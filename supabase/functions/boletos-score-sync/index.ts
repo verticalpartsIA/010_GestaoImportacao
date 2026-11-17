@@ -18,9 +18,9 @@
 // Regras do Omie (CLAUDE.md Art. 30): só leitura, pausa entre chamadas, NUNCA repetir chamada que deu erro
 // (o Omie bloqueia a API toda por 30 min depois de ~10 erros seguidos) — o erro encerra a rodada e fica no cursor.
 // Sem supabase-js (Art. 23): fetch + PostgREST.
-// NÃO VERIFICADO (conector do Omie estava fora do ar ao escrever): nomes dos filtros de ListarMovimentos
-// para receber (cNatureza, dDtVencDe/Ate, dDtPagtoDe/Ate) e dos campos (cGrupo, nCodCliente, dDtVenc,
-// dDtPagamento, resumo.nValPago/nValAberto). Rodar `sondar` antes de `carga`.
+// CONFERIDO em 17/11/2026 com a ação `sondar` (cópia de teste, dados reais): filtros cNatureza=R, dDtVencDe/Ate e dDtPagtoDe/Ate
+// funcionam; títulos pagos trazem cStatus RECEBIDO, dDtPagamento e resumo.cLiquidado=S; o nº da NF vem em cNumDocFiscal (não cNumTitulo).
+// Ainda não verificado: volume da carga inteira (≈265 títulos vencendo por semana → alguns milhares desde 01/01/2024).
 // ============================================================
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -142,7 +142,7 @@ function mapear(m, agoraISO) {
   return {
     codigo_lancamento_omie: id,
     codigo_cliente_omie: cli,
-    numero_documento: d.cNumTitulo || null,
+    numero_documento: d.cNumDocFiscal || d.cNumTitulo || null,   // o Omie traz o nº da NF em cNumDocFiscal (conferido com `sondar`, 17/11/2026)
     numero_parcela: d.cNumParcela || null,
     data_vencimento: venc,
     data_pagamento: pago ? isoDeBR(d.dDtPagamento) : null,
