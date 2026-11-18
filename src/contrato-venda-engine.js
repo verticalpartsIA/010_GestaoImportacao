@@ -95,6 +95,33 @@
     if (pf) return { tipoPessoa: 'PF', cnpj: '', cpf: dCpf || (dCnpj.length === 11 ? dCnpj : '') };
     return { tipoPessoa: 'PJ', cnpj: dCnpj, cpf: dCpf };
   }
+  /* Cadastro de Clientes primeiro, texto da Proposta só como reserva (decisão do Gelson, 17/11/2026,
+     "opção A"). `cli` = proposta.data_json.cliente; `cad` = linha de `clientes` (ou null).
+     Campo a campo: o que o cadastro tem vence; o que está vazio no cadastro cai para a proposta.
+     O ENDEREÇO vai em bloco (logradouro, bairro, cidade, UF, CEP): se o cadastro tem logradouro,
+     usa o endereço inteiro dele — nunca mistura rua de um com CEP do outro. Cidade "São Paulo (SP)"
+     (sufixo digitado no cadastro) perde o "(SP)", senão sairia "São Paulo (SP)/SP" no contrato. */
+  function clienteComCadastro(cli, cad) {
+    cli = cli || {};
+    if (!cad) return cli;
+    const t = (v) => String(v == null ? '' : v).trim();
+    const cidade = (v) => t(v).replace(/\s*\(\s*[A-Za-z]{2}\s*\)\s*$/, '');
+    const pf = cad.tipo_pessoa === 'PF';
+    const end = t(cad.endereco_logradouro)
+      ? { endereco: t(cad.endereco_logradouro), numero: '', bairro: t(cad.endereco_bairro), cidade: cidade(cad.endereco_cidade), uf: t(cad.endereco_estado), cep: t(cad.endereco_cep) }
+      : { endereco: cli.endereco, numero: cli.numero, bairro: cli.bairro, cidade: cli.cidade, uf: cli.uf, cep: cli.cep };
+    return {
+      ...cli, ...end,
+      nome: t(cad.razao_social) || cli.nome,
+      tipo_pessoa: pf ? 'PF' : (cad.tipo_pessoa === 'PJ' ? 'PJ' : cli.tipo_pessoa),
+      /* PF: não herda o "CPF: …" digitado no campo CNPJ da proposta; PJ: CNPJ do cadastro, senão o da proposta. */
+      cnpj: pf ? t(cad.cnpj) : (t(cad.cnpj) || cli.cnpj),
+      cpf: t(cad.cpf) || t(cli.cpf),
+      email: t(cad.email) || cli.email,
+      telefone: t(cad.telefone) || cli.telefone,
+      responsavel: t(cad.contato) || cli.responsavel,
+    };
+  }
   /* Endereço completo no padrão do contrato ("Rua, nº, bairro, cidade/UF, CEP")
      a partir de {endereco, numero, bairro, cidade, uf, cep} — antes só
      logradouro + número herdavam da Proposta. Partes vazias são omitidas. */
@@ -648,7 +675,7 @@
   /* ---------- Exporta tudo em window.CV ---------- */
   window.CV = {
     VENDEDORA, EQUIPAMENTOS, CONTATOS_VP,
-    onlyDigits, isCPFValid, documentoDoCliente, montarEndereco, maskCNPJ, maskCPF, maskPhone, maskCEP, maskMoney, parseMoney, brl, dataBR,
+    onlyDigits, isCPFValid, documentoDoCliente, clienteComCadastro, montarEndereco, maskCNPJ, maskCPF, maskPhone, maskCEP, maskMoney, parseMoney, brl, dataBR,
     descEquipamento, defaultState, numeroExibicao, propostaExibicao,
     buildContract,
     calcularD0, addDias,  // ISSUE #6

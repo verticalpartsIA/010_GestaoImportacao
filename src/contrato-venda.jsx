@@ -593,6 +593,46 @@ const CV_STEPS = [
   { id: 'revisao',   label: 'Revisão',   sub: 'Anexos & envio' },
 ];
 
+/* Monta o `comprador` do contrato a partir de um cliente no formato da Proposta (nome, cnpj, cpf, tipo_pessoa,
+   endereço…). Campo vazio mantém o que já estava (`prev`). PF: o nome também é o "representante" e o CPF é o do
+   próprio comprador; PJ: CNPJ + responsável, como sempre. */
+function cvCompradorDeCliente(cli, prev) {
+  const doc = window.CV.documentoDoCliente(cli);
+  const pf = doc.tipoPessoa === 'PF';
+  return {
+    ...prev,
+    tipoPessoa: doc.tipoPessoa,
+    razao: cli.nome || prev.razao,
+    cnpj: pf ? '' : ((doc.cnpj && window.CV.maskCNPJ(doc.cnpj)) || prev.cnpj),
+    repCpf: window.CV.maskCPF(doc.cpf) || prev.repCpf,
+    rep: pf ? (cli.nome || prev.razao || '') : (cli.responsavel || prev.rep),
+    repCargo: cli.cargo || cli.responsavel_cargo || prev.repCargo,
+    email: cli.email || prev.email,
+    tel: cli.telefone || prev.tel,
+    endereco: window.CV.montarEndereco(cli) || prev.endereco,
+  };
+}
+
+/* Linha do Cadastro de Clientes ligada à proposta (propostas.cliente_id). Sem vínculo = null (vale o texto da proposta).
+   Falha ao ler = avisa e segue com o texto da proposta (nunca trava o contrato). */
+async function cvCadastroDaProposta(p) {
+  try {
+    const sb = (window.__VP_SB || {}).sb;
+    let id = p && p.cliente_id;
+    if (!id && sb && p && p.id) {
+      const { data, error } = await sb.from('propostas').select('cliente_id').eq('id', p.id).maybeSingle();
+      if (error) throw error;
+      id = data && data.cliente_id;
+    }
+    if (!id || !window.CadastrosClientesStore) return null;
+    return await window.CadastrosClientesStore.obter(id);
+  } catch (e) {
+    console.warn('[contrato-venda] não leu o cadastro do cliente da proposta', e);
+    window.toast?.('Não foi possível ler o Cadastro de Clientes; os dados do comprador vieram do texto da proposta. Confira antes de seguir.', 'warning');
+    return null;
+  }
+}
+
 function validateStep(idx, s) {
   const e = {};
   if (idx === 0 && s.comprador.tipoPessoa === 'PF') {
@@ -703,8 +743,6 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
     /* Endereço completo (bairro, cidade/UF e CEP também) — antes só rua +
        número herdavam, e o CEP da obra (que a cláusula 1 cita como base de
        reajuste) nunca chegava ao contrato. */
-    const endCli = window.CV.montarEndereco(cli);
-    const docCli = window.CV.documentoDoCliente(cli); // PF × PJ (inclusive "CPF: …" digitado no campo CNPJ)
     const endObra = window.CV.montarEndereco(obra);
 
     /* Sinal/Parcelas: a Proposta já calcula isso (Sinal de 40% + N parcelas
@@ -745,18 +783,7 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
       sinalPct: sinalPctInf != null ? sinalPctInf : prev.sinalPct,
       parcelas: parcelasInf != null ? parcelasInf : prev.parcelas,
       parcelasDetalhe: parcelasDetalheInf,
-      comprador: {
-        ...prev.comprador,
-        tipoPessoa: docCli.tipoPessoa,
-        razao: cli.nome || prev.comprador.razao,
-        cnpj: docCli.tipoPessoa === 'PF' ? '' : ((docCli.cnpj && window.CV.maskCNPJ(docCli.cnpj)) || prev.comprador.cnpj),
-        repCpf: (window.CV.maskCPF(docCli.cpf) || prev.comprador.repCpf),
-        rep: docCli.tipoPessoa === 'PF' ? (cli.nome || prev.comprador.razao || '') : (cli.responsavel || prev.comprador.rep),
-        repCargo: cli.cargo || cli.responsavel_cargo || prev.comprador.repCargo,
-        email: cli.email || prev.comprador.email,
-        tel: cli.telefone || prev.comprador.tel,
-        endereco: endCli || prev.comprador.endereco,
-      },
+      comprador: cvCompradorDeCliente(cli, prev.comprador),
       localObra: endObra || prev.localObra,
       obraCidade: (obra.cidade && String(obra.cidade).trim()) || prev.obraCidade || '',
       obraUf: (obra.uf && String(obra.uf).trim()) || prev.obraUf || '',
@@ -773,6 +800,13 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
       descProposta: descPropostaInf || prev.descProposta,
       equipamentosIds: idsAtivosInf.length ? idsAtivosInf : prev.equipamentosIds,
     }));
+
+    /* Cadastro de Clientes primeiro (decisão do Gelson, 17/11/2026): se a proposta tem cliente_id, nome, documento,
+       endereço, e-mail e telefone vêm do cadastro; o texto da proposta (acima) fica só como reserva. */
+    cvCadastroDaProposta(p).then((cad) => {
+      if (!cad) return;
+      setForm((prev) => ({ ...prev, comprador: cvCompradorDeCliente(window.CV.clienteComCadastro(cli, cad), prev.comprador) }));
+    });
   };
 
   /* Aberto pela fila "aguardando contrato" do Painel: já entra com a proposta
