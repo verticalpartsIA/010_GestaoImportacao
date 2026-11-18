@@ -396,7 +396,7 @@ async function montarDocumento(doc, assinaturas) {
   ]);
 
   const corpo = [
-    h(Text, { key: 'titulo', style: S.titulo }, doc.titulo || 'CONTRATO DE COMPRA E VENDA DE EQUIPAMENTOS E PRESTAÇÃO DE SERVIÇOS DE INSTALAÇÃO'),
+    h(Text, { key: 'titulo', style: S.titulo }, doc.titulo || 'CONTRATO DE COMPRA E VENDA DE EQUIPAMENTOS E PRESTAÇÃO DE SERVIÇOS DE INSTALAÇÃO & GARANTIA'),
     h(Text, { key: 'numero', style: S.numero }, `Nº do Contrato: ${doc.numero || ''}`),
     ...(doc.sections || []).map(Secao),
     ...Assinaturas(doc, assinaturas),
