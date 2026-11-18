@@ -103,6 +103,18 @@
     return row.id;
   }
 
+  /* Autoria para o rodapé: quem criou, quando, versão e quem atualizou (ver FT.autoriaFicha).
+     Lê só `fichas_historico` desta ficha. Falha de leitura devolve null (rodapé sem autoria), nunca inventa. */
+  async function autoria(fichaId) {
+    const c = sb(); if (!c || !fichaId) return null;
+    const [fr, hr] = await Promise.all([
+      c.from('fichas_tecnicas').select('criado_em, atualizado_em').eq('id', fichaId).maybeSingle(),
+      c.from('fichas_historico').select('acao, ator_nome, criado_em').eq('ficha_id', fichaId).in('acao', ['criou', 'editou']).order('criado_em', { ascending: true }).limit(500),
+    ]);
+    if (fr.error || hr.error || !fr.data) { console.warn('[FTStore] autoria', (fr.error || hr.error || {}).message); return null; }
+    return window.FT.autoriaFicha(fr.data, hr.data || []);
+  }
+
   /* Cria uma nova ficha + sincroniza no catalogo_produtos */
   async function createDraft(state, opts) {
     opts = opts || {};
@@ -293,7 +305,7 @@
 
   window.FTStore = {
     uuid, fmtDateTime, relative,
-    listAll, getById, createDraft, update, remove, gravarCodigoPublicado, soPrefixo,
+    listAll, getById, autoria, createDraft, update, remove, gravarCodigoPublicado, soPrefixo,
     syncCatalogoProduto, extractNCM, buildAtributos,
     loadLibrary, saveCategoryToLibrary, saveFieldToLibrary, libFieldKey,
     deleteCategoryFromLibrary, deleteFieldFromLibrary,
