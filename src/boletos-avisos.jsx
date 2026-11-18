@@ -87,6 +87,7 @@ function BavDetalhe({ cliente, faixa }) {
 function BoletosAvisosPage() {
   const S = window.BoletosAvisosStore, C = window.BoletosAvisosCalc;
   const [acesso, setAcesso] = React.useState(null);
+  const [podeAtualizar, setPodeAtualizar] = React.useState(false); // alçada "atualizar": só o botão "Atualizar do Omie"
   const [gerir, setGerir] = React.useState(false); // só os 3 fixos; quem tem só a alçada "ver" consulta, sem botões de ação
   const [lista, setLista] = React.useState(null);
   const [abertos, setAbertos] = React.useState([]);
@@ -110,6 +111,7 @@ function BoletosAvisosPage() {
     let vivo = true;
     S.pode().then(ok => { if (vivo) { setAcesso(ok); if (ok) carregar(); } });
     S.podeGerir().then(ok => { if (vivo) setGerir(ok); });
+    S.podeAtualizar().then(ok => { if (vivo) setPodeAtualizar(ok); });
     const t = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
     return () => { vivo = false; clearInterval(t); };
   }, [carregar]);
@@ -192,7 +194,7 @@ function BoletosAvisosPage() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <Button size="sm" variant="primary" onClick={() => setAberto('score')}>Consultar cliente (score)</Button>
-          {gerir && <Button size="sm" variant="outline" disabled={busy === 'sync'} onClick={sincronizar}>{busy === 'sync' ? 'Lendo o Omie…' : 'Atualizar do Omie'}</Button>}
+          {(gerir || podeAtualizar) && <Button size="sm" variant="outline" disabled={busy === 'sync'} onClick={sincronizar}>{busy === 'sync' ? 'Lendo o Omie…' : 'Atualizar do Omie'}</Button>}
           {gerir && <Button size="sm" variant="outline" disabled={busy === 'sim'} onClick={simular}>Simular envio de hoje</Button>}
         </div>
       </div>
