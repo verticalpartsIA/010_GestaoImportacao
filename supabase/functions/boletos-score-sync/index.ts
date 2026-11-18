@@ -156,6 +156,24 @@ function mapear(m, agoraISO) {
   };
 }
 
+// BEGIN DEDUPE
+/* O Omie pode devolver o MESMO título mais de uma vez na mesma página (o título e uma baixa dele, por exemplo). O banco recusa
+   um lote com a mesma chave duas vezes ("ON CONFLICT DO UPDATE command cannot affect row a second time"): foi isso que parou a
+   carga de 17/11/2026 na janela 29. Fica uma linha por título: a paga (com a pagamento mais recente) vence; entre abertas, a última. */
+function unicosPorTitulo(linhas) {
+  const porId = new Map();
+  for (const l of linhas) {
+    const a = porId.get(l.codigo_lancamento_omie);
+    if (!a) { porId.set(l.codigo_lancamento_omie, l); continue; }
+    let fica = l;
+    if (a.pago && !l.pago) fica = a;
+    else if (a.pago && l.pago) fica = String(l.data_pagamento || "") >= String(a.data_pagamento || "") ? l : a;
+    porId.set(l.codigo_lancamento_omie, fica);
+  }
+  return [...porId.values()];
+}
+// END DEDUPE
+
 /* ---------- clientes (razão social e CNPJ dos que ainda não têm) ---------- */
 async function resolverClientes(limite, prazo) {
   const pendentes = await pgSelect("boletos_avisos_clientes", `select=codigo_cliente_omie&razao_social=is.null&order=codigo_cliente_omie&limit=${limite}`);
@@ -215,11 +233,17 @@ async function trabalhar(fase, inicio) {
         }
       }
       paginas++;
-      const linhas = (resp.movimentos || []).map((m) => mapear(m, agoraISO)).filter(Boolean);
+      const linhas = unicosPorTitulo((resp.movimentos || []).map((m) => mapear(m, agoraISO)).filter(Boolean));
       if (linhas.length) {
-        await pgUpsert("boletos_avisos_historico", "codigo_lancamento_omie", linhas);
-        const clientes = [...new Set(linhas.map((l) => l.codigo_cliente_omie))].map((x) => ({ codigo_cliente_omie: x }));
-        await pgUpsert("boletos_avisos_clientes", "codigo_cliente_omie", clientes, "resolution=ignore-duplicates,return=minimal");
+        try {
+          await pgUpsert("boletos_avisos_historico", "codigo_lancamento_omie", linhas);
+          const clientes = [...new Set(linhas.map((l) => l.codigo_cliente_omie))].map((x) => ({ codigo_cliente_omie: x }));
+          await pgUpsert("boletos_avisos_clientes", "codigo_cliente_omie", clientes, "resolution=ignore-duplicates,return=minimal");
+        } catch (e) {
+          // falha ao gravar: a rodada para e o motivo fica no cursor (antes estourava como 500 e a carga morria sem aviso)
+          await gravarCursor({ ...c, ultimo_resultado: { erro: String(e?.message || e), janela: j, pagina: c.proxima_pagina, quando: new Date().toISOString() } });
+          return { ok: false, parou_por_erro: String(e?.message || e), janela: j, pagina: c.proxima_pagina };
+        }
       }
       c.titulos_lidos += linhas.length;
       const total = resp.nTotPaginas || 1;
