@@ -96,3 +96,23 @@ test('sem nada vencido não há índice (null), não zero', () => {
   assert.equal(S.indice({ vencido_valor: 0, vencido_aberto_valor: 0, a_vencer_valor: 900 }).pct, null);
   assert.equal(S.indice(null).pct, null);
 });
+
+// ---- calendário livre de início e fim (18/11/2026) ----
+test('intervalo: datas válidas passam; início depois do fim e data vazia ou inexistente dão erro', () => {
+  assert.equal(S.intervalo('2026-01-01', '2026-11-17').erro, null);
+  assert.equal(S.intervalo('2026-11-17', '2026-11-17').erro, null, 'um dia só vale');
+  assert.match(S.intervalo('2026-11-18', '2026-11-17').erro, /depois/);
+  assert.match(S.intervalo('', '2026-11-17').erro, /Escolha/);
+  assert.match(S.intervalo('2026-02-30', '2026-03-10').erro, /Escolha/, '30/02 não existe');
+  assert.equal(S.dataValida('2028-02-29'), true);
+  assert.equal(S.dataValida('2027-02-29'), false);
+});
+test('atalhos preenchem início e fim sem inverter, inclusive em 1º de janeiro', () => {
+  for (const hoje of ['2026-11-17', '2026-01-01', '2026-12-31', '2026-03-01']) {
+    for (const a of S.atalhos(hoje)) assert.equal(S.intervalo(a.de, a.ate).erro, null, a.id + ' em ' + hoje);
+  }
+  const a = Object.fromEntries(S.atalhos('2026-11-17').map((x) => [x.id, x]));
+  assert.deepEqual([a['30d'].de, a['30d'].ate], ['2026-10-18', '2026-11-16']);
+  assert.deepEqual([a.prox30.de, a.prox30.ate], ['2026-11-18', '2026-12-17']);
+  assert.deepEqual([a.mes_atual.de, a.mes_atual.ate], ['2026-11-01', '2026-11-17']);
+});

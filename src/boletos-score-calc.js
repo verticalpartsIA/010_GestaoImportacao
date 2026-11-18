@@ -126,6 +126,33 @@ window.BoletosScoreCalc = (() => {
     return { modo: 'passado', preset: '30d', de: somarDias(hojeISO, -30), ate: ontem };
   }
 
+  /* Calendário livre (18/11/2026, pedido do Gelson): o usuário escolhe o início e o fim. Devolve { de, ate, erro }.
+     O índice olha só o que já venceu (antes de hoje); o que vence de hoje em diante entra em "A vencer" (o banco separa). */
+  const ISO = /^\d{4}-\d{2}-\d{2}$/;
+  function dataValida(s) {
+    if (!ISO.test(String(s || ''))) return false;
+    const d = new Date(s + 'T12:00:00Z');
+    return !isNaN(d) && d.toISOString().slice(0, 10) === s;
+  }
+  function intervalo(de, ate) {
+    if (!dataValida(de) || !dataValida(ate)) return { de, ate, erro: 'Escolha a data de início e a de fim.' };
+    if (de > ate) return { de, ate, erro: 'A data de início é depois da data de fim.' };
+    return { de, ate, erro: null };
+  }
+  /* Atalhos do calendário (preenchem início e fim; depois dá para mexer nas datas à mão). */
+  function atalhos(hojeISO) {
+    const p = (m, pr) => periodo(m, pr, hojeISO);
+    const lista = [
+      ['30d', 'Últimos 30 dias', p('passado', '30d')],
+      ['90d', 'Últimos 90 dias', p('passado', '90d')],
+      ['mes_passado', 'Mês passado', p('passado', 'mes')],
+      ['mes_atual', 'Mês atual', p('presente', 'mes')],
+      ['prox30', 'Próximos 30 dias', p('futuro', '30d')],
+      ['ano', 'Ano até ontem', p('passado', 'ano')],
+    ];
+    return lista.map(([id, rotulo, per]) => ({ id, rotulo, de: per.de, ate: per.ate }));
+  }
+
   /* Totais vêm de boletos_avisos_indice(): valores em reais.
      índice = vencido ainda em aberto ÷ total que venceu no período. Sem nada vencido não há índice (null). */
   function indice(t) {
@@ -142,5 +169,5 @@ window.BoletosScoreCalc = (() => {
     };
   }
 
-  return { CONFIG_PADRAO, CLASSES, PRESETS, mesclarConfig, pontualidade, classificar, periodo, indice, somarDias };
+  return { CONFIG_PADRAO, CLASSES, PRESETS, mesclarConfig, pontualidade, classificar, periodo, intervalo, atalhos, dataValida, indice, somarDias };
 })();

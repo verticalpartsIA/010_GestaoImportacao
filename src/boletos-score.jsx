@@ -37,13 +37,14 @@ function useBoletosScores(versao) {
   return estado;
 }
 
-/* ---------------- Card: Índice de inadimplência (Passado | Presente | Futuro) ---------------- */
+/* ---------------- Card: Índice de inadimplência (calendário de início e de fim) ---------------- */
 function BoletosIndiceCard() {
   const S = window.BoletosAvisosStore, K = window.BoletosScoreCalc, C = window.BoletosAvisosCalc;
-  const [sel, setSel] = window.useQueryParam ? window.useQueryParam('periodo', 'passado:30d') : React.useState('passado:30d');
-  const [modo, presetUrl] = String(sel).split(':');
-  const modoOk = ['passado', 'presente', 'futuro'].includes(modo) ? modo : 'passado';
-  const per = K.periodo(modoOk, presetUrl, C.hojeBrasil());
+  const hoje = C.hojeBrasil();
+  const padrao = K.periodo('passado', '30d', hoje);
+  const [deUrl, setDe] = window.useQueryParam ? window.useQueryParam('de', padrao.de) : React.useState(padrao.de);
+  const [ateUrl, setAte] = window.useQueryParam ? window.useQueryParam('ate', padrao.ate) : React.useState(padrao.ate);
+  const per = K.intervalo(deUrl, ateUrl);
   const [dados, setDados] = React.useState(null);
   const [erro, setErro] = React.useState(null);
   const [histEm, setHistEm] = React.useState(undefined);
@@ -51,15 +52,17 @@ function BoletosIndiceCard() {
   React.useEffect(() => {
     let vivo = true;
     setDados(null);
+    if (per.erro) { setErro(null); return () => { vivo = false; }; }
     Promise.all([S.indiceDoPeriodo(per), S.historicoAtualizadoEm()])
       .then(([d, h]) => { if (vivo) { setDados(K.indice(d)); setHistEm(h); setErro(null); } })
       .catch(e => { if (vivo) { setErro(e.message); setDados(null); } });
     return () => { vivo = false; };
-  }, [per.modo, per.preset, per.de, per.ate]);
+  }, [per.de, per.ate, per.erro]);
 
-  const escolher = (m, p) => setSel(m + ':' + (p || K.periodo(m, null, C.hojeBrasil()).preset));
-  const abas = [['passado', 'Passado'], ['presente', 'Presente'], ['futuro', 'Futuro']];
-  const btn = (ativo) => ({ padding: '5px 14px', border: '1px solid var(--border, #d1d5db)', background: ativo ? '#111827' : 'transparent', color: ativo ? '#fff' : 'inherit', cursor: 'pointer', fontWeight: 600 });
+  const atalhos = K.atalhos(hoje);
+  const usar = (a) => { setDe(a.de); setAte(a.ate); };
+  const temPassado = !per.erro && per.de < hoje;       // parte do período que já venceu
+  const temFuturo = !per.erro && per.ate >= hoje;      // parte que ainda vai vencer
   const semHistorico = histEm === null;
   const kpi = (t, v, cor, sub) => (
     <div style={{ border: '1px solid var(--border, #e5e7eb)', borderLeft: '4px solid ' + cor, borderRadius: 6, padding: '8px 12px' }}>
@@ -75,25 +78,28 @@ function BoletosIndiceCard() {
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ fontWeight: 700 }}>Índice de inadimplência</div>
-            <div className="small muted">Por data de vencimento: {C.dataBR(per.de)} a {C.dataBR(per.ate)}. “Vencido” = venceu antes de hoje.</div>
+            <div className="small muted">Por data de vencimento{per.erro ? '' : ': ' + C.dataBR(per.de) + ' a ' + C.dataBR(per.ate)}. “Vencido” = venceu antes de hoje; o que vence de hoje em diante entra em “A vencer”.</div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <div role="group" aria-label="Passado, presente ou futuro" style={{ display: 'inline-flex' }}>
-              {abas.map(([m, rot], i) => <button key={m} type="button" aria-pressed={modoOk === m} onClick={() => escolher(m)} style={{ ...btn(modoOk === m), borderRadius: i === 0 ? '6px 0 0 6px' : i === 2 ? '0 6px 6px 0' : 0, marginLeft: i ? -1 : 0 }}>{rot}</button>)}
-            </div>
-            {K.PRESETS[modoOk].length > 1 && (
-              <select className="input" aria-label="Período" value={per.preset} onChange={e => escolher(modoOk, e.target.value)}>
-                {K.PRESETS[modoOk].map(([p, rot]) => <option key={p} value={p}>{rot}</option>)}
-              </select>
-            )}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <label className="small" style={{ display: 'grid', gap: 2 }}>Início
+              <input type="date" className="input" aria-label="Data de início" value={deUrl || ''} max={ateUrl || undefined} onChange={e => setDe(e.target.value)}/>
+            </label>
+            <label className="small" style={{ display: 'grid', gap: 2 }}>Fim
+              <input type="date" className="input" aria-label="Data de fim" value={ateUrl || ''} min={deUrl || undefined} onChange={e => setAte(e.target.value)}/>
+            </label>
           </div>
         </div>
+        <div className="small" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }} aria-label="Atalhos de período">
+          <span className="muted">Atalhos:</span>
+          {atalhos.map(a => <a key={a.id} href="#" onClick={e => { e.preventDefault(); usar(a); }} style={{ fontWeight: per.de === a.de && per.ate === a.ate ? 700 : 400 }}>{a.rotulo}</a>)}
+        </div>
+        {per.erro && <div role="alert" style={{ color: 'var(--vp-danger)' }}>{per.erro}</div>}
 
         {erro && <div style={{ color: 'var(--vp-danger)' }}>Não consegui ler o índice: {erro}</div>}
         {!erro && semHistorico && <div className="muted">O histórico de pagamentos ainda não foi carregado do Omie. Assim que a primeira carga terminar, o índice aparece aqui.</div>}
         {!erro && !semHistorico && !dados && <div className="muted">Calculando…</div>}
 
-        {!erro && !semHistorico && dados && modoOk !== 'futuro' && (
+        {!erro && !per.erro && !semHistorico && dados && temPassado && (
           dados.pct === null
             ? <div className="muted">Nenhum título venceu neste período.</div>
             : <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
@@ -103,10 +109,10 @@ function BoletosIndiceCard() {
               {kpi('Venceu e não pagou', C.moedaBR(dados.aberto), '#dc2626', dados.titulos + ' títulos no período · ' + dados.clientes + ' clientes')}
             </div>
         )}
-        {!erro && !semHistorico && dados && modoOk === 'futuro' && (
+        {!erro && !per.erro && !semHistorico && dados && temFuturo && (
           <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
             {kpi('A vencer no período', C.moedaBR(dados.aVencer), '#111827', dados.titulosAVencer + ' títulos · ' + dados.clientesAVencer + ' clientes')}
-            <div className="small muted" style={{ alignSelf: 'center' }}>Ainda não venceu: não existe índice de inadimplência para o futuro, só a carteira que vai vencer.</div>
+            <div className="small muted" style={{ alignSelf: 'center' }}>Ainda não venceu: não existe índice de inadimplência para esta parte, só a carteira que vai vencer.</div>
           </div>
         )}
         {histEm && <div className="small muted">Histórico de pagamentos atualizado em {new Date(histEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}.</div>}
