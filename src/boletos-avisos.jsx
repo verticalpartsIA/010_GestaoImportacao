@@ -11,6 +11,52 @@ function BavSemaforo({ situacao, dias }) {
   );
 }
 
+/* Filtro por caixas na coluna Situação (18/11/2026, pedido do Gelson): marca quais situações aparecem. Nada marcado = todas. */
+const BAV_SITUACOES = [['atrasado', 'Atrasado'], ['vence_hoje', 'Vence hoje'], ['em_dia', 'Em dia']];
+function BavFiltroSituacao({ marcadas, onChange }) {
+  const [aberto, setAberto] = React.useState(false);
+  const [pos, setPos] = React.useState({ top: 0, left: 0 });
+  const ref = React.useRef(null), btn = React.useRef(null);
+  /* Abre para baixo; se não couber na tela (título da coluna no fim da janela), abre para cima. */
+  const ALTURA_MENU = 140;
+  const reposicionar = () => {
+    if (!btn.current) return;
+    const r = btn.current.getBoundingClientRect();
+    const cabeEmbaixo = r.bottom + 4 + ALTURA_MENU <= window.innerHeight;
+    setPos(cabeEmbaixo ? { top: r.bottom + 4, left: r.left } : { bottom: Math.max(4, window.innerHeight - r.top + 4), left: r.left });
+  };
+  React.useEffect(() => {
+    if (!aberto) return undefined;
+    const fora = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
+    const esc = (e) => { if (e.key === 'Escape') setAberto(false); };
+    /* rolar a página ou mudar o tamanho NÃO fecha o menu (marcar uma caixa encolhe a lista e rola a página): ele só acompanha o botão */
+    document.addEventListener('mousedown', fora); document.addEventListener('keydown', esc); window.addEventListener('scroll', reposicionar, true); window.addEventListener('resize', reposicionar);
+    return () => { document.removeEventListener('mousedown', fora); document.removeEventListener('keydown', esc); window.removeEventListener('scroll', reposicionar, true); window.removeEventListener('resize', reposicionar); };
+  }, [aberto]);
+  /* O menu é "fixed" (calculado a partir do botão): dentro da tabela ele seria cortado pela área de rolagem quando a lista tem poucas linhas. */
+  const abrirOuFechar = () => { reposicionar(); setAberto(!aberto); };
+  const alternar = (chave) => onChange(marcadas.includes(chave) ? marcadas.filter(x => x !== chave) : [...marcadas, chave]);
+  const ativo = marcadas.length > 0;
+  return (
+    <span ref={ref} style={{ position: 'relative', display: 'inline-block', marginLeft: 6 }} onClick={e => e.stopPropagation()}>
+      <button ref={btn} type="button" aria-label="Filtrar por situação" aria-expanded={aberto} title="Escolher quais situações aparecem" onClick={abrirOuFechar}
+        style={{ cursor: 'pointer', border: '1px solid ' + (ativo ? '#111827' : 'var(--border, #d1d5db)'), background: ativo ? '#111827' : 'transparent', color: ativo ? '#fff' : 'inherit', borderRadius: 4, padding: '0 6px', fontSize: 11, fontWeight: 700 }}>
+        {ativo ? '▾ ' + marcadas.length : '▾'}
+      </button>
+      {aberto && (
+        <div role="group" aria-label="Situações" style={{ position: 'fixed', zIndex: 50, top: pos.top, bottom: pos.bottom, left: pos.left, background: 'var(--surface, #fff)', border: '1px solid var(--border, #d1d5db)', borderRadius: 6, boxShadow: '0 4px 14px rgba(0,0,0,.15)', padding: '8px 12px', display: 'grid', gap: 6, minWidth: 150, fontWeight: 400 }}>
+          {BAV_SITUACOES.map(([chave, rot]) => (
+            <label key={chave} style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <input type="checkbox" checked={marcadas.includes(chave)} onChange={() => alternar(chave)}/> {rot}
+            </label>
+          ))}
+          <a href="#" className="small" onClick={e => { e.preventDefault(); onChange([]); }}>Mostrar todas</a>
+        </div>
+      )}
+    </span>
+  );
+}
+
 function BavDetalhe({ cliente, faixa }) {
   const S = window.BoletosAvisosStore, C = window.BoletosAvisosCalc;
   const [boletos, setBoletos] = React.useState(null);
@@ -99,6 +145,8 @@ function BoletosAvisosPage() {
   const [soSem, setSoSem] = React.useState(false);
   const [q, setQ] = window.useQueryParam ? window.useQueryParam('q', '') : React.useState('');
   const [faixaUrl, setFaixa] = window.useQueryParam ? window.useQueryParam('faixa', '') : React.useState('');
+  const [sitUrl, setSit] = window.useQueryParam ? window.useQueryParam('sit', '') : React.useState('');   // situações marcadas, separadas por vírgula
+  const ord = window.useOrdenacao ? window.useOrdenacao() : { th: (k, r) => <th>{r}</th>, aplicar: (l) => l };   // setas ▲▼ nos títulos (18/11/2026, pedido do Gelson)
   const sc = window.useBoletosScores ? window.useBoletosScores() : { map: new Map() };   // classe A–D de cada cliente (boletos-score.jsx)
 
   const carregar = React.useCallback(async () => {
@@ -174,9 +222,22 @@ function BoletosAvisosPage() {
     x.qtd++; x.centavos += Math.round(Number(b.valor || 0) * 100); naFaixa.set(b.codigo_cliente_omie, x);
   }
   const bateBusca = (c) => (!soSem || Number(c.qtd_sem_boleto) > 0) && (!q || `${c.razao_social} ${c.cnpj || ''}`.toLowerCase().includes(q.toLowerCase()));
-  const filtrada = (lista || []).filter(c => bateBusca(c) && (!faixaAtiva || naFaixa.has(c.codigo_cliente_omie)));
+  const sitMarcadas = String(sitUrl || '').split(',').filter(x => BAV_SITUACOES.some(([k]) => k === x));
+  const filtrada = (lista || []).filter(c => bateBusca(c) && (!faixaAtiva || naFaixa.has(c.codigo_cliente_omie)) && (!sitMarcadas.length || sitMarcadas.includes(c.situacao)));
   const escolherFaixa = (chave) => setFaixa(chave && chave !== faixaAtiva ? chave : '');
   /* Os cards acompanham a busca e o filtro: somam só os títulos dos clientes que estão na lista */
+  /* Classificar pelos títulos das colunas. Sem clique, vale a ordem de antes (maior atraso primeiro). Valor e quantidade seguem a faixa ativa. */
+  const RANK_CLASSE = { A: 1, B: 2, C: 3, D: 4, N: 5 };
+  const doScore = (c) => { const r = sc.map.get(Number(c.codigo_cliente_omie)); return r && r.cls ? r.cls.classe : null; };
+  const linhasOrdenadas = ord.aplicar(filtrada, {
+    situacao: (c) => (c.situacao === 'atrasado' ? Number(c.dias_atraso) || 0 : c.situacao === 'vence_hoje' ? 0 : -1),
+    razao: (c) => c.razao_social,
+    score: (c) => { const k = doScore(c); return k ? (RANK_CLASSE[k] || 9) : null; },
+    qtd: (c) => (faixaAtiva ? (naFaixa.get(c.codigo_cliente_omie) || { qtd: 0 }).qtd : Number(c.qtd_boletos)),
+    valor: (c) => (faixaAtiva ? (naFaixa.get(c.codigo_cliente_omie) || { centavos: 0 }).centavos / 100 : Number(c.valor_total)),
+    email: (c) => (c.emails || [])[0] || '',
+    aviso: (c) => (c.ultimo_aviso_em ? Date.parse(c.ultimo_aviso_em) : null),
+  });
   const filtrando = !!q || soSem;
   const codigosFiltrados = new Set((lista || []).filter(bateBusca).map(c => c.codigo_cliente_omie));
   const fin = C.resumoFinanceiro(filtrando ? abertos.filter(b => codigosFiltrados.has(b.codigo_cliente_omie)) : abertos, C.hojeBrasil(), feriados);
@@ -250,11 +311,11 @@ function BoletosAvisosPage() {
         )}
         <div className="table-wrap">
           <table className="t pcp-grid">
-            <thead><tr><th style={{ width: 28 }}></th><th>Situação</th><th>Razão Social</th><th>Score</th><th style={{ textAlign: 'right' }}>Qtd de títulos</th><th style={{ textAlign: 'right' }}>Valor em aberto</th><th>E-mail</th><th>Último aviso</th><th></th></tr></thead>
+            <thead><tr><th style={{ width: 28 }}></th>{ord.th('situacao', <>Situação<BavFiltroSituacao marcadas={sitMarcadas} onChange={(v) => setSit(v.join(','))}/></>)}{ord.th('razao', 'Razão Social')}{ord.th('score', 'Score')}{ord.th('qtd', 'Qtd de títulos', { style: { textAlign: 'right' } })}{ord.th('valor', 'Valor em aberto', { style: { textAlign: 'right' } })}{ord.th('email', 'E-mail')}{ord.th('aviso', 'Último aviso')}<th></th></tr></thead>
             <tbody>
               {lista === null && <tr><td colSpan={9}>Carregando…</td></tr>}
               {lista && !filtrada.length && <tr><td colSpan={9} className="muted">{(lista || []).length ? 'Nenhum cliente encontrado.' : 'Nenhum boleto em aberto lido do Omie ainda. Clique em "Atualizar do Omie".'}</td></tr>}
-              {filtrada.map(c => {
+              {linhasOrdenadas.map(c => {
                 const id = String(c.codigo_cliente_omie), isOpen = aberto === id;
                 const semEmail = !(c.emails || []).length;
                 return (

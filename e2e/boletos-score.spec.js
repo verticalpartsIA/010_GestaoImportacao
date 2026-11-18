@@ -85,22 +85,88 @@ test('quem gerencia (3 fixos) continua vendo os botões de ação', async ({ pag
   expect(erros).toEqual([]);
 });
 
-test('card: Passado → Presente → Futuro pedem o período certo ao banco e o Futuro não mostra índice', async ({ page }) => {
+const hojeISO = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+const somaDias = (n) => new Date(Date.UTC(+hojeISO.slice(0, 4), +hojeISO.slice(5, 7) - 1, +hojeISO.slice(8, 10)) + n * 86400000).toISOString().slice(0, 10);
+
+test('card: calendário de início e fim pede exatamente essas datas ao banco; período no futuro mostra a carteira a vencer', async ({ page }) => {
   const erros = coletarErros(page);
   const ch = await preparar(page, { gerir: false });
   await page.goto('/adm-financeiro/boletos-avisos');
   await expect(page.getByText('Índice de inadimplência').first()).toBeVisible({ timeout: 45_000 });
   await expect.poll(() => ch.indice.length).toBeGreaterThan(0);
-  const passado = ch.indice[ch.indice.length - 1];
-  expect(passado.p_de < passado.p_ate).toBe(true);
-
-  await page.getByRole('button', { name: 'Futuro', exact: true }).click();
-  await expect(page.getByText(/não existe índice de inadimplência para o futuro/i)).toBeVisible();
-  const futuro = ch.indice[ch.indice.length - 1];
-  expect(futuro.p_de > passado.p_ate).toBe(true);                                   // o futuro começa depois do passado
-
-  await page.getByRole('button', { name: 'Presente', exact: true }).click();
+  const padrao = ch.indice[ch.indice.length - 1];
+  expect(padrao.p_de < padrao.p_ate).toBe(true);
+  expect(padrao.p_ate < hojeISO).toBe(true);                                        // o padrão (últimos 30 dias) termina ontem
   await expect(page.getByText('15%').first()).toBeVisible();
+
+  // datas livres: de 01/01/2026 até daqui a 60 dias (passado e futuro no mesmo período)
+  await page.getByLabel('Data de início').fill('2026-01-01');
+  await page.getByLabel('Data de fim').fill(somaDias(60));
+  await expect.poll(() => { const u = ch.indice[ch.indice.length - 1]; return u.p_de + '|' + u.p_ate; }).toBe('2026-01-01|' + somaDias(60));
+  await expect(page.getByText('A vencer no período')).toBeVisible();
+  await expect(page.getByText('15%').first()).toBeVisible();                        // a parte já vencida continua com índice
+
+  // só futuro: sem índice, só a carteira
+  await page.getByRole('link', { name: 'Próximos 30 dias' }).click();
+  await expect.poll(() => ch.indice[ch.indice.length - 1].p_de).toBe(somaDias(1));
+  await expect(page.getByText('A vencer no período')).toBeVisible();
+  await expect(page.getByText('Pago em dia')).toHaveCount(0);
+
+  // início depois do fim: avisa e NÃO consulta o banco
+  await page.getByLabel('Data de início').fill(somaDias(10));
+  await page.getByLabel('Data de fim').fill(somaDias(5));
+  await expect(page.getByRole('alert')).toContainText('depois');
+  const ultima = ch.indice[ch.indice.length - 1];
+  expect(ultima.p_de <= ultima.p_ate).toBe(true);
+  expect(erros).toEqual([]);
+});
+
+test('lista: setas nos títulos classificam do menor ao maior, do maior ao menor e voltam à ordem original', async ({ page }) => {
+  const erros = coletarErros(page);
+  await preparar(page, { gerir: false });
+  await page.goto('/adm-financeiro/boletos-avisos');
+  const linhas = page.locator('table.pcp-grid tbody > tr').filter({ hasText: /CLIENTE (BOM|RUIM)/ });
+  await expect(linhas).toHaveCount(2, { timeout: 45_000 });
+  const th = page.locator('table.pcp-grid thead th').filter({ hasText: /Valor em aberto/ });
+  await expect(th).toHaveAttribute('aria-sort', 'none');
+  await th.click();
+  await expect(th).toHaveAttribute('aria-sort', 'ascending');
+  await expect(linhas.first()).toContainText('CLIENTE BOM');                        // R$ 500 antes de R$ 8.000
+  await th.click();
+  await expect(th).toHaveAttribute('aria-sort', 'descending');
+  await expect(linhas.first()).toContainText('CLIENTE RUIM');
+  await th.click();
+  await expect(th).toHaveAttribute('aria-sort', 'none');
+  await expect(linhas.first()).toContainText('CLIENTE BOM');                        // ordem original
+  // por Razão Social, decrescente: RUIM antes de BOM
+  const razao = page.locator('table.pcp-grid thead th').filter({ hasText: /Razão Social/ });
+  await razao.click(); await razao.click();
+  await expect(linhas.first()).toContainText('CLIENTE RUIM');
+  expect(erros).toEqual([]);
+});
+
+test('lista: caixas na coluna Situação escolhem quais situações aparecem; nada marcado mostra todas', async ({ page }) => {
+  const erros = coletarErros(page);
+  await preparar(page, { gerir: false });
+  await page.goto('/adm-financeiro/boletos-avisos');
+  const linhas = page.locator('table.pcp-grid tbody > tr').filter({ hasText: /CLIENTE (BOM|RUIM)/ });
+  await expect(linhas).toHaveCount(2, { timeout: 45_000 });
+  await page.getByRole('button', { name: 'Filtrar por situação' }).click();
+  await page.getByRole('checkbox', { name: 'Atrasado' }).check();
+  await expect(linhas).toHaveCount(1);
+  await expect(linhas.first()).toContainText('CLIENTE RUIM');
+  await expect(page).toHaveURL(/sit=atrasado/);
+  await page.getByRole('checkbox', { name: 'Em dia' }).check();
+  await expect(linhas).toHaveCount(2);
+  await page.getByRole('checkbox', { name: 'Em dia' }).uncheck();
+  await page.getByRole('checkbox', { name: 'Atrasado' }).uncheck();
+  await expect(linhas).toHaveCount(2);                                              // nada marcado = todas
+  await page.getByRole('checkbox', { name: 'Atrasado' }).check();
+  await page.getByRole('link', { name: 'Mostrar todas' }).click();
+  await expect(linhas).toHaveCount(2);
+  await expect(page).not.toHaveURL(/sit=/);
+  // clicar na caixa não classifica a coluna (o filtro não dispara a ordenação do título)
+  await expect(page.locator('table.pcp-grid thead th').filter({ hasText: /Situação/ })).toHaveAttribute('aria-sort', 'none');
   expect(erros).toEqual([]);
 });
 
