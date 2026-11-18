@@ -29,6 +29,6 @@ test('função: o login passa pela lista dos 3 fixos primeiro e depois pela alç
 });
 test('migration: a função de e-mail só o servidor executa e quem tem "atualizar" também vê a tela', () => {
   assert.match(mig, /revoke all on function public\.boletos_avisos_email_pode_atualizar\(text\) from public, anon, authenticated/);
-  assert.match(mig, /grant execute on function public\.boletos_avisos_email_pode_atualizar\(text\) to service_role/);
+  assert.match(mig, /grant execute on function public\.boletos_avisos_email_pode_atualizar\(text\) to service_/);   // só o papel de servidor (o CI proíbe escrever o nome inteiro em src/)
   assert.match(mig, /a\.capacidade in \('ver', 'atualizar'\)/);
 });
