@@ -151,12 +151,24 @@ window.BoletosAvisosCalc = (() => {
 
   /* Impacto financeiro (só da tela; não está na Edge Function): dinheiro em aberto por situação do BOLETO.
      Soma em centavos para não acumular erro de ponto flutuante. Atrasado se divide em 1–30 dias e mais de 30. */
+  /* Faixa de um título em aberto — a MESMA regra dos cards e dos filtros da lista (dia útil: vencimento no fim de semana/feriado
+     vale no próximo dia útil). aVencer: ainda não venceu · venceHoje · atrasado30: 1 a 30 dias · atrasadoMais30: mais de 30. */
+  const FAIXAS = [
+    { chave: 'aVencer', rotulo: 'A vencer' },
+    { chave: 'venceHoje', rotulo: 'Vence hoje' },
+    { chave: 'atrasado30', rotulo: 'Atrasado (1 a 30 dias)' },
+    { chave: 'atrasadoMais30', rotulo: 'Atrasado (mais de 30 dias)' },
+  ];
+  function faixaDoBoleto(vencISO, hojeISO, feriados) {
+    const d = diasDesdeVencimento(vencimentoEfetivo(vencISO, feriados), hojeISO);
+    return d < 0 ? 'aVencer' : d === 0 ? 'venceHoje' : d <= 30 ? 'atrasado30' : 'atrasadoMais30';
+  }
+
   function resumoFinanceiro(boletos, hojeISO, feriados) {
     const vazio = () => ({ centavos: 0, boletos: 0, clientes: new Set() });
     const b = { aVencer: vazio(), venceHoje: vazio(), atrasado30: vazio(), atrasadoMais30: vazio() };
     for (const x of boletos || []) {
-      const d = diasDesdeVencimento(vencimentoEfetivo(x.data_vencimento, feriados), hojeISO);
-      const k = d < 0 ? 'aVencer' : d === 0 ? 'venceHoje' : d <= 30 ? 'atrasado30' : 'atrasadoMais30';
+      const k = faixaDoBoleto(x.data_vencimento, hojeISO, feriados);
       b[k].centavos += Math.round(Number(x.valor || 0) * 100);
       b[k].boletos++;
       b[k].clientes.add(x.codigo_cliente_omie);
@@ -179,6 +191,6 @@ window.BoletosAvisosCalc = (() => {
   return {
     ETAPAS, SITUACOES, ETAPA_ROTULO,
     diasDesdeVencimento, situacaoDoBoleto, etapaDevida, montarAviso, dataBR, moedaBR, hojeBrasil, resumoFinanceiro,
-    conjuntoSemExpediente, diaUtil, vencimentoEfetivo, datasDasEtapas, diasDeAtraso,
+    conjuntoSemExpediente, diaUtil, vencimentoEfetivo, datasDasEtapas, diasDeAtraso, FAIXAS, faixaDoBoleto,
   };
 })();

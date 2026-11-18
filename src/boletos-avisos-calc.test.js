@@ -261,3 +261,30 @@ test('a função lê o calendário de feriados e não envia em dia sem expedient
   assert.match(sql, /f\.bloqueia_envio or f\.descricao ilike 'Carnaval%'/);
   assert.match(sql, /boletos_avisos_venc_efetivo\(b\.data_vencimento\)/);
 });
+
+// ---- faixas dos cards (18/11/2026): o filtro da lista usa a MESMA regra dos cards ----
+test('faixaDoBoleto: a vencer, vence hoje, atrasado 1–30 e atrasado mais de 30 (segunda-feira 23/11/2026, dia útil)', () => {
+  const hoje = '2026-11-23';
+  assert.equal(C.faixaDoBoleto('2026-11-30', hoje, FER), 'aVencer');
+  assert.equal(C.faixaDoBoleto('2026-11-23', hoje, FER), 'venceHoje');
+  assert.equal(C.faixaDoBoleto('2026-11-22', hoje, FER), 'venceHoje');       // domingo: vale no próximo dia útil = hoje
+  assert.equal(C.faixaDoBoleto('2026-11-20', hoje, FER), 'venceHoje');       // 20/11 é feriado no calendário do teste: vale na segunda
+  assert.equal(C.faixaDoBoleto('2026-11-19', hoje, FER), 'atrasado30');      // quinta: venceu há 4 dias
+  assert.equal(C.faixaDoBoleto('2026-10-23', hoje, FER), 'atrasadoMais30');  // sexta: venceu há 31 dias
+});
+test('faixaDoBoleto: fronteira de 30 dias (quarta 25/11/2026: 26/10 é segunda, exatamente 30 dias)', () => {
+  const hoje = '2026-11-25';
+  assert.equal(C.faixaDoBoleto('2026-10-26', hoje, FER), 'atrasado30');      // 30 dias: ainda é "1 a 30"
+  assert.equal(C.faixaDoBoleto('2026-10-24', hoje, FER), 'atrasado30');      // sábado: vale na segunda 26/10 = 30 dias
+  assert.equal(C.faixaDoBoleto('2026-10-23', hoje, FER), 'atrasadoMais30');  // sexta: 33 dias
+});
+test('faixaDoBoleto e resumoFinanceiro concordam em todos os casos (a lista nunca discorda do card)', () => {
+  const hoje = '2026-11-23';
+  const bol = ['2026-12-10', '2026-11-23', '2026-11-22', '2026-11-10', '2026-10-24', '2026-10-23', '2025-01-05'].map((d, i) => ({ codigo_cliente_omie: i + 1, data_vencimento: d, valor: 100 + i }));
+  const r = C.resumoFinanceiro(bol, hoje, FER);
+  for (const f of C.FAIXAS) {
+    const doFiltro = bol.filter((b) => C.faixaDoBoleto(b.data_vencimento, hoje, FER) === f.chave);
+    assert.equal(doFiltro.length, r[f.chave].boletos, f.chave + ': quantidade');
+    assert.equal(Math.round(doFiltro.reduce((a, b) => a + b.valor * 100, 0)) / 100, r[f.chave].valor, f.chave + ': valor');
+  }
+});
