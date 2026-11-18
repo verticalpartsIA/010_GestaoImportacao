@@ -87,8 +87,14 @@ window.BoletosAvisosStore = (() => {
     return data;
   }
 
+  /* A função `boletos-avisos` precisa saber QUEM clicou (ela confere o login no Supabase e a lista de quem pode).
+     O cliente de dados do app só manda a sessão nas consultas ao banco (/rest/v1); numa chamada de função ele manda a chave
+     pública, e a função respondia 401 "Não autorizado" para todo mundo (achado de 18/11/2026, nos logs: 401 em 15–37 ms).
+     Por isso o login desta pessoa vai à mão no cabeçalho. Sem sessão ativa, avisa em vez de fingir que foi. */
   async function chamar(acao, extra) {
-    const { data, error } = await sb().functions.invoke('boletos-avisos', { body: { acao, ...(extra || {}) } });
+    const token = (window.VpAuth && window.VpAuth.getAccessToken) ? await window.VpAuth.getAccessToken() : null;
+    if (!token) throw new Error('Sua sessão não está ativa neste navegador. Recarregue a página (Ctrl+F5) ou entre de novo pelo portal e tente outra vez.');
+    const { data, error } = await sb().functions.invoke('boletos-avisos', { body: { acao, ...(extra || {}) }, headers: { Authorization: 'Bearer ' + token } });
     if (error) {
       let msg = error.message;
       try { const j = await error.context.json(); if (j && j.error) msg = j.error; } catch (e) { /* mensagem padrão */ }
