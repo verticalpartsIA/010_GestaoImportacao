@@ -112,7 +112,27 @@ function useFichaOrientation(midia) {
   return orientation;
 }
 
-function FtFicha({ state }) {
+/* Rodapé de autoria: quem CRIOU (e quando) e, havendo versão nova, quem ATUALIZOU.
+   Nunca usa o usuário que está com a ficha aberta. Ficha ainda não salva = sem autoria. */
+function ftFmtQuando(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+function FtAutoria({ autoria }) {
+  if (!autoria) return null;
+  const a = autoria;
+  return (
+    <span className="ft-fz-autor">
+      <span className="ft-fz-autor-l">Criada por {a.criadoPor || 'autor não registrado'}{a.criadoEm ? ' em ' + ftFmtQuando(a.criadoEm) : ''}</span>
+      {a.atualizadoEm && (
+        <span className="ft-fz-autor-l">Versão {a.versao} — atualizada por {a.atualizadoPor || 'autor não registrado'} em {ftFmtQuando(a.atualizadoEm)}</span>
+      )}
+    </span>
+  );
+}
+
+function FtFicha({ state, autoria }) {
   const d = window.FT.compile(state);
   const id = d.identificacao;
   const nome = id.nomeProduto || 'Ficha Técnica';
@@ -173,8 +193,8 @@ function FtFicha({ state }) {
         <div className="fb">VERTICAL<span>PARTS</span></div>
         <div className="fc">{id.categoriaProduto || 'Ficha Técnica'}</div>
         <div className="fc">
-          {window.FT.hoje()} · www.verticalparts.com.br
-          {window.__VP_USER?.email && <span className="ft-fz-autor"> · Criado por {window.__VP_USER.email}</span>}
+          Emitida em {window.FT.hoje()} · www.verticalparts.com.br
+          <FtAutoria autoria={autoria}/>
         </div>
       </div>
     </div>
@@ -603,6 +623,17 @@ function FtGenerator({ initial, onSaved, onCancel, setRoute, setSubsel }) {
     }
   };
   const fichaIdAtual = state.__id || (initial && initial.__id) || null;
+  /* Autoria do rodapé: só existe para ficha já salva (não é cópia nem nova). Recarrega após salvar. */
+  const [autoria, setAutoria] = _ftUS(null);
+  const ehCopiaNaoSalva = !!(initial && initial.__copiaDe);
+  const carregarAutoria = React.useCallback(async (id) => {
+    if (!id || !window.FTStore) { setAutoria(null); return; }
+    try { setAutoria(await window.FTStore.autoria(id)); } catch (e) { console.warn('[FT] autoria', e); setAutoria(null); }
+  }, []);
+  _ftUE(() => {
+    if (!initial || !initial.__id || ehCopiaNaoSalva) { setAutoria(null); return; }
+    carregarAutoria(initial.__id);
+  }, [initial && initial.__id, ehCopiaNaoSalva]);
   _ftUE(() => {
     let vivo = true;
     if (fichaIdAtual && window.SolicitacoesProdutoStore) {
@@ -784,7 +815,7 @@ function FtGenerator({ initial, onSaved, onCancel, setRoute, setSubsel }) {
           acao: editando ? 'editou' : 'criou',
           de_etapa: rec.etapa || null, para_etapa: rec.etapa || null,
           detalhe: { nome_produto: state.identificacao.nomeProduto },
-        }).catch(() => {});
+        }).then(() => carregarAutoria(rec.id || (initial && initial.__id) || state.__id)).catch(() => {});
       }
       onSaved && onSaved(rec);
     } catch (e) {
@@ -915,7 +946,7 @@ function FtGenerator({ initial, onSaved, onCancel, setRoute, setSubsel }) {
         <div className="ft-previewcol">
           <div className="ft-preview-head"><span>Pré-visualização</span><em>compila só o preenchido</em></div>
           <div className="ft-preview-wrap" ref={previewWrap}>
-            <div className="ft-preview-scaler" style={{ zoom: scale }}><FtFicha state={state}/></div>
+            <div className="ft-preview-scaler" style={{ zoom: scale }}><FtFicha state={state} autoria={autoria}/></div>
           </div>
         </div>
       </div>
@@ -1095,7 +1126,7 @@ function FtGenerator({ initial, onSaved, onCancel, setRoute, setSubsel }) {
               <button className="ft-btn ghost" onClick={() => setOverlay(false)}>Fechar</button>
             </div>
           </div>
-          <div className="ft-fo-scroll"><FtFicha state={state}/></div>
+          <div className="ft-fo-scroll"><FtFicha state={state} autoria={autoria}/></div>
         </div>,
         document.body
       )}

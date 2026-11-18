@@ -520,7 +520,8 @@
 .ft-fz-footer .fb { font-weight: 800; text-transform: uppercase; letter-spacing: .02em; color: var(--ft-black); font-size: 11px; }
 .ft-fz-footer .fb span { color: var(--ft-yellow-700); }
 .ft-fz-footer .fc { font-family: 'Courier New', monospace; letter-spacing: .02em; }
-.ft-fz-autor { font-size: 8px; color: var(--ft-steel); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; }
+.ft-fz-autor { display: block; margin-top: 2px; font-size: 8px; color: var(--ft-steel); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; letter-spacing: 0; }
+.ft-fz-autor-l { display: block; }
 
 /* ============================================================
    MODALS
