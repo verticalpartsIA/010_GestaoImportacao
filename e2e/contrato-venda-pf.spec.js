@@ -44,7 +44,14 @@ test('Criar contrato da proposta 1004: nome, CPF, endereço e telefone vêm do C
   const proposta = {
     id: 'prop-1004', master_id: 'VPEL-EL1004-A', numero_documento: 'VPPR-1004', titulo: 'Elevador', valor_total: 235215.21,
     aprovada_em: '2026-11-13T16:56:38Z', cliente_id: 'cli-weng',
-    data_json: { cliente: { nome: 'Weng Meihuan', cnpj: 'CPF: 227.295.968-79', endereco: 'R. Vinte e Cinco de Março', numero: '970', bairro: 'Centro', cidade: 'São Paulo', uf: 'SP', cep: '01021-100', email: '', telefone: '', responsavel: 'Weng' }, obra: {}, elevador: { valores: {}, especificacoes: [{}] } },
+    data_json: { cliente: { nome: 'Weng Meihuan', cnpj: 'CPF: 227.295.968-79', endereco: 'R. Vinte e Cinco de Março', numero: '970', bairro: 'Centro', cidade: 'São Paulo', uf: 'SP', cep: '01021-100', email: '', telefone: '', responsavel: 'Weng' }, obra: {},
+      elevador: {
+        valores: { formaTipo: 'parcelado', qtdParcelas: '6', parcelas: [
+          { desc: 'Sinal de 43,40% na assinatura do contrato', valor: '102.075,16' }, { desc: '1ª Parcela 16,60%', valor: '39.053,96' },
+          { desc: '2ª Parcela 10%', valor: '23.521,52' }, { desc: '3ª Parcela 10%', valor: '23.521,52' },
+          { desc: '4ª Parcela 15%', valor: '35.282,28' }, { desc: '5ª Parcela 5%', valor: '11.760,77' } ] },
+        especificacoes: [{ id: 'VPEL-EL1004-1', qtd: 1, carac: 'Passageiros', modelo: 'Elevador de Passageiros - 1950kg', capacidade: '1950kg - 26 Passageiros', andaresParadasPortas: '04/04/04', vel: '1' }],
+      } },
   };
   const weng = { id: 'cli-weng', razao_social: 'WENG MEIHUAN', tipo_pessoa: 'PF', cpf: '22729596879', cnpj: null, email: null, telefone: '(11) 98194-0360', endereco_logradouro: 'Said Aiach, 277', endereco_bairro: 'Paraiso', endereco_cep: '04003020', endereco_cidade: 'São Paulo (SP)', endereco_estado: 'SP' };
   await page.addInitScript(() => {
@@ -67,5 +74,18 @@ test('Criar contrato da proposta 1004: nome, CPF, endereço e telefone vêm do C
   await expect(campo(/^Telefone/)).toHaveValue('(11) 98194-0360');
   await expect(campo(/^Endereço/)).toHaveValue('Said Aiach, 277, Paraiso, São Paulo/SP, CEP 04003-020');
   await expect(page.getByText(/inscrito\(a\) no CPF sob o nº 227\.295\.968-79, residente e domiciliado\(a\) na Said Aiach, 277/)).toBeVisible();
+
+  /* Passo 2: a quantidade de paradas da proposta ("04/04/04") aparece no campo (antes ficava vazio: 4 não está na lista fixa). */
+  await page.getByRole('button', { name: /Avançar/ }).click();
+  await expect(page.locator('select.cv-select').nth(1)).toHaveValue('4');
+  await expect(page.getByText(/, 4 paradas/).first()).toBeVisible();
+
+  /* Passo de preço: entrada = R$ 102.075,16 (43,4%) e as parcelas desiguais da proposta, não 40% + parcelas iguais. */
+  await page.getByRole('button', { name: /Avançar/ }).click();
+  await page.getByRole('button', { name: /Avançar/ }).click();
+  const resumo = page.locator('.cv-pay-row');
+  await expect(resumo.filter({ hasText: /^Sinal \(43,4%\)/ })).toContainText('102.075,16');
+  await expect(resumo.filter({ hasText: 'Parcela 1 de 5' })).toContainText('39.053,96');
+  await expect(resumo.filter({ hasText: 'Parcela 5 de 5' })).toContainText('11.760,77');
   expect(erros.length, erros.join('\n')).toBe(0);
 });
