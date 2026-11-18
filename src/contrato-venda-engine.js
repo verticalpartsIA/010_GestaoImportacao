@@ -95,6 +95,40 @@
     if (pf) return { tipoPessoa: 'PF', cnpj: '', cpf: dCpf || (dCnpj.length === 11 ? dCnpj : '') };
     return { tipoPessoa: 'PJ', cnpj: dCnpj, cpf: dCpf };
   }
+  /* Cronograma de pagamento da Proposta → campos do contrato (sinal %, parcelas do saldo e valores de cada parcela).
+     `valores` = proposta.data_json.elevador.valores; `total` = valor total da proposta.
+     O SINAL vem do valor real da 1ª linha ("Sinal de 43,40% …" = R$ 102.075,16), não de um 40% fixo: o vendedor pode
+     ter ajustado o cronograma (17/11/2026, cotação 1004). Mantido em precisão total — arredondar a % faria o sinal
+     deixar de bater com as parcelas e o contrato cair na divisão em parcelas iguais. Devolve null quando a proposta
+     não traz forma de pagamento (o contrato mantém o que já tinha). */
+  function cronogramaDaProposta(valores, total) {
+    valores = valores || {};
+    const num = (v) => {
+      const s = String(v == null ? '' : v).trim();
+      if (!s) return NaN;
+      return Number(s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s);
+    };
+    if (valores.formaTipo === 'vista') return { sinalPct: 100, parcelas: 0, parcelasDetalhe: null };
+    if (valores.formaTipo === 'parcelado' && Number(valores.qtdParcelas) > 0) {
+      const q = Number(valores.qtdParcelas);
+      const linhas = Array.isArray(valores.parcelas) ? valores.parcelas : [];
+      let sinalPct = 40; // padrão da Proposta quando não há cronograma detalhado
+      let detalhe = null;
+      if (linhas.length === q && /sinal/i.test(String(linhas[0] && linhas[0].desc))) {
+        const sinalV = num(linhas[0].valor);
+        const resto = linhas.slice(1).map((l) => num(l.valor));
+        if (resto.length && resto.every((x) => Number.isFinite(x) && x > 0)) detalhe = resto;
+        if (Number.isFinite(sinalV) && sinalV > 0 && total > 0 && sinalV < total) sinalPct = (sinalV / total) * 100;
+      }
+      return { sinalPct, parcelas: Math.max(q - 1, 0), parcelasDetalhe: detalhe };
+    }
+    return null;
+  }
+  /* Quantidade de paradas da especificação da Proposta: "04/04/04" (andares/paradas/portas) → "4". Vazio se não houver número. */
+  function paradasDaEspecificacao(spec) {
+    const m = String((spec && spec.andaresParadasPortas) || '').match(/\d+/);
+    return m ? String(parseInt(m[0], 10)) : '';
+  }
   /* Cadastro de Clientes primeiro, texto da Proposta só como reserva (decisão do Gelson, 17/11/2026,
      "opção A"). `cli` = proposta.data_json.cliente; `cad` = linha de `clientes` (ou null).
      Campo a campo: o que o cadastro tem vence; o que está vazio no cadastro cai para a proposta.
@@ -675,7 +709,7 @@
   /* ---------- Exporta tudo em window.CV ---------- */
   window.CV = {
     VENDEDORA, EQUIPAMENTOS, CONTATOS_VP,
-    onlyDigits, isCPFValid, documentoDoCliente, clienteComCadastro, montarEndereco, maskCNPJ, maskCPF, maskPhone, maskCEP, maskMoney, parseMoney, brl, dataBR,
+    onlyDigits, isCPFValid, documentoDoCliente, clienteComCadastro, cronogramaDaProposta, paradasDaEspecificacao, montarEndereco, maskCNPJ, maskCPF, maskPhone, maskCEP, maskMoney, parseMoney, brl, dataBR,
     descEquipamento, defaultState, numeroExibicao, propostaExibicao,
     buildContract,
     calcularD0, addDias,  // ISSUE #6

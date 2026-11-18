@@ -56,6 +56,8 @@ function CVSelect({ label, value, onChange, options, width }) {
       <select className="cv-input cv-select" value={value || ''} onChange={(e) => onChange(e.target.value)}>
         <option value="">Selecione…</option>
         {options.map(o => <option key={o.value || o} value={o.value || o}>{o.label || o}</option>)}
+        {/* Valor herdado da Proposta que não está na lista (ex.: 4 paradas) continua visível em vez de o campo ficar vazio. */}
+        {value && !options.some(o => String(o.value || o) === String(value)) && <option value={value}>{value}</option>}
       </select>
     </div>
   );
@@ -273,13 +275,13 @@ function CVStepPreco({ form, set, errors }) {
         <CVMoneyField label="Valor total do contrato" required width="wide" value={form.valor} onChange={(v) => set({ valor: v })} error={errors.valor}/>
       </div>
       <div className="cv-grid">
-        <CVField label="Sinal / entrada (%)" type="number" suffix="%" value={form.sinalPct} onChange={(v) => set({ sinalPct: Math.max(0, Math.min(100, parseInt(v) || 0)) })}/>
+        <CVField label="Sinal / entrada (%)" type="number" suffix="%" value={Math.round(Number(form.sinalPct) * 100) / 100} onChange={(v) => set({ sinalPct: Math.max(0, Math.min(100, Math.round((parseFloat(String(v).replace(',', '.')) || 0) * 100) / 100)) })}/>
         <CVSelect label="Nº de parcelas do saldo" value={String(form.parcelas)} onChange={(v) => set({ parcelas: parseInt(v) })} options={['1','2','3','4','5','6','8','10','12'].map(n => ({ value: n, label: n + '×' }))}/>
       </div>
       {valor > 0 && (
         <div className="cv-pay-summary">
           <div className="cv-mini-label">Resumo do pagamento</div>
-          <div className="cv-pay-row"><span>Sinal ({form.sinalPct}%)</span><b className="cv-mono">{window.CV.brl(valor * form.sinalPct / 100)}</b></div>
+          <div className="cv-pay-row"><span>Sinal ({String(Math.round(Number(form.sinalPct) * 100) / 100).replace('.', ',')}%)</span><b className="cv-mono">{window.CV.brl(valor * form.sinalPct / 100)}</b></div>
           {(() => {
             const det = Array.isArray(form.parcelasDetalhe) ? form.parcelasDetalhe.map(Number) : null;
             const sinalV = valor * form.sinalPct / 100;
@@ -717,7 +719,7 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
     /* Equipamento: antes NADA da especificação era herdado, então o objeto
        do contrato ficava no default ("1× Elevador Social, 10 paradas") em vez
        do equipamento real da proposta (achado E2E C). */
-    const paradasInf = (String(spec.andaresParadasPortas || '').match(/\d+/) || [])[0] || '';
+    const paradasInf = window.CV.paradasDaEspecificacao(spec); // "04/04/04" → "4"
     const modeloInf = spec.modelo || valores.equipamento || '';
     const cargaInf = (String(spec.capacidade || '').match(/(\d+)\s*kg/i) || [])[1] || '';
     const TIPO_MAP = { passageiros: 'Social', passageiro: 'Social', social: 'Social', panoramico: 'Panorâmico', 'panorâmico': 'Panorâmico', carga: 'Carga', montacargas: 'Montacargas' };
@@ -733,7 +735,6 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
     const descPropostaInf = [
       (spec.carac && !new RegExp('\\b' + String(spec.carac).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(String(spec.capacidade || ''))) ? spec.carac : '',
       spec.capacidade,
-      spec.andaresParadasPortas,
       spec.vel && `velocidade ${String(spec.vel).replace('.', ',')} m/s`,
       spec.dimensoesCaixa && `caixa ${spec.dimensoesCaixa}`,
     ].map((x) => String(x || '').trim()).filter(Boolean).join(', ');
@@ -754,28 +755,11 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
        só as parcelas do saldo (sem a linha do sinal) — por isso o -1.
        O percentual do sinal na Proposta é sempre fixo em 40% (hardcoded em
        gerarParcelasAutomaticas), não configurável por lá. */
-    let sinalPctInf = null;
-    let parcelasInf = null;
-    /* Cronograma real da Proposta (o vendedor pode ter editado, ex.: 20/15/15/10
-       em vez de parcelas iguais): valores em R$ das linhas depois do sinal. */
-    let parcelasDetalheInf = null;
-    const numBR = (v) => {
-      const s = String(v == null ? '' : v).trim();
-      if (!s) return NaN;
-      return Number(s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s);
-    };
-    if (valores.formaTipo === 'vista') {
-      sinalPctInf = 100;
-      parcelasInf = 0;
-    } else if (valores.formaTipo === 'parcelado' && Number(valores.qtdParcelas) > 0) {
-      sinalPctInf = 40;
-      parcelasInf = Math.max(Number(valores.qtdParcelas) - 1, 0);
-      const linhas = Array.isArray(valores.parcelas) ? valores.parcelas : [];
-      if (linhas.length === Number(valores.qtdParcelas) && /sinal/i.test(String(linhas[0] && linhas[0].desc))) {
-        const v = linhas.slice(1).map((l) => numBR(l.valor));
-        if (v.length && v.every((x) => Number.isFinite(x) && x > 0)) parcelasDetalheInf = v;
-      }
-    }
+    /* Sinal e parcelas vêm do cronograma REAL da Proposta (valor da 1ª linha = sinal), não de 40% fixo. */
+    const cron = window.CV.cronogramaDaProposta(valores, totalProposta);
+    const sinalPctInf = cron ? cron.sinalPct : null;
+    const parcelasInf = cron ? cron.parcelas : null;
+    const parcelasDetalheInf = cron ? cron.parcelasDetalhe : null;
 
     setForm(prev => ({
       ...prev,

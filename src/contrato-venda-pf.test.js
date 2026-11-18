@@ -89,3 +89,49 @@ test('clienteComCadastro: PJ usa o CNPJ do cadastro e mantém tipo PJ', () => {
   assert.strictEqual(CV.documentoDoCliente(m).tipoPessoa, 'PJ');
   assert.strictEqual(CV.documentoDoCliente(m).cnpj, '01623480000100');
 });
+
+/* ---- Cronograma e paradas herdados da Proposta (cotação 1004, 18/11/2026) ---- */
+const valores1004 = {
+  formaTipo: 'parcelado', qtdParcelas: '6',
+  parcelas: [
+    { desc: 'Sinal de 43,40% na assinatura do contrato', valor: '102.075,16' },
+    { desc: '1ª Parcela 16,60%', valor: '39.053,96' },
+    { desc: '2ª Parcela 10%', valor: '23.521,52' },
+    { desc: '3ª Parcela 10%', valor: '23.521,52' },
+    { desc: '4ª Parcela 15%', valor: '35.282,28' },
+    { desc: '5ª Parcela 5%', valor: '11.760,77' },
+  ],
+};
+
+test('cronogramaDaProposta: sinal vem do VALOR da 1ª linha (R$ 102.075,16), não de 40% fixo', () => {
+  const c = CV.cronogramaDaProposta(valores1004, 235215.21);
+  assert.strictEqual(c.parcelas, 5);
+  assert.deepStrictEqual(c.parcelasDetalhe, [39053.96, 23521.52, 23521.52, 35282.28, 11760.77]);
+  assert.ok(Math.abs(235215.21 * c.sinalPct / 100 - 102075.16) < 0.005);
+});
+
+test('contrato da 1004 sai com o cronograma da proposta: sinal 102.075,16 e as 5 parcelas desiguais', () => {
+  const c = CV.cronogramaDaProposta(valores1004, 235215.21);
+  const doc = CV.buildContract({ form: { ...CV.defaultState(), parcelasDetalhe: c.parcelasDetalhe }, comprador: CV.defaultState().comprador, valor: 235215.21, sinalPct: c.sinalPct, parcelas: c.parcelas, numero: 'VPCV-1004' });
+  const tabela = doc.sections.find((x) => x.id === 's3').body.find((b) => b.table).table;
+  assert.deepStrictEqual(tabela.map((l) => Number(l.valor.toFixed(2))), [102075.16, 39053.96, 23521.52, 23521.52, 35282.28, 11760.77]);
+});
+
+test('cronogramaDaProposta: com sinal de 40% redondo e à vista continua como antes', () => {
+  const v40 = { formaTipo: 'parcelado', qtdParcelas: '3', parcelas: [{ desc: 'Sinal de 40%', valor: '400,00' }, { desc: '1ª', valor: '300,00' }, { desc: '2ª', valor: '300,00' }] };
+  assert.ok(Math.abs(CV.cronogramaDaProposta(v40, 1000).sinalPct - 40) < 1e-9);
+  assert.deepStrictEqual(CV.cronogramaDaProposta({ formaTipo: 'vista' }, 1000), { sinalPct: 100, parcelas: 0, parcelasDetalhe: null });
+  assert.strictEqual(CV.cronogramaDaProposta({}, 1000), null);
+});
+
+test('cronogramaDaProposta: sem linha de sinal reconhecível cai nos 40% padrão', () => {
+  const c = CV.cronogramaDaProposta({ formaTipo: 'parcelado', qtdParcelas: '2', parcelas: [{ desc: 'Entrada', valor: '500,00' }, { desc: 'Final', valor: '500,00' }] }, 1000);
+  assert.strictEqual(c.sinalPct, 40);
+  assert.strictEqual(c.parcelasDetalhe, null);
+});
+
+test('paradasDaEspecificacao: "04/04/04" vira "4"; sem número vira vazio', () => {
+  assert.strictEqual(CV.paradasDaEspecificacao({ andaresParadasPortas: '04/04/04' }), '4');
+  assert.strictEqual(CV.paradasDaEspecificacao({ andaresParadasPortas: '10/10/10' }), '10');
+  assert.strictEqual(CV.paradasDaEspecificacao({}), '');
+});
