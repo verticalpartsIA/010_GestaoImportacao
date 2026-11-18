@@ -135,3 +135,14 @@ test('paradasDaEspecificacao: "04/04/04" vira "4"; sem número vira vazio', () =
   assert.strictEqual(CV.paradasDaEspecificacao({ andaresParadasPortas: '10/10/10' }), '10');
   assert.strictEqual(CV.paradasDaEspecificacao({}), '');
 });
+
+/* ---- Papel do comprador no bloco de assinaturas digitais (18/11/2026) ---- */
+test('papelAssinaturaComprador: PF assina como "Comprador"; PJ segue "Representante legal do Comprador"', () => {
+  const docPF = gerar(base({ tipoPessoa: 'PF', razao: 'Weng Meihuan', repCpf: '227.295.968-79', endereco: 'Rua A' }));
+  const docPJ = gerar(base({ razao: 'ACME LTDA', cnpj: '01.623.480/0001-00', rep: 'Fulano', repCpf: '227.295.968-79' }));
+  assert.strictEqual(CV.papelAssinaturaComprador(docPF), 'Comprador');
+  assert.strictEqual(CV.papelAssinaturaComprador(docPJ), 'Representante legal do Comprador');
+  assert.strictEqual(CV.papelAssinaturaComprador({ comprador: { tipoPessoa: 'PF' } }), 'Comprador'); // form_state do registro
+  assert.strictEqual(CV.papelAssinaturaComprador({ comprador: { tipoPessoa: 'PJ' } }), 'Representante legal do Comprador');
+  assert.strictEqual(CV.papelAssinaturaComprador(null), 'Representante legal do Comprador'); // contrato antigo/sem dado
+});

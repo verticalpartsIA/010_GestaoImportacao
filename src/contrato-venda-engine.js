@@ -124,6 +124,15 @@
     }
     return null;
   }
+  /* Papel de quem assina pelo COMPRADOR no bloco de assinaturas digitais: pessoa física assina por si ("Comprador");
+     pessoa jurídica, pelo representante ("Representante legal do Comprador"). Aceita o `doc` do contrato
+     (assinatura.comprador.pf) ou o `form_state` do registro (comprador.tipoPessoa). */
+  function papelAssinaturaComprador(origem) {
+    origem = origem || {};
+    const pf = !!(origem.assinatura && origem.assinatura.comprador && origem.assinatura.comprador.pf)
+      || !!(origem.comprador && origem.comprador.tipoPessoa === 'PF');
+    return pf ? 'Comprador' : 'Representante legal do Comprador';
+  }
   /* Quantidade de paradas da especificação da Proposta: "04/04/04" (andares/paradas/portas) → "4". Vazio se não houver número. */
   function paradasDaEspecificacao(spec) {
     const m = String((spec && spec.andaresParadasPortas) || '').match(/\d+/);
@@ -709,7 +718,7 @@
   /* ---------- Exporta tudo em window.CV ---------- */
   window.CV = {
     VENDEDORA, EQUIPAMENTOS, CONTATOS_VP,
-    onlyDigits, isCPFValid, documentoDoCliente, clienteComCadastro, cronogramaDaProposta, paradasDaEspecificacao, montarEndereco, maskCNPJ, maskCPF, maskPhone, maskCEP, maskMoney, parseMoney, brl, dataBR,
+    onlyDigits, isCPFValid, documentoDoCliente, clienteComCadastro, cronogramaDaProposta, paradasDaEspecificacao, papelAssinaturaComprador, montarEndereco, maskCNPJ, maskCPF, maskPhone, maskCEP, maskMoney, parseMoney, brl, dataBR,
     descEquipamento, defaultState, numeroExibicao, propostaExibicao,
     buildContract,
     calcularD0, addDias,  // ISSUE #6
