@@ -146,3 +146,26 @@ test('papelAssinaturaComprador: PF assina como "Comprador"; PJ segue "Representa
   assert.strictEqual(CV.papelAssinaturaComprador({ comprador: { tipoPessoa: 'PJ' } }), 'Representante legal do Comprador');
   assert.strictEqual(CV.papelAssinaturaComprador(null), 'Representante legal do Comprador'); // contrato antigo/sem dado
 });
+
+/* Minuta contratual de 18/11/2026 (Jurídico): textos que mudaram. */
+test('minuta 18/11/2026: título, objeto, frete, serviços, tributos, sinal e foro', () => {
+  const doc = gerar(base({}));
+  const todo = doc.sections.flatMap((s) => s.body.map((b) => b.text || '')).join('\n');
+  assert.match(doc.titulo, /INSTALAÇÃO & GARANTIA$/);
+  assert.match(todo, /consiste no fornecimento de equipamento com serviço de instalação e garantia/);
+  assert.doesNotMatch(todo, /Modalidade: “CIF”/);
+  assert.match(todo, /Frete e seguro \(transporte e desembarque\)/);
+  assert.match(todo, /em até 10 \(dez\) dias úteis/);
+  assert.match(todo, /vide cláusula 2\.5 e a mantê-los/);
+  assert.match(todo, /A entrega dos equipamentos no local da obra está incluída no preço/);
+  assert.match(todo, /greves de categorias alheias às partes/);
+  assert.doesNotMatch(todo, /rollover/);
+  assert.match(todo, /A parcela correspondente a serviços será de 30%/);
+  assert.match(todo, /o preço será revisto na proporção do impacto comprovado/);
+  assert.match(todo, /3\.6 Aquisição dos equipamentos e natureza do sinal/);
+  assert.match(todo, /arts\. 417 a 420 do Código Civil/);
+  assert.match(todo, /O COMPRADOR não poderá ceder ou transferir/);
+  assert.match(todo, /Greve de pessoal e\/ou/);
+  assert.match(todo, /Foro da Comarca de Guarulhos, Estado de São Paulo/);
+  assert.doesNotMatch(todo, /COMPRADORA/);
+});
