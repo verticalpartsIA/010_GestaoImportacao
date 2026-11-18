@@ -5,7 +5,7 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/06_contratos_juridico.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `53e05d6`)
-- **Palavras:** 12024 · **blocos:** 243 · **seções com selo próprio:** 35 de 48
+- **Palavras:** 12029 · **blocos:** 243 · **seções com selo próprio:** 35 de 48
 - **Origem do selo dos blocos:** próprio 68 · da seção 115 · da seção-pai 0 · do cabeçalho 36 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 24
 - **Selo efetivo dos blocos:** Conferido 174 · Herdado 22 · Não verificado 23
 
