@@ -482,6 +482,7 @@ async function enviarManual(codigo, email, simular) {
 }
 
 /* ---------- autenticação ---------- */
+const INTERVALO_MIN_ATUALIZAR_MS = 5 * 60 * 1000;
 async function autenticar(req) {
   const segredo = req.headers.get("x-cron-secret") || "";
   if (segredo) {
@@ -494,8 +495,11 @@ async function autenticar(req) {
     const r = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { Authorization: bearer, apikey: serviceKey } });
     if (!r.ok) return null;
     const email = String((await r.json())?.email || "").toLowerCase();
-    if (!email || (await rpc("boletos_avisos_email_permitido", { p_email: email })) !== true) return { modo: "negado", email };
-    return { modo: "usuario", email };
+    if (!email) return null;
+    if ((await rpc("boletos_avisos_email_permitido", { p_email: email })) === true) return { modo: "usuario", email };
+    // 18/11/2026: quem tem só a alçada "atualizar" (Administração › Alçadas) pode ler o Omie; o resto continua dos 3 fixos
+    if ((await rpc("boletos_avisos_email_pode_atualizar", { p_email: email })) === true) return { modo: "usuario", email, soAtualizar: true };
+    return { modo: "negado", email };
   } catch (_) { return null; }
 }
 
@@ -511,8 +515,18 @@ Deno.serve(async (req) => {
   try {
     if (acao === "sincronizar") {
       if (!omieKey || !omieSecret) return json({ error: "OMIE_API_KEY / OMIE_API_SECRET não configuradas" }, 500);
+      if (auth.soAtualizar) {
+        // protege o Omie (limite de consumo): quem não é dos 3 fixos só atualiza se a última leitura tiver mais de 5 minutos
+        const cfg = ((await pgSelect("boletos_avisos_config", "select=sincronizado_em&id=eq.true")) || [])[0];
+        const ult = cfg?.sincronizado_em ? Date.parse(cfg.sincronizado_em) : 0;
+        if (ult && Date.now() - ult < INTERVALO_MIN_ATUALIZAR_MS) {
+          const min = Math.max(1, Math.ceil((INTERVALO_MIN_ATUALIZAR_MS - (Date.now() - ult)) / 60000));
+          return json({ error: `O Omie foi lido há pouco. Tente de novo em ${min} minuto(s) — a tela já mostra a leitura mais recente.` }, 429);
+        }
+      }
       return json({ ok: true, ...(await sincronizar()) });
     }
+    if (auth.soAtualizar) return json({ error: "Com a alçada \"atualizar\" só dá para atualizar do Omie." }, 403);
     if (acao === "automatico") {
       if (auth.modo === "usuario" && !p.simular) return json({ error: "Pela tela só dá para simular; o envio automático roda pela rotina." }, 403);
       if (!SENDER || !Deno.env.get("AZURE_TENANT_ID")) return json({ error: "Microsoft Graph não configurada" }, 503);

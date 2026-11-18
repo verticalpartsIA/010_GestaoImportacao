@@ -25,6 +25,14 @@ window.BoletosAvisosStore = (() => {
     return data === true;
   }
 
+  /* 18/11/2026: alçada "atualizar" (Administração › Alçadas) — pode clicar em "Atualizar do Omie" sem ser um dos 3 fixos. */
+  async function podeAtualizar() {
+    const c = sb(); if (!c) return false;
+    const { data, error } = await c.rpc('boletos_avisos_pode_atualizar');
+    if (error) return false;
+    return data === true;
+  }
+
   async function listarClientes() {
     const { data, error } = await sb().from('boletos_avisos_resumo_v').select('*').order('dias_atraso', { ascending: false }).order('razao_social').limit(2000);
     if (error) throw new Error(error.message);
@@ -169,6 +177,6 @@ window.BoletosAvisosStore = (() => {
     return data && data[0] ? data[0].atualizado_em : null;
   }
 
-  return { pode, podeGerir, feriados, feriadosCache, listarClientes, boletosAbertos, boletosDoCliente, logDoCliente, config, salvarConfig, sincronizar, enviarAviso, simularAutomatico,
+  return { pode, podeGerir, podeAtualizar, feriados, feriadosCache, listarClientes, boletosAbertos, boletosDoCliente, logDoCliente, config, salvarConfig, sincronizar, enviarAviso, simularAutomatico,
     indiceDoPeriodo, scoreConfig, salvarScoreConfig, listarScores, titulosDoCliente, listarClientesHistorico, historicoAtualizadoEm, quem };
 })();

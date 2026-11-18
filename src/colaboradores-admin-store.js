@@ -203,6 +203,7 @@
          quem receber esta caixa só vê a tela, sem enviar aviso, atualizar do Omie nem mexer no envio automático. */
       { modulo: 'boletos-avisos', label: 'Boletos Avisos', capacidades: [
         { chave: 'ver', label: 'Vê a tela Boletos Avisos (somente leitura)' },
+        { chave: 'atualizar', label: 'Atualiza os boletos do Omie (botão "Atualizar do Omie"; só lê o Omie, não envia aviso)' },
       ]},
     ]},
     { grupo: 'Jurídico', itens: [
