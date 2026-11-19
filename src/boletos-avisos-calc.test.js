@@ -299,3 +299,59 @@ test('resumoSelecao: nada marcado e dados faltando não quebram', () => {
   assert.deepEqual(C.resumoSelecao(null), { clientes: 0, titulos: 0, valor: 0 });
   assert.deepEqual(C.resumoSelecao([{}, { qtd: 'x', centavos: null }]), { clientes: 2, titulos: 0, valor: 0 });
 });
+
+// ---- erros de envio e envios do dia (19/11/2026) ----
+test('ehDevolucao: reconhece o aviso do servidor (postmaster, mailer-daemon, "Não é possível entregar", Undeliverable) e ignora resposta comum', () => {
+  assert.equal(C.ehDevolucao({ de_email: 'postmaster@grupoccr.onmicrosoft.com', assunto: 'Não é possível entregar: Seus pagamentos vencem hoje' }), true);
+  assert.equal(C.ehDevolucao({ de_email: 'MAILER-DAEMON@x.com', assunto: 'qualquer' }), true);
+  assert.equal(C.ehDevolucao({ de_email: 'x@y.com', assunto: 'Undeliverable: Boleto em aberto' }), true);
+  assert.equal(C.ehDevolucao({ de_email: 'x@y.com', assunto: 'Delivery Status Notification (Failure)' }), true);
+  assert.equal(C.ehDevolucao({ de_email: 'financeiro@cliente.com.br', assunto: 'RES: Seu boleto vence amanhã — CLIENTE' }), false);
+  assert.equal(C.ehDevolucao({ de_email: 'financeiro@cliente.com.br', assunto: 'Segue o comprovante' }), false);
+  assert.equal(C.ehDevolucao({ de_email: 'compras@cliente.com.br', assunto: 'RES: NF devolvida — boleto cancelado' }), false);   // resposta comum, mesmo falando em devolução
+  assert.equal(C.ehDevolucao({ de_email: 'compras@cliente.com.br', assunto: 'Mercadoria não entregue' }), false);
+  assert.equal(C.ehDevolucao({ de_email: 'MicrosoftExchange329e71ec88ae4615bbc36ab6ce41109e@verticalparts.com.br', assunto: 'Não é possível entregar: Seu boleto vence hoje — CLIENTE' }), true);   // aviso do Exchange (remetente não é postmaster)
+  assert.equal(C.ehDevolucao(null), false);
+});
+const LISTA_ERRO = [
+  { codigo_cliente_omie: 1, ultimo_aviso_em: '2026-11-19T10:00:00Z', ultimo_aviso_status: 'enviado' },   // devolvido no último envio
+  { codigo_cliente_omie: 2, ultimo_aviso_em: '2026-11-19T10:00:00Z', ultimo_aviso_status: 'erro' },      // falhou do nosso lado
+  { codigo_cliente_omie: 3, ultimo_aviso_em: '2026-11-19T10:00:00Z', ultimo_aviso_status: 'enviado' },   // devolvido antes, entregue depois
+  { codigo_cliente_omie: 4, ultimo_aviso_em: '2026-11-19T10:00:00Z', ultimo_aviso_status: 'enviado' },   // sem problema
+];
+test('clientesComErro: último envio devolvido ou falho entra; devolução de envio já superado não conta (sai sozinho)', () => {
+  const envios = [
+    { id: 'e1', codigo_cliente_omie: 1, criado_em: '2026-11-19T10:00:00Z', para: ['a@x.com'] },
+    { id: 'e3', codigo_cliente_omie: 3, criado_em: '2026-11-17T10:00:00Z', para: ['c@x.com'] },
+  ];
+  const devs = [{ envio_id: 'e1', assunto: 'Não é possível entregar: X' }, { envio_id: 'e3', assunto: 'Não é possível entregar: Y' }];
+  const m = C.clientesComErro(LISTA_ERRO, devs, envios);
+  assert.deepEqual([...m.keys()].sort(), [1, 2]);
+  assert.equal(m.get(1).tipo, 'devolvido');
+  assert.deepEqual(m.get(1).para, ['a@x.com']);
+  assert.match(m.get(1).motivo, /entregar/);
+  assert.equal(m.get(2).tipo, 'falha');
+});
+test('clientesComErro: sem devolução nem falha, ninguém; dados faltando não quebram', () => {
+  assert.equal(C.clientesComErro(LISTA_ERRO.filter((c) => c.codigo_cliente_omie === 4), [], []).size, 0);
+  assert.equal(C.clientesComErro(null, null, null).size, 0);
+  assert.equal(C.clientesComErro(LISTA_ERRO, [{ envio_id: 'nao-existe' }], []).size, 1);   // só o cliente 2 (falha)
+});
+test('contarEnviosDoDia: conta só enviados de hoje por etapa, sem erro, modo teste, manual nem outro dia (dia de Brasília)', () => {
+  const hoje = '2026-11-19';
+  const e = (o) => ({ status: 'enviado', modo_teste: false, etapa: 'D-5', codigo_cliente_omie: 1, criado_em: '2026-11-19T12:00:00Z', ...o });
+  const r = C.contarEnviosDoDia([
+    e({}), e({ codigo_cliente_omie: 1 }), e({ codigo_cliente_omie: 2 }),             // D-5: 3 e-mails, 2 clientes
+    e({ etapa: 'D0', codigo_cliente_omie: 3 }),
+    e({ status: 'erro' }), e({ modo_teste: true }), e({ etapa: 'manual' }),          // ignorados
+    e({ criado_em: '2026-11-18T12:00:00Z' }),                                         // ontem
+    e({ criado_em: '2026-11-19T02:30:00Z' }),                                         // 23h30 de ontem em Brasília: ontem
+    e({ criado_em: '2026-11-20T02:30:00Z' }),                                         // 23h30 de hoje em Brasília: hoje
+  ], hoje);
+  assert.equal(r['D-5'].emails, 4);
+  assert.equal(r['D-5'].clientes.size, 2);
+  assert.equal(r['D0'].emails, 1);
+  assert.equal(r['D-1'].emails, 0);
+  assert.equal(r['D+1'].emails, 0);
+  assert.deepEqual(C.ETAPAS_DO_DIA, ['D-5', 'D-1', 'D0', 'D+1']);
+});

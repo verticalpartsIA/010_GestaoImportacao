@@ -83,6 +83,41 @@ window.BoletosAvisosStore = (() => {
     return (envios || []).map(e => ({ ...e, respostas: respostas.filter(x => x.referencia_id === e.id) }));
   }
 
+  /* Avisos enviados HOJE (dia de Brasília): alimenta o card "Avisos enviados hoje". Falha de leitura não derruba a tela. */
+  async function enviosDeHoje() {
+    try {
+      const inicio = window.BoletosAvisosCalc.hojeBrasil() + 'T03:00:00Z';   // 00:00 de Brasília = 03:00 UTC
+      const out = [];
+      for (let off = 0; ; off += 1000) {
+        const { data, error } = await sb().from('boletos_avisos_envios').select('id,codigo_cliente_omie,etapa,status,modo_teste,criado_em')
+          .gte('criado_em', inicio).order('criado_em', { ascending: false }).range(off, off + 999);
+        if (error) throw new Error(error.message);
+        out.push(...(data || []));
+        if (!data || data.length < 1000) break;
+      }
+      return out;
+    } catch (e) { console.warn('[BoletosAvisos] envios de hoje indisponíveis', e.message); return []; }
+  }
+
+  /* E-mails devolvidos pelo servidor do cliente ("Não é possível entregar", do postmaster): chegam no Inbox ligados ao envio por
+     referencia_id. Devolve as respostas (já filtradas por ehDevolucao) e os envios a que elas se referem. Últimos 30 dias. */
+  async function devolucoes() {
+    const vazio = { devolucoes: [], envios: [] };
+    try {
+      const C = window.BoletosAvisosCalc;
+      const desde = new Date(Date.now() - 30 * 86400e3).toISOString();
+      const r = await sb().from('emails_projeto').select('id,referencia_id,assunto,de_email,data_mensagem')
+        .eq('referencia_tipo', 'boleto_aviso').eq('direcao', 'entrada').gte('data_mensagem', desde).order('data_mensagem', { ascending: false }).limit(1000);
+      if (r.error) throw new Error(r.error.message);
+      const devs = (r.data || []).filter(C.ehDevolucao).map(x => ({ envio_id: x.referencia_id, assunto: x.assunto, data: x.data_mensagem }));
+      const ids = [...new Set(devs.map(d => d.envio_id).filter(Boolean))];
+      if (!ids.length) return vazio;
+      const e = await sb().from('boletos_avisos_envios').select('id,codigo_cliente_omie,criado_em,para').in('id', ids);
+      if (e.error) throw new Error(e.error.message);
+      return { devolucoes: devs, envios: e.data || [] };
+    } catch (err) { console.warn('[BoletosAvisos] devoluções indisponíveis', err.message); return vazio; }
+  }
+
   async function config() {
     const { data, error } = await sb().from('boletos_avisos_config').select('*').eq('id', true).maybeSingle();
     if (error) throw new Error(error.message);
@@ -177,6 +212,6 @@ window.BoletosAvisosStore = (() => {
     return data && data[0] ? data[0].atualizado_em : null;
   }
 
-  return { pode, podeGerir, podeAtualizar, feriados, feriadosCache, listarClientes, boletosAbertos, boletosDoCliente, logDoCliente, config, salvarConfig, sincronizar, enviarAviso, simularAutomatico,
+  return { pode, podeGerir, podeAtualizar, feriados, feriadosCache, listarClientes, boletosAbertos, boletosDoCliente, logDoCliente, enviosDeHoje, devolucoes, config, salvarConfig, sincronizar, enviarAviso, simularAutomatico,
     indiceDoPeriodo, scoreConfig, salvarScoreConfig, listarScores, titulosDoCliente, listarClientesHistorico, historicoAtualizadoEm, quem };
 })();

@@ -188,6 +188,51 @@ window.BoletosAvisosCalc = (() => {
     return out;
   }
 
+  /* ---- Erros de envio e envios do dia (19/11/2026, pedido do Gelson) ----
+     Dois tipos de e-mail que "não chegou": (a) FALHA nossa: o envio ficou com status 'erro'; (b) DEVOLVIDO: o servidor do cliente
+     devolveu ("Não é possível entregar", do postmaster). No caso (b) o envio fica 'enviado': só a resposta no Inbox mostra o erro. */
+  function ehDevolucao(email) {
+    const de = String((email && email.de_email) || '').toLowerCase();
+    const assunto = String((email && email.assunto) || '');
+    if (/^(postmaster|mailer-daemon|mail-daemon)@/.test(de)) return true;
+    return /n[aã]o [eé] poss[ií]vel entregar|n[aã]o foi poss[ií]vel entregar|undeliverable|delivery status notification|mail delivery (failed|subsystem)|delivery has failed|returned mail|message not delivered|falha na entrega/i.test(assunto);
+  }
+  /* Cliente com erro = o envio MAIS RECENTE dele falhou ou foi devolvido (devolução de um envio já superado por outro não conta:
+     é isso que faz o cliente sair da lista sozinho quando o aviso seguinte é entregue).
+     lista: linhas da view (codigo_cliente_omie, ultimo_aviso_em, ultimo_aviso_status);
+     devolucoes: [{ envio_id, assunto, para, data }] já filtradas por ehDevolucao;
+     envios: [{ id, codigo_cliente_omie, criado_em, para }] dos envios que receberam devolução. */
+  function clientesComErro(lista, devolucoes, envios) {
+    const porEnvio = new Map((envios || []).map((e) => [e.id, e]));
+    const ultimaDevolucao = new Map();   // cliente -> devolução do envio mais recente
+    for (const d of devolucoes || []) {
+      const e = porEnvio.get(d.envio_id);
+      if (!e) continue;
+      const atual = ultimaDevolucao.get(e.codigo_cliente_omie);
+      if (!atual || String(e.criado_em) > String(atual.envio.criado_em)) ultimaDevolucao.set(e.codigo_cliente_omie, { d, envio: e });
+    }
+    const out = new Map();
+    for (const c of lista || []) {
+      const dev = ultimaDevolucao.get(c.codigo_cliente_omie);
+      const ehOUltimo = dev && c.ultimo_aviso_em && Date.parse(dev.envio.criado_em) === Date.parse(c.ultimo_aviso_em);
+      if (ehOUltimo) out.set(c.codigo_cliente_omie, { tipo: 'devolvido', motivo: dev.d.assunto || 'E-mail devolvido', para: dev.envio.para || [], desde: dev.envio.criado_em });
+      else if (c.ultimo_aviso_status === 'erro') out.set(c.codigo_cliente_omie, { tipo: 'falha', motivo: 'Falha no envio', para: [], desde: c.ultimo_aviso_em });
+    }
+    return out;
+  }
+  /* Quantos e-mails automáticos foram enviados no dia, por etapa (só 'enviado', fora do modo teste e do envio manual). */
+  const ETAPAS_DO_DIA = ['D-5', 'D-1', 'D0', 'D+1'];
+  function contarEnviosDoDia(envios, hojeISO) {
+    const out = {};
+    for (const k of ETAPAS_DO_DIA) out[k] = { emails: 0, clientes: new Set() };
+    for (const e of envios || []) {
+      if (e.status !== 'enviado' || e.modo_teste || !out[e.etapa]) continue;
+      if (hojeBrasil(Date.parse(e.criado_em)) !== hojeISO) continue;
+      out[e.etapa].emails++; out[e.etapa].clientes.add(e.codigo_cliente_omie);
+    }
+    return out;
+  }
+
   /* Clientes marcados na lista (18/11/2026, pedido do Gelson): só conta e soma, sem ação em lote.
      linhas = [{ qtd, centavos }] (já na faixa ativa dos cards). Soma em centavos: sem erro de ponto flutuante. */
   function resumoSelecao(linhas) {
@@ -200,5 +245,6 @@ window.BoletosAvisosCalc = (() => {
     ETAPAS, SITUACOES, ETAPA_ROTULO,
     diasDesdeVencimento, situacaoDoBoleto, etapaDevida, montarAviso, dataBR, moedaBR, hojeBrasil, resumoFinanceiro,
     conjuntoSemExpediente, diaUtil, vencimentoEfetivo, datasDasEtapas, diasDeAtraso, FAIXAS, faixaDoBoleto, resumoSelecao,
+    ehDevolucao, clientesComErro, contarEnviosDoDia, ETAPAS_DO_DIA,
   };
 })();
