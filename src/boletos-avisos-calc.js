@@ -51,7 +51,8 @@ window.BoletosAvisosCalc = (() => {
   /* Boleto que vence em dia sem expediente pode ser pago no próximo dia útil sem encargos: é esse o vencimento que vale. */
   function vencimentoEfetivo(vencISO, feriados) { return proximoDiaUtil(vencISO, feriados); }
   /* Data (sempre dia útil) de cada etapa. D-1 é o dia útil ANTES do vencimento efetivo; as demais vão para o próximo
-     dia útil. Sem boleto o aviso de atraso sai no 2º dia útil (conciliação manual). */
+     dia útil. O aviso de atraso ("D+1") sai no 2º dia útil depois do vencimento efetivo, com ou sem boleto (Gelson,
+     19/11/2026: o banco pode levar 1 dia útil para mostrar o pagamento). semBoleto fica na assinatura por compatibilidade. */
   function datasDasEtapas(vencISO, semBoleto, feriados) {
     const efetivo = vencimentoEfetivo(vencISO, feriados);
     const atraso1 = proximoDiaUtil(somarDias(efetivo, 1), feriados);
@@ -59,7 +60,7 @@ window.BoletosAvisosCalc = (() => {
       'D-5': proximoDiaUtil(somarDias(vencISO, -5), feriados),
       'D-1': diaUtilAnterior(efetivo, feriados),
       'D0': efetivo,
-      'D+1': semBoleto ? proximoDiaUtil(somarDias(atraso1, 1), feriados) : atraso1,
+      'D+1': proximoDiaUtil(somarDias(atraso1, 1), feriados),
     };
   }
   function situacaoDoBoleto(vencISO, hojeISO, feriados) {
@@ -83,60 +84,227 @@ window.BoletosAvisosCalc = (() => {
   }
   function dataBR(iso) { return iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : ''; }
   function moedaBR(v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-  function montarAviso(razao, boletos, etapa, feriados) {
-    // Textos aprovados pelo Gelson em 17/11/2026 (mantém "encargos"; sem telefone e sem dados bancários).
-    const plural = boletos.length > 1;
-    const algumSem = boletos.some((b) => b.tem_boleto === false);
-    const pl = (sing, plur) => (plural ? plur : sing);
-    const item = algumSem ? pl('pagamento', 'pagamentos') : pl('boleto', 'boletos');
-    const vence = pl('vence', 'vencem');
-    const vencEmDiaSemExpediente = boletos.every((b) => !diaUtil(b.data_vencimento, feriados));
-    const intro = {
-      'D-5': 'Olá, tudo bem?\n\nPassando para lembrar que ' + pl('o ', 'os ') + item + ' abaixo ' + vence + ' em 5 dias:',
-      'D-1': 'Olá,\n\n' + pl('O ', 'Os ') + item + ' abaixo ' + vence + ' amanhã:',
-      'D0': 'Olá,\n\n' + pl('O ', 'Os ') + item + ' abaixo ' + (vencEmDiaSemExpediente
-        ? pl('venceu', 'venceram') + ' em dia sem expediente bancário e ' + pl('pode', 'podem') + ' ser '
-          + (algumSem ? pl('feito', 'feitos') : pl('pago', 'pagos')) + ' hoje sem encargos:'
-        : vence + ' hoje:'),
-      'D+1': 'Olá,\n\n' + (algumSem
-        ? 'Até o momento ' + pl('o pagamento abaixo, já vencido, ainda não consta como recebido:', 'os pagamentos abaixo, já vencidos, ainda não constam como recebidos:')
-        : 'Até o momento não identificamos o pagamento ' + pl('do boleto abaixo, já vencido:', 'dos boletos abaixo, já vencidos:')),
-      'manual': 'Olá,\n\n' + pl('Segue o ', 'Seguem os ') + item + ' em aberto da sua empresa:',
-    }[etapa] || 'Olá,\n\n' + pl('Segue o ', 'Seguem os ') + item + ' em aberto da sua empresa:';
-    const fecho = {
-      'D-5': 'Se o pagamento já estiver programado, pode desconsiderar este e-mail.\n'
-        + (algumSem ? 'Tem alguma dúvida?' : 'Precisa da 2ª via ou tem alguma dúvida?') + ' É só responder esta mensagem.',
-      'D-1': 'Para evitar encargos por atraso, recomendamos o pagamento até a data do vencimento.\n'
-        + 'Se já foi pago ou programado, desconsidere este aviso.\nQualquer dúvida, é só responder este e-mail.',
-      'D0': 'Se o pagamento já foi feito, obrigado e desconsidere esta mensagem.'
-        + (algumSem ? '' : '\nSe precisar da 2ª via, responda este e-mail.'),
-      'D+1': 'Se já pagou: responda este e-mail com o comprovante' + (algumSem ? ' do depósito ou da transferência' : '') + ' para darmos baixa.\n'
-        + 'Se ainda não pagou: solicitamos a regularização imediata, sujeita aos encargos por atraso.'
-        + (algumSem ? '' : ' A 2ª via atualizada pode ser solicitada respondendo este e-mail.'),
-    }[etapa] || 'Se o pagamento já foi feito, responda este e-mail com o comprovante para darmos baixa.\nQualquer dúvida, é só responder esta mensagem.';
-    const assunto = (algumSem ? {
-      'D-5': 'Lembrete: ' + pl('pagamento vence', 'pagamentos vencem') + ' em 5 dias',
-      'D-1': pl('Seu pagamento vence', 'Seus pagamentos vencem') + ' amanhã',
-      'D0': pl('Seu pagamento vence', 'Seus pagamentos vencem') + ' hoje',
-      'D+1': pl('Pagamento em aberto — vencido', 'Pagamentos em aberto — vencidos'),
+  /* Textos aprovados pelo Gelson em 17/11/2026 (mantém "encargos"; sem telefone e sem dados bancários).
+     19/11/2026: um e-mail pode juntar títulos em etapas diferentes (e de vários códigos do mesmo cliente) — cada título vai
+     na seção da SUA etapa (Vencido / Vence hoje / Próximos vencimentos), nunca sob o texto do mais grave; "amanhã" e
+     "em 5 dias" só quando é verdade; corpo em tabela (html) + versão texto (log). etapa = 'D-5'|'D-1'|'D0'|'D+1'|'manual'
+     para todos, ou { codigo_lancamento_omie: etapa }. */
+  const DIA_SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+  function diaDaSemana(iso) { return DIA_SEMANA[new Date(iso + 'T12:00:00Z').getUTCDay()]; }
+  function escHtml(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  /* Vencimento como o cliente lê: se caiu em dia sem expediente, diz até quando pode pagar sem encargos. */
+  function vencimentoTexto(vencISO, feriados) {
+    const ef = vencimentoEfetivo(vencISO, feriados);
+    if (ef === vencISO) return dataBR(vencISO);
+    const w = new Date(vencISO + 'T12:00:00Z').getUTCDay();
+    return dataBR(vencISO) + ' (' + (w === 0 || w === 6 ? diaDaSemana(vencISO) : 'feriado') + ') — pode pagar até ' + dataBR(ef).slice(0, 5);
+  }
+  /* "amanhã" / "em 3 dias" / "no próximo dia útil, segunda-feira, 23/11" — sem hoje, cai nos textos fixos. */
+  function quandoVence(lista, etapa, feriados, hojeISO) {
+    if (etapa === 'D-1') {
+      const efs = [...new Set(lista.map((b) => vencimentoEfetivo(b.data_vencimento, feriados)))];
+      if (!hojeISO || (efs.length === 1 && efs[0] === somarDias(hojeISO, 1))) return { frase: 'amanhã', assunto: 'amanhã' };
+      if (efs.length === 1) return { frase: 'no próximo dia útil, ' + diaDaSemana(efs[0]) + ', ' + dataBR(efs[0]).slice(0, 5), assunto: 'em ' + dataBR(efs[0]).slice(0, 5) };
+      return { frase: 'nos próximos dias', assunto: 'nos próximos dias' };
+    }
+    const vs = [...new Set(lista.map((b) => b.data_vencimento))];
+    if (!hojeISO) return { frase: 'em 5 dias', assunto: 'em 5 dias' };
+    if (vs.length > 1) return { frase: 'nos próximos dias', assunto: 'nos próximos dias' };
+    const n = diasDesdeVencimento(hojeISO, vs[0]);
+    const t = n === 1 ? 'amanhã' : 'em ' + n + ' dias';
+    return { frase: t, assunto: t };
+  }
+  const ORDEM_ETAPA = ['manual', 'D-5', 'D-1', 'D0', 'D+1'];
+  function montarAviso(razao, boletos, etapa, feriados, hojeISO) {
+    const etapaDe = (b) => (typeof etapa === 'string' ? etapa : (etapa && etapa[b.codigo_lancamento_omie]) || 'manual');
+    const grupoDe = (e) => (e === 'D-5' || e === 'D-1' ? 'prox' : e);
+    const porGrupo = {};
+    for (const b of boletos) (porGrupo[grupoDe(etapaDe(b))] = porGrupo[grupoDe(etapaDe(b))] || []).push(b);
+    const grupos = ['D+1', 'D0', 'prox', 'manual'].filter((g) => porGrupo[g]);
+    const maisGrave = boletos.map(etapaDe).sort((a, b) => ORDEM_ETAPA.indexOf(b) - ORDEM_ETAPA.indexOf(a))[0];
+    const algumSemTodos = boletos.some((b) => b.tem_boleto === false);
+
+    // palavras de uma lista (singular/plural, boleto/pagamento)
+    const palavras = (lista) => {
+      const plural = lista.length > 1;
+      const algumSem = lista.some((b) => b.tem_boleto === false);
+      const pl = (s, p) => (plural ? p : s);
+      return { plural, algumSem, pl, item: algumSem ? pl('pagamento', 'pagamentos') : pl('boleto', 'boletos'), vence: pl('vence', 'vencem') };
+    };
+    const linhaTexto = (b) => {
+      let l = '• ' + [b.numero_documento ? 'NF ' + b.numero_documento : null, b.numero_parcela ? 'parcela ' + b.numero_parcela : null].filter(Boolean).join(' · ')
+        + ' — vencimento ' + vencimentoTexto(b.data_vencimento, feriados) + ' — ' + moedaBR(b.valor);
+      if (b.tem_boleto !== false && b.linha_digitavel) l += '\n  Linha digitável: ' + b.linha_digitavel;
+      return l;
+    };
+    const soma = (lista) => lista.reduce((s, b) => s + Math.round(Number(b.valor || 0) * 100), 0) / 100;
+    const ordenar = (lista) => lista.slice().sort((a, b) => (a.data_vencimento < b.data_vencimento ? -1 : a.data_vencimento > b.data_vencimento ? 1 : 0));
+
+    const fechoDe = (e, lista) => {
+      const w = palavras(lista);
+      return {
+        'D-5': 'Se o pagamento já estiver programado, pode desconsiderar este e-mail.\n'
+          + (w.algumSem ? 'Tem alguma dúvida?' : 'Precisa da 2ª via ou tem alguma dúvida?') + ' É só responder esta mensagem.',
+        'D-1': 'Para evitar encargos por atraso, recomendamos o pagamento até a data do vencimento.\n'
+          + 'Se já foi pago ou programado, desconsidere este aviso.\nQualquer dúvida, é só responder este e-mail.',
+        'D0': 'Se o pagamento já foi feito, obrigado e desconsidere esta mensagem.'
+          + (w.algumSem ? '' : '\nSe precisar da 2ª via, responda este e-mail.'),
+        'D+1': 'Se já pagou: responda este e-mail com o comprovante' + (w.algumSem ? ' do depósito ou da transferência' : '') + ' para darmos baixa.\n'
+          + 'Se ainda não pagou: solicitamos a regularização imediata, sujeita aos encargos por atraso.'
+          + (w.algumSem ? '' : ' A 2ª via atualizada pode ser solicitada respondendo este e-mail.'),
+      }[e] || 'Se o pagamento já foi feito, responda este e-mail com o comprovante para darmos baixa.\nQualquer dúvida, é só responder esta mensagem.';
+    };
+    const semExpediente = (lista) => lista.every((b) => !diaUtil(b.data_vencimento, feriados));
+
+    let secoes, intro, fecho;
+    if (grupos.length === 1) {
+      // uma situação só: os textos aprovados em 17/11, com a data certa
+      const lista = ordenar(boletos);
+      const w = palavras(lista);
+      const q = quandoVence(lista, maisGrave, feriados, hojeISO);
+      intro = {
+        'D-5': 'Olá, tudo bem?\n\nPassando para lembrar que ' + w.pl('o ', 'os ') + w.item + ' abaixo ' + w.vence + ' ' + q.frase + ':',
+        'D-1': 'Olá,\n\n' + w.pl('O ', 'Os ') + w.item + ' abaixo ' + w.vence + ' ' + q.frase + ':',
+        'D0': 'Olá,\n\n' + w.pl('O ', 'Os ') + w.item + ' abaixo ' + (semExpediente(lista)
+          ? w.pl('venceu', 'venceram') + ' em dia sem expediente bancário e ' + w.pl('pode', 'podem') + ' ser '
+            + (w.algumSem ? w.pl('feito', 'feitos') : w.pl('pago', 'pagos')) + ' hoje sem encargos:'
+          : w.vence + ' hoje:'),
+        'D+1': 'Olá,\n\n' + (w.algumSem
+          ? 'Até o momento ' + w.pl('o pagamento abaixo, já vencido, ainda não consta como recebido:', 'os pagamentos abaixo, já vencidos, ainda não constam como recebidos:')
+          : 'Até o momento não identificamos o pagamento ' + w.pl('do boleto abaixo, já vencido:', 'dos boletos abaixo, já vencidos:')),
+      }[maisGrave] || 'Olá,\n\n' + w.pl('Segue o ', 'Seguem os ') + w.item + ' em aberto da sua empresa:';
+      secoes = [{ grupo: grupos[0], titulo: null, lista, fecho: null }];
+      fecho = fechoDe(maisGrave, lista);
+    } else {
+      // situações diferentes no mesmo e-mail: uma seção para cada, cada uma com o seu texto
+      intro = 'Olá,\n\nSegue a situação dos seus ' + (algumSemTodos ? 'pagamentos' : 'boletos') + ' com a VerticalParts.';
+      secoes = grupos.map((g) => {
+        const lista = ordenar(porGrupo[g]);
+        const w = palavras(lista);
+        const titulo = {
+          'D+1': w.pl('Vencido — ainda não consta como recebido', 'Vencidos — ainda não constam como recebidos'),
+          'D0': semExpediente(lista)
+            ? w.pl('Venceu em dia sem expediente bancário — pode ser pago hoje sem encargos', 'Venceram em dia sem expediente bancário — podem ser pagos hoje sem encargos')
+            : w.pl('Vence hoje', 'Vencem hoje'),
+          'prox': 'Próximos vencimentos',
+        }[g] || 'Em aberto';
+        return { grupo: g, titulo, lista, fecho: g === 'D+1' ? fechoDe('D+1', lista).split('\n').slice(0, 2).join('\n') : null };
+      });
+      fecho = 'Para evitar encargos por atraso, recomendamos o pagamento até a data de cada vencimento. O que já foi pago ou programado pode ser desconsiderado.\n'
+        + 'Qualquer dúvida' + (boletos.some((b) => b.tem_boleto !== false) ? ' ou se precisar da 2ª via' : '') + ', é só responder este e-mail.';
+    }
+
+    // assunto: a situação mais grave
+    const listaAssunto = boletos.filter((b) => etapaDe(b) === maisGrave);
+    const wa = palavras(listaAssunto);
+    const qa = quandoVence(listaAssunto, maisGrave, feriados, hojeISO);
+    const assunto = (wa.algumSem ? {
+      'D-5': 'Lembrete: ' + wa.pl('pagamento vence', 'pagamentos vencem') + ' ' + qa.assunto,
+      'D-1': wa.pl('Seu pagamento vence', 'Seus pagamentos vencem') + ' ' + qa.assunto,
+      'D0': wa.pl('Seu pagamento vence', 'Seus pagamentos vencem') + ' hoje',
+      'D+1': wa.pl('Pagamento em aberto — vencido', 'Pagamentos em aberto — vencidos'),
       'manual': 'Pagamentos em aberto',
     } : {
-      'D-5': 'Lembrete: ' + pl('boleto vence', 'boletos vencem') + ' em 5 dias',
-      'D-1': pl('Seu boleto vence', 'Seus boletos vencem') + ' amanhã',
-      'D0': pl('Seu boleto vence', 'Seus boletos vencem') + ' hoje',
-      'D+1': pl('Boleto em aberto — vencido', 'Boletos em aberto — vencidos'),
+      'D-5': 'Lembrete: ' + wa.pl('boleto vence', 'boletos vencem') + ' ' + qa.assunto,
+      'D-1': wa.pl('Seu boleto vence', 'Seus boletos vencem') + ' ' + qa.assunto,
+      'D0': wa.pl('Seu boleto vence', 'Seus boletos vencem') + ' hoje',
+      'D+1': wa.pl('Boleto em aberto — vencido', 'Boletos em aberto — vencidos'),
       'manual': 'Boletos em aberto',
-    })[etapa] + ' — ' + razao;
-    const linhas = boletos.map((b) => {
-      let l = '• ' + [b.numero_documento ? 'NF ' + b.numero_documento : null, b.numero_parcela ? 'parcela ' + b.numero_parcela : null].filter(Boolean).join(' · ')
-        + ' — vencimento ' + dataBR(b.data_vencimento) + ' — ' + moedaBR(b.valor);
-      if (b.tem_boleto === false) l += '\n  Forma de pagamento: depósito/transferência, conforme combinado.';
-      else if (b.linha_digitavel) l += '\n  Linha digitável: ' + b.linha_digitavel;
-      return l;
+    })[maisGrave] + ' — ' + razao;
+
+    // forma de pagamento uma vez só, no rodapé (Gelson, 19/11/2026)
+    const temSem = boletos.some((b) => b.tem_boleto === false), temCom = boletos.some((b) => b.tem_boleto !== false);
+    const formaPagamento = 'Forma de pagamento: ' + (temSem && temCom
+      ? 'boleto (linha digitável junto do título) ou, onde não há linha digitável, depósito/transferência, conforme combinado.'
+      : temSem ? 'depósito/transferência, conforme combinado.' : 'boleto (linha digitável junto de cada título).');
+    const assinatura = 'Atenciosamente,\nFinanceiro — VerticalParts';
+    const texto = intro + '\n\n'
+      + secoes.map((s) => (s.titulo ? s.titulo + ':\n' : '') + s.lista.map(linhaTexto).join('\n')
+        + (s.lista.length > 1 ? '\nTotal: ' + moedaBR(soma(s.lista)) : '') + (s.fecho ? '\n\n' + s.fecho : '')).join('\n\n')
+      + '\n\n' + fecho + '\n\n' + formaPagamento + '\n\n' + assinatura;
+
+    // html (19/11/2026, formato aprovado pelo Gelson — pacote "email-cobranca" da sessão CoworkOutlook): cartão de 640px,
+    // "Pagamentos de <cliente>", frase de resumo, uma tabela por situação (Vencem hoje → Vencidos → A vencer) com total,
+    // e a assinatura do hub (cobrança sem assinatura parece golpe). Cada título fica na seção da SUA etapa (dia útil/feriado),
+    // nunca pela data do calendário. Só <table> e estilo em linha (Outlook); tudo escapado.
+    const F = "font-family:'Segoe UI',Arial,Helvetica,sans-serif;";
+    const C1 = '#1f2933', C2 = '#52606d', LINHA = '#e3e8ee';
+    const corDe = { 'D0': '#b45309', 'D+1': '#b91c1c', prox: '#1d4ed8', manual: C1 };
+    const ordemHtml = ['D0', 'D+1', 'prox', 'manual'].filter((g) => porGrupo[g]);
+    const notaVencimento = (b) => {
+      const ef = vencimentoEfetivo(b.data_vencimento, feriados);
+      const partes = [];
+      if (ef !== b.data_vencimento) {
+        const w = new Date(b.data_vencimento + 'T12:00:00Z').getUTCDay();
+        partes.push((w === 0 || w === 6 ? diaDaSemana(b.data_vencimento) : 'feriado') + ' — pode pagar até ' + dataBR(ef).slice(0, 5));
+      }
+      if (hojeISO && diasDesdeVencimento(ef, hojeISO) > 0) {
+        const n = diasDesdeVencimento(ef, hojeISO);
+        partes.push('vencido há ' + n + (n === 1 ? ' dia' : ' dias'));
+      }
+      return partes.join(' · ');
+    };
+    const secaoHtml = (g) => {
+      const lista = ordenar(porGrupo[g]);
+      const w = palavras(lista);
+      const titulo = { 'D0': w.pl('Vence hoje', 'Vencem hoje'), 'D+1': w.pl('Vencido', 'Vencidos'), prox: 'A vencer', manual: 'Em aberto' }[g];
+      const nota = {
+        'D0': (semExpediente(lista) ? w.pl('Venceu', 'Venceram') + ' em dia sem expediente bancário e ' + w.pl('pode', 'podem') + ' ser '
+          + (w.algumSem ? w.pl('feito', 'feitos') : w.pl('pago', 'pagos')) + ' hoje sem encargos. ' : '')
+          + 'Se o pagamento já foi feito, obrigado e desconsidere.',
+        'D+1': (w.algumSem ? w.pl('Ainda não consta como recebido.', 'Ainda não constam como recebidos.') : w.pl('Ainda não identificamos o pagamento.', 'Ainda não identificamos os pagamentos.'))
+          + '\n' + fechoDe('D+1', lista).split('\n').slice(0, 2).join('\n'),
+        prox: 'Lembrete: ' + w.pl('este ' + w.item + ' vence', 'estes ' + w.item + ' vencem') + ' nos próximos dias, na data indicada.',
+        manual: w.pl('Título em aberto nesta data.', 'Títulos em aberto nesta data.'),
+      }[g];
+      const th = 'padding:10px 12px;' + F + 'font-size:12px;color:' + C2 + ';background-color:#f4f6f8;border-bottom:1px solid ' + LINHA + ';';
+      const td = 'padding:11px 12px;' + F + 'font-size:14px;color:' + C1 + ';border-bottom:1px solid ' + LINHA + ';vertical-align:top;';
+      let t = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid ' + LINHA + ';border-collapse:collapse;">'
+        + '<tr><th align="left" style="' + th + '">Nota fiscal</th><th align="left" style="' + th + '">Parcela</th><th align="left" style="' + th + '">Vencimento</th><th align="right" style="' + th + '">Valor</th></tr>';
+      for (const b of lista) {
+        const ld = b.tem_boleto !== false && b.linha_digitavel;
+        const tdl = ld ? td.replace('border-bottom:1px solid ' + LINHA + ';', '') : td;
+        const nv = notaVencimento(b);
+        t += '<tr><td style="' + tdl + 'font-weight:bold;">' + escHtml(b.numero_documento ? 'NF ' + b.numero_documento : '—') + '</td>'
+          + '<td style="' + tdl + '">' + escHtml(b.numero_parcela || '') + '</td>'
+          + '<td style="' + tdl + '">' + escHtml(dataBR(b.data_vencimento)) + (nv ? '<br><span style="font-size:12px;color:' + (g === 'D+1' ? corDe['D+1'] : C2) + ';">' + escHtml(nv) + '</span>' : '') + '</td>'
+          + '<td align="right" style="' + tdl + 'font-weight:bold;white-space:nowrap;">' + escHtml(moedaBR(b.valor)) + '</td></tr>';
+        if (ld) t += '<tr><td colspan="4" style="padding:0 12px 10px 12px;' + F + 'font-size:12px;color:' + C2 + ';border-bottom:1px solid ' + LINHA + ';">Linha digitável: <span style="font-family:Consolas,Menlo,monospace;color:' + C1 + ';word-break:break-all;">' + escHtml(b.linha_digitavel) + '</span></td></tr>';
+      }
+      t += '<tr><td colspan="3" style="' + td + 'font-weight:bold;background-color:#f9fafb;">Total (' + lista.length + ' ' + w.pl('parcela', 'parcelas') + ')</td>'
+        + '<td align="right" style="' + td + 'font-weight:bold;background-color:#f9fafb;white-space:nowrap;">' + escHtml(moedaBR(soma(lista))) + '</td></tr></table>';
+      return '<tr><td style="padding:22px 28px 6px 28px;' + F + 'font-size:17px;font-weight:bold;color:' + corDe[g] + ';">' + escHtml(titulo) + ' <span style="color:' + C1 + ';">' + escHtml(moedaBR(soma(lista))) + '</span></td></tr>'
+        + '<tr><td style="padding:0 28px 10px 28px;' + F + 'font-size:13px;line-height:1.5;color:' + C2 + ';">' + escHtml(nota).replace(/\n/g, '<br>') + '</td></tr>'
+        + '<tr><td style="padding:0 28px;">' + t + '</td></tr>';
+    };
+    const partesResumo = ordemHtml.map((g) => {
+      const n = porGrupo[g].length, pl = (s1, p1) => (n > 1 ? p1 : s1);
+      const r = { 'D0': pl('parcela que vence hoje', 'parcelas que vencem hoje'), 'D+1': pl('já vencida', 'já vencidas'), prox: 'a vencer', manual: 'em aberto' }[g];
+      return '<strong>' + n + ' ' + r + '</strong> (' + escHtml(moedaBR(soma(porGrupo[g]))) + ')';
     });
-    const texto = intro + '\n\n' + linhas.join('\n') + '\n\n' + fecho + '\n\n'
-      + 'Atenciosamente,\nFinanceiro — VerticalParts';
-    return { assunto, texto };
+    const resumo = partesResumo.length > 1 ? partesResumo.slice(0, -1).join(', ') + ' e ' + partesResumo[partesResumo.length - 1] : partesResumo[0];
+    const so = ordemHtml.length === 1 ? ordemHtml[0] : null;
+    const fechoHtml = so === 'D+1'
+      ? 'Qualquer dúvida' + (temCom ? ' ou se precisar da 2ª via atualizada' : '') + ', é só responder este e-mail.'
+      : 'Para evitar encargos por atraso, recomendamos o pagamento até a data de cada vencimento. O que já foi pago ou programado pode ser desconsiderado.\n'
+        + 'Qualquer dúvida' + (temCom ? ' ou se precisar da 2ª via' : '') + ', é só responder este e-mail.';
+    const assinaturaHub = '<table role="presentation" id="vp-assinatura-hub" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;max-width:600px"><tr><td>'
+      + '<a href="https://verticalparts.com.br" target="_blank" style="text-decoration:none"><img src="https://jxtqwzmpgofwctqajewt.supabase.co/storage/v1/object/public/engenharia/email-assinatura/assinatura-hub.jpg" width="600" alt="VerticalParts" style="display:block;width:100%;max-width:600px;height:auto;border:0"></a></td></tr>'
+      + '<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.5;color:#777;padding-top:6px"><b>E-mail corporativo VerticalParts</b> &mdash; fale com todas as áreas da empresa por aqui. Basta responder.<br>'
+      + '<b>VerticalParts corporate e-mail</b> &mdash; reach every area of the company here. Just reply.<br>'
+      + '<a href="mailto:financeiro@verticalparts.com.br" style="color:#777">financeiro@verticalparts.com.br</a> &middot; <a href="https://verticalparts.com.br" style="color:#777">verticalparts.com.br</a></td></tr></table>';
+    const html = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f6f8;"><tr><td align="center" style="padding:24px 12px;">'
+      + '<table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0" style="width:640px;max-width:100%;background-color:#ffffff;border:1px solid ' + LINHA + ';">'
+      + '<tr><td style="padding:26px 28px 4px 28px;' + F + 'font-size:12px;font-weight:bold;letter-spacing:1px;color:#b45309;">VERTICALPARTS · FINANCEIRO</td></tr>'
+      + '<tr><td style="padding:0 28px 8px 28px;' + F + 'font-size:24px;font-weight:bold;color:' + C1 + ';">Pagamentos de ' + escHtml(razao) + '</td></tr>'
+      + '<tr><td style="padding:10px 28px 0 28px;' + F + 'font-size:14px;line-height:1.5;color:' + C1 + ';">Olá, segue o resumo dos pagamentos desta empresa' + (hojeISO ? ' em ' + escHtml(dataBR(hojeISO)) : '') + ': ' + resumo + '.</td></tr>'
+      + ordemHtml.map(secaoHtml).join('')
+      + '<tr><td style="padding:22px 28px 0 28px;' + F + 'font-size:14px;line-height:1.5;color:' + C1 + ';">' + escHtml(fechoHtml).replace(/\n/g, '<br>') + '</td></tr>'
+      + '<tr><td style="padding:12px 28px 0 28px;' + F + 'font-size:13px;line-height:1.5;color:' + C2 + ';">' + escHtml(formaPagamento) + '</td></tr>'
+      + '<tr><td style="padding:24px 28px 8px 28px;' + F + 'font-size:14px;color:' + C1 + ';">Atenciosamente,<br><strong>Financeiro — VerticalParts</strong></td></tr>'
+      + '<tr><td style="padding:8px 28px 22px 28px;">' + assinaturaHub + '</td></tr>'
+      + '</table></td></tr></table>';
+    return { assunto, texto, html };
   }
   // END CALC
 
@@ -243,7 +411,7 @@ window.BoletosAvisosCalc = (() => {
 
   return {
     ETAPAS, SITUACOES, ETAPA_ROTULO,
-    diasDesdeVencimento, situacaoDoBoleto, etapaDevida, montarAviso, dataBR, moedaBR, hojeBrasil, resumoFinanceiro,
+    diasDesdeVencimento, situacaoDoBoleto, etapaDevida, montarAviso, vencimentoTexto, dataBR, moedaBR, hojeBrasil, resumoFinanceiro,
     conjuntoSemExpediente, diaUtil, vencimentoEfetivo, datasDasEtapas, diasDeAtraso, FAIXAS, faixaDoBoleto, resumoSelecao,
     ehDevolucao, clientesComErro, contarEnviosDoDia, ETAPAS_DO_DIA,
   };
