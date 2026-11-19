@@ -126,7 +126,7 @@ function CVCelula({ resp, qtdRef, melhor, editavel, valorQtd, onQtd, onTudo }) {
   const faixas = resp ? C.faixasOrdenadas(resp.faixas) : [];
   const aplicada = resp ? C.precoNaQuantidade(resp.faixas, qtdRef) : null;
   return (
-    <div style={{ minWidth: 170, padding: '4px 2px', background: melhor ? 'rgba(34,160,90,.10)' : undefined, borderRadius: 6 }}>
+    <div style={{ padding: '4px 2px', background: melhor ? 'rgba(34,160,90,.10)' : undefined, borderRadius: 6 }}>
       {!resp || !faixas.length ? <div className="small muted">sem preço</div> : (
         <div className="small" style={{ lineHeight: 1.45 }}>
           {faixas.map((f) => (
@@ -454,6 +454,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const [npsMap, setNpsMap] = React.useState({});
   const [busca, setBusca] = React.useState('');
   const [limite, setLimite] = React.useState(50);
+  const ordMapa = window.useOrdenacao();   // ordenar o mapa clicando no título da coluna (antes de qualquer return)
   const [substituir, setSubstituir] = React.useState(null);   // convite que está sendo substituído
   const [subForn, setSubForn] = React.useState('');
   const [subMotivo, setSubMotivo] = React.useState('');
@@ -663,8 +664,33 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
 
   const fornecedoresLivres = forn.filter((f) => !convites.some((c) => c.fornecedor_id === f.id));
   const termo = busca.trim().toLowerCase();
-  const itensFiltrados = termo ? itens.filter((i) => ((i.codigo || '') + ' ' + (i.descricao || '')).toLowerCase().includes(termo)) : itens;
+  const itensBusca = termo ? itens.filter((i) => ((i.codigo || '') + ' ' + (i.descricao || '')).toLowerCase().includes(termo)) : itens;
+  // Quantidade de referência do item (a comprada, senão a pedida) — a mesma usada para escolher o preço da faixa.
+  const qtdCompradaDe = (it) => decisoesAtuais.filter((d) => d.item_id === it.id).reduce((a, d) => a + d.quantidade, 0);
+  const qtdRefDe = (it) => { const c = qtdCompradaDe(it); return c > 0 ? c : cvNum(it.quantidade_pedida); };
+  const gettersMapa = {
+    codigo: (it) => it.codigo, descricao: (it) => it.descricao,
+    qtd: (it) => cvNum(it.quantidade_pedida), comprar: (it) => qtdCompradaDe(it),
+  };
+  convites.forEach((cv) => {
+    gettersMapa['f:' + cv.id] = (it) => {
+      const r = respDe(cv.id, it.id);
+      const a = r ? C.precoNaQuantidade(r.faixas, qtdRefDe(it)) : null;
+      return a && a.preco > 0 ? a.preco : null;   // sem preço vai sempre ao fim
+    };
+  });
+  const itensFiltrados = ordMapa.aplicar(itensBusca, gettersMapa);
   const itensVisiveis = itensFiltrados.slice(0, limite);
+  // Título de coluna ordenável: ⇅ esmaecido quando inativa, ▲/▼ quando ativa (o ciclo de clique é o do useOrdenacao).
+  const cvTh = (chave, rotulo, props) => {
+    const p = props || {}; const ativo = ordMapa.ord.chave === chave;
+    return (
+      <th key={p.key} className={p.className} title={p.title || 'Clique para ordenar'} aria-sort={ativo ? (ordMapa.ord.dir === 1 ? 'ascending' : 'descending') : 'none'}
+        style={{ cursor: 'pointer', userSelect: 'none', ...(p.style || {}) }} onClick={() => ordMapa.alternar(chave)}>
+        {rotulo}<span className="cv-sort" style={{ marginLeft: 5, opacity: ativo ? 1 : .35, color: ativo ? 'var(--vp-yellow,#f6c000)' : undefined }}>{ativo ? (ordMapa.ord.dir === 1 ? '▲' : '▼') : '⇅'}</span>
+      </th>
+    );
+  };
   const chaveNps = (cv) => npsMap[cv.fornecedor_id] || npsMap[String(cv.fornecedor_nome || '').toLowerCase()] || null;
   const abrirSubstituir = (cv) => { setSubstituir(cv); setSubForn(''); setSubMotivo(''); };
   const confirmarSubstituir = async () => {
@@ -774,19 +800,33 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
 
       <div style={{ height: 12 }} />
       <Card title="Mapa comparativo" sub={convites.length ? 'Verde = menor preço para a quantidade em questão. ★ = comprar a quantidade pedida deste fornecedor.' : 'Convide fornecedores acima para montar o comparativo.'}>
-        <style>{'.cv-mapa thead th{position:sticky;top:0;z-index:3;background:var(--surface,#fff)}'}</style>
+        <style>{[
+          '.cv-mapa{table-layout:fixed;border-collapse:separate;border-spacing:0}',
+          '.cv-mapa thead th{position:sticky;top:0;z-index:3;background:#111;color:#fff;border-bottom:3px solid var(--vp-yellow,#f6c000);padding:12px 10px;vertical-align:bottom;white-space:normal;overflow-wrap:anywhere;line-height:1.25;font-size:12px;letter-spacing:.02em}',
+          '.cv-mapa thead th:hover{background:#222}',
+          '.cv-mapa thead th .cv-moeda{display:inline-block;margin-top:4px;padding:1px 7px;border-radius:10px;background:var(--vp-yellow,#f6c000);color:#111;font-size:10px;font-weight:700}',
+          '.cv-mapa tbody td{padding:12px 10px;vertical-align:top;border-bottom:1px solid var(--border,#e5e7eb);overflow-wrap:anywhere}',
+          '.cv-mapa tbody tr:nth-child(even) td{background:rgba(127,127,127,.05)}',
+          '.cv-mapa tbody tr:hover td{background:rgba(246,192,0,.10)}',
+          '.cv-mapa tfoot td{padding:12px 10px;background:rgba(246,192,0,.14);border-top:3px solid #111;vertical-align:top}',
+        ].join('')}</style>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
           <input className="input" style={{ minWidth: 280 }} placeholder="Buscar produto por código ou descrição…" value={busca} onChange={(e) => { setBusca(e.target.value); setLimite(50); }} />
           <span className="small muted">{itensFiltrados.length === itens.length ? itens.length + ' produto(s)' : itensFiltrados.length + ' de ' + itens.length + ' produto(s)'}</span>
         </div>
         <div className="table-wrap" style={{ overflow: 'auto', maxHeight: '75vh' }}>
-          <table className="t cv-mapa">
+          <table className="t cv-mapa" style={{ width: 130 + 110 + 300 + 110 + convites.length * 200 + 110 + 110 }}>
+            <colgroup>
+              <col style={{ width: 130 }} /><col style={{ width: 110 }} /><col style={{ width: 300 }} /><col style={{ width: 110 }} />
+              {convites.map((cv) => <col key={cv.id} style={{ width: 200 }} />)}
+              <col style={{ width: 110 }} /><col style={{ width: 110 }} />
+            </colgroup>
             <thead>
               <tr>
-                <th style={{ width: 64 }}>Foto</th><th>Código</th><th>Descrição</th><th className="text-right">Qtd. pedida</th>
-                {convites.map((cv) => <th key={cv.id}>{cv.fornecedor_nome}<div className="small muted" style={{ fontWeight: 400 }}>{cv.moeda}</div></th>)}
+                <th>Foto</th>{cvTh('codigo', 'Código')}{cvTh('descricao', 'Descrição')}{cvTh('qtd', 'Qtd. pedida', { className: 'text-right' })}
+                {convites.map((cv) => cvTh('f:' + cv.id, <><span style={{ fontWeight: 700 }}>{cv.fornecedor_nome}</span><div><span className="cv-moeda">{cv.moeda}</span></div></>, { key: cv.id, title: 'Ordenar pelo menor preço de ' + cv.fornecedor_nome }))}
                 <th className="text-center" title="Marque se este item exige certificado: o fornecedor só consegue enviar o preço anexando o arquivo no link">Certificado</th>
-                <th className="text-right">Comprar</th>
+                {cvTh('comprar', 'Comprar', { className: 'text-right' })}
               </tr>
             </thead>
             <tbody>
@@ -831,7 +871,8 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                       </div>
                     </td>
                     <td className="mono">{it.codigo}</td>
-                    <td style={{ maxWidth: 260 }}>
+                    <td>
+                      {it.descricao && <div style={{ fontWeight: 600, lineHeight: 1.35, marginBottom: 4 }}>{it.descricao}</div>}
                       {(origens[it.id] || []).length > 0 && (
                         <div className="small" style={{ margin: '4px 0', color: 'var(--vp-info, #1d6fd1)', fontWeight: 700 }} title="Este produto veio de pedido(s) de vendedor (Pedidos › Solicitações)">
                           👤 {origens[it.id].map((o) => 'Pedido de ' + o.vendedor + ' (' + o.numero + ', ' + o.quantidade + ')').join(' · ')}
@@ -839,7 +880,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                       )}
                       {editavel
                         ? <>
-                            <textarea key={it.obs_vp || ''} className="input" rows={(it.obs_vp || '').length > 90 ? 3 : 1} style={{ width: '100%', marginTop: 4, fontSize: 12 }} placeholder="Obs. VerticalParts (o fornecedor lê no portal)" defaultValue={it.obs_vp || ''} onBlur={(e) => { if ((e.target.value || '') !== (it.obs_vp || '')) editarItem(it, 'obs_vp', e.target.value || null); }} />
+                            <textarea key={it.obs_vp || ''} className="input" rows={(it.obs_vp || '').length > 90 ? 3 : 2} style={{ width: '100%', marginTop: 4, fontSize: 12, resize: 'vertical', boxSizing: 'border-box' }} placeholder="Obs. VerticalParts (o fornecedor lê no portal)" defaultValue={it.obs_vp || ''} onBlur={(e) => { if ((e.target.value || '') !== (it.obs_vp || '')) editarItem(it, 'obs_vp', e.target.value || null); }} />
                             <button className="link-btn" onClick={() => setDescItem(it)} title="Descrição técnica em inglês (e português), com ajuda da IA">{it.obs_vp ? '✎ descrição em inglês' : '+ descrição em inglês (com IA)'}</button>
                           </>
                         : (it.obs_vp ? <div className="small muted" style={{ whiteSpace: 'pre-wrap' }}>{it.obs_vp}</div> : null)}
@@ -873,7 +914,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
             {convites.length > 0 && (
               <tfoot>
                 <tr>
-                  <td colSpan={4} style={{ fontWeight: 800 }}>Total por fornecedor</td>
+                  <td colSpan={4} style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: 12 }}>Total por fornecedor</td>
                   {convites.map((cv) => { const g = calc.porConvite[cv.id]; return <td key={cv.id}>{g ? <><b>{cvFmtMoeda(g.totalOriginal, cv.moeda)}</b>{g.totalBRL != null && cv.moeda !== 'BRL' && <div className="small muted">≈ {cvFmtMoeda(g.totalBRL, 'BRL')}</div>}</> : <span className="muted">—</span>}</td>; })}
                   <td />
                   <td className="text-right"><b>{calc.totalBRL != null ? cvFmtMoeda(calc.totalBRL, 'BRL') : (cambioNum > 0 ? '—' : 'informe o câmbio')}</b></td>
