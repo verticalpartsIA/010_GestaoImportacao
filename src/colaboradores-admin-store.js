@@ -204,6 +204,7 @@
       { modulo: 'boletos-avisos', label: 'Boletos Avisos', capacidades: [
         { chave: 'ver', label: 'Vê a tela Boletos Avisos (somente leitura)' },
         { chave: 'atualizar', label: 'Atualiza os boletos do Omie (botão "Atualizar do Omie"; só lê o Omie, não envia aviso)' },
+        { chave: 'tratar', label: 'Trata os casos da aba Tratativas (anota, muda o status e o responsável; não envia aviso)' },
       ]},
     ]},
     { grupo: 'Jurídico', itens: [
