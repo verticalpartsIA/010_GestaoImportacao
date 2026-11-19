@@ -188,9 +188,17 @@ window.BoletosAvisosCalc = (() => {
     return out;
   }
 
+  /* Clientes marcados na lista (18/11/2026, pedido do Gelson): só conta e soma, sem ação em lote.
+     linhas = [{ qtd, centavos }] (já na faixa ativa dos cards). Soma em centavos: sem erro de ponto flutuante. */
+  function resumoSelecao(linhas) {
+    let titulos = 0, centavos = 0;
+    for (const l of linhas || []) { titulos += Number(l && l.qtd) || 0; centavos += Math.round(Number(l && l.centavos) || 0); }
+    return { clientes: (linhas || []).length, titulos, valor: centavos / 100 };
+  }
+
   return {
     ETAPAS, SITUACOES, ETAPA_ROTULO,
     diasDesdeVencimento, situacaoDoBoleto, etapaDevida, montarAviso, dataBR, moedaBR, hojeBrasil, resumoFinanceiro,
-    conjuntoSemExpediente, diaUtil, vencimentoEfetivo, datasDasEtapas, diasDeAtraso, FAIXAS, faixaDoBoleto,
+    conjuntoSemExpediente, diaUtil, vencimentoEfetivo, datasDasEtapas, diasDeAtraso, FAIXAS, faixaDoBoleto, resumoSelecao,
   };
 })();

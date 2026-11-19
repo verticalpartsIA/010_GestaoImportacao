@@ -288,3 +288,14 @@ test('faixaDoBoleto e resumoFinanceiro concordam em todos os casos (a lista nunc
     assert.equal(Math.round(doFiltro.reduce((a, b) => a + b.valor * 100, 0)) / 100, r[f.chave].valor, f.chave + ': valor');
   }
 });
+
+test('resumoSelecao: soma clientes, títulos e valor em centavos (0,1 + 0,2 não vira 0,30000000000000004)', () => {
+  const r = C.resumoSelecao([{ qtd: 1, centavos: 10 }, { qtd: 2, centavos: 20 }]);
+  assert.deepEqual(r, { clientes: 2, titulos: 3, valor: 0.3 });
+  assert.deepEqual(C.resumoSelecao([{ qtd: 4, centavos: 890000 }, { qtd: 1, centavos: 150000 }]), { clientes: 2, titulos: 5, valor: 10400 });
+});
+test('resumoSelecao: nada marcado e dados faltando não quebram', () => {
+  assert.deepEqual(C.resumoSelecao([]), { clientes: 0, titulos: 0, valor: 0 });
+  assert.deepEqual(C.resumoSelecao(null), { clientes: 0, titulos: 0, valor: 0 });
+  assert.deepEqual(C.resumoSelecao([{}, { qtd: 'x', centavos: null }]), { clientes: 2, titulos: 0, valor: 0 });
+});
