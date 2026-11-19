@@ -153,25 +153,36 @@ function Portal() {
     sc.onload = () => (window.ExcelJS ? ok(window.ExcelJS) : falha(new Error('exceljs'))); sc.onerror = () => falha(new Error('exceljs')); document.head.appendChild(sc);
   });
   const baixarImagem = async (url) => {
-    try { const r = await fetch(url); if (!r.ok) return null; const blob = await r.blob(); const t = (blob.type || '').toLowerCase();
-      const ext = /png/.test(t) ? 'png' : /jpe?g/.test(t) ? 'jpeg' : null; if (!ext) return null; return { buffer: await blob.arrayBuffer(), extension: ext }; } catch (e) { return null; }
+    try {
+      const r = await fetch(url); if (!r.ok) return null; const bmp = await createImageBitmap(await r.blob());
+      const esc = Math.min(1, 300 / Math.max(bmp.width, bmp.height)); const w = Math.max(1, Math.round(bmp.width * esc)); const h = Math.max(1, Math.round(bmp.height * esc));
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, w, h); cx.drawImage(bmp, 0, 0, w, h);
+      const blob = await new Promise((ok) => cv.toBlob(ok, 'image/jpeg', 0.85)); if (!blob) return null;
+      return { buffer: await blob.arrayBuffer(), extension: 'jpeg', w, h };
+    } catch (e) { return null; }
   };
   const baixarExcel = async () => {
     setErro(null); setAviso(null); setGerando(true);
     try {
       const EJ = await carregarExcelJS();
       const wb = new EJ.Workbook(); const ws = wb.addWorksheet('Quotation');
-      const cols = [['photo', 14], ['ref', 18], ['description', 48], ['qty_needed', 11], ['unit', 8], ['certificate_required', 12], ['unit_price', 12], ['lead_time_days', 12], ['remarks', 30], ['photo_url', 30]];
+      const cols = [['photo', 20], ['ref', 18], ['description', 48], ['qty_needed', 11], ['unit', 8], ['certificate_required', 12], ['unit_price', 12], ['lead_time_days', 12], ['remarks', 30], ['photo_url', 30]];
       ws.columns = cols.map(([header, width]) => ({ header, key: header, width }));
+      /* Título com espaços no fim: se o fornecedor usar "ajustar largura da coluna" no Excel, a coluna A não encolhe e as fotos não passam por cima do ref. */
+      ws.getCell('A1').value = 'photo' + ' '.repeat(20);
       ws.getRow(1).font = { bold: true }; ws.views = [{ state: 'frozen', ySplit: 1 }];
       const cache = {}; const fotoDe = (i) => [i.foto_url, i.foto_url2].concat(i.fotos_manuais || []).filter(Boolean)[0] || '';
       const urls = Array.from(new Set(itens.map(fotoDe).filter(Boolean)));
-      for (let k = 0; k < urls.length; k += 6) await Promise.all(urls.slice(k, k + 6).map(async (u) => { const im = await baixarImagem(u); if (im) cache[u] = wb.addImage(im); }));
+      for (let k = 0; k < urls.length; k += 6) await Promise.all(urls.slice(k, k + 6).map(async (u) => { const im = await baixarImagem(u); if (im) cache[u] = { id: wb.addImage({ buffer: im.buffer, extension: im.extension }), w: im.w, h: im.h }; }));
       itens.forEach((i, idx) => {
         const x = form[i.id] || inicial(i, null); const u = fotoDe(i);
         const row = ws.addRow({ photo: '', ref: i.codigo, description: i.descricao || '', qty_needed: i.quantidade, unit: i.unidade || '', certificate_required: i.exige_certificado ? 'yes' : 'no', unit_price: x.f[0].preco === '' ? null : Number(String(x.f[0].preco).replace(',', '.')) || x.f[0].preco, lead_time_days: x.lt === '' ? null : Number(x.lt) || x.lt, remarks: x.obs, photo_url: u });
-        row.height = 75; row.alignment = { vertical: 'middle', wrapText: true };
-        if (u && cache[u] !== undefined) ws.addImage(cache[u], { tl: { col: 0.1, row: idx + 1.1 }, ext: { width: 90, height: 90 } });
+        row.height = 80; row.alignment = { vertical: 'middle', wrapText: true };
+        if (u && cache[u]) {
+          /* Foto centralizada na célula A, tamanho fixo e proporção original (caixa 135 × 97 px dentro de 145 × 107). Posição em EMU exato (o ExcelJS erra posição fracionada). */
+          const c = cache[u]; const esc = Math.min(135 / c.w, 97 / c.h); const pw = c.w * esc; const ph = c.h * esc;
+          ws.addImage(c.id, { tl: { nativeCol: 0, nativeColOff: Math.round((145 - pw) / 2 * 9525), nativeRow: idx + 1, nativeRowOff: Math.round((107 - ph) / 2 * 9525) }, ext: { width: pw, height: ph }, editAs: 'oneCell' });
+        }
       });
       const buf = await wb.xlsx.writeBuffer();
       const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = lote.numero + '-quotation.xlsx'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
