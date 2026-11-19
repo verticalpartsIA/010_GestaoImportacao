@@ -15,7 +15,7 @@ function BtStatus({ s }) {
 }
 const btQuando = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—');
 
-function BtCaso({ cod, rotulo, caso, podeTratar, voltar, recarregar }) {
+function BtCaso({ cod, rotulo, emails, caso, podeTratar, voltar, recarregar }) {
   const S = window.BoletosAvisosStore, T = window.BoletosTratativasCalc, C = window.BoletosAvisosCalc;
   const n = Number(cod);
   const [log, setLog] = React.useState(null);
@@ -28,6 +28,7 @@ function BtCaso({ cod, rotulo, caso, podeTratar, voltar, recarregar }) {
   const [prom, setProm] = React.useState(caso ? caso.promessa_pagamento || '' : '');
   const [nota, setNota] = React.useState('');
   const [busy, setBusy] = React.useState(null);
+  const [resp2, setResp2] = React.useState(null);   // compositor da resposta ao cliente: { para:{email:bool}, assunto, texto }
 
   const carregar = React.useCallback(async () => {
     try {
@@ -66,6 +67,24 @@ function BtCaso({ cod, rotulo, caso, podeTratar, voltar, recarregar }) {
   };
 
   const itens = T.linhaDoTempo(log || [], trat || []).slice().reverse();   // mais recente primeiro
+  const abrirResposta = () => {
+    const ops = T.opcoesDestinatarios(emails || [], itens);
+    setResp2({ ops, para: Object.fromEntries(ops.map(o => [o.email, o.marcado])), assunto: T.assuntoDaResposta(itens), texto: '' });
+  };
+  const enviarResposta = async () => {
+    const para = Object.keys(resp2.para).filter(e => resp2.para[e]);
+    if (!para.length) { window.toast?.('Escolha ao menos um destinatário.', 'error'); return; }
+    if (resp2.texto.trim().length < 3) { window.toast?.('Escreva a mensagem.', 'error'); return; }
+    if (!window.confirm('Enviar esta resposta por e-mail para ' + para.join(', ') + '?')) return;
+    setBusy('resposta');
+    try {
+      const r = await S.responderCliente({ codigo_cliente_omie: n, razao_social: rotulo }, { para, assunto: resp2.assunto, texto: resp2.texto });
+      window.toast?.('Resposta enviada para ' + (r.para || para).join(', ') + '.', 'success');
+      if (r.avisos && r.avisos.length) window.toast?.('A resposta saiu, mas o registro teve problema: ' + r.avisos.join(' · '), 'warning');
+      setResp2(null); await Promise.all([carregar(), recarregar()]);
+    } catch (e) { window.toast?.(e.message, 'error'); }
+    setBusy(null);
+  };
   const totalAberto = (boletos || []).reduce((a, b) => a + Math.round(Number(b.valor || 0) * 100), 0) / 100;
   const nomes = Object.fromEntries(pessoas.map(p => [p.email.toLowerCase(), p.nome || p.email]));
 
@@ -106,7 +125,29 @@ function BtCaso({ cod, rotulo, caso, podeTratar, voltar, recarregar }) {
           {podeTratar && (
             <div style={{ display: 'grid', gap: 6 }}>
               <textarea className="input" aria-label="Registrar tratativa" rows={3} maxLength={4000} placeholder="Registrar tratativa (ex.: liguei, o cliente vai pagar na sexta). Fica só aqui, não vai para o cliente." value={nota} onChange={e => setNota(e.target.value)}/>
-              <div><Button size="sm" variant="outline" disabled={busy === 'nota' || nota.trim().length < 3} onClick={registrar}>{busy === 'nota' ? 'Registrando…' : 'Registrar tratativa'}</Button></div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <Button size="sm" variant="outline" disabled={busy === 'nota' || nota.trim().length < 3} onClick={registrar}>{busy === 'nota' ? 'Registrando…' : 'Registrar tratativa'}</Button>
+                {!resp2 && <Button size="sm" variant="primary" onClick={abrirResposta}>Responder o cliente por e-mail</Button>}
+              </div>
+            </div>
+          )}
+          {podeTratar && resp2 && (
+            <div role="group" aria-label="Responder o cliente" style={{ display: 'grid', gap: 8, border: '1px solid var(--vp-border, #e5e7eb)', borderRadius: 8, padding: 12 }}>
+              <div style={{ fontWeight: 700 }}>Responder o cliente por e-mail</div>
+              <div className="small muted">Só aparecem e-mails do cliente e de quem respondeu o aviso. A mensagem sai da caixa do hub e o financeiro vai em cópia.</div>
+              {resp2.ops.length === 0 && <div role="alert" style={{ color: '#b45309' }}>Este cliente não tem e-mail cadastrado nem resposta recebida: não há para quem responder.</div>}
+              {resp2.ops.map(o => (
+                <label key={o.email} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input type="checkbox" aria-label={'Enviar para ' + o.email} checked={!!resp2.para[o.email]} onChange={e => setResp2(r => ({ ...r, para: { ...r.para, [o.email]: e.target.checked } }))}/>
+                  <span>{o.email}</span><span className="small muted">{o.origem === 'respondeu' ? 'respondeu o aviso' : 'cadastro do cliente'}</span>
+                </label>
+              ))}
+              <input className="input" aria-label="Assunto da resposta" maxLength={200} value={resp2.assunto} onChange={e => setResp2(r => ({ ...r, assunto: e.target.value }))}/>
+              <textarea className="input" aria-label="Mensagem da resposta" rows={6} maxLength={8000} placeholder="Escreva a resposta ao cliente." value={resp2.texto} onChange={e => setResp2(r => ({ ...r, texto: e.target.value }))}/>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Button size="sm" variant="primary" disabled={busy === 'resposta' || resp2.ops.length === 0} onClick={enviarResposta}>{busy === 'resposta' ? 'Enviando…' : 'Enviar resposta'}</Button>
+                <Button size="sm" variant="outline" disabled={busy === 'resposta'} onClick={() => setResp2(null)}>Cancelar</Button>
+              </div>
             </div>
           )}
         </div>
@@ -146,7 +187,7 @@ function BoletosTratativas({ voltar, casos, painel, lista, recarregar, podeTrata
   if (cod) {
     const base = (lista || []).find(c => String(c.codigo_cliente_omie) === String(cod)) || (casos || []).find(c => String(c.codigo_cliente_omie) === String(cod));
     const caso = ((painel && painel.casos) || []).find(c => String(c.codigo_cliente_omie) === String(cod)) || null;
-    return <BtCaso cod={cod} rotulo={(base && base.razao_social) || 'Cliente ' + cod} caso={caso} podeTratar={podeTratar} voltar={() => setCod(null)} recarregar={recarregar}/>;
+    return <BtCaso cod={cod} rotulo={(base && base.razao_social) || 'Cliente ' + cod} emails={(base && base.emails) || []} caso={caso} podeTratar={podeTratar} voltar={() => setCod(null)} recarregar={recarregar}/>;
   }
 
   const termo = q.trim().toLowerCase();
