@@ -251,10 +251,15 @@ function BoletosAvisosPage() {
   const marcarTodos = (sim) => setSelecionados(s => { const n = new Set(s); linhasOrdenadas.forEach(c => (sim ? n.add(c.codigo_cliente_omie) : n.delete(c.codigo_cliente_omie))); return n; });
   const filtrando = !!q || soSem;
   const codigosFiltrados = new Set((lista || []).filter(bateBusca).map(c => c.codigo_cliente_omie));
-  const fin = C.resumoFinanceiro(filtrando ? abertos.filter(b => codigosFiltrados.has(b.codigo_cliente_omie)) : abertos, C.hojeBrasil(), feriados);
+  /* Com clientes marcados (19/11/2026, pedido do Gelson) os cards mostram só o que é deles: marcado AND passa na busca/"sem boleto".
+     Como já era, os cards não seguem a faixa clicada nem o filtro da Situação (senão os outros cards zerariam). */
+  const comSelecao = selecionados.size > 0;
+  const codigosDosCards = comSelecao ? new Set([...codigosFiltrados].filter(cod => selecionados.has(cod))) : codigosFiltrados;
+  const fin = C.resumoFinanceiro((filtrando || comSelecao) ? abertos.filter(b => codigosDosCards.has(b.codigo_cliente_omie)) : abertos, C.hojeBrasil(), feriados);
   const atrasadoDoCliente = new Map();
   for (const b of abertos) { if (C.situacaoDoBoleto(b.data_vencimento, C.hojeBrasil(), feriados) === 'atrasado') atrasadoDoCliente.set(b.codigo_cliente_omie, Math.round(((atrasadoDoCliente.get(b.codigo_cliente_omie) || 0) + Number(b.valor || 0)) * 100) / 100); }
   const tot = filtrada.reduce((a, c) => { a.boletos += Number(c.qtd_boletos || 0); a.sem += Number(c.qtd_sem_boleto || 0); if (c.situacao === 'atrasado') a.atr++; if (c.situacao === 'vence_hoje') a.hoje++; if (!(c.emails || []).length) a.semEmail++; return a; }, { boletos: 0, sem: 0, atr: 0, hoje: 0, semEmail: 0 });
+  const semEmailNosCards = comSelecao ? (lista || []).filter(c => codigosDosCards.has(c.codigo_cliente_omie) && !(c.emails || []).length).length : tot.semEmail;
 
   return (
     <div className="page fade-in">
@@ -284,7 +289,7 @@ function BoletosAvisosPage() {
         </div>
         <div style={{ padding: '4px 16px 12px', display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
           {[
-            { f: '', t: filtrando ? 'Total em aberto (filtrado)' : 'Total em aberto', v: fin.total, cor: '#111827', sub: fin.total.clientes + ' clientes · ' + fin.total.boletos + ' títulos' },
+            { f: '', t: comSelecao ? 'Total em aberto (selecionados)' : filtrando ? 'Total em aberto (filtrado)' : 'Total em aberto', v: fin.total, cor: '#111827', sub: fin.total.clientes + ' clientes · ' + fin.total.boletos + ' títulos' },
             { f: 'aVencer', t: 'A vencer', v: fin.aVencer, cor: '#16a34a', sub: fin.aVencer.clientes + ' clientes · ' + fin.aVencer.boletos + ' títulos' },
             { f: 'venceHoje', t: 'Vence hoje', v: fin.venceHoje, cor: '#a16207', sub: fin.venceHoje.clientes + ' clientes · ' + fin.venceHoje.boletos + ' títulos' },
             { f: 'atrasado30', t: 'Atrasado (1 a 30 dias)', v: fin.atrasado30, cor: '#dc2626', sub: fin.atrasado30.clientes + ' clientes · ' + fin.atrasado30.boletos + ' títulos' },
@@ -306,8 +311,8 @@ function BoletosAvisosPage() {
           })}
         </div>
         <div style={{ padding: '0 16px 12px', display: 'flex', gap: 16, flexWrap: 'wrap' }} className="small">
-          <span><b>{fin.pctAtrasado.toLocaleString('pt-BR')}%</b> do valor em aberto está atrasado ({C.moedaBR(fin.atrasado.valor)} de {fin.atrasado.clientes} clientes)</span>
-          <span className="muted"><b>{tot.semEmail}</b> sem e-mail</span>
+          <span><b>{fin.pctAtrasado.toLocaleString('pt-BR')}%</b> do valor em aberto{comSelecao ? ' dos selecionados' : ''} está atrasado ({C.moedaBR(fin.atrasado.valor)} de {fin.atrasado.clientes} clientes)</span>
+          <span className="muted"><b>{semEmailNosCards}</b> sem e-mail</span>
           <label className="muted" style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={soSem} onChange={e => setSoSem(e.target.checked)}/> Só clientes com título sem boleto ({tot.sem} título(s), pagam por depósito/transferência)</label>
         </div>
         <div style={{ padding: '0 16px 12px' }}>

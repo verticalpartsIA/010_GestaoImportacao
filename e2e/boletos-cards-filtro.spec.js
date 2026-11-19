@@ -110,3 +110,41 @@ test('"Vence hoje" mostra só quem vence hoje (só em dia útil: fim de semana v
   await expect(linhasDaLista(page).first()).toContainText('CLIENTE DOIS HOJE');
   expect(erros).toEqual([]);
 });
+
+test('clientes marcados: os 5 cards mostram só o que é deles; desmarcar volta ao total; "sem e-mail" e % atrasado acompanham', async ({ page }) => {
+  test.skip(!diaUtilHoje, 'hoje não é dia útil: a faixa "vence hoje" fica vazia por regra');
+  const erros = coletarErros(page);
+  await preparar(page);
+  await page.goto('/adm-financeiro/boletos-avisos');
+  await expect(visivel(page, 'CLIENTE QUATRO ATRASO LONGO')).toBeVisible({ timeout: 45_000 });
+  const card = (nome) => page.getByRole('button', { name: nome });
+  await expect(card(/^Total em aberto/)).toContainText('1.050,00');                   // 100 + 200 + 300 + 450 (400 + 50)
+
+  // marca só o cliente 4 (R$ 400 atrasado há mais de 30 dias + R$ 50 a vencer)
+  await page.getByRole('checkbox', { name: 'Selecionar CLIENTE QUATRO ATRASO LONGO' }).check();
+  await expect(card(/^Total em aberto \(selecionados\)/)).toContainText('450,00');
+  await expect(card(/^Total em aberto \(selecionados\)/)).toContainText('1 clientes');
+  await expect(card(/^A vencer/)).toContainText('50,00');
+  await expect(card(/^Vence hoje/)).toContainText('0,00');                            // o cliente 2 (R$ 200) não está marcado
+  await expect(card(/Atrasado \(1 a 30 dias\)/)).toContainText('0,00');             // o cliente 3 (R$ 300) não está marcado
+  await expect(card(/Atrasado \(mais de 30 dias\)/)).toContainText('400,00');
+  await expect(page.getByText(/do valor em aberto dos selecionados está atrasado/)).toBeVisible();
+
+  // marca também o cliente 3: soma 450 + 300
+  await page.getByRole('checkbox', { name: 'Selecionar CLIENTE TRES ATRASO CURTO' }).check();
+  await expect(card(/^Total em aberto \(selecionados\)/)).toContainText('750,00');
+  await expect(card(/Atrasado \(1 a 30 dias\)/)).toContainText('300,00');
+
+  // clicar num card continua filtrando a lista (e os cards seguem só os marcados)
+  await card(/Atrasado \(mais de 30 dias\)/).click();
+  await expect(linhasDaLista(page)).toHaveCount(1);
+  await expect(card(/^Total em aberto \(selecionados\)/)).toContainText('750,00');
+  await card(/Atrasado \(mais de 30 dias\)/).click();
+
+  // desmarcar tudo: volta ao total geral
+  await page.getByRole('link', { name: 'Limpar seleção' }).click();
+  await expect(card(/^Total em aberto(?! \()/)).toContainText('1.050,00');
+  await expect(card(/Atrasado \(1 a 30 dias\)/)).toContainText('300,00');
+  await expect(card(/^Vence hoje/)).toContainText('200,00');
+  expect(erros).toEqual([]);
+});
