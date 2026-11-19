@@ -245,6 +245,64 @@ function CVModalConfirmar({ cfg, onClose }) {
   );
 }
 
+/* ---------- Mover produto para outro lote em rascunho (ou para um lote novo) ---------- */
+function CVModalMover({ item, loteAtualId, onClose, onFeito }) {
+  const S = window.CotacoesVarejoStore;
+  const [lotes, setLotes] = React.useState(null);
+  const [destino, setDestino] = React.useState('');       // '' = ainda não escolheu · '__novo' = lote novo
+  const [titulo, setTitulo] = React.useState('');
+  const [rodando, setRodando] = React.useState(false);
+  React.useEffect(() => { S.listarLotes().then((ls) => setLotes(ls.filter((l) => l.status === 'rascunho' && l.id !== loteAtualId))).catch(() => setLotes([])); }, []);
+  const ok = async () => {
+    setRodando(true);
+    try { const r = await S.moverItem(item.id, destino === '__novo' ? null : destino, destino === '__novo' ? titulo : null); onFeito(r); }
+    catch (e) { window.toast?.(String((e && e.message) || e), 'error'); setRodando(false); }
+  };
+  return (
+    <Modal title={'Mover ' + item.codigo + ' para outro lote'} onClose={onClose} width={480}
+      footer={<>
+        <Button variant="ghost" onClick={onClose} disabled={rodando}>Voltar</Button>
+        <Button variant="primary" onClick={ok} disabled={rodando || !destino}>{rodando ? 'Movendo…' : 'Mover produto'}</Button>
+      </>}>
+      <p className="small">O produto sai deste lote e entra no escolhido (só lotes ainda em rascunho). Se o produto já estiver lá, a quantidade é somada. As respostas de fornecedor não se perdem, mas este produto deixa de contar neste lote.</p>
+      {lotes == null ? <p className="small muted">Carregando lotes…</p> : (
+        <label className="small" style={{ display: 'block', marginTop: 8 }}>Lote de destino
+          <select className="input" style={{ width: '100%', marginTop: 4 }} value={destino} onChange={(e) => setDestino(e.target.value)}>
+            <option value="">— escolha —</option>
+            {lotes.map((l) => <option key={l.id} value={l.id}>{l.numero}{l.titulo ? ' · ' + l.titulo : ''} ({l.qtdItens} produto(s))</option>)}
+            <option value="__novo">+ Novo lote</option>
+          </select>
+        </label>
+      )}
+      {destino === '__novo' && (
+        <label className="small" style={{ display: 'block', marginTop: 8 }}>Nome do novo lote (opcional)
+          <input className="input" style={{ width: '100%', marginTop: 4 }} maxLength={80} value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ex.: Guilherme - Corrimãos" />
+        </label>
+      )}
+    </Modal>
+  );
+}
+
+/* ---------- Renomear o lote (título livre, até 80 letras) ---------- */
+function CVModalRenomear({ lote, onClose, onFeito }) {
+  const S = window.CotacoesVarejoStore;
+  const [titulo, setTitulo] = React.useState(lote.titulo || '');
+  const [rodando, setRodando] = React.useState(false);
+  const ok = async () => { setRodando(true); try { await S.renomearLote(lote.id, titulo); onFeito(); } catch (e) { window.toast?.(String((e && e.message) || e), 'error'); setRodando(false); } };
+  return (
+    <Modal title={'Renomear o lote ' + lote.numero} onClose={onClose} width={440}
+      footer={<>
+        <Button variant="ghost" onClick={onClose} disabled={rodando}>Voltar</Button>
+        <Button variant="primary" onClick={ok} disabled={rodando}>{rodando ? 'Salvando…' : 'Salvar nome'}</Button>
+      </>}>
+      <label className="small" style={{ display: 'block' }}>Nome do lote
+        <input className="input" style={{ width: '100%', marginTop: 4 }} maxLength={80} autoFocus value={titulo} onChange={(e) => setTitulo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !rodando) ok(); }} placeholder="Ex.: Guilherme - Corrimãos" />
+      </label>
+      <p className="small muted" style={{ marginTop: 8 }}>O número ({lote.numero}) não muda. Em branco, o lote fica sem nome.</p>
+    </Modal>
+  );
+}
+
 /* ---------- NPS: mini-gráfico (barras por critério + evolução da nota geral) ---------- */
 function NpsMini({ resumo, linhas }) {
   const S = window.CotacoesVarejoStore;
@@ -399,14 +457,18 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const [substituir, setSubstituir] = React.useState(null);   // convite que está sendo substituído
   const [subForn, setSubForn] = React.useState('');
   const [subMotivo, setSubMotivo] = React.useState('');
+  const [moverIt, setMoverIt] = React.useState(null);          // item que está sendo movido para outro lote
+  const [renomeando, setRenomeando] = React.useState(false);
   const fotosTentadas = React.useRef(false);
 
   React.useEffect(() => { window.PropostaStore?.temCapacidade?.('cotacoes-varejo', 'criar').then(setPodeGerenciar).catch(() => setPodeGerenciar(false)); }, []);
   React.useEffect(() => { S.fornecedoresCadastrados().then(setForn).catch(() => setForn([])); }, []);
 
   const [origens, setOrigens] = React.useState({});   // item do lote → pedidos de vendedores que o originaram (Solicitações de Compra)
+  const [meusItens, setMeusItens] = React.useState(() => new Set());   // itens cuja quantidade o usuário pode editar (vendedor: só os que pediu; a regra é do banco)
   const carregar = React.useCallback(async () => {
     try {
+      S.itensEditaveis(loteId).then((ids) => setMeusItens(new Set(ids))).catch(() => setMeusItens(new Set()));
       const d = await S.obterLote(loteId);
       if (d && window.SolicitacoesCompraStore) window.SolicitacoesCompraStore.origemDosItens(d.itens).then(setOrigens).catch(() => {});
       if (!d) { setErro('Lote não encontrado.'); return; }
@@ -566,12 +628,25 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     if (!window.confirm('Remover esta foto do produto ' + item.codigo + ' neste lote?')) return;
     try { await S.atualizarItem(item.id, { [campo]: '' }); await carregar(); } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
   };
+  // Vendedor (sem alçada de comprador) altera só a quantidade dos itens que ele pediu; o banco confere de novo.
+  const ajustarMinhaQtd = async (item, valor) => {
+    try {
+      const r = await S.ajustarQuantidade(item.id, valor); await carregar();
+      window.toast?.('Quantidade de ' + item.codigo + ' salva.' + (r && r.lote_status === 'em_cotacao' ? ' O lote já está em cotação: o comprador foi avisado.' : ''), r && r.lote_status === 'em_cotacao' ? 'warning' : 'success');
+    } catch (e) { window.toast?.(String(e.message || e), 'error'); await carregar(); }
+  };
   const editarItem = async (item, campo, valor) => { try { await S.atualizarItem(item.id, { [campo]: valor }); await carregar(); if (campo === 'quantidade_pedida') window.toast?.('Quantidade de ' + item.codigo + ' salva.', 'success'); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
-  const tirarItem = (item) => setConfirmar({
-    titulo: 'Tirar produto do lote', rotulo: 'Tirar produto',
-    texto: 'Tirar ' + item.codigo + ' deste lote? Ele sai do mapa e da cotação; as respostas já dadas pelos fornecedores ficam guardadas no histórico.',
-    acao: async () => { await S.removerItem(item.id); await carregar(); },
-  });
+  // Lote em rascunho: o produto que veio de um pedido de vendedor VOLTA à fila de Solicitações (não fica "alocado" para sempre).
+  const tirarItem = (item) => {
+    const doVendedor = (origens[item.id] || []).length > 0 && lote.status === 'rascunho';
+    setConfirmar({
+      titulo: doVendedor ? 'Devolver produto à solicitação' : 'Tirar produto do lote', rotulo: doVendedor ? 'Devolver à solicitação' : 'Tirar produto',
+      texto: doVendedor
+        ? 'Tirar ' + item.codigo + ' deste lote e devolvê-lo à fila de Solicitações? O pedido do vendedor volta a "não alocado" (aba Pedidos › Solicitações) e pode ser alocado em outro lote.'
+        : 'Tirar ' + item.codigo + ' deste lote? Ele sai do mapa e da cotação; as respostas já dadas pelos fornecedores ficam guardadas no histórico.',
+      acao: async () => { if (lote.status === 'rascunho') await S.devolverItem(item.id); else await S.removerItem(item.id); await carregar(); },
+    });
+  };
 
   const aprovar = async () => {
     setAprovando(true);
@@ -608,7 +683,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule" />Suprimentos · Cotações de Varejo</div>
           <h1 className="page-head__title">{lote.numero} <Badge variant={st.variant}>{st.label}</Badge></h1>
-          <p className="page-head__sub">{lote.titulo ? lote.titulo + ' · ' : ''}Criado por {lote.criado_por_nome || lote.criado_por || '—'} em {cvFmtData(lote.created_at)}. Em cada célula digite a quantidade que vai comprar daquele fornecedor (pode dividir, e pode ser mais ou menos que o pedido).</p>
+          <p className="page-head__sub">{lote.titulo ? lote.titulo + ' · ' : ''}{editavel && <button type="button" className="link-btn" title="Renomear o lote" onClick={() => setRenomeando(true)}>✎ {lote.titulo ? 'renomear' : 'dar um nome ao lote'}</button>}{editavel ? ' · ' : ''}Criado por {lote.criado_por_nome || lote.criado_por || '—'} em {cvFmtData(lote.created_at)}. Em cada célula digite a quantidade que vai comprar daquele fornecedor (pode dividir, e pode ser mais ou menos que o pedido).</p>
         </div>
         <div className="page-head__r">
           <Button variant="outline" onClick={onVoltar}>← Lotes</Button>
@@ -770,10 +845,11 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                         : (it.obs_vp ? <div className="small muted" style={{ whiteSpace: 'pre-wrap' }}>{it.obs_vp}</div> : null)}
                     </td>
                     <td className="text-right">
-                      {editavel
-                        ? <input className="input text-right" style={{ width: 80, ...(cvNum(it.quantidade_pedida) > 0 ? {} : { borderColor: '#d97706', background: '#fffbeb' }) }} placeholder="a definir" title={cvNum(it.quantidade_pedida) > 0 ? '' : 'Sem sugestão de compra: informe a quantidade que queremos cotar'} type="number" min="1" step="any" defaultValue={cvNum(it.quantidade_pedida) > 0 ? it.quantidade_pedida : ''} onBlur={(e) => { const v = cvNum(e.target.value); if (v > 0 && v !== cvNum(it.quantidade_pedida)) editarItem(it, 'quantidade_pedida', v); }} />
+                      {(editavel || (aberto && meusItens.has(it.id)))
+                        ? <input className="input text-right" style={{ width: 80, ...(cvNum(it.quantidade_pedida) > 0 ? {} : { borderColor: '#d97706', background: '#fffbeb' }) }} placeholder="a definir" title={cvNum(it.quantidade_pedida) > 0 ? (editavel ? '' : 'Produto que você pediu: você pode alterar a quantidade') : 'Sem sugestão de compra: informe a quantidade que queremos cotar'} type="number" min="1" step="any" defaultValue={cvNum(it.quantidade_pedida) > 0 ? it.quantidade_pedida : ''} onBlur={(e) => { const v = cvNum(e.target.value); if (v > 0 && v !== cvNum(it.quantidade_pedida)) { if (editavel) editarItem(it, 'quantidade_pedida', v); else ajustarMinhaQtd(it, v); } }} />
                         : cvFmtNum(it.quantidade_pedida)}
-                      {editavel && <div><button type="button" className="link-btn muted" title="Remover produto do lote" aria-label={'Remover produto ' + it.codigo + ' do lote'} onClick={() => tirarItem(it)} style={{ display: 'inline-flex', padding: 4 }}><Icon.trash /></button></div>}
+                {editavel && lote.status === 'rascunho' && <div><button type="button" className="link-btn" title="Mover este produto para outro lote em rascunho (ou um lote novo)" onClick={() => setMoverIt(it)}>↪ mover</button></div>}
+                      {editavel && <div><button type="button" className="link-btn muted" title={(origens[it.id] || []).length > 0 && lote.status === 'rascunho' ? 'Devolver à fila de Solicitações' : 'Remover produto do lote'} aria-label={'Remover produto ' + it.codigo + ' do lote'} onClick={() => tirarItem(it)} style={{ display: 'inline-flex', padding: 4 }}><Icon.trash /></button></div>}
                     </td>
                     {convites.map((cv) => (
                       <td key={cv.id}>
@@ -813,6 +889,9 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
 
       {modalPedir && <CVModalPedirCotacao convites={convites} forn={forn} onClose={() => setModalPedir(false)} onEmail={enviarEmail} onZap={zap} onLink={copiarLink} onTodosEmail={enviarTodosEmail} enviandoTodos={enviandoTodos} cc={cc} onCc={setCc} />}
       {confirmar && <CVModalConfirmar cfg={confirmar} onClose={() => setConfirmar(null)} />}
+      {moverIt && <CVModalMover item={moverIt} loteAtualId={lote.id} onClose={() => setMoverIt(null)}
+        onFeito={(r) => { const cod = moverIt.codigo; setMoverIt(null); window.toast?.(cod + ' foi para o lote ' + (r && r.numero) + (r && r.somado ? ' (quantidade somada)' : '') + '.', 'success'); carregar(); }} />}
+      {renomeando && <CVModalRenomear lote={lote} onClose={() => setRenomeando(false)} onFeito={() => { setRenomeando(false); window.toast?.('Lote renomeado.', 'success'); carregar(); }} />}
       {descItem && <CVModalDescricao item={descItem} onClose={() => setDescItem(null)} onSalvo={carregar} />}
       {npsConvite && <CVModalNPS lote={lote} convite={npsConvite} onClose={() => setNpsConvite(null)} onSalvo={carregarNps} />}
       {substituir && (
