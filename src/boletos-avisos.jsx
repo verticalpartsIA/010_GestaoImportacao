@@ -99,7 +99,7 @@ function BavDetalhe({ cliente, faixa }) {
         </table>
       </div>
       <div>
-        <div className="small" style={{ fontWeight: 700, marginBottom: 6 }}>Log de envios e respostas</div>
+        <div className="small" style={{ fontWeight: 700, marginBottom: 6 }}>Log de envios e respostas · <a href="#" onClick={e => { e.preventDefault(); if (window.VpRouter) window.VpRouter.navigate('boletos-avisos', 'tratativas', String(cliente.codigo_cliente_omie)); }}>Abrir tratativa deste cliente</a></div>
         {log !== null && !log.length && <div className="muted">Nenhum aviso enviado a este cliente ainda.</div>}
         <div style={{ display: 'grid', gap: 10 }}>
           {(log || []).map(e => (
@@ -148,6 +148,8 @@ function BoletosAvisosPage() {
   const [selecionados, setSelecionados] = React.useState(() => new Set());   // clientes marcados na lista (só conta e soma; não vai para a URL)
   const [erroUrl, setErroUrl] = window.useQueryParam ? window.useQueryParam('erro', '') : React.useState('');      // 1 = só clientes com e-mail devolvido/falho
   const [envioUrl, setEnvioUrl] = window.useQueryParam ? window.useQueryParam('envio', '') : React.useState('');  // D-5 | D-1 | D0 | D+1 = só quem recebeu essa etapa hoje
+  const [painel, setPainel] = React.useState({ casos: [], tratativas: [], entradas: [], envios: [], semTabelas: false, erro: null });   // aba Tratativas
+  const [podeTratar, setPodeTratar] = React.useState(false);
   const [enviosHoje, setEnviosHoje] = React.useState([]);
   const [devs, setDevs] = React.useState({ devolucoes: [], envios: [] });
   const [sitUrl, setSit] = window.useQueryParam ? window.useQueryParam('sit', '') : React.useState('');   // situações marcadas, separadas por vírgula
@@ -156,14 +158,15 @@ function BoletosAvisosPage() {
 
   const carregar = React.useCallback(async () => {
     try {
-      const [l, c, b, f, eh, dv] = await Promise.all([S.listarClientes(), S.config(), S.boletosAbertos(), S.feriados(), S.enviosDeHoje(), S.devolucoes()]);
-      setLista(l); setCfg(c); setAbertos(b); setFeriados(f); setEnviosHoje(eh); setDevs(dv); setErro(null);
+      const [l, c, b, f, eh, dv, pt] = await Promise.all([S.listarClientes(), S.config(), S.boletosAbertos(), S.feriados(), S.enviosDeHoje(), S.devolucoes(), S.painelTratativas()]);
+      setLista(l); setCfg(c); setAbertos(b); setFeriados(f); setEnviosHoje(eh); setDevs(dv); setPainel(pt); setErro(null);
     } catch (e) { setErro(e.message); setLista([]); }
   }, []);
   React.useEffect(() => {
     let vivo = true;
     S.pode().then(ok => { if (vivo) { setAcesso(ok); if (ok) carregar(); } });
     S.podeGerir().then(ok => { if (vivo) setGerir(ok); });
+    S.podeTratar().then(ok => { if (vivo) setPodeTratar(ok); });
     S.podeAtualizar().then(ok => { if (vivo) setPodeAtualizar(ok); });
     const t = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
     return () => { vivo = false; clearInterval(t); };
@@ -235,6 +238,11 @@ function BoletosAvisosPage() {
   const envioAtivo = C.ETAPAS_DO_DIA.includes(envioUrl) ? envioUrl : '';
   const nDevolvidos = [...errosDeEnvio.values()].filter(x => x.tipo === 'devolvido').length;
   const nFalhas = errosDeEnvio.size - nDevolvidos;
+  /* Aba Tratativas: casos por cliente (resposta sem tratar, e-mail devolvido, caso aberto). O número no botão = quantos pedem ação. */
+  const TT = window.BoletosTratativasCalc;
+  const casosTrat = TT ? TT.casosAtivos({ lista, entradas: painel.entradas, envios: painel.envios, casos: painel.casos, tratativas: painel.tratativas, erros: errosDeEnvio, hojeISO }) : [];
+  const nTrat = TT ? TT.pedemAcao(casosTrat) : 0;
+  if (aberto === 'tratativas' && window.BoletosTratativas) return <window.BoletosTratativas voltar={() => setAberto(null)} casos={casosTrat} painel={painel} lista={lista || []} recarregar={carregar} podeTratar={podeTratar}/>;
   const filtrada = (lista || []).filter(c => bateBusca(c) && (!faixaAtiva || naFaixa.has(c.codigo_cliente_omie)) && (!sitMarcadas.length || sitMarcadas.includes(c.situacao))
     && (!erroAtivo || errosDeEnvio.has(c.codigo_cliente_omie)) && (!envioAtivo || doDia[envioAtivo].clientes.has(c.codigo_cliente_omie)));
   const escolherFaixa = (chave) => setFaixa(chave && chave !== faixaAtiva ? chave : '');
@@ -283,6 +291,7 @@ function BoletosAvisosPage() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <Button size="sm" variant="primary" onClick={() => setAberto('score')}>Consultar cliente (score)</Button>
+          <Button size="sm" variant={nTrat ? 'primary' : 'outline'} onClick={() => setAberto('tratativas')}>{'Tratativas' + (nTrat ? ' (' + nTrat + ')' : '')}</Button>
           {(gerir || podeAtualizar) && <Button size="sm" variant="outline" disabled={busy === 'sync'} onClick={sincronizar}>{busy === 'sync' ? 'Lendo o Omie…' : 'Atualizar do Omie'}</Button>}
           {gerir && <Button size="sm" variant="outline" disabled={busy === 'sim'} onClick={simular}>Simular envio de hoje</Button>}
         </div>

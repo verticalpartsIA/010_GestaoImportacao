@@ -18,6 +18,14 @@ window.BoletosAvisosStore = (() => {
   }
 
   /* Só os 3 fixos (Gelson, Diego, Juliana): enviar aviso, atualizar do Omie, envio automático. Quem só tem a alçada "ver" lê. */
+  /* Aba "Tratativas" (19/11/2026): os 3 fixos + quem recebeu a caixa "tratar" respondem, anotam e mudam o caso. Quem só lê vê a aba sem controles. */
+  async function podeTratar() {
+    const c = sb(); if (!c) return false;
+    const { data, error } = await c.rpc('boletos_avisos_pode_tratar');
+    if (error) return false;
+    return data === true;
+  }
+
   async function podeGerir() {
     const c = sb(); if (!c) return false;
     const { data, error } = await c.rpc('boletos_avisos_pode_gerir');
@@ -118,6 +126,63 @@ window.BoletosAvisosStore = (() => {
     } catch (err) { console.warn('[BoletosAvisos] devoluções indisponíveis', err.message); return vazio; }
   }
 
+  /* ---- Tratativas: um caso por cliente (tabelas boletos_avisos_casos e boletos_avisos_tratativas) ---- */
+  const semTabela = (e) => !!e && (e.code === '42P01' || e.code === 'PGRST205' || /does not exist|Could not find the table/i.test(e.message || ''));
+
+  /* Tudo que a lista de casos precisa, numa leitura: casos, anotações, e-mails de ENTRADA ligados aos avisos (90 dias) e os envios a que eles respondem.
+     Se as tabelas novas ainda não existirem no banco, devolve `semTabelas: true` e a tela avisa em vez de quebrar. */
+  async function painelTratativas() {
+    const vazio = { casos: [], tratativas: [], entradas: [], envios: [], semTabelas: false, erro: null };
+    try {
+      const desde = new Date(Date.now() - 90 * 86400e3).toISOString();
+      const [cs, tr, en] = await Promise.all([
+        sb().from('boletos_avisos_casos').select('*'),
+        sb().from('boletos_avisos_tratativas').select('*').order('criado_em', { ascending: false }).limit(2000),
+        sb().from('emails_projeto').select('id,referencia_id,assunto,de_email,de_nome,corpo_texto,data_mensagem')
+          .eq('referencia_tipo', 'boleto_aviso').eq('direcao', 'entrada').gte('data_mensagem', desde).order('data_mensagem', { ascending: false }).limit(1000),
+      ]);
+      const sem = semTabela(cs.error) || semTabela(tr.error);   // migration ainda não aplicada: segue lendo respostas e devoluções, sem casos nem anotações
+      for (const r of (sem ? [en] : [cs, tr, en])) if (r.error) throw new Error(r.error.message);
+      const entradas = en.data || [];
+      const ids = [...new Set(entradas.map(x => x.referencia_id).filter(Boolean))];
+      let envios = [];
+      for (let i = 0; i < ids.length; i += 100) {
+        const e = await sb().from('boletos_avisos_envios').select('id,codigo_cliente_omie,criado_em,para,assunto,etapa,status').in('id', ids.slice(i, i + 100));
+        if (e.error) throw new Error(e.error.message);
+        envios = envios.concat(e.data || []);
+      }
+      return { ...vazio, casos: sem ? [] : (cs.data || []), tratativas: sem ? [] : (tr.data || []), entradas, envios, semTabelas: sem };
+    } catch (err) { console.warn('[BoletosAvisos] tratativas indisponíveis', err.message); return { ...vazio, erro: err.message }; }
+  }
+
+  async function tratativasDoCliente(cod) {
+    const { data, error } = await sb().from('boletos_avisos_tratativas').select('*').eq('codigo_cliente_omie', cod).order('criado_em', { ascending: true }).limit(1000);
+    if (error) throw new Error(error.message);
+    return data || [];
+  }
+
+  /* Usuários ativos para escolher o responsável do caso (só nome e e-mail). */
+  async function responsaveis() {
+    const { data, error } = await sb().from('perfis').select('email,nome').eq('ativo', true).order('nome');
+    if (error) throw new Error(error.message);
+    return (data || []).filter(p => p.email);
+  }
+
+  /* Muda status, responsável e/ou promessa do caso (patch parcial; promessa/responsável vazios limpam). O banco confere a alçada e grava o histórico. */
+  async function mudarCaso(cod, patch, clienteNome) {
+    const { data, error } = await sb().rpc('boletos_avisos_caso_mudar', { p_cliente: cod, p_patch: patch });
+    if (error) throw new Error(error.message);
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Boletos Avisos', acao: 'Mudou o caso de tratativa do cliente', alvo: clienteNome || String(cod), alvo_id: String(cod), detalhe: patch });
+    return data;
+  }
+
+  async function anotarTratativa(cod, texto, clienteNome) {
+    const { data, error } = await sb().rpc('boletos_avisos_tratativa_nota', { p_cliente: cod, p_texto: texto });
+    if (error) throw new Error(error.message);
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Boletos Avisos', acao: 'Registrou tratativa do cliente', alvo: clienteNome || String(cod), alvo_id: String(cod), detalhe: { tamanho: String(texto || '').length } });
+    return data;
+  }
+
   async function config() {
     const { data, error } = await sb().from('boletos_avisos_config').select('*').eq('id', true).maybeSingle();
     if (error) throw new Error(error.message);
@@ -212,6 +277,6 @@ window.BoletosAvisosStore = (() => {
     return data && data[0] ? data[0].atualizado_em : null;
   }
 
-  return { pode, podeGerir, podeAtualizar, feriados, feriadosCache, listarClientes, boletosAbertos, boletosDoCliente, logDoCliente, enviosDeHoje, devolucoes, config, salvarConfig, sincronizar, enviarAviso, simularAutomatico,
+  return { pode, podeGerir, podeAtualizar, feriados, feriadosCache, listarClientes, boletosAbertos, boletosDoCliente, logDoCliente, enviosDeHoje, devolucoes, painelTratativas, tratativasDoCliente, responsaveis, mudarCaso, anotarTratativa, podeTratar, config, salvarConfig, sincronizar, enviarAviso, simularAutomatico,
     indiceDoPeriodo, scoreConfig, salvarScoreConfig, listarScores, titulosDoCliente, listarClientesHistorico, historicoAtualizadoEm, quem };
 })();
