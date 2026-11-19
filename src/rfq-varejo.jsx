@@ -130,7 +130,7 @@ function RVTratativa({ lote, convite, itens, respostas, editavel }) {
             const m = it.m;
             return (
               <div key={it.k} style={{ border: '1px solid var(--border)', padding: '8px 10px', borderRadius: 4 }}>
-                <div className="row sb" style={{ marginBottom: 4 }}><span className="row gap-2"><b style={{ fontSize: 12 }}>{m.autor}</b><span className="badge" style={{ fontSize: 10 }}>Tratativa</span></span><span className="muted small mono">{rvData(m.created_at)}</span></div>
+                <div className="row sb" style={{ marginBottom: 4 }}><span className="row gap-2"><b style={{ fontSize: 12 }}>{m.autor}</b><span className="badge" style={{ fontSize: 10 }}>{m.origem === 'fornecedor' ? 'Portal do fornecedor' : 'Tratativa'}</span></span><span className="muted small mono">{rvData(m.created_at)}</span></div>
                 {m.mensagem && <div style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{m.mensagem}</div>}
                 {(m.anexos || []).length > 0 && <div className="row gap-2" style={{ flexWrap: 'wrap', marginTop: 6 }}>{m.anexos.map((a, i) => <a key={i} href={a.url} target="_blank" rel="noreferrer" style={{ border: '1px solid var(--border)', padding: '4px 8px', fontSize: 12 }}>{a.nome}</a>)}</div>}
               </div>
