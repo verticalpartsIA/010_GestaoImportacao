@@ -116,8 +116,8 @@ function BavDetalhe({ cliente, faixa }) {
               {e.erro && <div className="small" style={{ color: 'var(--vp-danger)' }}>{e.erro}</div>}
               {e.respostas.length > 0
                 ? e.respostas.map(r => (
-                  <div key={r.id} style={{ marginTop: 8, borderLeft: '3px solid #16a34a', paddingLeft: 10 }}>
-                    <div className="small"><b>Resposta do cliente</b> · {r.de_nome || r.de_email} · {new Date(r.data_mensagem).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</div>
+                  <div key={r.id} style={{ marginTop: 8, borderLeft: '3px solid ' + (C.ehDevolucao(r) ? '#dc2626' : '#16a34a'), paddingLeft: 10 }}>
+                    <div className="small"><b style={C.ehDevolucao(r) ? { color: '#dc2626' } : undefined}>{C.ehDevolucao(r) ? 'E-mail devolvido pelo servidor do cliente' : 'Resposta do cliente'}</b>{C.ehDevolucao(r) && <span className="muted"> — confira o endereço em "Para" acima e corrija no Omie</span>} · {r.de_nome || r.de_email} · {new Date(r.data_mensagem).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</div>
                     <div className="small" style={{ whiteSpace: 'pre-wrap' }}>{String(r.corpo_texto || '').slice(0, 600) || '(sem texto)'}</div>
                   </div>
                 ))
@@ -146,14 +146,18 @@ function BoletosAvisosPage() {
   const [q, setQ] = window.useQueryParam ? window.useQueryParam('q', '') : React.useState('');
   const [faixaUrl, setFaixa] = window.useQueryParam ? window.useQueryParam('faixa', '') : React.useState('');
   const [selecionados, setSelecionados] = React.useState(() => new Set());   // clientes marcados na lista (só conta e soma; não vai para a URL)
+  const [erroUrl, setErroUrl] = window.useQueryParam ? window.useQueryParam('erro', '') : React.useState('');      // 1 = só clientes com e-mail devolvido/falho
+  const [envioUrl, setEnvioUrl] = window.useQueryParam ? window.useQueryParam('envio', '') : React.useState('');  // D-5 | D-1 | D0 | D+1 = só quem recebeu essa etapa hoje
+  const [enviosHoje, setEnviosHoje] = React.useState([]);
+  const [devs, setDevs] = React.useState({ devolucoes: [], envios: [] });
   const [sitUrl, setSit] = window.useQueryParam ? window.useQueryParam('sit', '') : React.useState('');   // situações marcadas, separadas por vírgula
   const ord = window.useOrdenacao ? window.useOrdenacao() : { th: (k, r) => <th>{r}</th>, aplicar: (l) => l };   // setas ▲▼ nos títulos (18/11/2026, pedido do Gelson)
   const sc = window.useBoletosScores ? window.useBoletosScores() : { map: new Map() };   // classe A–D de cada cliente (boletos-score.jsx)
 
   const carregar = React.useCallback(async () => {
     try {
-      const [l, c, b, f] = await Promise.all([S.listarClientes(), S.config(), S.boletosAbertos(), S.feriados()]);
-      setLista(l); setCfg(c); setAbertos(b); setFeriados(f); setErro(null);
+      const [l, c, b, f, eh, dv] = await Promise.all([S.listarClientes(), S.config(), S.boletosAbertos(), S.feriados(), S.enviosDeHoje(), S.devolucoes()]);
+      setLista(l); setCfg(c); setAbertos(b); setFeriados(f); setEnviosHoje(eh); setDevs(dv); setErro(null);
     } catch (e) { setErro(e.message); setLista([]); }
   }, []);
   React.useEffect(() => {
@@ -224,7 +228,15 @@ function BoletosAvisosPage() {
   }
   const bateBusca = (c) => (!soSem || Number(c.qtd_sem_boleto) > 0) && (!q || `${c.razao_social} ${c.cnpj || ''}`.toLowerCase().includes(q.toLowerCase()));
   const sitMarcadas = String(sitUrl || '').split(',').filter(x => BAV_SITUACOES.some(([k]) => k === x));
-  const filtrada = (lista || []).filter(c => bateBusca(c) && (!faixaAtiva || naFaixa.has(c.codigo_cliente_omie)) && (!sitMarcadas.length || sitMarcadas.includes(c.situacao)));
+  /* Cliente com e-mail devolvido ou com falha no último envio (sai sozinho quando o aviso seguinte é entregue) e quem recebeu cada etapa hoje. */
+  const errosDeEnvio = C.clientesComErro(lista, devs.devolucoes, devs.envios);
+  const doDia = C.contarEnviosDoDia(enviosHoje, hojeISO);
+  const erroAtivo = erroUrl === '1';
+  const envioAtivo = C.ETAPAS_DO_DIA.includes(envioUrl) ? envioUrl : '';
+  const nDevolvidos = [...errosDeEnvio.values()].filter(x => x.tipo === 'devolvido').length;
+  const nFalhas = errosDeEnvio.size - nDevolvidos;
+  const filtrada = (lista || []).filter(c => bateBusca(c) && (!faixaAtiva || naFaixa.has(c.codigo_cliente_omie)) && (!sitMarcadas.length || sitMarcadas.includes(c.situacao))
+    && (!erroAtivo || errosDeEnvio.has(c.codigo_cliente_omie)) && (!envioAtivo || doDia[envioAtivo].clientes.has(c.codigo_cliente_omie)));
   const escolherFaixa = (chave) => setFaixa(chave && chave !== faixaAtiva ? chave : '');
   /* Os cards acompanham a busca e o filtro: somam só os títulos dos clientes que estão na lista */
   /* Classificar pelos títulos das colunas. Sem clique, vale a ordem de antes (maior atraso primeiro). Valor e quantidade seguem a faixa ativa. */
@@ -310,6 +322,36 @@ function BoletosAvisosPage() {
             );
           })}
         </div>
+        <div style={{ padding: '0 16px 12px', display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+          <div role="button" tabIndex={0} aria-pressed={erroAtivo} aria-label="E-mails com erro"
+            title={errosDeEnvio.size ? (erroAtivo ? 'Clique para ver todos de novo' : 'Clique para ver só os clientes com e-mail devolvido ou com falha no envio') : 'Nenhum cliente com e-mail devolvido ou com falha'}
+            onClick={() => { if (errosDeEnvio.size || erroAtivo) setErroUrl(erroAtivo ? '' : '1'); }}
+            onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && (errosDeEnvio.size || erroAtivo)) { e.preventDefault(); setErroUrl(erroAtivo ? '' : '1'); } }}
+            style={{ border: '1px solid var(--border, #e5e7eb)', borderLeft: '4px solid ' + (errosDeEnvio.size ? '#dc2626' : '#9ca3af'), borderRadius: 6, padding: '8px 12px', cursor: errosDeEnvio.size ? 'pointer' : 'default',
+              boxShadow: erroAtivo ? '0 0 0 2px #dc2626' : undefined, background: erroAtivo ? '#dc262612' : undefined }}>
+            <div className="small muted">E-mails com erro (sem entrega)</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: errosDeEnvio.size ? '#dc2626' : '#6b7280' }}>{errosDeEnvio.size ? errosDeEnvio.size + ' cliente(s)' : 'nenhum'}</div>
+            <div className="small muted">{erroAtivo ? 'filtrando — clique para limpar' : errosDeEnvio.size ? nDevolvidos + ' devolvido(s) pelo cliente · ' + nFalhas + ' falha(s) no envio' : 'todos os avisos recentes foram entregues'}</div>
+          </div>
+          <div style={{ border: '1px solid var(--border, #e5e7eb)', borderLeft: '4px solid #2563eb', borderRadius: 6, padding: '8px 12px' }}>
+            <div className="small muted">Avisos enviados hoje (e-mails)</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+              {[['D-5', '5 dias antes'], ['D-1', '1 dia antes'], ['D0', 'No dia'], ['D+1', 'Atraso']].map(([et, rot]) => {
+                const n = doDia[et], ativo = envioAtivo === et;
+                return (
+                  <button key={et} type="button" aria-pressed={ativo} aria-label={rot + ': ' + n.emails + ' e-mail(s) enviado(s) hoje'}
+                    title={n.emails ? n.clientes.size + ' cliente(s) · clique para ver só quem recebeu' + (ativo ? ' (clique de novo para limpar)' : '') : 'Nenhum envio hoje nesta etapa'}
+                    onClick={() => setEnvioUrl(ativo ? '' : et)} disabled={!n.emails && !ativo}
+                    style={{ cursor: n.emails || ativo ? 'pointer' : 'default', textAlign: 'center', minWidth: 78, padding: '4px 8px', borderRadius: 6, border: '1px solid ' + (ativo ? '#2563eb' : 'var(--border, #d1d5db)'),
+                      background: ativo ? '#2563eb18' : 'transparent', boxShadow: ativo ? '0 0 0 2px #2563eb' : undefined, opacity: !n.emails && !ativo ? 0.55 : 1 }}>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: '#1d4ed8' }}>{n.emails}</div>
+                    <div className="small muted">{rot}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
         <div style={{ padding: '0 16px 12px', display: 'flex', gap: 16, flexWrap: 'wrap' }} className="small">
           <span><b>{fin.pctAtrasado.toLocaleString('pt-BR')}%</b> do valor em aberto{comSelecao ? ' dos selecionados' : ''} está atrasado ({C.moedaBR(fin.atrasado.valor)} de {fin.atrasado.clientes} clientes)</span>
           <span className="muted"><b>{semEmailNosCards}</b> sem e-mail</span>
@@ -323,6 +365,12 @@ function BoletosAvisosPage() {
           <div role="status" style={{ margin: '0 16px 12px', padding: '8px 12px', borderRadius: 6, background: 'var(--surface-2, #f3f4f6)', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
             <span>Mostrando só: <b>{C.FAIXAS.find(f => f.chave === faixaAtiva).rotulo}</b> — {filtrada.length} cliente(s). As colunas "Qtd de títulos" e "Valor em aberto" mostram só os títulos desta faixa.</span>
             <a href="#" onClick={e => { e.preventDefault(); escolherFaixa(''); }}>Limpar filtro</a>
+          </div>
+        )}
+        {(erroAtivo || envioAtivo) && (
+          <div role="status" aria-label="Filtro de envios" style={{ margin: '0 16px 12px', padding: '8px 12px', borderRadius: 6, background: 'var(--surface-2, #f3f4f6)', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span>Mostrando só: <b>{erroAtivo ? 'clientes com e-mail devolvido ou com falha no envio' : 'clientes que receberam hoje o aviso de ' + (C.ETAPA_ROTULO[envioAtivo] || envioAtivo).toLowerCase()}</b> — {filtrada.length} cliente(s).{erroAtivo && ' Abra o cliente para ver o endereço e o motivo; corrija o e-mail no Omie e o aviso seguinte tira o cliente daqui.'}</span>
+            <a href="#" onClick={e => { e.preventDefault(); setErroUrl(''); setEnvioUrl(''); }}>Limpar filtro</a>
           </div>
         )}
         {selecionados.size > 0 && (
@@ -352,7 +400,7 @@ function BoletosAvisosPage() {
                       <td style={{ textAlign: 'right' }}>{faixaAtiva ? qtdDe(c) : c.qtd_boletos}{!faixaAtiva && Number(c.qtd_sem_boleto) > 0 && <div className="small muted">{c.qtd_sem_boleto} sem boleto</div>}</td>
                       <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><b>{C.moedaBR(faixaAtiva ? centavosDe(c) / 100 : c.valor_total)}</b>{!faixaAtiva && atrasadoDoCliente.get(c.codigo_cliente_omie) > 0 && <div className="small" style={{ color: '#dc2626' }}>{C.moedaBR(atrasadoDoCliente.get(c.codigo_cliente_omie))} atrasado</div>}</td>
                       <td>{semEmail ? <Badge variant="warning">sem e-mail</Badge> : <span className="small" title={c.emails.join(', ')}>{c.emails[0]}{c.emails.length > 1 ? ` +${c.emails.length - 1}` : ''}</span>}</td>
-                      <td className="small">{c.ultimo_aviso_em ? <>{new Date(c.ultimo_aviso_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · {C.ETAPA_ROTULO[c.ultimo_aviso_etapa] || c.ultimo_aviso_etapa}{c.ultimo_aviso_status === 'erro' ? ' (erro)' : ''}</> : <span className="muted">—</span>}</td>
+                      <td className="small">{c.ultimo_aviso_em ? <>{new Date(c.ultimo_aviso_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · {C.ETAPA_ROTULO[c.ultimo_aviso_etapa] || c.ultimo_aviso_etapa}{c.ultimo_aviso_status === 'erro' ? ' (erro)' : ''}{errosDeEnvio.has(c.codigo_cliente_omie) && <div title={errosDeEnvio.get(c.codigo_cliente_omie).motivo + ((errosDeEnvio.get(c.codigo_cliente_omie).para || []).length ? ' — para: ' + errosDeEnvio.get(c.codigo_cliente_omie).para.join(', ') : '')}><Badge variant="danger">{errosDeEnvio.get(c.codigo_cliente_omie).tipo === 'devolvido' ? 'e-mail devolvido' : 'falha no envio'}</Badge></div>}</> : <span className="muted">—</span>}</td>
                       <td onClick={e => e.stopPropagation()}>
                         {gerir && <Button size="sm" variant="primary" disabled={semEmail || busy === 'env' + id} onClick={() => enviar(c)}>{busy === 'env' + id ? 'Enviando…' : 'Enviar aviso'}</Button>}
                       </td>
