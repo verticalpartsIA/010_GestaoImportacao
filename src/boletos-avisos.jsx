@@ -145,6 +145,7 @@ function BoletosAvisosPage() {
   const [soSem, setSoSem] = React.useState(false);
   const [q, setQ] = window.useQueryParam ? window.useQueryParam('q', '') : React.useState('');
   const [faixaUrl, setFaixa] = window.useQueryParam ? window.useQueryParam('faixa', '') : React.useState('');
+  const [selecionados, setSelecionados] = React.useState(() => new Set());   // clientes marcados na lista (só conta e soma; não vai para a URL)
   const [sitUrl, setSit] = window.useQueryParam ? window.useQueryParam('sit', '') : React.useState('');   // situações marcadas, separadas por vírgula
   const ord = window.useOrdenacao ? window.useOrdenacao() : { th: (k, r) => <th>{r}</th>, aplicar: (l) => l };   // setas ▲▼ nos títulos (18/11/2026, pedido do Gelson)
   const sc = window.useBoletosScores ? window.useBoletosScores() : { map: new Map() };   // classe A–D de cada cliente (boletos-score.jsx)
@@ -229,15 +230,25 @@ function BoletosAvisosPage() {
   /* Classificar pelos títulos das colunas. Sem clique, vale a ordem de antes (maior atraso primeiro). Valor e quantidade seguem a faixa ativa. */
   const RANK_CLASSE = { A: 1, B: 2, C: 3, D: 4, N: 5 };
   const doScore = (c) => { const r = sc.map.get(Number(c.codigo_cliente_omie)); return r && r.cls ? r.cls.classe : null; };
+  const qtdDe = (c) => (faixaAtiva ? (naFaixa.get(c.codigo_cliente_omie) || { qtd: 0 }).qtd : Number(c.qtd_boletos));
+  const centavosDe = (c) => (faixaAtiva ? (naFaixa.get(c.codigo_cliente_omie) || { centavos: 0 }).centavos : Math.round(Number(c.valor_total || 0) * 100));
   const linhasOrdenadas = ord.aplicar(filtrada, {
     situacao: (c) => (c.situacao === 'atrasado' ? Number(c.dias_atraso) || 0 : c.situacao === 'vence_hoje' ? 0 : -1),
     razao: (c) => c.razao_social,
     score: (c) => { const k = doScore(c); return k ? (RANK_CLASSE[k] || 9) : null; },
-    qtd: (c) => (faixaAtiva ? (naFaixa.get(c.codigo_cliente_omie) || { qtd: 0 }).qtd : Number(c.qtd_boletos)),
-    valor: (c) => (faixaAtiva ? (naFaixa.get(c.codigo_cliente_omie) || { centavos: 0 }).centavos / 100 : Number(c.valor_total)),
+    qtd: (c) => qtdDe(c),
+    valor: (c) => centavosDe(c) / 100,
     email: (c) => (c.emails || [])[0] || '',
     aviso: (c) => (c.ultimo_aviso_em ? Date.parse(c.ultimo_aviso_em) : null),
   });
+  /* Marcar: o resumo conta só quem está visível na lista atual; marcado escondido por filtro continua marcado e aparece como "fora do filtro". */
+  const visiveis = filtrada.filter(c => selecionados.has(c.codigo_cliente_omie));
+  const resumoSel = C.resumoSelecao(visiveis.map(c => ({ qtd: qtdDe(c), centavos: centavosDe(c) })));
+  const foraDoFiltro = selecionados.size - visiveis.length;
+  const todosMarcados = linhasOrdenadas.length > 0 && linhasOrdenadas.every(c => selecionados.has(c.codigo_cliente_omie));
+  const algunsMarcados = linhasOrdenadas.some(c => selecionados.has(c.codigo_cliente_omie));
+  const marcar = (cod, sim) => setSelecionados(s => { const n = new Set(s); if (sim) n.add(cod); else n.delete(cod); return n; });
+  const marcarTodos = (sim) => setSelecionados(s => { const n = new Set(s); linhasOrdenadas.forEach(c => (sim ? n.add(c.codigo_cliente_omie) : n.delete(c.codigo_cliente_omie))); return n; });
   const filtrando = !!q || soSem;
   const codigosFiltrados = new Set((lista || []).filter(bateBusca).map(c => c.codigo_cliente_omie));
   const fin = C.resumoFinanceiro(filtrando ? abertos.filter(b => codigosFiltrados.has(b.codigo_cliente_omie)) : abertos, C.hojeBrasil(), feriados);
@@ -309,31 +320,39 @@ function BoletosAvisosPage() {
             <a href="#" onClick={e => { e.preventDefault(); escolherFaixa(''); }}>Limpar filtro</a>
           </div>
         )}
+        {selecionados.size > 0 && (
+          <div role="status" aria-label="Clientes selecionados" style={{ margin: '0 16px 12px', padding: '8px 12px', borderRadius: 6, background: 'var(--surface-2, #f3f4f6)', display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span><b>{resumoSel.clientes}</b> cliente(s) selecionado(s) · <b>{resumoSel.titulos}</b> título(s) · <b>{C.moedaBR(resumoSel.valor)}</b>{foraDoFiltro > 0 && <span className="muted"> · +{foraDoFiltro} marcado(s) fora do filtro, não contado(s)</span>}</span>
+            <a href="#" onClick={e => { e.preventDefault(); setSelecionados(new Set()); }}>Limpar seleção</a>
+          </div>
+        )}
         <div className="table-wrap">
           <table className="t pcp-grid">
-            <thead><tr><th style={{ width: 28 }}></th>{ord.th('situacao', <>Situação<BavFiltroSituacao marcadas={sitMarcadas} onChange={(v) => setSit(v.join(','))}/></>)}{ord.th('razao', 'Razão Social')}{ord.th('score', 'Score')}{ord.th('qtd', 'Qtd de títulos', { style: { textAlign: 'right' } })}{ord.th('valor', 'Valor em aberto', { style: { textAlign: 'right' } })}{ord.th('email', 'E-mail')}{ord.th('aviso', 'Último aviso')}<th></th></tr></thead>
+            <thead><tr><th style={{ width: 32 }}><input type="checkbox" aria-label="Selecionar todos os clientes da lista" title="Marcar ou desmarcar todos os clientes que estão na lista" disabled={!linhasOrdenadas.length}
+              checked={todosMarcados} ref={el => { if (el) el.indeterminate = algunsMarcados && !todosMarcados; }} onChange={e => marcarTodos(e.target.checked)}/></th><th style={{ width: 28 }}></th>{ord.th('situacao', <>Situação<BavFiltroSituacao marcadas={sitMarcadas} onChange={(v) => setSit(v.join(','))}/></>)}{ord.th('razao', 'Razão Social')}{ord.th('score', 'Score')}{ord.th('qtd', 'Qtd de títulos', { style: { textAlign: 'right' } })}{ord.th('valor', 'Valor em aberto', { style: { textAlign: 'right' } })}{ord.th('email', 'E-mail')}{ord.th('aviso', 'Último aviso')}<th></th></tr></thead>
             <tbody>
-              {lista === null && <tr><td colSpan={9}>Carregando…</td></tr>}
-              {lista && !filtrada.length && <tr><td colSpan={9} className="muted">{(lista || []).length ? 'Nenhum cliente encontrado.' : 'Nenhum boleto em aberto lido do Omie ainda. Clique em "Atualizar do Omie".'}</td></tr>}
+              {lista === null && <tr><td colSpan={10}>Carregando…</td></tr>}
+              {lista && !filtrada.length && <tr><td colSpan={10} className="muted">{(lista || []).length ? 'Nenhum cliente encontrado.' : 'Nenhum boleto em aberto lido do Omie ainda. Clique em "Atualizar do Omie".'}</td></tr>}
               {linhasOrdenadas.map(c => {
                 const id = String(c.codigo_cliente_omie), isOpen = aberto === id;
                 const semEmail = !(c.emails || []).length;
                 return (
                   <React.Fragment key={id}>
                     <tr onClick={() => setAberto(isOpen ? null : id)} style={{ cursor: 'pointer', background: isOpen ? 'var(--surface-2, #fafafa)' : undefined }}>
+                      <td onClick={e => e.stopPropagation()}><input type="checkbox" aria-label={'Selecionar ' + c.razao_social} checked={selecionados.has(c.codigo_cliente_omie)} onChange={e => marcar(c.codigo_cliente_omie, e.target.checked)}/></td>
                       <td>{isOpen ? '▾' : '▸'}</td>
                       <td><BavSemaforo situacao={c.situacao} dias={c.dias_atraso}/></td>
                       <td><b>{c.razao_social}</b>{c.cnpj ? <span className="muted small"> · {c.cnpj}</span> : null}</td>
                       <td onClick={e => { e.stopPropagation(); if (window.VpRouter) window.VpRouter.navigate('boletos-avisos', 'score', id); }} style={{ cursor: 'pointer' }}>{window.BsChip ? <window.BsChip r={sc.map.get(Number(c.codigo_cliente_omie)) ? sc.map.get(Number(c.codigo_cliente_omie)).cls : (sc.cfg ? window.BoletosScoreCalc.classificar({}, sc.cfg) : null)}/> : null}</td>
-                      <td style={{ textAlign: 'right' }}>{faixaAtiva ? (naFaixa.get(c.codigo_cliente_omie) || { qtd: 0 }).qtd : c.qtd_boletos}{!faixaAtiva && Number(c.qtd_sem_boleto) > 0 && <div className="small muted">{c.qtd_sem_boleto} sem boleto</div>}</td>
-                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><b>{C.moedaBR(faixaAtiva ? (naFaixa.get(c.codigo_cliente_omie) || { centavos: 0 }).centavos / 100 : c.valor_total)}</b>{!faixaAtiva && atrasadoDoCliente.get(c.codigo_cliente_omie) > 0 && <div className="small" style={{ color: '#dc2626' }}>{C.moedaBR(atrasadoDoCliente.get(c.codigo_cliente_omie))} atrasado</div>}</td>
+                      <td style={{ textAlign: 'right' }}>{faixaAtiva ? qtdDe(c) : c.qtd_boletos}{!faixaAtiva && Number(c.qtd_sem_boleto) > 0 && <div className="small muted">{c.qtd_sem_boleto} sem boleto</div>}</td>
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><b>{C.moedaBR(faixaAtiva ? centavosDe(c) / 100 : c.valor_total)}</b>{!faixaAtiva && atrasadoDoCliente.get(c.codigo_cliente_omie) > 0 && <div className="small" style={{ color: '#dc2626' }}>{C.moedaBR(atrasadoDoCliente.get(c.codigo_cliente_omie))} atrasado</div>}</td>
                       <td>{semEmail ? <Badge variant="warning">sem e-mail</Badge> : <span className="small" title={c.emails.join(', ')}>{c.emails[0]}{c.emails.length > 1 ? ` +${c.emails.length - 1}` : ''}</span>}</td>
                       <td className="small">{c.ultimo_aviso_em ? <>{new Date(c.ultimo_aviso_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · {C.ETAPA_ROTULO[c.ultimo_aviso_etapa] || c.ultimo_aviso_etapa}{c.ultimo_aviso_status === 'erro' ? ' (erro)' : ''}</> : <span className="muted">—</span>}</td>
                       <td onClick={e => e.stopPropagation()}>
                         {gerir && <Button size="sm" variant="primary" disabled={semEmail || busy === 'env' + id} onClick={() => enviar(c)}>{busy === 'env' + id ? 'Enviando…' : 'Enviar aviso'}</Button>}
                       </td>
                     </tr>
-                    {isOpen && <tr><td colSpan={9} style={{ padding: 0 }}><BavDetalhe cliente={c} faixa={faixaAtiva}/></td></tr>}
+                    {isOpen && <tr><td colSpan={10} style={{ padding: 0 }}><BavDetalhe cliente={c} faixa={faixaAtiva}/></td></tr>}
                   </React.Fragment>
                 );
               })}

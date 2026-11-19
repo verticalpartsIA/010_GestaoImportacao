@@ -170,6 +170,43 @@ test('lista: caixas na coluna Situação escolhem quais situações aparecem; na
   expect(erros).toEqual([]);
 });
 
+test('lista: caixa em cada linha marca e conta (clientes, títulos, valor); marcar não abre o detalhe; "marcar todos" tem estado intermediário', async ({ page }) => {
+  const erros = coletarErros(page);
+  await preparar(page, { gerir: false });
+  await page.goto('/adm-financeiro/boletos-avisos');
+  const linhas = page.locator('table.pcp-grid tbody > tr').filter({ hasText: /CLIENTE (BOM|RUIM)/ });
+  await expect(linhas).toHaveCount(2, { timeout: 45_000 });
+  const resumo = page.getByRole('status', { name: 'Clientes selecionados' });
+  const todos = page.getByRole('checkbox', { name: 'Selecionar todos os clientes da lista' });
+  await expect(resumo).toHaveCount(0);                                              // nada marcado: sem barra
+
+  await page.getByRole('checkbox', { name: 'Selecionar CLIENTE RUIM SA' }).check();
+  await expect(resumo).toContainText('1 cliente(s) selecionado(s)');
+  await expect(resumo).toContainText('2 título(s)');
+  await expect(resumo).toContainText('8.000,00');
+  await expect(page.getByText('Boletos em aberto deste cliente').or(page.locator('table.pcp-grid tbody tr td[colspan]'))).toHaveCount(0);   // marcar não abriu o detalhe
+  expect(await todos.evaluate(el => el.indeterminate)).toBe(true);                  // só uma de duas: estado intermediário
+
+  await todos.check();
+  await expect(resumo).toContainText('2 cliente(s) selecionado(s)');
+  await expect(resumo).toContainText('8.500,00');
+  expect(await todos.evaluate(el => el.indeterminate)).toBe(false);
+  await expect(page.getByRole('checkbox', { name: 'Selecionar CLIENTE BOM LTDA' })).toBeChecked();
+
+  // filtrar por situação: o marcado que sai da lista não é contado, mas é avisado
+  await page.getByRole('button', { name: 'Filtrar por situação' }).click();
+  await page.getByRole('checkbox', { name: 'Atrasado' }).check();
+  await expect(linhas).toHaveCount(1);
+  await expect(resumo).toContainText('1 cliente(s) selecionado(s)');
+  await expect(resumo).toContainText('8.000,00');
+  await expect(resumo).toContainText('+1 marcado(s) fora do filtro');
+
+  await page.getByRole('link', { name: 'Limpar seleção' }).click();
+  await expect(resumo).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: 'Selecionar CLIENTE RUIM SA' })).not.toBeChecked();
+  expect(erros).toEqual([]);
+});
+
 test('consulta: busca o cliente e mostra classe, conselho e títulos; cliente sem histórico aparece como novo', async ({ page }) => {
   const erros = coletarErros(page);
   await preparar(page, { gerir: false });
