@@ -189,8 +189,12 @@ function Portal() {
     } catch (e) { setErro(T('Could not create the Excel file. Use the CSV instead.')); }
     setGerando(false);
   };
+  /* CSV 100% em inglês (pedido do Gelson, 19/11/2026): a descrição é o texto técnico em inglês da VerticalParts (obs_vp); só cai para a descrição do cadastro (português) se o item ainda não tem texto em inglês. Unidades em inglês. */
+  const UNID_EN = { PC: 'pcs', PCS: 'pcs', UN: 'unit', UND: 'unit', UNID: 'unit', PAR: 'pair', PR: 'pair', M: 'm', MT: 'm', KIT: 'kit', JG: 'set', CJ: 'set' };
+  const unidadeEN = (u) => { const k = String(u || '').trim().toUpperCase(); return UNID_EN[k] || String(u || '').trim(); };
+  const descricaoEN = (i) => String(i.obs_vp || '').trim() || i.descricao || '';
   const baixarPlanilha = () => {
-    const linhas = itens.map((i) => { const x = form[i.id] || inicial(i, null); return [i.codigo, i.descricao || '', i.quantidade, i.unidade || '', i.exige_certificado ? 'yes' : 'no', x.f[0].preco, x.lt, x.obs]; });
+    const linhas = itens.map((i) => { const x = form[i.id] || inicial(i, null); return [i.codigo, descricaoEN(i), i.quantidade, unidadeEN(i.unidade), i.exige_certificado ? 'yes' : 'no', x.f[0].preco, x.lt, x.obs]; });
     const csv = '\ufeff' + [CSV_COLS].concat(linhas).map((r) => r.map(csvCel).join(',')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = lote.numero + '-quotation.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
