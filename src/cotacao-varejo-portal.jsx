@@ -176,7 +176,7 @@ function Portal() {
       for (let k = 0; k < urls.length; k += 6) await Promise.all(urls.slice(k, k + 6).map(async (u) => { const im = await baixarImagem(u); if (im) cache[u] = { id: wb.addImage({ buffer: im.buffer, extension: im.extension }), w: im.w, h: im.h }; }));
       itens.forEach((i, idx) => {
         const x = form[i.id] || inicial(i, null); const u = fotoDe(i);
-        const row = ws.addRow({ photo: '', ref: i.codigo, description: i.descricao || '', qty_needed: i.quantidade, unit: i.unidade || '', certificate_required: i.exige_certificado ? 'yes' : 'no', unit_price: x.f[0].preco === '' ? null : Number(String(x.f[0].preco).replace(',', '.')) || x.f[0].preco, lead_time_days: x.lt === '' ? null : Number(x.lt) || x.lt, remarks: x.obs, photo_url: u });
+        const row = ws.addRow({ photo: '', ref: i.codigo, description: descricaoEN(i), qty_needed: i.quantidade, unit: unidadeEN(i.unidade), certificate_required: i.exige_certificado ? 'yes' : 'no', unit_price: x.f[0].preco === '' ? null : Number(String(x.f[0].preco).replace(',', '.')) || x.f[0].preco, lead_time_days: x.lt === '' ? null : Number(x.lt) || x.lt, remarks: x.obs, photo_url: u });
         row.height = 80; row.alignment = { vertical: 'middle', wrapText: true };
         if (u && cache[u]) {
           /* Foto centralizada na célula A, tamanho fixo e proporção original (caixa 135 × 97 px dentro de 145 × 107). Posição em EMU exato (o ExcelJS erra posição fracionada). */
