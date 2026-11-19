@@ -300,6 +300,66 @@ function Portal() {
           </button>
         </div>
       )}
+      <Mensagens token={token} encerrado={encerrado} />
+    </div>
+  );
+}
+
+/* Mensagem + arquivos do fornecedor para a VerticalParts (cai nas Tratativas da RFQ Importação). Só RPC com o token. */
+const MSG_MAX_MB = 25;
+function Mensagens({ token, encerrado }) {
+  const [lista, setLista] = useState([]);
+  const [texto, setTexto] = useState('');
+  const [anexos, setAnexos] = useState([]);
+  const [subindo, setSubindo] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const carregar = () => sbc().rpc('public_ivc_tratativas_listar', { p_token: token }).then(({ data }) => setLista(Array.isArray(data) ? data : []));
+  useEffect(() => { carregar(); }, []);
+  const addArquivos = async (files) => {
+    setMsg(null); setSubindo(true);
+    try {
+      for (const f of Array.from(files || [])) {
+        if (anexos.length >= 5) { setMsg({ erro: T('Up to 5 files per message.') }); break; }
+        if (f.size > MSG_MAX_MB * 1024 * 1024) { setMsg({ erro: T('"' + f.name + '" is larger than ' + MSG_MAX_MB + ' MB.') }); continue; }
+        const path = 'cotacao-varejo-msg/' + token.slice(0, 12) + '/' + Date.now() + '_' + (f.name || 'file').replace(/[^\w.\-]/g, '_');
+        const up = await sbc().storage.from('engenharia').upload(path, f, { upsert: false, contentType: f.type || 'application/octet-stream' });
+        if (up.error) throw up.error;
+        setAnexos((a) => a.concat([{ nome: (f.name || 'file').slice(0, 120), url: sbc().storage.from('engenharia').getPublicUrl(path).data.publicUrl, tipo: f.type || '', tamanho: f.size }]));
+      }
+    } catch (e) { setMsg({ erro: T('Could not upload the file. Try again.') }); }
+    setSubindo(false);
+  };
+  const enviarMsg = async () => {
+    setEnviando(true); setMsg(null);
+    const { data, error } = await sbc().rpc('public_ivc_tratativa_enviar', { p_token: token, p_mensagem: texto, p_anexos: anexos });
+    setEnviando(false);
+    if (error || !data || !data.ok) { setMsg({ erro: data && data.erro === 'cotacao_encerrada' ? T('This quotation is closed.') : T('Could not send. Try again.') }); return; }
+    setTexto(''); setAnexos([]); setMsg({ ok: T('Message sent to VerticalParts.') }); carregar();
+  };
+  const dt = (v) => { try { return new Date(v).toLocaleString('en-GB'); } catch (e) { return ''; } };
+  return (
+    <div style={{ marginTop: 24, borderTop: '1px solid #e5e5df', paddingTop: 16 }}>
+      <h3 style={{ margin: '0 0 6px', fontSize: 16 }}>{T('Messages and files for VerticalParts')}</h3>
+      <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>{T('Send us a question, a comment or documents (PDF, images, Excel, Word — up to 25 MB each).')}</div>
+      {lista.map((m, i) => (
+        <div key={i} style={{ border: '1px solid #e5e5df', borderRadius: 8, padding: '8px 10px', marginBottom: 6, background: m.origem === 'fornecedor' ? '#fffbe6' : '#fff' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}><b>{m.autor}</b><span style={{ color: '#888' }}>{dt(m.em)}</span></div>
+          {m.mensagem && <div style={{ fontSize: 13, whiteSpace: 'pre-wrap', marginTop: 4 }}>{m.mensagem}</div>}
+          {(m.anexos || []).length > 0 && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>{m.anexos.map((a, k) => <a key={k} href={a.url} target="_blank" rel="noopener noreferrer" style={{ border: '1px solid #ddd', padding: '3px 8px', fontSize: 12, borderRadius: 6 }}>{a.nome}</a>)}</div>}
+        </div>
+      ))}
+      {!encerrado && (
+        <div>
+          <textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={3} maxLength={4000} placeholder={T('Write your message to VerticalParts…')} style={{ width: '100%', boxSizing: 'border-box', padding: 8, border: '1px solid #ccc', borderRadius: 6, fontFamily: 'inherit', fontSize: 13 }} />
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', margin: '6px 0' }}>
+            {anexos.map((a, i) => <span key={i} style={{ border: '1px solid #ddd', padding: '3px 8px', fontSize: 12, borderRadius: 6 }}>{a.nome} <button type="button" onClick={() => setAnexos((x) => x.filter((_, j) => j !== i))} style={{ border: 0, background: 'none', cursor: 'pointer' }}>×</button></span>)}
+            <label style={{ border: '1px solid #ccc', padding: '5px 10px', fontSize: 12, borderRadius: 6, cursor: 'pointer', background: '#fff' }}>{subindo ? '…' : T('Attach file')}<input type="file" multiple style={{ display: 'none' }} disabled={subindo} onChange={(e) => { addArquivos(e.target.files); e.target.value = ''; }} /></label>
+          </div>
+          {msg && <div style={{ fontSize: 12, color: msg.erro ? '#b00' : '#1a7f37', marginBottom: 6 }}>{msg.erro || msg.ok}</div>}
+          <button type="button" onClick={enviarMsg} disabled={enviando || subindo || (!texto.trim() && !anexos.length)} style={{ background: '#f6c000', border: 0, padding: '8px 18px', fontWeight: 700, borderRadius: 6, cursor: 'pointer', opacity: enviando || subindo || (!texto.trim() && !anexos.length) ? .5 : 1 }}>{enviando ? '…' : T('Send message')}</button>
+        </div>
+      )}
     </div>
   );
 }
