@@ -44,6 +44,7 @@ function Portal() {
   const [subindo, setSubindo] = useState(null);
   const [busca, setBusca] = useState('');
   const [aviso, setAviso] = useState(null);
+  const [gerando, setGerando] = useState(false);
 
   useEffect(() => {
     sbc().rpc('public_ivc_obter', { p_token: token }).then(({ data, error }) => {
@@ -145,6 +146,38 @@ function Portal() {
   /* Planilha (CSV abre no Excel): baixa com os nossos itens, o fornecedor preenche e importa de volta — sem digitar item por item. */
   const CSV_COLS = ['ref', 'description', 'qty_needed', 'unit', 'certificate_required', 'unit_price', 'lead_time_days', 'remarks'];
   const csvCel = (v) => { const s = v == null ? '' : String(v); return /[",\n\r;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  /* Excel (.xlsx) com a foto de cada item embutida: o trader pode encaminhar o arquivo à fábrica sem perder a referência visual. ExcelJS 4.4.0 (cdnjs), carregado só quando o fornecedor pede o Excel. */
+  const carregarExcelJS = () => new Promise((ok, falha) => {
+    if (window.ExcelJS) return ok(window.ExcelJS);
+    const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+    sc.onload = () => (window.ExcelJS ? ok(window.ExcelJS) : falha(new Error('exceljs'))); sc.onerror = () => falha(new Error('exceljs')); document.head.appendChild(sc);
+  });
+  const baixarImagem = async (url) => {
+    try { const r = await fetch(url); if (!r.ok) return null; const blob = await r.blob(); const t = (blob.type || '').toLowerCase();
+      const ext = /png/.test(t) ? 'png' : /jpe?g/.test(t) ? 'jpeg' : null; if (!ext) return null; return { buffer: await blob.arrayBuffer(), extension: ext }; } catch (e) { return null; }
+  };
+  const baixarExcel = async () => {
+    setErro(null); setAviso(null); setGerando(true);
+    try {
+      const EJ = await carregarExcelJS();
+      const wb = new EJ.Workbook(); const ws = wb.addWorksheet('Quotation');
+      const cols = [['photo', 14], ['ref', 18], ['description', 48], ['qty_needed', 11], ['unit', 8], ['certificate_required', 12], ['unit_price', 12], ['lead_time_days', 12], ['remarks', 30], ['photo_url', 30]];
+      ws.columns = cols.map(([header, width]) => ({ header, key: header, width }));
+      ws.getRow(1).font = { bold: true }; ws.views = [{ state: 'frozen', ySplit: 1 }];
+      const cache = {}; const fotoDe = (i) => [i.foto_url, i.foto_url2].concat(i.fotos_manuais || []).filter(Boolean)[0] || '';
+      const urls = Array.from(new Set(itens.map(fotoDe).filter(Boolean)));
+      for (let k = 0; k < urls.length; k += 6) await Promise.all(urls.slice(k, k + 6).map(async (u) => { const im = await baixarImagem(u); if (im) cache[u] = wb.addImage(im); }));
+      itens.forEach((i, idx) => {
+        const x = form[i.id] || inicial(i, null); const u = fotoDe(i);
+        const row = ws.addRow({ photo: '', ref: i.codigo, description: i.descricao || '', qty_needed: i.quantidade, unit: i.unidade || '', certificate_required: i.exige_certificado ? 'yes' : 'no', unit_price: x.f[0].preco === '' ? null : Number(String(x.f[0].preco).replace(',', '.')) || x.f[0].preco, lead_time_days: x.lt === '' ? null : Number(x.lt) || x.lt, remarks: x.obs, photo_url: u });
+        row.height = 75; row.alignment = { vertical: 'middle', wrapText: true };
+        if (u && cache[u] !== undefined) ws.addImage(cache[u], { tl: { col: 0.1, row: idx + 1.1 }, ext: { width: 90, height: 90 } });
+      });
+      const buf = await wb.xlsx.writeBuffer();
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = lote.numero + '-quotation.xlsx'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    } catch (e) { setErro(T('Could not create the Excel file. Use the CSV instead.')); }
+    setGerando(false);
+  };
   const baixarPlanilha = () => {
     const linhas = itens.map((i) => { const x = form[i.id] || inicial(i, null); return [i.codigo, i.descricao || '', i.quantidade, i.unidade || '', i.exige_certificado ? 'yes' : 'no', x.f[0].preco, x.lt, x.obs]; });
     const csv = '\ufeff' + [CSV_COLS].concat(linhas).map((r) => r.map(csvCel).join(',')).join('\r\n');
@@ -167,7 +200,13 @@ function Portal() {
   const importarPlanilha = async (file) => {
     if (!file) return;
     try {
-      const rows = lerCSV((await file.text()).replace(/^\ufeff/, ''));
+      let rows;
+      if (/\.xlsx$/i.test(file.name || '')) {
+        const EJ = await carregarExcelJS(); const wb = new EJ.Workbook(); await wb.xlsx.load(await file.arrayBuffer());
+        const ws = wb.worksheets[0]; rows = [];
+        const txt = (v) => (v == null ? '' : typeof v === 'object' ? (v.result != null ? String(v.result) : v.text != null ? String(v.text) : (v.richText || []).map((t) => t.text).join('')) : String(v));
+        ws.eachRow({ includeEmpty: false }, (row) => { const arr = []; for (let c = 1; c <= row.cellCount; c++) arr.push(txt(row.getCell(c).value)); rows.push(arr); });
+      } else rows = lerCSV((await file.text()).replace(/^\ufeff/, ''));
       const cab = (rows[0] || []).map((h) => String(h).trim().toLowerCase()); const col = (n) => cab.indexOf(n);
       if (col('ref') < 0) throw new Error('x');
       let n = 0; const novo = { ...form };
@@ -180,7 +219,7 @@ function Portal() {
       });
       setForm(novo); setErro(null);
       setAviso(T(n + ' item(s) loaded from the file. Review and click Send.'));
-    } catch (e) { setErro(T('Could not read the file. Use the template downloaded here (CSV).')); }
+    } catch (e) { setErro(T('Could not read the file. Use the template downloaded here (Excel or CSV).')); }
   };
 
   const th = { textAlign: 'left', padding: '8px 6px', fontSize: 12, borderBottom: '2px solid #222', background: '#ece9e0', position: 'sticky', top: 0 };
@@ -206,8 +245,9 @@ function Portal() {
         {!encerrado && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
             <input style={{ ...inp, width: 260 }} placeholder={T('Search item by REF. or description…')} value={busca} onChange={(e) => setBusca(e.target.value)} />
+            <button type="button" onClick={baixarExcel} disabled={gerando} title={T('Excel file with the product photos')} style={{ ...inp, width: 'auto', cursor: 'pointer', background: '#fff' }}>{gerando ? T('Preparing Excel…') : T('Download Excel (with photos)')}</button>
             <button type="button" onClick={baixarPlanilha} style={{ ...inp, width: 'auto', cursor: 'pointer', background: '#fff' }}>{T('Download spreadsheet (CSV)')}</button>
-            <label style={{ ...inp, width: 'auto', cursor: 'pointer', background: '#fff' }}>{T('Upload filled spreadsheet')}<input type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={(e) => { importarPlanilha(e.target.files && e.target.files[0]); e.target.value = ''; }} /></label>
+            <label style={{ ...inp, width: 'auto', cursor: 'pointer', background: '#fff' }}>{T('Upload filled spreadsheet')}<input type="file" accept=".xlsx,.csv,text/csv" style={{ display: 'none' }} onChange={(e) => { importarPlanilha(e.target.files && e.target.files[0]); e.target.value = ''; }} /></label>
             <span style={{ fontSize: 11, color: '#666' }}>{T('Your typing is kept on this computer until you send.')}</span>
           </div>
         )}
