@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/07_suprimentos_importacao.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `fe50b5b`)
-- **Palavras:** 12471 · **blocos:** 281 · **seções com selo próprio:** 74 de 145
-- **Origem do selo dos blocos:** próprio 93 · da seção 66 · da seção-pai 0 · do cabeçalho 97 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
-- **Selo efetivo dos blocos:** Conferido 165 · Herdado 60 · Não verificado 31
+- **Palavras:** 12628 · **blocos:** 282 · **seções com selo próprio:** 74 de 145
+- **Origem do selo dos blocos:** próprio 94 · da seção 66 · da seção-pai 0 · do cabeçalho 97 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
+- **Selo efetivo dos blocos:** Conferido 165 · Herdado 60 · Não verificado 32
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -133,7 +133,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 7.10.6 Comportamento | `docs/modulos/07_suprimentos_importacao.md#7106-comportamento` | 3 | Não verificado (misto (vale o mais fraco)) | 10 | b4 s6 |
 | 7.10.7 Dados | `docs/modulos/07_suprimentos_importacao.md#7107-dados` | 3 | — | 1 | c1 |
 | 7.10.8 Regras e armadilhas | `docs/modulos/07_suprimentos_importacao.md#7108-regras-e-armadilhas` | 3 | — | 4 | c4 |
-| 7.10.9 Testes | `docs/modulos/07_suprimentos_importacao.md#7109-testes` | 3 | Não verificado (misto (vale o mais fraco)) | 3 | b2 s1 |
+| 7.10.9 Testes | `docs/modulos/07_suprimentos_importacao.md#7109-testes` | 3 | Não verificado (misto (vale o mais fraco)) | 4 | b3 s1 |
 | 7.10.10 Pendências e decisões | `docs/modulos/07_suprimentos_importacao.md#71010-pendências-e-decisões` | 3 | Herdado (uniforme) | 1 | b1 |
 | 7.10.11 Histórico | `docs/modulos/07_suprimentos_importacao.md#71011-histórico` | 3 | — | 1 | c1 |
 | 7.11 Pedidos | `docs/modulos/07_suprimentos_importacao.md#711-pedidos` | 2 | — | 0 | — |

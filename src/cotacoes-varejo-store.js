@@ -138,6 +138,19 @@
     if (window.VPLog) window.VPLog.registrar({ modulo: 'Cotações de Varejo', acao: 'Devolveu produto à fila de Solicitações', alvo: data && data.lote, alvo_id: itemId, detalhe: { devolvidos: data && data.devolvidos } });
     return data;
   }
+  /* Ids dos itens do lote que o usuário pode editar (comprador: todos; vendedor: só os que ele pediu). Falha = nenhum (a tela fica em leitura). */
+  async function itensEditaveis(loteId) {
+    const c = sb(); if (!c) return [];
+    try { const { data, error } = await c.rpc('iv_cotacao_itens_editaveis', { p_lote_id: loteId }); return error ? [] : (data || []); } catch (e) { return []; }
+  }
+  /* Vendedor (ou comprador) altera a quantidade pedida de um item; a regra de quem pode mora no banco. */
+  async function ajustarQuantidade(itemId, quantidade) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.rpc('iv_cotacao_ajustar_quantidade', { p_item_id: itemId, p_quantidade: Number(quantidade) });
+    if (error) throw new Error(window.SolicitacoesCompraCalc ? window.SolicitacoesCompraCalc.mensagemErro(error) : error.message);
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Cotações de Varejo', acao: 'Alterou a quantidade pedida do produto', alvo: data && data.lote, alvo_id: itemId, detalhe: { codigo: data && data.codigo, de: data && data.de, para: data && data.para } });
+    return data;
+  }
   async function renomearLote(id, titulo) {
     const t = String(titulo || '').trim().slice(0, 80);
     await atualizarLote(id, { titulo: t || null });
@@ -572,7 +585,7 @@
 
   window.CotacoesVarejoStore = {
     MAX_FOTOS_MANUAIS, adicionarFotoManual, removerFotoManual, convitesEmCotacao, registrarRespostaPorEmail,
-    portalUrl, codigosEmCotacao, listarLotes, obterLote, criarLote, adicionarItens, atualizarLote, atualizarItem, removerItem, moverItem, devolverItem, renomearLote, cancelarLote,
+    portalUrl, codigosEmCotacao, listarLotes, obterLote, criarLote, adicionarItens, atualizarLote, atualizarItem, removerItem, moverItem, devolverItem, itensEditaveis, ajustarQuantidade, renomearLote, cancelarLote,
     obterDescricao, descricoesGuardadas, salvarDescricao, montarObsVP, aplicarDescricoesGuardadas, sugerirDescricaoIA, NPS_CRITERIOS, avaliarFornecedor, npsDosFornecedores, avaliacoesDoFornecedor, registrarCambioDia, fixarCambioCotacao, fornecedoresCadastrados, convidarFornecedor, removerConvite, substituirConvite, atualizarConvite, marcarEnviado, novaRodada,
     textoConvite, enviarPorEmail, whatsAppHref, salvarDecisoes, aprovarLote, fotosDoBanco, enviarFoto, resolverFotos,
   };

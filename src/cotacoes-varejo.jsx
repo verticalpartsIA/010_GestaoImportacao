@@ -465,8 +465,10 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   React.useEffect(() => { S.fornecedoresCadastrados().then(setForn).catch(() => setForn([])); }, []);
 
   const [origens, setOrigens] = React.useState({});   // item do lote → pedidos de vendedores que o originaram (Solicitações de Compra)
+  const [meusItens, setMeusItens] = React.useState(() => new Set());   // itens cuja quantidade o usuário pode editar (vendedor: só os que pediu; a regra é do banco)
   const carregar = React.useCallback(async () => {
     try {
+      S.itensEditaveis(loteId).then((ids) => setMeusItens(new Set(ids))).catch(() => setMeusItens(new Set()));
       const d = await S.obterLote(loteId);
       if (d && window.SolicitacoesCompraStore) window.SolicitacoesCompraStore.origemDosItens(d.itens).then(setOrigens).catch(() => {});
       if (!d) { setErro('Lote não encontrado.'); return; }
@@ -625,6 +627,13 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const tirarFotoBanco = async (item, campo) => {
     if (!window.confirm('Remover esta foto do produto ' + item.codigo + ' neste lote?')) return;
     try { await S.atualizarItem(item.id, { [campo]: '' }); await carregar(); } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
+  };
+  // Vendedor (sem alçada de comprador) altera só a quantidade dos itens que ele pediu; o banco confere de novo.
+  const ajustarMinhaQtd = async (item, valor) => {
+    try {
+      const r = await S.ajustarQuantidade(item.id, valor); await carregar();
+      window.toast?.('Quantidade de ' + item.codigo + ' salva.' + (r && r.lote_status === 'em_cotacao' ? ' O lote já está em cotação: o comprador foi avisado.' : ''), r && r.lote_status === 'em_cotacao' ? 'warning' : 'success');
+    } catch (e) { window.toast?.(String(e.message || e), 'error'); await carregar(); }
   };
   const editarItem = async (item, campo, valor) => { try { await S.atualizarItem(item.id, { [campo]: valor }); await carregar(); if (campo === 'quantidade_pedida') window.toast?.('Quantidade de ' + item.codigo + ' salva.', 'success'); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
   // Lote em rascunho: o produto que veio de um pedido de vendedor VOLTA à fila de Solicitações (não fica "alocado" para sempre).
@@ -836,8 +845,8 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                         : (it.obs_vp ? <div className="small muted" style={{ whiteSpace: 'pre-wrap' }}>{it.obs_vp}</div> : null)}
                     </td>
                     <td className="text-right">
-                      {editavel
-                        ? <input className="input text-right" style={{ width: 80, ...(cvNum(it.quantidade_pedida) > 0 ? {} : { borderColor: '#d97706', background: '#fffbeb' }) }} placeholder="a definir" title={cvNum(it.quantidade_pedida) > 0 ? '' : 'Sem sugestão de compra: informe a quantidade que queremos cotar'} type="number" min="1" step="any" defaultValue={cvNum(it.quantidade_pedida) > 0 ? it.quantidade_pedida : ''} onBlur={(e) => { const v = cvNum(e.target.value); if (v > 0 && v !== cvNum(it.quantidade_pedida)) editarItem(it, 'quantidade_pedida', v); }} />
+                      {(editavel || (aberto && meusItens.has(it.id)))
+                        ? <input className="input text-right" style={{ width: 80, ...(cvNum(it.quantidade_pedida) > 0 ? {} : { borderColor: '#d97706', background: '#fffbeb' }) }} placeholder="a definir" title={cvNum(it.quantidade_pedida) > 0 ? (editavel ? '' : 'Produto que você pediu: você pode alterar a quantidade') : 'Sem sugestão de compra: informe a quantidade que queremos cotar'} type="number" min="1" step="any" defaultValue={cvNum(it.quantidade_pedida) > 0 ? it.quantidade_pedida : ''} onBlur={(e) => { const v = cvNum(e.target.value); if (v > 0 && v !== cvNum(it.quantidade_pedida)) { if (editavel) editarItem(it, 'quantidade_pedida', v); else ajustarMinhaQtd(it, v); } }} />
                         : cvFmtNum(it.quantidade_pedida)}
                 {editavel && lote.status === 'rascunho' && <div><button type="button" className="link-btn" title="Mover este produto para outro lote em rascunho (ou um lote novo)" onClick={() => setMoverIt(it)}>↪ mover</button></div>}
                       {editavel && <div><button type="button" className="link-btn muted" title={(origens[it.id] || []).length > 0 && lote.status === 'rascunho' ? 'Devolver à fila de Solicitações' : 'Remover produto do lote'} aria-label={'Remover produto ' + it.codigo + ' do lote'} onClick={() => tirarItem(it)} style={{ display: 'inline-flex', padding: 4 }}><Icon.trash /></button></div>}
