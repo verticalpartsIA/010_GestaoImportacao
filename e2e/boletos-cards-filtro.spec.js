@@ -76,7 +76,7 @@ test('clicar em "Atrasado (mais de 30 dias)" mostra só quem tem título nessa f
   await expect(page).toHaveURL(/faixa=atrasadoMais30/);
   await expect(page.getByRole('button', { name: /Atrasado \(1 a 30 dias\)/ })).toContainText('300,00');   // os outros cards não zeram
   // o detalhe do cliente lista só o título da faixa
-  await linhasDaLista(page).first().locator('td').nth(2).click();   // célula do nome (o centro da linha cai na célula Score, que abre a consulta)
+  await linhasDaLista(page).first().locator('td').nth(3).click();   // célula do nome (0 = caixa de seleção, 1 = setinha; o centro da linha cai na célula Score, que abre a consulta)
   await expect(page.getByText('NF-D1')).toBeVisible();
   await expect(linhasDaLista(page)).toHaveCount(1);                  // abrir o cliente não solta o filtro
   await expect(page.getByText('NF-D2')).toHaveCount(0);
