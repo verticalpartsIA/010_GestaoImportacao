@@ -38,7 +38,7 @@ Termos gerais (alçada, soft-delete, alerta, Nº da cotação, evento de fluxo) 
 - **Posição (do estoque):** disponível + pendente + comprado + a caminho; é o que a regra de compra compara com o mínimo.
 - **Dia D:** data-limite para decidir o pedido (hoje + cobertura em dias − prazo total).
 - **Lote de cotação (COTV):** conjunto de produtos que o comprador pede para cotar; **convite** = o fornecedor chamado; **resposta** = o que ele devolveu pelo portal; **rodada** = cada negociação.
-- **Mapa comparativo:** produto × fornecedor, onde o comprador digita a quantidade a comprar de cada um.
+- **Mapa comparativo:** produto × fornecedor, onde o comprador digita a quantidade a comprar de cada um. (19/11/2026, pedido do Gelson; **Não verificado** no navegador, só compilação do JSX) Cabeçalho preto com borda amarela como o portal do fornecedor; nome do fornecedor quebra linha (colunas de 200 px, `table-layout: fixed`); a descrição do produto aparece acima da obs. VerticalParts; clicar no título de Código, Descrição, Qtd. pedida, Comprar ou de um fornecedor ordena ▲ → ▼ → ordem original (por fornecedor = menor preço para a quantidade de referência; sem preço vai ao fim). Ordenação só em memória.
 
 ---
 
