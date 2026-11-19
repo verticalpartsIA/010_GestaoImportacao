@@ -122,6 +122,28 @@
     if (error) throw error;
     await c.from('iv_cotacao_decisoes').delete().eq('item_id', id);
   }
+  /* Comprador: move o produto para outro lote em rascunho (loteDestino nulo = lote novo com `titulo`). Soma a quantidade se o produto já estiver lá. */
+  async function moverItem(itemId, loteDestino, titulo) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.rpc('iv_cotacao_mover_item', { p_item_id: itemId, p_lote_destino: loteDestino || null, p_titulo: titulo || null });
+    if (error) throw new Error(window.SolicitacoesCompraCalc ? window.SolicitacoesCompraCalc.mensagemErro(error) : error.message);
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Cotações de Varejo', acao: 'Moveu produto para outro lote', alvo: data && data.numero, alvo_id: itemId, detalhe: { de: data && data.de, somado: !!(data && data.somado) } });
+    return data;
+  }
+  /* Comprador: tira o produto do lote e o devolve à fila de Solicitações (item de cesta só sai do lote). */
+  async function devolverItem(itemId) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.rpc('iv_cotacao_devolver_item', { p_item_id: itemId });
+    if (error) throw new Error(window.SolicitacoesCompraCalc ? window.SolicitacoesCompraCalc.mensagemErro(error) : error.message);
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Cotações de Varejo', acao: 'Devolveu produto à fila de Solicitações', alvo: data && data.lote, alvo_id: itemId, detalhe: { devolvidos: data && data.devolvidos } });
+    return data;
+  }
+  async function renomearLote(id, titulo) {
+    const t = String(titulo || '').trim().slice(0, 80);
+    await atualizarLote(id, { titulo: t || null });
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Cotações de Varejo', acao: 'Renomeou o lote de cotação', alvo_id: id, detalhe: { titulo: t || null } });
+    return t || null;
+  }
   async function cancelarLote(id) {
     await atualizarLote(id, { status: 'cancelado' });
     if (window.VPLog) window.VPLog.registrar({ modulo: 'Cotações de Varejo', acao: 'Cancelou o lote de cotação', alvo_id: id });
@@ -550,7 +572,7 @@
 
   window.CotacoesVarejoStore = {
     MAX_FOTOS_MANUAIS, adicionarFotoManual, removerFotoManual, convitesEmCotacao, registrarRespostaPorEmail,
-    portalUrl, codigosEmCotacao, listarLotes, obterLote, criarLote, adicionarItens, atualizarLote, atualizarItem, removerItem, cancelarLote,
+    portalUrl, codigosEmCotacao, listarLotes, obterLote, criarLote, adicionarItens, atualizarLote, atualizarItem, removerItem, moverItem, devolverItem, renomearLote, cancelarLote,
     obterDescricao, descricoesGuardadas, salvarDescricao, montarObsVP, aplicarDescricoesGuardadas, sugerirDescricaoIA, NPS_CRITERIOS, avaliarFornecedor, npsDosFornecedores, avaliacoesDoFornecedor, registrarCambioDia, fixarCambioCotacao, fornecedoresCadastrados, convidarFornecedor, removerConvite, substituirConvite, atualizarConvite, marcarEnviado, novaRodada,
     textoConvite, enviarPorEmail, whatsAppHref, salvarDecisoes, aprovarLote, fotosDoBanco, enviarFoto, resolverFotos,
   };
