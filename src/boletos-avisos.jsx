@@ -193,7 +193,7 @@ function BoletosAvisosPage() {
   const alternarAutomatico = () => {
     const ligar = !(cfg && cfg.envio_automatico);
     const texto = ligar
-      ? 'LIGAR o envio automático?\n\nDe segunda a sexta, às 08h30, o sistema manda e-mail real aos clientes: 5 dias antes, 1 dia antes, no dia e 1 dia depois do vencimento, e avisa a Joice e a Maximira dos atrasos (WhatsApp).' + (cfg && cfg.destino_teste ? `\n\nModo teste ATIVO: tudo vai só para ${cfg.destino_teste}.` : '\n\nO modo teste está DESLIGADO: os e-mails vão para os clientes de verdade.')
+      ? 'LIGAR o envio automático?\n\nDe segunda a sexta, às 08h30, o sistema manda e-mail real aos clientes: 5 dias antes, 1 dia antes, no dia e 2 dias úteis depois do vencimento (um e-mail por cliente), e avisa a Joice e a Maximira dos atrasos (WhatsApp).' + (cfg && cfg.destino_teste ? `\n\nModo teste ATIVO: tudo vai só para ${cfg.destino_teste}.` : '\n\nO modo teste está DESLIGADO: os e-mails vão para os clientes de verdade.')
       : 'Desligar o envio automático? Nenhum aviso sai sozinho até religar.';
     if (!confirm(texto)) return;
     rodar('auto', () => S.salvarConfig({ envio_automatico: ligar }), () => ligar ? 'Envio automático LIGADO.' : 'Envio automático desligado.');
@@ -267,7 +267,7 @@ function BoletosAvisosPage() {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro &amp; Preços · Boletos Avisos</div>
           <h1 className="page-head__title">Boletos Avisos</h1>
-          <p className="page-head__sub">Clientes com título em aberto no Omie (com boleto ou, para quem paga por depósito, sem boleto até 180 dias de atraso). O sistema avisa por e-mail 5 dias antes, 1 dia antes, no dia e, se atrasar, 1 dia depois (boleto) ou 2 dias depois (sem boleto, que o financeiro concilia à mão); a Joice e a Maximira são avisadas dos atrasos. Tela restrita: Gelson, Diego e Juliana gerenciam; quem recebeu a alçada só consulta.</p>
+          <p className="page-head__sub">Clientes com título em aberto no Omie (com boleto ou, para quem paga por depósito, sem boleto até 180 dias de atraso). O sistema avisa por e-mail (um por cliente, com os títulos separados por situação) 5 dias antes, 1 dia antes, no dia e, se atrasar, 2 dias úteis depois (com ou sem boleto: o banco pode levar 1 dia útil para mostrar o pagamento); a Joice e a Maximira são avisadas dos atrasos. Tela restrita: Gelson, Diego e Juliana gerenciam; quem recebeu a alçada só consulta.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <Button size="sm" variant="primary" onClick={() => setAberto('score')}>Consultar cliente (score)</Button>

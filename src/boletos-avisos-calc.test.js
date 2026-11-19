@@ -12,10 +12,11 @@ const C = window.BoletosAvisosCalc;
 test('boleto que vence em 5 dias recebe a etapa D-5', () => {
   assert.equal(C.etapaDevida('2026-11-16', '2026-11-11', []), 'D-5');
 });
-test('um dia antes do vencimento é D-1; no dia é D0; um dia depois é D+1', () => {
+test('um dia antes do vencimento é D-1; no dia é D0; 2 dias úteis depois é o aviso de atraso (D+1)', () => {
   assert.equal(C.etapaDevida('2026-11-12', '2026-11-11', []), 'D-1');
   assert.equal(C.etapaDevida('2026-11-11', '2026-11-11', []), 'D0');
-  assert.equal(C.etapaDevida('2026-11-10', '2026-11-11', []), 'D+1');
+  assert.equal(C.etapaDevida('2026-11-10', '2026-11-11', []), null);
+  assert.equal(C.etapaDevida('2026-11-10', '2026-11-12', []), 'D+1');
 });
 test('entre as etapas não há aviso (faltam 3 dias, por exemplo)', () => {
   assert.equal(C.etapaDevida('2026-11-14', '2026-11-11', []), null);   // quarta, faltam 3 dias
@@ -29,15 +30,16 @@ test('etapa que cairia no fim de semana vai para o próximo dia útil (D-5 de um
   // 19/11 (quinta): o D-5 cai no sábado 14/11; a rotina só roda de segunda a sexta
   assert.equal(C.etapaDevida('2026-11-19', '2026-11-16', []), 'D-5');
 });
-test('boleto que vence no fim de semana: o vencimento vale na segunda (D0), o atraso só na terça', () => {
+test('boleto que vence no fim de semana: o vencimento vale na segunda (D0), o atraso só na quarta', () => {
   assert.equal(C.etapaDevida('2026-11-15', '2026-11-16', []), 'D0');
   assert.equal(C.etapaDevida('2026-11-14', '2026-11-16', []), 'D0');
-  assert.equal(C.etapaDevida('2026-11-14', '2026-11-17', []), 'D+1');
+  assert.equal(C.etapaDevida('2026-11-14', '2026-11-17', []), null);
+  assert.equal(C.etapaDevida('2026-11-14', '2026-11-18', []), 'D+1');
   assert.equal(C.etapaDevida('2026-11-14', '2026-11-13', []), 'D-1');   // sexta antes
 });
 test('fora da segunda-feira não há recuperação: o que passou do dia não é cobrado depois', () => {
-  assert.equal(C.etapaDevida('2026-11-10', '2026-11-12', []), null);   // quinta, D+1 era quarta
-  assert.equal(C.etapaDevida('2026-11-07', '2026-11-11', []), null);
+  assert.equal(C.etapaDevida('2026-11-09', '2026-11-12', []), null);   // quinta, o aviso de atraso era quarta
+  assert.equal(C.etapaDevida('2026-11-06', '2026-11-11', []), null);   // sexta: o aviso de atraso era terça
 });
 
 // ---- semáforo ----
@@ -189,12 +191,12 @@ test('a Escamax (raiz do CNPJ) fica sem o corte de 180 dias do sem-boleto', () =
   assert.match(f, /LIMITE_ESCAMAX_DIAS = 365/);
 });
 
-test('sem boleto o aviso de atraso sai no 2º dia; boleto segue no 1º', () => {
-  assert.equal(C.etapaDevida('2026-11-10', '2026-11-11', [], false), 'D+1');
-  assert.equal(C.etapaDevida('2026-11-10', '2026-11-11', [], true), null);
-  assert.equal(C.etapaDevida('2026-11-10', '2026-11-12', [], true), 'D+1');
-  assert.equal(C.etapaDevida('2026-11-10', '2026-11-12', [], false), null);
-  assert.equal(C.etapaDevida('2026-11-10', '2026-11-12', ['D+1'], true), null);
+test('aviso de atraso no 2º dia útil, com ou sem boleto (19/11/2026)', () => {
+  for (const sem of [false, true]) {
+    assert.equal(C.etapaDevida('2026-11-10', '2026-11-11', [], sem), null);
+    assert.equal(C.etapaDevida('2026-11-10', '2026-11-12', [], sem), 'D+1');
+    assert.equal(C.etapaDevida('2026-11-10', '2026-11-12', ['D+1'], sem), null);
+  }
 });
 test('sem boleto: D-5, D-1 e D0 continuam iguais; sexta vencida cai na segunda (2 dias depois)', () => {
   assert.equal(C.etapaDevida('2026-11-16', '2026-11-11', [], true), 'D-5');
@@ -222,11 +224,12 @@ test('em feriado e fim de semana nenhum aviso sai', () => {
   assert.equal(C.diaUtil('2026-11-19', FER), true);
 });
 test('exemplo do Gelson: boleto de sábado 21/11 com feriado na sexta 20/11', () => {
-  assert.deepEqual(C.datasDasEtapas('2026-11-21', false, FER), { 'D-5': '2026-11-16', 'D-1': '2026-11-19', 'D0': '2026-11-23', 'D+1': '2026-11-24' });
-  assert.equal(C.datasDasEtapas('2026-11-21', true, FER)['D+1'], '2026-11-25');   // sem boleto: 2º dia útil
+  assert.deepEqual(C.datasDasEtapas('2026-11-21', false, FER), { 'D-5': '2026-11-16', 'D-1': '2026-11-19', 'D0': '2026-11-23', 'D+1': '2026-11-25' });
+  assert.equal(C.datasDasEtapas('2026-11-21', true, FER)['D+1'], '2026-11-25');   // 2º dia útil, com ou sem boleto
   assert.equal(C.etapaDevida('2026-11-21', '2026-11-19', [], false, FER), 'D-1');
   assert.equal(C.etapaDevida('2026-11-21', '2026-11-23', [], false, FER), 'D0');
-  assert.equal(C.etapaDevida('2026-11-21', '2026-11-24', [], false, FER), 'D+1');
+  assert.equal(C.etapaDevida('2026-11-21', '2026-11-24', [], false, FER), null);
+  assert.equal(C.etapaDevida('2026-11-21', '2026-11-25', [], false, FER), 'D+1');
 });
 test('boleto que vence no feriado vale no dia útil seguinte: semáforo em dia antes, sem atraso no dia', () => {
   assert.equal(C.vencimentoEfetivo('2026-11-20', FER), '2026-11-23');
@@ -239,7 +242,7 @@ test('Carnaval: boleto da segunda de Carnaval vale na quarta de cinzas', () => {
   assert.equal(C.vencimentoEfetivo('2027-02-08', FER), '2027-02-10');
   assert.equal(C.etapaDevida('2027-02-08', '2027-02-05', [], false, FER), 'D-1');   // sexta antes
   assert.equal(C.etapaDevida('2027-02-08', '2027-02-10', [], false, FER), 'D0');
-  assert.equal(C.etapaDevida('2027-02-08', '2027-02-11', [], false, FER), 'D+1');
+  assert.equal(C.etapaDevida('2027-02-08', '2027-02-12', [], false, FER), 'D+1');
 });
 test('resumo financeiro não conta como atrasado o boleto que venceu no feriado e vale hoje', () => {
   const r = C.resumoFinanceiro([{ codigo_cliente_omie: 1, data_vencimento: '2026-11-21', valor: 100 }], '2026-11-23', FER);
@@ -298,4 +301,80 @@ test('resumoSelecao: nada marcado e dados faltando não quebram', () => {
   assert.deepEqual(C.resumoSelecao([]), { clientes: 0, titulos: 0, valor: 0 });
   assert.deepEqual(C.resumoSelecao(null), { clientes: 0, titulos: 0, valor: 0 });
   assert.deepEqual(C.resumoSelecao([{}, { qtd: 'x', centavos: null }]), { clientes: 2, titulos: 0, valor: 0 });
+});
+
+// ---- 19/11/2026: um e-mail com etapas diferentes (caso Escamax) ----
+{
+  const FER19 = new Set(['2026-11-20']);   // Consciência Negra
+  const t = (id, venc, valor, extra) => ({ codigo_lancamento_omie: id, numero_documento: String(id), numero_parcela: '1/1', data_vencimento: venc, valor, tem_boleto: false, ...extra });
+  const venc = t(1, '2026-11-17', 1495.87);
+  const feriado = t(2, '2026-11-20', 108.66);
+  const sabado = t(3, '2026-11-21', 1328.8);
+  const seg = t(4, '2026-11-23', 4059.42);
+  const etapas = { 1: 'D+1', 2: 'D-1', 3: 'D-1', 4: 'D-1' };
+  const m = C.montarAviso('ESCAMAX', [sabado, venc, seg, feriado], etapas, FER19, '2026-11-19');
+
+  test('título que ainda vai vencer não aparece como vencido', () => {
+    const [vencidos, proximos] = m.texto.split('Próximos vencimentos:');
+    assert.match(vencidos, /Vencido — ainda não consta como recebido:\n• NF 1 /);
+    assert.doesNotMatch(vencidos, /NF [234] /);
+    assert.match(proximos, /NF 2 .*NF 3 .*NF 4 /s);
+    assert.doesNotMatch(proximos, /regularização imediata/);
+    assert.equal(m.assunto, 'Pagamento em aberto — vencido — ESCAMAX');
+  });
+  test('vencimento em feriado ou fim de semana diz até quando pode pagar', () => {
+    assert.match(m.texto, /vencimento 20\/11\/2026 \(feriado\) — pode pagar até 23\/11/);
+    assert.match(m.texto, /vencimento 21\/11\/2026 \(sábado\) — pode pagar até 23\/11/);
+    assert.match(m.texto, /vencimento 23\/11\/2026 — R\$/);
+    assert.match(m.texto, /Total: R\$\s5\.496,88/);
+  });
+  test('véspera de feriado não diz "amanhã" quando o vencimento é na segunda', () => {
+    const s = C.montarAviso('X', [{ ...seg, tem_boleto: true }], 'D-1', FER19, '2026-11-19');
+    assert.equal(s.assunto, 'Seu boleto vence em 23/11 — X');
+    assert.match(s.texto, /O boleto abaixo vence no próximo dia útil, segunda-feira, 23\/11:/);
+    assert.match(C.montarAviso('X', [{ ...seg, tem_boleto: true }], 'D-1', FER19, '2026-11-22').texto, /vence amanhã:/);
+  });
+  test('D-5 conta os dias de verdade', () => {
+    assert.equal(C.montarAviso('X', [seg], 'D-5', FER19, '2026-11-18').assunto, 'Lembrete: pagamento vence em 5 dias — X');
+    assert.equal(C.montarAviso('X', [seg], 'D-5', FER19, '2026-11-19').assunto, 'Lembrete: pagamento vence em 4 dias — X');
+  });
+  test('html: tabela, linha digitável em linha própria e tudo escapado', () => {
+    const b = { ...seg, tem_boleto: true, linha_digitavel: '34191090080004474758259782520007916340000105259', numero_documento: '<b>9</b>' };
+    const h = C.montarAviso('A & B <LTDA>', [b, venc], { 1: 'D+1', 4: 'D0' }, FER19, '2026-11-23').html;
+    assert.match(h, /<table/);
+    assert.match(h, /Linha digitável: <span[^>]*>34191090080004474758259782520007916340000105259<\/span>/);
+    assert.match(h, /&lt;b&gt;9&lt;\/b&gt;/);
+    assert.doesNotMatch(h, /<b>9<\/b>/);
+    assert.match(h, /Pagamentos de A &amp; B &lt;LTDA&gt;/);
+    assert.match(h, />Vencido <span/);
+    assert.match(h, /solicitamos a regularização imediata, sujeita aos encargos por atraso/);
+    assert.ok(h.indexOf('>Vence hoje <span') < h.indexOf('>Vencido <span'), 'ordem do formato aprovado: Vence hoje antes de Vencido');
+    assert.match(h, /1 parcela que vence hoje<\/strong> \(R\$ 4\.059,42\) e <strong>1 já vencida/);
+    assert.match(h, /Atenciosamente,<br><strong>Financeiro — VerticalParts<\/strong>/);
+    assert.match(h, /id="vp-assinatura-hub"/);
+    assert.match(h, /mailto:financeiro@verticalparts\.com\.br/);
+    assert.match(h, /Forma de pagamento:/);
+  });
+  test('html: título que venceu no feriado fica em "Vence hoje" no 1º dia útil, nunca em "Vencidos"', () => {
+    const fer = { ...venc, codigo_lancamento_omie: 7, data_vencimento: '2026-11-20', numero_documento: '00022029' };
+    const h = C.montarAviso('ESCAMAX', [fer], { 7: 'D0' }, FER19, '2026-11-23').html;
+    assert.match(h, />Vence hoje <span/);
+    assert.doesNotMatch(h, />Vencidos? <span/);
+    assert.match(h, /20\/11\/2026<br><span[^>]*>feriado — pode pagar até 23\/11/);
+    assert.match(h, /em dia sem expediente bancário/);
+  });
+  test('envio manual continua uma seção só', () => {
+    const r = C.montarAviso('ACME', [venc, seg], 'manual', FER19, '2026-11-19');
+    assert.equal(r.assunto, 'Pagamentos em aberto — ACME');
+    assert.doesNotMatch(r.texto, /Próximos vencimentos|Vencido —/);
+  });
+}
+test('a função manda um e-mail por destinatário (códigos do Omie com o mesmo e-mail juntos)', () => {
+  const f = fs.readFileSync(path.join(__dirname, '..', 'supabase/functions/boletos-avisos/index.ts'), 'utf8');
+  assert.match(f, /const chave = emails\.length \? emails\.join\(","\)/);
+  assert.match(f, /montarAviso\(razao, boletos, origem === "manual" \? "manual" : etapaPorBoleto, feriados, hoje \|\| hojeBrasil\(\)\)/);
+  assert.match(f, /enviarGraph\(para, assunto, texto, html, cc\)/);
+  assert.match(f, /ccRecipients: cc\.map/);
+  assert.match(f, /!modoTeste && EMAIL_RE\.test\(CC_FINANCEIRO\)/);
+  assert.match(f, /comAssinatura\(html \|\|/);
 });
