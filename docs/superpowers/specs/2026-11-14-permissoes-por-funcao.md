@@ -1,6 +1,6 @@
 # Permissões por função/departamento (alçadas e "Valores R$")
 
-> **Status:** Specify e Clarify escritos em 14/11/2026; **8 respostas confirmadas pelo Gelson em 14/11/2026 (seção 2.1), com 5 pontos ainda ABERTOS**. Plan, Tasks e Analyze ainda **não** foram escritos (Art. 37). Nada de migration, tabela, deploy ou mudança de permissão sem "Confirmo" (Art. 14).
+> **Status:** Specify e Clarify escritos em 14/11/2026; **8 respostas confirmadas pelo Gelson em 14/11/2026 (seção 2.1), com 5 pontos ainda ABERTOS**. **Plan, Tasks e Analyze escritos em 15/11/2026** (seções 3 a 5), com os 5 pontos ABERTOS como parâmetros; o Analyze (A1) corrige um desenho meu anterior e pede decisão (Art. 37). Nada de migration, tabela, deploy ou mudança de permissão sem "Confirmo" (Art. 14).
 > **Módulo dono:** 15 Administração (`docs/modulos/15_administracao.md`). Quando houver decisão, ela migra para lá (Art. 38/42).
 > **Selos (Art. 6):** *Conferido* = visto no banco/código/página em 14/11/2026; *Não verificado* = não li.
 
@@ -77,5 +77,58 @@ O Gelson **confirmou as 8 respostas** abaixo (propostas por mim a partir dos dad
 
 **Efeito nos requisitos:** FR02 (várias funções por pessoa) vale com duas camadas (departamento + função); FR07 (departamento com fonte única) = vpsistema; FR05 (negar por padrão) mantido; FR04 (Valores R$ na função) depende da matriz da resposta 5.
 
-## 3. Plan / 4. Tasks / 5. Analyze
-**Pendentes** (só depois do Clarify). Esboço, sem compromisso: tabelas à la Spatie (`papeis`, `papel_permissoes`, `perfil_papeis`, `perfil_permissoes` com `efeito`), função SQL de permissão efetiva, relatório "quem perderia o quê" antes de qualquer carga, e contrato do `vpsistema-sync`.
+## 3. Plan
+> Escrito em 15/11/2026. **Os 5 pontos ABERTOS da seção 2.1 entram como parâmetros**: nenhuma Task que dependa deles pode ser executada antes de o Gelson decidir. Nenhuma migration, deploy ou mudança de permissão sem "Confirmo" (Art. 14).
+
+### 3.1 O que já existe e vale reaproveitar (Conferido no código, 15/11/2026)
+- **Decisão de acesso no banco:** `vp_tem_capacidade(modulo, cap)` = `vp_eh_admin()` **ou** existe linha em `alcadas_capacidade` do perfil logado (`supabase/migrations/20261004190000_vp_auth_helpers.sql`). Já é a **fonte única** no banco.
+- **Decisão de acesso no front:** `temCapacidade` (`src/proposta-store.js:707`) lê `alcadas_capacidade` direto e guarda cache por chave.
+- **Valores R$:** `vp_ve_valor(perfil, etiqueta)` lê `valores_acesso` (`modo` todos/nenhum + `liberar[]`/`esconder[]`) (`20261009270000_valores_acesso_vindo_do_vpsistema.sql`).
+- **Contrato do vpsistema com o hub, hoje, por pessoa e já "achatado":** a Edge Function `vpsistema-sync` aceita `set_alcadas` (e-mail, capacidades, módulos), `set_email` e `set_valores` (e-mail, modo, liberar, esconder); cada ação chama uma RPC `vpsistema_set_*` só do `service_role` (`supabase/functions/vpsistema-sync/index.ts`).
+- **Modo manual:** com `perfis.acesso_manual`, `vpsistema_set_alcadas` **não mexe** na pessoa (`20261014100000_acesso_manual_por_perfil.sql`). **`vpsistema_set_valores` não tem essa proteção** (nenhuma migration de 14/10 a cita), por isso `valores_acesso` segue sendo sobrescrito, inclusive em perfis manuais.
+
+### 3.2 Decisão de arquitetura (a confirmar pelo Gelson)
+Como as funções moram no **vpsistema** e o hub **só recebe** (resposta 6), a função é **resolvida lá** e o hub continua recebendo o **resultado por pessoa**, pelo contrato que já existe. O hub **não** ganha motor de função nem tabelas de papel nesta entrega.
+- **Vantagem:** o banco e o front não mudam de regra (`vp_tem_capacidade`, `temCapacidade`, `vp_ve_valor` ficam como estão); o risco de quebrar produção é pequeno e cada passo é reversível.
+- **O que se perde:** o hub não sabe, por conta própria, *de onde* veio cada permissão (função × exceção). Para FR08 isso se resolve com **um campo informativo `origem`** enviado pelo vpsistema (ver T6), sem recalcular nada no hub.
+- **Alternativa descartada por enquanto:** replicar papéis no hub (`papeis`, `papel_permissoes`, `perfil_papeis`, `perfil_permissoes` com `efeito`). Só vale se o Gelson decidir que o hub passa a calcular o acesso; contradiz a resposta 6 e dobra a fonte da verdade (ver Analyze, A1).
+
+### 3.3 Fases
+1. **Preparar os dados (sem mudar acesso):** fonte única de departamento no vpsistema (resp. 1); relatório "quem perderia o quê" por pessoa, comparando o acesso de hoje com o que as funções dariam.
+2. **Modelar no vpsistema:** funções (departamento-base + funções adicionais, resp. 2), contas de sistema, parceiro externo, matriz de Valores R$ (resp. 5). Entrega do lado do vpsistema, **fora deste repositório**.
+3. **Adaptar o hub ao contrato:** proteger `valores_acesso` do modo manual, acrescentar `origem`, mostrar na tela.
+4. **Migrar por onda:** primeiro departamentos pequenos, com exportação das exceções antes de tirar alguém do modo manual (resp. 6).
+5. **Depois, entrega separada (resp. 7):** ligar a trava de valores para todos, após simulação.
+
+## 4. Tasks
+> Cada Task é pequena e verificável. **[hub]** = neste repositório; **[vps]** = no repositório do vpsistema (fora do escopo desta sessão; o hub só define o contrato). **Bloqueada** = depende de ponto ABERTO.
+
+- **T001 [hub] Relatório "quem perderia o quê".** Consulta somente leitura (sem migration): por pessoa, alçadas de hoje × alçadas que a função candidata daria, e o mesmo para `valores_acesso`. Saída em tabela por departamento, **sem nomes no repositório** (só no chat). *Verificação:* totais batem com `alcadas_capacidade` (1.834 linhas) e `valores_acesso` (45). **Bloqueada** para a parte de Valores R$ até a matriz (ABERTO 5).
+- **T002 [vps] Departamento único.** Corrigir no vpsistema os 22 casos divergentes e os 8 sem departamento; decidir a pessoa "MKT" sem departamento (ABERTO 1). *Verificação:* `perfis.departamento` = `colaboradores_vpsistema.departamento` para todos os ativos.
+- **T003 [vps] Modelar funções.** Departamento-base + funções adicionais; **negar vence**; padrão negar (FR01–FR05). **Bloqueada** pelos nomes e recortes de Logística (ABERTO 2), pela conta de automação do quadro (ABERTO 3) e pela revisão dos Administradores (ABERTO 4).
+- **T004 [vps] Matriz de Valores R$ por função.** Etiquetas por departamento a partir da proposta da resposta 5. **Bloqueada** (ABERTO 5).
+- **T005 [hub] Proteger `valores_acesso` do modo manual.** Migration: `vpsistema_set_valores` passa a ignorar perfis com `acesso_manual` (mesmo critério de `vpsistema_set_alcadas`). *Verificação:* teste em transação desfeita — perfil manual não muda; perfil normal muda. Precisa de **"Confirmo"** (Art. 14).
+- **T006 [hub] Campo `origem`.** Migration: coluna informativa em `alcadas_capacidade` (e em `valores_acesso` por etiqueta, se couber) e extensão compatível de `set_alcadas`/`set_valores` (parâmetro novo opcional; chamadas antigas continuam valendo). Precisa de **"Confirmo"**.
+- **T007 [hub] Tela.** No detalhe da pessoa (aba Administração), mostrar a origem (função × exceção) e manter "Valores R$" como está (somente leitura, já em produção). *Verificação:* abrir a tela de verdade (Art. 34) e conferir contra o banco.
+- **T008 [hub] Exportar exceções dos perfis manuais.** Antes de qualquer perfil voltar a sincronizar (resp. 6): lista, por perfil manual, do que está gravado à mão (as 459 linhas de origem diferente do vpsistema). Saída para o Gelson aprovar; **não** muda nada.
+- **T009 [hub] Onda 1 de migração.** Tirar do modo manual os perfis dos departamentos já modelados, **um departamento por vez**, depois da T001/T008 aprovadas. Precisa de **"Confirmo"** por onda. *Reverter:* `hub_set_acesso_manual(perfil, true)` e reaplicar a exportação da T008.
+- **T010 [hub] Documentação.** Atualizar `docs/modulos/15_administracao.md` (15.2.4: dois estados; modo manual transitório; nova origem), `npm run rag`, ajuda do "?" e pedido de tutorial à sessão de tutoriais (Art. 46/52). A edição do 15.2.4 **só quando o Gelson pedir**.
+- **T011 [hub] Simulação da trava de valores para todos** (entrega separada, resp. 7): "quem perde leitura e escrita" e quantos perfis ainda não têm sessão. **Não** liga nada; só mede.
+
+**Ordem:** T001 → T002 → T003/T004 (vpsistema, em paralelo, depois dos ABERTOS) → T005 → T006 → T007 → T008 → T009 (por onda) → T010; T011 em separado.
+
+## 5. Analyze (auditoria crítica, 15/11/2026)
+Cruzamento da Constituição, da seção 1, das respostas (2.1), do Plan e das Tasks.
+
+- **A1 — Contradição do meu desenho anterior (corrijo, Art. 5).** O "modelo proposto" que apresentei antes (tabelas `papeis` etc. no hub, com função SQL de permissão efetiva) **contradiz a resposta 6** ("o hub só recebe; não edita funções") e **duplicaria a fonte da verdade** (vpsistema e hub). O Plan 3.2 troca isso por: função resolvida no vpsistema, hub recebe o achatado. FR06 ("função SQL única no hub") **já é verdade hoje** (`vp_tem_capacidade`), então não exige trabalho novo. **Decisão necessária:** o Gelson confirma que o hub não calcula funções.
+- **A2 — FR03 ("negar vence") e FR05 ("negar por padrão") ficam no vpsistema.** O hub só vê o resultado final por pessoa e não consegue provar a regra. O teste dessas regras é do vpsistema (**fora deste repositório**); no hub só se confere o efeito (T001).
+- **A3 — Lacuna real de segurança hoje: `valores_acesso` não respeita o modo manual.** Confirmado em 3.1. Sem a T005, tirar alguém do modo manual ou mexer à mão em Valores R$ é desfeito pela próxima sincronia, e o inverso também. Prioridade alta, baixo risco.
+- **A4 — Segurança real não vem desta mudança.** `valores_acesso` tem `SELECT` para `anon` e `authenticated` (`using (true)`), e `vp_ve_valor` é executável por `anon`. Função/permissão por departamento organiza o acesso, mas **não fecha a leitura** (Art. 25, issue #571). Não prometer mais do que isso na tela nem no doc.
+- **A5 — "Valores R$" na função depende de etiquetas sem regra.** Só 12 etiquetas têm regra no banco (`vp_valores_regra`); a matriz da resposta 5 cita etiquetas fora disso (**Não verificado** a lista completa em `valores_acesso`). Atribuir uma etiqueta sem regra **não protege nada**. A T004 deve listar quais etiquetas da matriz ainda não têm regra antes de a matriz ser aprovada.
+- **A6 — Risco de perda de acesso na migração.** São 31 perfis manuais, 459 linhas de origem diferente do vpsistema e a tela avisa que voltar a sincronizar pode apagá-las. Mitigação: T008 antes de T009, onda por departamento, reversão pelo `hub_set_acesso_manual`.
+- **A7 — Dependência externa não visível daqui.** T002, T003 e T004 são do vpsistema, cujo repositório **não foi lido**; os prazos e a viabilidade do contrato `origem` (T006) são **Não verificados**. Se o vpsistema não puder enviar `origem`, a FR08 vira só "função × exceção" calculada na T001, sem campo novo.
+- **A8 — Casos de borda.** Pessoa sem departamento no vpsistema (ABERTO 1); conta de sistema com 0 alçadas (ABERTO 3); parceiro externo com e-mail fora do domínio (resp. 3); 1 perfil ativo sem colaborador e 13 colaboradores sem perfil (duplicados) — T002 precisa tratá-los **antes** de qualquer função por departamento.
+- **A9 — Constituição.** Nada aqui altera o `CLAUDE.md` (Art. 13). Migrations T005/T006 pedem "Confirmo" (Art. 14/31) e nascem **sem** abrir política para a chave pública (Art. 26). T010 segue Art. 42/46/52. Sem nomes de pessoas no repositório (Art. 28).
+- **A10 — Teste (Art. 33/34).** T005 e T006 têm regra de negócio no banco: testar em transação desfeita antes do "Confirmo"; T007 é tela: abrir de verdade (já há script de navegador local para isso). Testes de unidade só onde houver lógica pura nova no hub (hoje nenhuma prevista).
+
+**Correções que o Analyze pede antes de implementar (aguardam decisão do Gelson):** (1) confirmar A1 (hub não calcula funções); (2) aprovar T005 como primeiro passo isolado; (3) decidir os 5 pontos ABERTOS, que destravam T003/T004.
