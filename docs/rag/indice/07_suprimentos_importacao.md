@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/07_suprimentos_importacao.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `fe50b5b`)
-- **Palavras:** 11935 · **blocos:** 275 · **seções com selo próprio:** 69 de 145
-- **Origem do selo dos blocos:** próprio 87 · da seção 61 · da seção-pai 0 · do cabeçalho 102 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
-- **Selo efetivo dos blocos:** Conferido 170 · Herdado 60 · Não verificado 20
+- **Palavras:** 13122 · **blocos:** 283 · **seções com selo próprio:** 74 de 145
+- **Origem do selo dos blocos:** próprio 95 · da seção 66 · da seção-pai 0 · do cabeçalho 97 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
+- **Selo efetivo dos blocos:** Conferido 165 · Herdado 60 · Não verificado 33
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -116,8 +116,8 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 7.9.1 O que é | `docs/modulos/07_suprimentos_importacao.md#791-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 7.9.2 Rota e arquivos | `docs/modulos/07_suprimentos_importacao.md#792-rota-e-arquivos` | 3 | Conferido (uniforme) | 1 | b1 |
 | 7.9.3 Perfil e acesso | `docs/modulos/07_suprimentos_importacao.md#793-perfil-e-acesso` | 3 | Conferido (uniforme) | 1 | b1 |
-| 7.9.4 O que a tela mostra | `docs/modulos/07_suprimentos_importacao.md#794-o-que-a-tela-mostra` | 3 | — | 1 | c1 |
-| 7.9.5 Botões e controles | `docs/modulos/07_suprimentos_importacao.md#795-botões-e-controles` | 3 | — | 1 | c1 |
+| 7.9.4 O que a tela mostra | `docs/modulos/07_suprimentos_importacao.md#794-o-que-a-tela-mostra` | 3 | Não verificado (uniforme) | 2 | b1 s1 |
+| 7.9.5 Botões e controles | `docs/modulos/07_suprimentos_importacao.md#795-botões-e-controles` | 3 | Não verificado (uniforme) | 2 | b1 s1 |
 | 7.9.6 Comportamento | `docs/modulos/07_suprimentos_importacao.md#796-comportamento` | 3 | — | 4 | c4 |
 | 7.9.7 Dados | `docs/modulos/07_suprimentos_importacao.md#797-dados` | 3 | — | 1 | c1 |
 | 7.9.8 Regras e armadilhas | `docs/modulos/07_suprimentos_importacao.md#798-regras-e-armadilhas` | 3 | Herdado (uniforme) | 6 | b3 s3 |
@@ -130,10 +130,10 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 7.10.3 Perfil e acesso | `docs/modulos/07_suprimentos_importacao.md#7103-perfil-e-acesso` | 3 | Conferido (uniforme) | 1 | b1 |
 | 7.10.4 O que a tela mostra | `docs/modulos/07_suprimentos_importacao.md#7104-o-que-a-tela-mostra` | 3 | — | 1 | c1 |
 | 7.10.5 Botões e controles | `docs/modulos/07_suprimentos_importacao.md#7105-botões-e-controles` | 3 | Não verificado (uniforme) | 1 | b1 |
-| 7.10.6 Comportamento | `docs/modulos/07_suprimentos_importacao.md#7106-comportamento` | 3 | Não verificado (misto (vale o mais fraco)) | 10 | b4 s6 |
+| 7.10.6 Comportamento | `docs/modulos/07_suprimentos_importacao.md#7106-comportamento` | 3 | Não verificado (misto (vale o mais fraco)) | 11 | b5 s6 |
 | 7.10.7 Dados | `docs/modulos/07_suprimentos_importacao.md#7107-dados` | 3 | — | 1 | c1 |
 | 7.10.8 Regras e armadilhas | `docs/modulos/07_suprimentos_importacao.md#7108-regras-e-armadilhas` | 3 | — | 4 | c4 |
-| 7.10.9 Testes | `docs/modulos/07_suprimentos_importacao.md#7109-testes` | 3 | — | 1 | c1 |
+| 7.10.9 Testes | `docs/modulos/07_suprimentos_importacao.md#7109-testes` | 3 | Não verificado (misto (vale o mais fraco)) | 4 | b3 s1 |
 | 7.10.10 Pendências e decisões | `docs/modulos/07_suprimentos_importacao.md#71010-pendências-e-decisões` | 3 | Herdado (uniforme) | 1 | b1 |
 | 7.10.11 Histórico | `docs/modulos/07_suprimentos_importacao.md#71011-histórico` | 3 | — | 1 | c1 |
 | 7.11 Pedidos | `docs/modulos/07_suprimentos_importacao.md#711-pedidos` | 2 | — | 0 | — |
@@ -146,7 +146,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 7.11.7 Dados | `docs/modulos/07_suprimentos_importacao.md#7117-dados` | 3 | — | 1 | c1 |
 | 7.11.8 Regras e armadilhas | `docs/modulos/07_suprimentos_importacao.md#7118-regras-e-armadilhas` | 3 | — | 1 | c1 |
 | 7.11.9 Testes | `docs/modulos/07_suprimentos_importacao.md#7119-testes` | 3 | — | 1 | c1 |
-| 7.11.10 Pendências e decisões | `docs/modulos/07_suprimentos_importacao.md#71110-pendências-e-decisões` | 3 | — | 1 | c1 |
+| 7.11.10 Pendências e decisões | `docs/modulos/07_suprimentos_importacao.md#71110-pendências-e-decisões` | 3 | Não verificado (uniforme) | 2 | b1 s1 |
 | 7.11.11 Histórico | `docs/modulos/07_suprimentos_importacao.md#71111-histórico` | 3 | Herdado (uniforme) | 1 | b1 |
 | Parte comum de Suprimentos & Importação | `docs/modulos/07_suprimentos_importacao.md#parte-comum-de-suprimentos--importação` | 2 | — | 0 | — |
 | PC-1 Mapa de ligações | `docs/modulos/07_suprimentos_importacao.md#pc-1-mapa-de-ligações` | 3 | — | 2 | c2 |
@@ -156,7 +156,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-5 Moeda, câmbio e totais | `docs/modulos/07_suprimentos_importacao.md#pc-5-moeda-câmbio-e-totais` | 3 | — | 2 | c2 |
 | PC-6 Identidade, alçadas e segurança | `docs/modulos/07_suprimentos_importacao.md#pc-6-identidade-alçadas-e-segurança` | 3 | Conferido (uniforme) | 3 | b1 s2 |
 | PC-7 Gatilhos e rotinas | `docs/modulos/07_suprimentos_importacao.md#pc-7-gatilhos-e-rotinas` | 3 | Não verificado (misto (vale o mais fraco)) | 3 | b3 |
-| PC-8 Tabelas | `docs/modulos/07_suprimentos_importacao.md#pc-8-tabelas` | 3 | — | 1 | c1 |
+| PC-8 Tabelas | `docs/modulos/07_suprimentos_importacao.md#pc-8-tabelas` | 3 | Não verificado (uniforme) | 2 | b1 s1 |
 | PC-9 Navegação, cache e testes | `docs/modulos/07_suprimentos_importacao.md#pc-9-navegação-cache-e-testes` | 3 | — | 1 | c1 |
 | PC-10 Menu "?" e tutoriais | `docs/modulos/07_suprimentos_importacao.md#pc-10-menu--e-tutoriais` | 3 | Conferido (uniforme) | 1 | b1 |
 | PC-11 Documentos soltos e destino do que foi concatenado | `docs/modulos/07_suprimentos_importacao.md#pc-11-documentos-soltos-e-destino-do-que-foi-concatenado` | 3 | Não verificado (misto (vale o mais fraco)) | 2 | b1 s1 |

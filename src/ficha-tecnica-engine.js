@@ -134,6 +134,34 @@
 
   function hoje() { return new Date().toLocaleDateString('pt-BR'); }
 
+  /* Autoria da ficha para o rodapé. Puro (testado).
+     Fonte: `fichas_historico` (acao 'criou'/'editou', com ator_nome) + datas da própria ficha.
+     `fichas_tecnicas.criado_por` é uuid e nunca foi preenchido (0 de 422 em 18/11/2026), por isso não serve.
+     Não inventa: sem evento 'criou' no histórico (fichas antigas), `criadoPor` fica null e o rodapé diz "autor não registrado". */
+  function autoriaFicha(ficha, historico) {
+    const ev = (Array.isArray(historico) ? historico : []).slice()
+      .sort((a, b) => new Date(a.criado_em) - new Date(b.criado_em));
+    const criou = ev.find((e) => e.acao === 'criou') || null;
+    const edicoes = ev.filter((e) => e.acao === 'editou');
+    const ultima = edicoes.length ? edicoes[edicoes.length - 1] : null;
+    const criadoEm = (ficha && ficha.criado_em) || (criou && criou.criado_em) || null;
+    let atualizadoEm = ultima ? ultima.criado_em : null;
+    let atualizadoSemAutor = false;
+    /* ficha antiga sem evento de edição, mas com data de atualização bem depois da criação */
+    if (!ultima && ficha && ficha.atualizado_em && criadoEm
+        && new Date(ficha.atualizado_em) - new Date(criadoEm) > 5 * 60 * 1000) {
+      atualizadoEm = ficha.atualizado_em; atualizadoSemAutor = true;
+    }
+    return {
+      criadoPor: criou ? (criou.ator_nome || null) : null,
+      criadoEm,
+      versao: 1 + edicoes.length,
+      atualizadoPor: ultima ? (ultima.ator_nome || null) : null,
+      atualizadoEm,
+      atualizadoSemAutor,
+    };
+  }
+
   /* Cache da biblioteca persistente (carregada via FTStore.loadLibrary).
      Estrutura: { cats: [{id, nome, icon}], campos: [{cat_id, k, nome, unidade, tipo}] } */
   let LIB_EXTRAS = { cats: [], campos: [] };
@@ -485,6 +513,6 @@
     slug, hoje, freshCats, freshState, normalizeNome,
     compile, aplicarTemplate, nextOrdem, podeGerar,
     setLibraryExtras, buildSKU,
-    copiarFicha, substituirEmFicha,
+    copiarFicha, substituirEmFicha, autoriaFicha,
   };
 }());

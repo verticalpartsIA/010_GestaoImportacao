@@ -194,7 +194,19 @@ const GROUPS_LS_KEY = "vp_sidebar_collapsed_groups";
 function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
   const emailLogado = String((window.__VP_USER || {}).email || "").toLowerCase();
   /* "emails": item visível só para esses e-mails (organização do menu; a trava de verdade está no banco, Art. 25) */
-  const filterVisible = (item) => (!item.restrict || item.restrict.includes(role)) && (!item.emails || item.emails.includes(emailLogado));
+  /* Boletos Avisos (17/11/2026): aparece para os 3 e-mails fixos OU para quem o banco libera pela grade de alçadas
+     (boletos_avisos_pode). Não depende do perfil de visão (role): na 1ª versão dependia e o item sumia para o Financeiro. */
+  const [podeBoletos, setPodeBoletos] = React.useState(false);
+  React.useEffect(() => {
+    let vivo = true;
+    const checar = () => { try { const p = window.BoletosAvisosStore && window.BoletosAvisosStore.pode(); if (p && p.then) p.then(ok => { if (vivo) setPodeBoletos(ok === true); }).catch(() => {}); } catch (e) { /* menu segue sem o item */ } };
+    checar();
+    window.addEventListener('vpprd:user', checar);
+    return () => { vivo = false; window.removeEventListener('vpprd:user', checar); };
+  }, [emailLogado]);
+  const filterVisible = (item) => item.id === "boletos-avisos"
+    ? (item.emails.includes(emailLogado) || podeBoletos)
+    : ((!item.restrict || item.restrict.includes(role)) && (!item.emails || item.emails.includes(emailLogado)));
   /* Badge de decisões pendentes — o dado já existia em DecisoesStore
      (listarPendentesParaMim, usado por decisoes.jsx), só nunca tinha sido
      plugado no nav. Sidebar já re-renderiza a cada navegação (recebe

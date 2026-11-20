@@ -315,7 +315,8 @@ function Assinaturas(doc, assinaturas) {
   const comp = a.comprador || {};
   const lista = Array.isArray(assinaturas) ? assinaturas : [];
   const razao = String(comp.razaoLabel || '').trim();
-  const razaoLtda = /ltda\.?$/i.test(razao) ? razao : `${razao} LTDA.`;
+  // Pessoa física (comp.pf) não leva "LTDA." depois do nome.
+  const razaoLtda = (comp.pf || /ltda\.?$/i.test(razao)) ? razao : `${razao} LTDA.`;
   const assinado = lista.length > 0;
   const bloco = (key, papel, nome, cpf) => h(View, { key, wrap: false, style: { marginBottom: 30 } }, assinado ? [
     h(Text, { key: 'r', style: S.assRole }, papel),
@@ -395,7 +396,7 @@ async function montarDocumento(doc, assinaturas) {
   ]);
 
   const corpo = [
-    h(Text, { key: 'titulo', style: S.titulo }, doc.titulo || 'CONTRATO DE COMPRA E VENDA DE EQUIPAMENTOS E PRESTAÇÃO DE SERVIÇOS DE INSTALAÇÃO'),
+    h(Text, { key: 'titulo', style: S.titulo }, doc.titulo || 'CONTRATO DE COMPRA E VENDA DE EQUIPAMENTOS E PRESTAÇÃO DE SERVIÇOS DE INSTALAÇÃO & GARANTIA'),
     h(Text, { key: 'numero', style: S.numero }, `Nº do Contrato: ${doc.numero || ''}`),
     ...(doc.sections || []).map(Secao),
     ...Assinaturas(doc, assinaturas),

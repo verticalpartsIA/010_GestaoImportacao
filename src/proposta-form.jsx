@@ -274,10 +274,15 @@ function S_Cliente({ d, set }) {
       <PEField label="Nome do Cliente" required span="2">
         <PETextInput value={d.cliente.nome} onChange={(v) => set("cliente.nome", v)} placeholder="Nome do cliente / empresa"/>
       </PEField>
-      <PEField label="CNPJ" required>
-        <PETextInput value={d.cliente.cnpj} onChange={(v) => set("cliente.cnpj", v)} placeholder="00.000.000/0001-00"/>
+      <PEField label={d.cliente.tipo_pessoa === "PF" ? "CPF" : "CNPJ"} required>
+        {d.cliente.tipo_pessoa === "PF"
+          ? <PETextInput value={d.cliente.cpf} onChange={(v) => set("cliente.cpf", v)} placeholder="000.000.000-00"/>
+          : <PETextInput value={d.cliente.cnpj} onChange={(v) => set("cliente.cnpj", v)} placeholder="00.000.000/0001-00"/>}
       </PEField>
 
+      <PEField label="Tipo de pessoa">
+        <PESelect value={d.cliente.tipo_pessoa || "PJ"} onChange={(v) => set("cliente.tipo_pessoa", v === "PF" ? "PF" : "PJ")} options={["PJ", "PF"]}/>
+      </PEField>
       <PEField label="A/C Responsável" span="2">
         <PETextInput value={d.cliente.responsavel} onChange={(v) => set("cliente.responsavel", v)} placeholder="Nome — Cargo"/>
       </PEField>

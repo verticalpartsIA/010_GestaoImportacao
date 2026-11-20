@@ -199,6 +199,13 @@
       ]},
       { modulo: 'aval-financeiro', label: 'Aval Financeiro' },
       { modulo: 'emissao-nf', label: 'Emissão de NF' },
+      /* 17/11/2026: só leitura. Gelson, Diego e Juliana têm acesso total fixo no banco (boletos_avisos_pode_gerir);
+         quem receber esta caixa só vê a tela, sem enviar aviso, atualizar do Omie nem mexer no envio automático. */
+      { modulo: 'boletos-avisos', label: 'Boletos Avisos', capacidades: [
+        { chave: 'ver', label: 'Vê a tela Boletos Avisos (somente leitura)' },
+        { chave: 'atualizar', label: 'Atualiza os boletos do Omie (botão "Atualizar do Omie"; só lê o Omie, não envia aviso)' },
+        { chave: 'tratar', label: 'Trata os casos da aba Tratativas (anota, muda o status e o responsável; não envia aviso)' },
+      ]},
     ]},
     { grupo: 'Jurídico', itens: [
       { modulo: 'contrato-venda-equipamentos', label: 'Contrato Venda de Equipamentos' },
@@ -214,7 +221,11 @@
       { modulo: 'ims-importacao', label: 'IMS' },
       { modulo: 'embarques-importacao', label: 'Embarques' },
       { modulo: 'gi-analise-precos', label: 'Análise de Preços' },
-      { modulo: 'compras', label: 'Importação Varejo' },
+      { modulo: 'compras', label: 'Importação Varejo', capacidades: [
+        ...ACOES_PADRAO,
+        { chave: 'solicitar', label: 'Envia solicitação de compra ao comprador (vendedor)' },
+        { chave: 'tratar_solicitacoes', label: 'Trata solicitações: aloca em cotação, devolve ao vendedor (comprador)' },
+      ]},
       { modulo: 'cotacoes-varejo', label: 'Cotações de Varejo' },
       { modulo: 'pedidos-acompanhamento', label: 'Pedidos' },
     ]},

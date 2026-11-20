@@ -126,7 +126,7 @@ function CVCelula({ resp, qtdRef, melhor, editavel, valorQtd, onQtd, onTudo }) {
   const faixas = resp ? C.faixasOrdenadas(resp.faixas) : [];
   const aplicada = resp ? C.precoNaQuantidade(resp.faixas, qtdRef) : null;
   return (
-    <div style={{ minWidth: 170, padding: '4px 2px', background: melhor ? 'rgba(34,160,90,.10)' : undefined, borderRadius: 6 }}>
+    <div style={{ padding: '4px 2px', background: melhor ? 'rgba(34,160,90,.10)' : undefined, borderRadius: 6 }}>
       {!resp || !faixas.length ? <div className="small muted">sem preço</div> : (
         <div className="small" style={{ lineHeight: 1.45 }}>
           {faixas.map((f) => (
@@ -241,6 +241,64 @@ function CVModalConfirmar({ cfg, onClose }) {
         <Button variant="primary" onClick={ok} disabled={rodando}>{rodando ? 'Aguarde…' : cfg.rotulo}</Button>
       </>}>
       <p className="small">{cfg.texto}</p>
+    </Modal>
+  );
+}
+
+/* ---------- Mover produto para outro lote em rascunho (ou para um lote novo) ---------- */
+function CVModalMover({ item, loteAtualId, onClose, onFeito }) {
+  const S = window.CotacoesVarejoStore;
+  const [lotes, setLotes] = React.useState(null);
+  const [destino, setDestino] = React.useState('');       // '' = ainda não escolheu · '__novo' = lote novo
+  const [titulo, setTitulo] = React.useState('');
+  const [rodando, setRodando] = React.useState(false);
+  React.useEffect(() => { S.listarLotes().then((ls) => setLotes(ls.filter((l) => l.status === 'rascunho' && l.id !== loteAtualId))).catch(() => setLotes([])); }, []);
+  const ok = async () => {
+    setRodando(true);
+    try { const r = await S.moverItem(item.id, destino === '__novo' ? null : destino, destino === '__novo' ? titulo : null); onFeito(r); }
+    catch (e) { window.toast?.(String((e && e.message) || e), 'error'); setRodando(false); }
+  };
+  return (
+    <Modal title={'Mover ' + item.codigo + ' para outro lote'} onClose={onClose} width={480}
+      footer={<>
+        <Button variant="ghost" onClick={onClose} disabled={rodando}>Voltar</Button>
+        <Button variant="primary" onClick={ok} disabled={rodando || !destino}>{rodando ? 'Movendo…' : 'Mover produto'}</Button>
+      </>}>
+      <p className="small">O produto sai deste lote e entra no escolhido (só lotes ainda em rascunho). Se o produto já estiver lá, a quantidade é somada. As respostas de fornecedor não se perdem, mas este produto deixa de contar neste lote.</p>
+      {lotes == null ? <p className="small muted">Carregando lotes…</p> : (
+        <label className="small" style={{ display: 'block', marginTop: 8 }}>Lote de destino
+          <select className="input" style={{ width: '100%', marginTop: 4 }} value={destino} onChange={(e) => setDestino(e.target.value)}>
+            <option value="">— escolha —</option>
+            {lotes.map((l) => <option key={l.id} value={l.id}>{l.numero}{l.titulo ? ' · ' + l.titulo : ''} ({l.qtdItens} produto(s))</option>)}
+            <option value="__novo">+ Novo lote</option>
+          </select>
+        </label>
+      )}
+      {destino === '__novo' && (
+        <label className="small" style={{ display: 'block', marginTop: 8 }}>Nome do novo lote (opcional)
+          <input className="input" style={{ width: '100%', marginTop: 4 }} maxLength={80} value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ex.: Guilherme - Corrimãos" />
+        </label>
+      )}
+    </Modal>
+  );
+}
+
+/* ---------- Renomear o lote (título livre, até 80 letras) ---------- */
+function CVModalRenomear({ lote, onClose, onFeito }) {
+  const S = window.CotacoesVarejoStore;
+  const [titulo, setTitulo] = React.useState(lote.titulo || '');
+  const [rodando, setRodando] = React.useState(false);
+  const ok = async () => { setRodando(true); try { await S.renomearLote(lote.id, titulo); onFeito(); } catch (e) { window.toast?.(String((e && e.message) || e), 'error'); setRodando(false); } };
+  return (
+    <Modal title={'Renomear o lote ' + lote.numero} onClose={onClose} width={440}
+      footer={<>
+        <Button variant="ghost" onClick={onClose} disabled={rodando}>Voltar</Button>
+        <Button variant="primary" onClick={ok} disabled={rodando}>{rodando ? 'Salvando…' : 'Salvar nome'}</Button>
+      </>}>
+      <label className="small" style={{ display: 'block' }}>Nome do lote
+        <input className="input" style={{ width: '100%', marginTop: 4 }} maxLength={80} autoFocus value={titulo} onChange={(e) => setTitulo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !rodando) ok(); }} placeholder="Ex.: Guilherme - Corrimãos" />
+      </label>
+      <p className="small muted" style={{ marginTop: 8 }}>O número ({lote.numero}) não muda. Em branco, o lote fica sem nome.</p>
     </Modal>
   );
 }
@@ -396,17 +454,24 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   const [npsMap, setNpsMap] = React.useState({});
   const [busca, setBusca] = React.useState('');
   const [limite, setLimite] = React.useState(50);
+  const ordMapa = window.useOrdenacao();   // ordenar o mapa clicando no título da coluna (antes de qualquer return)
   const [substituir, setSubstituir] = React.useState(null);   // convite que está sendo substituído
   const [subForn, setSubForn] = React.useState('');
   const [subMotivo, setSubMotivo] = React.useState('');
+  const [moverIt, setMoverIt] = React.useState(null);          // item que está sendo movido para outro lote
+  const [renomeando, setRenomeando] = React.useState(false);
   const fotosTentadas = React.useRef(false);
 
   React.useEffect(() => { window.PropostaStore?.temCapacidade?.('cotacoes-varejo', 'criar').then(setPodeGerenciar).catch(() => setPodeGerenciar(false)); }, []);
   React.useEffect(() => { S.fornecedoresCadastrados().then(setForn).catch(() => setForn([])); }, []);
 
+  const [origens, setOrigens] = React.useState({});   // item do lote → pedidos de vendedores que o originaram (Solicitações de Compra)
+  const [meusItens, setMeusItens] = React.useState(() => new Set());   // itens cuja quantidade o usuário pode editar (vendedor: só os que pediu; a regra é do banco)
   const carregar = React.useCallback(async () => {
     try {
+      S.itensEditaveis(loteId).then((ids) => setMeusItens(new Set(ids))).catch(() => setMeusItens(new Set()));
       const d = await S.obterLote(loteId);
+      if (d && window.SolicitacoesCompraStore) window.SolicitacoesCompraStore.origemDosItens(d.itens).then(setOrigens).catch(() => {});
       if (!d) { setErro('Lote não encontrado.'); return; }
       setDados(d);
       const m = {}; d.decisoes.forEach((x) => { m[x.item_id + '|' + x.convite_id] = String(x.quantidade); });
@@ -564,12 +629,25 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     if (!window.confirm('Remover esta foto do produto ' + item.codigo + ' neste lote?')) return;
     try { await S.atualizarItem(item.id, { [campo]: '' }); await carregar(); } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
   };
-  const editarItem = async (item, campo, valor) => { try { await S.atualizarItem(item.id, { [campo]: valor }); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
-  const tirarItem = (item) => setConfirmar({
-    titulo: 'Tirar produto do lote', rotulo: 'Tirar produto',
-    texto: 'Tirar ' + item.codigo + ' deste lote? Ele sai do mapa e da cotação; as respostas já dadas pelos fornecedores ficam guardadas no histórico.',
-    acao: async () => { await S.removerItem(item.id); await carregar(); },
-  });
+  // Vendedor (sem alçada de comprador) altera só a quantidade dos itens que ele pediu; o banco confere de novo.
+  const ajustarMinhaQtd = async (item, valor) => {
+    try {
+      const r = await S.ajustarQuantidade(item.id, valor); await carregar();
+      window.toast?.('Quantidade de ' + item.codigo + ' salva.' + (r && r.lote_status === 'em_cotacao' ? ' O lote já está em cotação: o comprador foi avisado.' : ''), r && r.lote_status === 'em_cotacao' ? 'warning' : 'success');
+    } catch (e) { window.toast?.(String(e.message || e), 'error'); await carregar(); }
+  };
+  const editarItem = async (item, campo, valor) => { try { await S.atualizarItem(item.id, { [campo]: valor }); await carregar(); if (campo === 'quantidade_pedida') window.toast?.('Quantidade de ' + item.codigo + ' salva.', 'success'); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
+  // Lote em rascunho: o produto que veio de um pedido de vendedor VOLTA à fila de Solicitações (não fica "alocado" para sempre).
+  const tirarItem = (item) => {
+    const doVendedor = (origens[item.id] || []).length > 0 && lote.status === 'rascunho';
+    setConfirmar({
+      titulo: doVendedor ? 'Devolver produto à solicitação' : 'Tirar produto do lote', rotulo: doVendedor ? 'Devolver à solicitação' : 'Tirar produto',
+      texto: doVendedor
+        ? 'Tirar ' + item.codigo + ' deste lote e devolvê-lo à fila de Solicitações? O pedido do vendedor volta a "não alocado" (aba Pedidos › Solicitações) e pode ser alocado em outro lote.'
+        : 'Tirar ' + item.codigo + ' deste lote? Ele sai do mapa e da cotação; as respostas já dadas pelos fornecedores ficam guardadas no histórico.',
+      acao: async () => { if (lote.status === 'rascunho') await S.devolverItem(item.id); else await S.removerItem(item.id); await carregar(); },
+    });
+  };
 
   const aprovar = async () => {
     setAprovando(true);
@@ -586,8 +664,33 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
 
   const fornecedoresLivres = forn.filter((f) => !convites.some((c) => c.fornecedor_id === f.id));
   const termo = busca.trim().toLowerCase();
-  const itensFiltrados = termo ? itens.filter((i) => ((i.codigo || '') + ' ' + (i.descricao || '')).toLowerCase().includes(termo)) : itens;
+  const itensBusca = termo ? itens.filter((i) => ((i.codigo || '') + ' ' + (i.descricao || '')).toLowerCase().includes(termo)) : itens;
+  // Quantidade de referência do item (a comprada, senão a pedida) — a mesma usada para escolher o preço da faixa.
+  const qtdCompradaDe = (it) => decisoesAtuais.filter((d) => d.item_id === it.id).reduce((a, d) => a + d.quantidade, 0);
+  const qtdRefDe = (it) => { const c = qtdCompradaDe(it); return c > 0 ? c : cvNum(it.quantidade_pedida); };
+  const gettersMapa = {
+    codigo: (it) => it.codigo, descricao: (it) => it.descricao,
+    qtd: (it) => cvNum(it.quantidade_pedida), comprar: (it) => qtdCompradaDe(it),
+  };
+  convites.forEach((cv) => {
+    gettersMapa['f:' + cv.id] = (it) => {
+      const r = respDe(cv.id, it.id);
+      const a = r ? C.precoNaQuantidade(r.faixas, qtdRefDe(it)) : null;
+      return a && a.preco > 0 ? a.preco : null;   // sem preço vai sempre ao fim
+    };
+  });
+  const itensFiltrados = ordMapa.aplicar(itensBusca, gettersMapa);
   const itensVisiveis = itensFiltrados.slice(0, limite);
+  // Título de coluna ordenável: ⇅ esmaecido quando inativa, ▲/▼ quando ativa (o ciclo de clique é o do useOrdenacao).
+  const cvTh = (chave, rotulo, props) => {
+    const p = props || {}; const ativo = ordMapa.ord.chave === chave;
+    return (
+      <th key={p.key} className={p.className} title={p.title || 'Clique para ordenar'} aria-sort={ativo ? (ordMapa.ord.dir === 1 ? 'ascending' : 'descending') : 'none'}
+        style={{ cursor: 'pointer', userSelect: 'none', ...(p.style || {}) }} onClick={() => ordMapa.alternar(chave)}>
+        {rotulo}<span className="cv-sort" style={{ marginLeft: 5, opacity: ativo ? 1 : .35, color: ativo ? 'var(--vp-yellow,#f6c000)' : undefined }}>{ativo ? (ordMapa.ord.dir === 1 ? '▲' : '▼') : '⇅'}</span>
+      </th>
+    );
+  };
   const chaveNps = (cv) => npsMap[cv.fornecedor_id] || npsMap[String(cv.fornecedor_nome || '').toLowerCase()] || null;
   const abrirSubstituir = (cv) => { setSubstituir(cv); setSubForn(''); setSubMotivo(''); };
   const confirmarSubstituir = async () => {
@@ -606,7 +709,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule" />Suprimentos · Cotações de Varejo</div>
           <h1 className="page-head__title">{lote.numero} <Badge variant={st.variant}>{st.label}</Badge></h1>
-          <p className="page-head__sub">{lote.titulo ? lote.titulo + ' · ' : ''}Criado por {lote.criado_por_nome || lote.criado_por || '—'} em {cvFmtData(lote.created_at)}. Em cada célula digite a quantidade que vai comprar daquele fornecedor (pode dividir, e pode ser mais ou menos que o pedido).</p>
+          <p className="page-head__sub">{lote.titulo ? lote.titulo + ' · ' : ''}{editavel && <button type="button" className="link-btn" title="Renomear o lote" onClick={() => setRenomeando(true)}>✎ {lote.titulo ? 'renomear' : 'dar um nome ao lote'}</button>}{editavel ? ' · ' : ''}Criado por {lote.criado_por_nome || lote.criado_por || '—'} em {cvFmtData(lote.created_at)}. Em cada célula digite a quantidade que vai comprar daquele fornecedor (pode dividir, e pode ser mais ou menos que o pedido).</p>
         </div>
         <div className="page-head__r">
           <Button variant="outline" onClick={onVoltar}>← Lotes</Button>
@@ -697,19 +800,33 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
 
       <div style={{ height: 12 }} />
       <Card title="Mapa comparativo" sub={convites.length ? 'Verde = menor preço para a quantidade em questão. ★ = comprar a quantidade pedida deste fornecedor.' : 'Convide fornecedores acima para montar o comparativo.'}>
-        <style>{'.cv-mapa thead th{position:sticky;top:0;z-index:3;background:var(--surface,#fff)}'}</style>
+        <style>{[
+          '.cv-mapa{table-layout:fixed;border-collapse:separate;border-spacing:0}',
+          '.cv-mapa thead th{position:sticky;top:0;z-index:3;background:#111;color:#fff;border-bottom:3px solid var(--vp-yellow,#f6c000);padding:12px 10px;vertical-align:bottom;white-space:normal;overflow-wrap:anywhere;line-height:1.25;font-size:12px;letter-spacing:.02em}',
+          '.cv-mapa thead th:hover{background:#222}',
+          '.cv-mapa thead th .cv-moeda{display:inline-block;margin-top:4px;padding:1px 7px;border-radius:10px;background:var(--vp-yellow,#f6c000);color:#111;font-size:10px;font-weight:700}',
+          '.cv-mapa tbody td{padding:12px 10px;vertical-align:top;border-bottom:1px solid var(--border,#e5e7eb);overflow-wrap:anywhere}',
+          '.cv-mapa tbody tr:nth-child(even) td{background:rgba(127,127,127,.05)}',
+          '.cv-mapa tbody tr:hover td{background:rgba(246,192,0,.10)}',
+          '.cv-mapa tfoot td{padding:12px 10px;background:rgba(246,192,0,.14);border-top:3px solid #111;vertical-align:top}',
+        ].join('')}</style>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
           <input className="input" style={{ minWidth: 280 }} placeholder="Buscar produto por código ou descrição…" value={busca} onChange={(e) => { setBusca(e.target.value); setLimite(50); }} />
           <span className="small muted">{itensFiltrados.length === itens.length ? itens.length + ' produto(s)' : itensFiltrados.length + ' de ' + itens.length + ' produto(s)'}</span>
         </div>
         <div className="table-wrap" style={{ overflow: 'auto', maxHeight: '75vh' }}>
-          <table className="t cv-mapa">
+          <table className="t cv-mapa" style={{ width: 130 + 110 + 300 + 110 + convites.length * 200 + 110 + 110 }}>
+            <colgroup>
+              <col style={{ width: 130 }} /><col style={{ width: 110 }} /><col style={{ width: 300 }} /><col style={{ width: 110 }} />
+              {convites.map((cv) => <col key={cv.id} style={{ width: 200 }} />)}
+              <col style={{ width: 110 }} /><col style={{ width: 110 }} />
+            </colgroup>
             <thead>
               <tr>
-                <th style={{ width: 64 }}>Foto</th><th>Código</th><th>Descrição</th><th className="text-right">Qtd. pedida</th>
-                {convites.map((cv) => <th key={cv.id}>{cv.fornecedor_nome}<div className="small muted" style={{ fontWeight: 400 }}>{cv.moeda}</div></th>)}
+                <th>Foto</th>{cvTh('codigo', 'Código')}{cvTh('descricao', 'Descrição')}{cvTh('qtd', 'Qtd. pedida', { className: 'text-right' })}
+                {convites.map((cv) => cvTh('f:' + cv.id, <><span style={{ fontWeight: 700 }}>{cv.fornecedor_nome}</span><div><span className="cv-moeda">{cv.moeda}</span></div></>, { key: cv.id, title: 'Ordenar pelo menor preço de ' + cv.fornecedor_nome }))}
                 <th className="text-center" title="Marque se este item exige certificado: o fornecedor só consegue enviar o preço anexando o arquivo no link">Certificado</th>
-                <th className="text-right">Comprar</th>
+                {cvTh('comprar', 'Comprar', { className: 'text-right' })}
               </tr>
             </thead>
             <tbody>
@@ -754,19 +871,26 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                       </div>
                     </td>
                     <td className="mono">{it.codigo}</td>
-                    <td style={{ maxWidth: 260 }}>
+                    <td>
+                      {it.descricao && <div style={{ fontWeight: 600, lineHeight: 1.35, marginBottom: 4 }}>{it.descricao}</div>}
+                      {(origens[it.id] || []).length > 0 && (
+                        <div className="small" style={{ margin: '4px 0', color: 'var(--vp-info, #1d6fd1)', fontWeight: 700 }} title="Este produto veio de pedido(s) de vendedor (Pedidos › Solicitações)">
+                          👤 {origens[it.id].map((o) => 'Pedido de ' + o.vendedor + ' (' + o.numero + ', ' + o.quantidade + ')').join(' · ')}
+                        </div>
+                      )}
                       {editavel
                         ? <>
-                            <textarea key={it.obs_vp || ''} className="input" rows={(it.obs_vp || '').length > 90 ? 3 : 1} style={{ width: '100%', marginTop: 4, fontSize: 12 }} placeholder="Obs. VerticalParts (o fornecedor lê no portal)" defaultValue={it.obs_vp || ''} onBlur={(e) => { if ((e.target.value || '') !== (it.obs_vp || '')) editarItem(it, 'obs_vp', e.target.value || null); }} />
+                            <textarea key={it.obs_vp || ''} className="input" rows={(it.obs_vp || '').length > 90 ? 3 : 2} style={{ width: '100%', marginTop: 4, fontSize: 12, resize: 'vertical', boxSizing: 'border-box' }} placeholder="Obs. VerticalParts (o fornecedor lê no portal)" defaultValue={it.obs_vp || ''} onBlur={(e) => { if ((e.target.value || '') !== (it.obs_vp || '')) editarItem(it, 'obs_vp', e.target.value || null); }} />
                             <button className="link-btn" onClick={() => setDescItem(it)} title="Descrição técnica em inglês (e português), com ajuda da IA">{it.obs_vp ? '✎ descrição em inglês' : '+ descrição em inglês (com IA)'}</button>
                           </>
                         : (it.obs_vp ? <div className="small muted" style={{ whiteSpace: 'pre-wrap' }}>{it.obs_vp}</div> : null)}
                     </td>
                     <td className="text-right">
-                      {editavel
-                        ? <input className="input text-right" style={{ width: 80, ...(cvNum(it.quantidade_pedida) > 0 ? {} : { borderColor: '#d97706', background: '#fffbeb' }) }} placeholder="a definir" title={cvNum(it.quantidade_pedida) > 0 ? '' : 'Sem sugestão de compra: informe a quantidade que queremos cotar'} type="number" min="1" step="any" defaultValue={cvNum(it.quantidade_pedida) > 0 ? it.quantidade_pedida : ''} onBlur={(e) => { const v = cvNum(e.target.value); if (v > 0 && v !== cvNum(it.quantidade_pedida)) editarItem(it, 'quantidade_pedida', v); }} />
+                      {(editavel || (aberto && meusItens.has(it.id)))
+                        ? <input className="input text-right" style={{ width: 80, ...(cvNum(it.quantidade_pedida) > 0 ? {} : { borderColor: '#d97706', background: '#fffbeb' }) }} placeholder="a definir" title={cvNum(it.quantidade_pedida) > 0 ? (editavel ? '' : 'Produto que você pediu: você pode alterar a quantidade') : 'Sem sugestão de compra: informe a quantidade que queremos cotar'} type="number" min="1" step="any" defaultValue={cvNum(it.quantidade_pedida) > 0 ? it.quantidade_pedida : ''} onBlur={(e) => { const v = cvNum(e.target.value); if (v > 0 && v !== cvNum(it.quantidade_pedida)) { if (editavel) editarItem(it, 'quantidade_pedida', v); else ajustarMinhaQtd(it, v); } }} />
                         : cvFmtNum(it.quantidade_pedida)}
-                      {editavel && <div><button type="button" className="link-btn muted" title="Remover produto do lote" aria-label={'Remover produto ' + it.codigo + ' do lote'} onClick={() => tirarItem(it)} style={{ display: 'inline-flex', padding: 4 }}><Icon.trash /></button></div>}
+                {editavel && lote.status === 'rascunho' && <div><button type="button" className="link-btn" title="Mover este produto para outro lote em rascunho (ou um lote novo)" onClick={() => setMoverIt(it)}>↪ mover</button></div>}
+                      {editavel && <div><button type="button" className="link-btn muted" title={(origens[it.id] || []).length > 0 && lote.status === 'rascunho' ? 'Devolver à fila de Solicitações' : 'Remover produto do lote'} aria-label={'Remover produto ' + it.codigo + ' do lote'} onClick={() => tirarItem(it)} style={{ display: 'inline-flex', padding: 4 }}><Icon.trash /></button></div>}
                     </td>
                     {convites.map((cv) => (
                       <td key={cv.id}>
@@ -790,7 +914,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
             {convites.length > 0 && (
               <tfoot>
                 <tr>
-                  <td colSpan={4} style={{ fontWeight: 800 }}>Total por fornecedor</td>
+                  <td colSpan={4} style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: 12 }}>Total por fornecedor</td>
                   {convites.map((cv) => { const g = calc.porConvite[cv.id]; return <td key={cv.id}>{g ? <><b>{cvFmtMoeda(g.totalOriginal, cv.moeda)}</b>{g.totalBRL != null && cv.moeda !== 'BRL' && <div className="small muted">≈ {cvFmtMoeda(g.totalBRL, 'BRL')}</div>}</> : <span className="muted">—</span>}</td>; })}
                   <td />
                   <td className="text-right"><b>{calc.totalBRL != null ? cvFmtMoeda(calc.totalBRL, 'BRL') : (cambioNum > 0 ? '—' : 'informe o câmbio')}</b></td>
@@ -806,6 +930,9 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
 
       {modalPedir && <CVModalPedirCotacao convites={convites} forn={forn} onClose={() => setModalPedir(false)} onEmail={enviarEmail} onZap={zap} onLink={copiarLink} onTodosEmail={enviarTodosEmail} enviandoTodos={enviandoTodos} cc={cc} onCc={setCc} />}
       {confirmar && <CVModalConfirmar cfg={confirmar} onClose={() => setConfirmar(null)} />}
+      {moverIt && <CVModalMover item={moverIt} loteAtualId={lote.id} onClose={() => setMoverIt(null)}
+        onFeito={(r) => { const cod = moverIt.codigo; setMoverIt(null); window.toast?.(cod + ' foi para o lote ' + (r && r.numero) + (r && r.somado ? ' (quantidade somada)' : '') + '.', 'success'); carregar(); }} />}
+      {renomeando && <CVModalRenomear lote={lote} onClose={() => setRenomeando(false)} onFeito={() => { setRenomeando(false); window.toast?.('Lote renomeado.', 'success'); carregar(); }} />}
       {descItem && <CVModalDescricao item={descItem} onClose={() => setDescItem(null)} onSalvo={carregar} />}
       {npsConvite && <CVModalNPS lote={lote} convite={npsConvite} onClose={() => setNpsConvite(null)} onSalvo={carregarNps} />}
       {substituir && (
