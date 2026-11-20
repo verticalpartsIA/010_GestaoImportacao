@@ -1,12 +1,14 @@
-name: Deploy — Hostinger
+name: Deploy — Hostinger (manual, reserva)
 
-# O deploy só roda depois que o workflow "CI — VP Gestão" termina com SUCESSO
-# na branch main. Também pode ser disparado manualmente (workflow_dispatch).
+# O deploy de produção é feito pela integração Git do hPanel ("Deploy Node.js app
+# from Git", build isolado por commit a cada push em main). Este workflow NÃO é
+# o caminho normal: ele só roda quando alguém o dispara à mão (workflow_dispatch),
+# por exemplo para um `git pull` de emergência por SSH.
+# O gate de qualidade é a proteção da branch main (checks "Validar estrutura do
+# projeto" e "Todas as telas abrem sem erro" exigidos antes do merge).
+# Antes de 20/11/2026 ele disparava sozinho após o CI; foi tirado para não haver
+# dois deploys concorrentes na mesma pasta.
 on:
-  workflow_run:
-    workflows: ["CI — VP Gestão"]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -20,7 +22,6 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Preparar chave SSH
         env:
@@ -64,7 +65,7 @@ jobs:
           SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
           SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
           # Token temporário do próprio workflow (somente leitura, expira ao fim do job).
-          # O repositório é privado: o servidor precisa dele para o git pull.
+          # O servidor usa o token para o git pull (funciona também se o repositório virar privado).
           GH_TOKEN: ${{ github.token }}
         run: |
           SSH_HOST="$(printf '%s' "$SSH_HOST" | tr -d ' \r\n')"
