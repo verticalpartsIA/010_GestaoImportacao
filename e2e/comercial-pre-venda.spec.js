@@ -132,6 +132,27 @@ test.describe('Proposta e Quadro de Comando — telas com dados', () => {
     expect(erros).toEqual([]);
   });
 
+  test('Rascunho que nasceu da cotação abre com Especificações e Acabamentos travados e o botão "Pedir destrave"', async ({ page }) => {
+    const erros = coletarErros(page);
+    const st = novoEstado({ tabelas: {
+      propostas: [], perfis: [{ id: 'p1', nivel: 'Vendedor', nome: 'Vend', email: 'vendedor.teste@verticalparts.com.br' }],
+    } });
+    await preparar(page, st);
+    await abrir(page, '/comercial/proposta-editor');
+    await page.waitForFunction(() => !!localStorage.getItem('vpprd.proposta-draft'));
+    const padrao = await page.evaluate(() => JSON.parse(localStorage.getItem('vpprd.proposta-draft')));
+    st.tabelas.propostas = [{ id: 'P-COT', proposal_type: 'elevador', status: 'rascunho', numero_documento: 'VPPR-1004', titulo: 'Cliente X · Obra', numero_cotacao: 1004, precificacao_id: 'PZ-1',
+      data_json: { ...padrao, numeroCotacao: '1004', precificacaoId: 'PZ-1', cliente: { ...padrao.cliente, nome: 'Cliente X' },
+        divergencias: [{ id: 'div-U1-porta_tipo_abertura', unidadeId: 'U1', key: 'porta_tipo_abertura', rotulo: 'Tipo de abertura da porta', secao: 'acabamentos', pedido: 'Central', cotado: 'Lateral', fornecedor: 'Glarie', status: 'pendente' }] },
+      valor_total: 1000, token: 'tok', version: 1, revisao_indice: 0 }];
+    await page.goto('/comercial/proposta-editor/P-COT');
+    await expect(page.getByRole('button', { name: 'Pedir destrave' }).first()).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByText('o que foi cotado não pode ser editado sem o destrave do Líder').first()).toBeVisible();
+    await expect(page.getByText('O fornecedor cotou diferente do que foi pedido')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Aceitar' })).toBeVisible();
+    expect(erros).toEqual([]);
+  });
+
   test('proposta com data_json vazio ({}) — as 125 importadas de 06/04/2026 — abre o editor (travada) em vez de derrubar a tela', async ({ page }) => {
     const erros = coletarErros(page);
     const st = novoEstado({ tabelas: {

@@ -5,9 +5,9 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/03_cadastros_mestres.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `980586c`)
-- **Palavras:** 10191 · **blocos:** 229 · **seções com selo próprio:** 25 de 45
-- **Origem do selo dos blocos:** próprio 50 · da seção 113 · da seção-pai 0 · do cabeçalho 42 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 24
-- **Selo efetivo dos blocos:** Conferido 169 · Herdado 20 · Não verificado 16
+- **Palavras:** 10345 · **blocos:** 231 · **seções com selo próprio:** 25 de 45
+- **Origem do selo dos blocos:** próprio 51 · da seção 114 · da seção-pai 0 · do cabeçalho 42 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 24
+- **Selo efetivo dos blocos:** Conferido 171 · Herdado 20 · Não verificado 16
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -27,7 +27,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 3.1.8 Regras e armadilhas | `docs/modulos/03_cadastros_mestres.md#318-regras-e-armadilhas` | 3 | Conferido (uniforme) | 8 | b2 s6 |
 | 3.1.9 Testes | `docs/modulos/03_cadastros_mestres.md#319-testes` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 3.1.10 Pendências e decisões | `docs/modulos/03_cadastros_mestres.md#3110-pendências-e-decisões` | 3 | Conferido (uniforme) | 14 | b5 s9 |
-| 3.1.11 Histórico (só o que ainda ensina) | `docs/modulos/03_cadastros_mestres.md#3111-histórico-só-o-que-ainda-ensina` | 3 | Conferido (uniforme) | 7 | b1 s6 |
+| 3.1.11 Histórico (só o que ainda ensina) | `docs/modulos/03_cadastros_mestres.md#3111-histórico-só-o-que-ainda-ensina` | 3 | Conferido (uniforme) | 8 | b1 s7 |
 | 3.2 Fornecedores | `docs/modulos/03_cadastros_mestres.md#32-fornecedores` | 2 | — | 0 | — |
 | 3.2.1 O que é | `docs/modulos/03_cadastros_mestres.md#321-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
 | 3.2.2 Rota e arquivos | `docs/modulos/03_cadastros_mestres.md#322-rota-e-arquivos` | 3 | Conferido (uniforme) | 2 | b1 s1 |
@@ -44,7 +44,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-1 Mapa de ligações | `docs/modulos/03_cadastros_mestres.md#pc-1-mapa-de-ligações` | 3 | Conferido (uniforme) | 5 | b1 s4 |
 | PC-2 Como nasce um cadastro (todos os caminhos) | `docs/modulos/03_cadastros_mestres.md#pc-2-como-nasce-um-cadastro-todos-os-caminhos` | 3 | Não verificado (misto (vale o mais fraco)) | 7 | b4 s3 |
 | PC-3 Consulta de CNPJ "Omie primeiro" | `docs/modulos/03_cadastros_mestres.md#pc-3-consulta-de-cnpj-omie-primeiro` | 3 | Herdado (misto (vale o mais fraco)) | 11 | b1 s10 |
-| PC-4 CPF/CNPJ de verdade e documento único | `docs/modulos/03_cadastros_mestres.md#pc-4-cpfcnpj-de-verdade-e-documento-único` | 3 | Conferido (uniforme) | 5 | b2 s3 |
+| PC-4 CPF/CNPJ de verdade e documento único | `docs/modulos/03_cadastros_mestres.md#pc-4-cpfcnpj-de-verdade-e-documento-único` | 3 | Conferido (uniforme) | 6 | b3 s3 |
 | PC-5 Nunca excluir cadastro com transação (🔒 Área Blindada) | `docs/modulos/03_cadastros_mestres.md#pc-5-nunca-excluir-cadastro-com-transação--área-blindada` | 3 | Herdado (misto (vale o mais fraco)) | 8 | b3 s5 |
 | PC-6 Identidade, alçadas e segurança | `docs/modulos/03_cadastros_mestres.md#pc-6-identidade-alçadas-e-segurança` | 3 | — | 3 | c3 |
 | PC-7 Gatilhos e rotinas | `docs/modulos/03_cadastros_mestres.md#pc-7-gatilhos-e-rotinas` | 3 | Conferido (uniforme) | 3 | b1 s2 |

@@ -346,7 +346,7 @@ function PgClienteObra(S, data) {
     h(Text, { style: S.subTitle, key: 'h1' }, 'Dados do Cliente'),
     h(View, { style: S.box, key: 'b1' }, [
       h(Text, { style: [S.boxP, { fontWeight: 700 }], key: 'n' }, nomeSemDoc(c.nome, c.cnpj) || c.nome || '—'),
-      c.cnpj ? h(Text, { style: S.boxP, key: 'cnpj' }, 'CNPJ: ' + fmtDoc(c.cnpj)) : null,
+      c.cnpj ? h(Text, { style: S.boxP, key: 'cnpj' }, 'CNPJ: ' + fmtDoc(c.cnpj)) : (c.cpf ? h(Text, { style: S.boxP, key: 'cpf' }, 'CPF: ' + fmtDoc(c.cpf)) : null),
       c.responsavel ? h(Text, { style: S.boxP, key: 'ac' }, 'A/C: ' + c.responsavel) : null,
       c.telefone ? h(Text, { style: S.boxP, key: 'tel' }, 'Telefone: ' + c.telefone) : null,
       c.email ? h(Text, { style: S.boxP, key: 'mail' }, 'E-mail: ' + c.email) : null,
@@ -478,7 +478,7 @@ function PgAcabamento(S, data) {
           b.nome ? h(Text, { style: S.subTitle, key: 'st' }, OPa.tituloPerfil(b)) : null,
           Tabela2(S, [{ label: 'Item', flex: 1 }, { label: b.rotulo, flex: 1 }], b.linhas, 't'),
         ].filter(Boolean)))
-      : [Vazio(S, 'Preencha os acabamentos na aba "Acabamentos".')]),
+      : [Vazio(S)]),
     PdfFooter(S),
   ]);
 }

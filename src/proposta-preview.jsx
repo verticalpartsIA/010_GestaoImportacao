@@ -289,7 +289,7 @@ function PreviewClienteObra({ data }) {
         <h2 className="pdf-sub-title">Dados do Cliente</h2>
         <div className="pdf-box">
           <p><b>{nomeSemDoc(c.nome, c.cnpj) || c.nome || "—"}</b></p>
-          {c.cnpj ? <p>CNPJ: {fmtDoc(c.cnpj)}</p> : null}
+          {c.cnpj ? <p>CNPJ: {fmtDoc(c.cnpj)}</p> : (c.cpf ? <p>CPF: {fmtDoc(c.cpf)}</p> : null)}
           {c.responsavel ? <p>A/C: {c.responsavel}</p> : null}
           {c.telefone ? <p>Telefone: {c.telefone}</p> : null}
           {c.email ? <p>E-mail: {c.email}</p> : null}

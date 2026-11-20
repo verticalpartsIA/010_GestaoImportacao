@@ -199,6 +199,13 @@
       ]},
       { modulo: 'aval-financeiro', label: 'Aval Financeiro' },
       { modulo: 'emissao-nf', label: 'Emissão de NF' },
+      /* 17/11/2026: só leitura. Gelson, Diego e Juliana têm acesso total fixo no banco (boletos_avisos_pode_gerir);
+         quem receber esta caixa só vê a tela, sem enviar aviso, atualizar do Omie nem mexer no envio automático. */
+      { modulo: 'boletos-avisos', label: 'Boletos Avisos', capacidades: [
+        { chave: 'ver', label: 'Vê a tela Boletos Avisos (somente leitura)' },
+        { chave: 'atualizar', label: 'Atualiza os boletos do Omie (botão "Atualizar do Omie"; só lê o Omie, não envia aviso)' },
+        { chave: 'tratar', label: 'Trata os casos da aba Tratativas (anota, muda o status e o responsável; não envia aviso)' },
+      ]},
     ]},
     { grupo: 'Jurídico', itens: [
       { modulo: 'contrato-venda-equipamentos', label: 'Contrato Venda de Equipamentos' },
@@ -214,7 +221,11 @@
       { modulo: 'ims-importacao', label: 'IMS' },
       { modulo: 'embarques-importacao', label: 'Embarques' },
       { modulo: 'gi-analise-precos', label: 'Análise de Preços' },
-      { modulo: 'compras', label: 'Importação Varejo' },
+      { modulo: 'compras', label: 'Importação Varejo', capacidades: [
+        ...ACOES_PADRAO,
+        { chave: 'solicitar', label: 'Envia solicitação de compra ao comprador (vendedor)' },
+        { chave: 'tratar_solicitacoes', label: 'Trata solicitações: aloca em cotação, devolve ao vendedor (comprador)' },
+      ]},
       { modulo: 'cotacoes-varejo', label: 'Cotações de Varejo' },
       { modulo: 'pedidos-acompanhamento', label: 'Pedidos' },
     ]},
@@ -385,6 +396,15 @@
     const { data } = await c.from('perfis').select('acesso_manual').eq('id', perfilId).maybeSingle();
     return !!(data && data.acesso_manual);
   }
+  /* "Valores R$" da pessoa (modo todos/nenhum + liberar/esconder por etiqueta
+     modulo.etiqueta). Só LEITURA: quem grava é o vpsistema.com/administracao
+     (vpsistema-sync). Falha de leitura NÃO vira "sem valores": devolve { erro }. */
+  async function valoresAcessoDe(perfilId) {
+    const c = sb(); if (!c) return { erro: 'Supabase não carregado' };
+    const { data, error } = await c.from('valores_acesso').select('modo, liberar, esconder, atualizado_em').eq('perfil_id', perfilId).maybeSingle();
+    if (error) return { erro: error.message || 'Não foi possível ler os valores.' };
+    return { dados: data || null };
+  }
   async function rpcManual(nome, args) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { data, error } = await c.rpc(nome, args);
@@ -431,6 +451,6 @@
     alocar, desalocar, removerTodasAlocacoes, enriquecerUsuarioLogado,
     ACOES_PADRAO, CATALOGO_MODULOS, listarCapacidadesConcedidas, concederCapacidade,
     MODULOS_POR_GRUPO_SIDEBAR, capacidadesDoGrupo, concederGrupoInteiro,
-    acessoManual, definirAcessoManual, definirAlcadaManual,
+    acessoManual, definirAcessoManual, definirAlcadaManual, valoresAcessoDe,
   };
 }());

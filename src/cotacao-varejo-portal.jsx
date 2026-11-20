@@ -44,6 +44,7 @@ function Portal() {
   const [subindo, setSubindo] = useState(null);
   const [busca, setBusca] = useState('');
   const [aviso, setAviso] = useState(null);
+  const [gerando, setGerando] = useState(false);
 
   useEffect(() => {
     sbc().rpc('public_ivc_obter', { p_token: token }).then(({ data, error }) => {
@@ -145,8 +146,55 @@ function Portal() {
   /* Planilha (CSV abre no Excel): baixa com os nossos itens, o fornecedor preenche e importa de volta — sem digitar item por item. */
   const CSV_COLS = ['ref', 'description', 'qty_needed', 'unit', 'certificate_required', 'unit_price', 'lead_time_days', 'remarks'];
   const csvCel = (v) => { const s = v == null ? '' : String(v); return /[",\n\r;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  /* Excel (.xlsx) com a foto de cada item embutida: o trader pode encaminhar o arquivo à fábrica sem perder a referência visual. ExcelJS 4.4.0 (cdnjs), carregado só quando o fornecedor pede o Excel. */
+  const carregarExcelJS = () => new Promise((ok, falha) => {
+    if (window.ExcelJS) return ok(window.ExcelJS);
+    const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+    sc.onload = () => (window.ExcelJS ? ok(window.ExcelJS) : falha(new Error('exceljs'))); sc.onerror = () => falha(new Error('exceljs')); document.head.appendChild(sc);
+  });
+  const baixarImagem = async (url) => {
+    try {
+      const r = await fetch(url); if (!r.ok) return null; const bmp = await createImageBitmap(await r.blob());
+      const esc = Math.min(1, 300 / Math.max(bmp.width, bmp.height)); const w = Math.max(1, Math.round(bmp.width * esc)); const h = Math.max(1, Math.round(bmp.height * esc));
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, w, h); cx.drawImage(bmp, 0, 0, w, h);
+      const blob = await new Promise((ok) => cv.toBlob(ok, 'image/jpeg', 0.85)); if (!blob) return null;
+      return { buffer: await blob.arrayBuffer(), extension: 'jpeg', w, h };
+    } catch (e) { return null; }
+  };
+  const baixarExcel = async () => {
+    setErro(null); setAviso(null); setGerando(true);
+    try {
+      const EJ = await carregarExcelJS();
+      const wb = new EJ.Workbook(); const ws = wb.addWorksheet('Quotation');
+      const cols = [['photo', 20], ['ref', 18], ['description', 48], ['qty_needed', 11], ['unit', 8], ['certificate_required', 12], ['unit_price', 12], ['lead_time_days', 12], ['remarks', 30], ['photo_url', 30]];
+      ws.columns = cols.map(([header, width]) => ({ header, key: header, width }));
+      /* Título com espaços no fim: se o fornecedor usar "ajustar largura da coluna" no Excel, a coluna A não encolhe e as fotos não passam por cima do ref. */
+      ws.getCell('A1').value = 'photo' + ' '.repeat(20);
+      ws.getRow(1).font = { bold: true }; ws.views = [{ state: 'frozen', ySplit: 1 }];
+      const cache = {}; const fotoDe = (i) => [i.foto_url, i.foto_url2].concat(i.fotos_manuais || []).filter(Boolean)[0] || '';
+      const urls = Array.from(new Set(itens.map(fotoDe).filter(Boolean)));
+      for (let k = 0; k < urls.length; k += 6) await Promise.all(urls.slice(k, k + 6).map(async (u) => { const im = await baixarImagem(u); if (im) cache[u] = { id: wb.addImage({ buffer: im.buffer, extension: im.extension }), w: im.w, h: im.h }; }));
+      itens.forEach((i, idx) => {
+        const x = form[i.id] || inicial(i, null); const u = fotoDe(i);
+        const row = ws.addRow({ photo: '', ref: i.codigo, description: descricaoEN(i), qty_needed: i.quantidade, unit: unidadeEN(i.unidade), certificate_required: i.exige_certificado ? 'yes' : 'no', unit_price: x.f[0].preco === '' ? null : Number(String(x.f[0].preco).replace(',', '.')) || x.f[0].preco, lead_time_days: x.lt === '' ? null : Number(x.lt) || x.lt, remarks: x.obs, photo_url: u });
+        row.height = 80; row.alignment = { vertical: 'middle', wrapText: true };
+        if (u && cache[u]) {
+          /* Foto centralizada na célula A, tamanho fixo e proporção original (caixa 135 × 97 px dentro de 145 × 107). Posição em EMU exato (o ExcelJS erra posição fracionada). */
+          const c = cache[u]; const esc = Math.min(135 / c.w, 97 / c.h); const pw = c.w * esc; const ph = c.h * esc;
+          ws.addImage(c.id, { tl: { nativeCol: 0, nativeColOff: Math.round((145 - pw) / 2 * 9525), nativeRow: idx + 1, nativeRowOff: Math.round((107 - ph) / 2 * 9525) }, ext: { width: pw, height: ph }, editAs: 'oneCell' });
+        }
+      });
+      const buf = await wb.xlsx.writeBuffer();
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = lote.numero + '-quotation.xlsx'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    } catch (e) { setErro(T('Could not create the Excel file. Use the CSV instead.')); }
+    setGerando(false);
+  };
+  /* CSV 100% em inglês (pedido do Gelson, 19/11/2026): a descrição é o texto técnico em inglês da VerticalParts (obs_vp); só cai para a descrição do cadastro (português) se o item ainda não tem texto em inglês. Unidades em inglês. */
+  const UNID_EN = { PC: 'pcs', PCS: 'pcs', UN: 'unit', UND: 'unit', UNID: 'unit', PAR: 'pair', PR: 'pair', M: 'm', MT: 'm', KIT: 'kit', JG: 'set', CJ: 'set' };
+  const unidadeEN = (u) => { const k = String(u || '').trim().toUpperCase(); return UNID_EN[k] || String(u || '').trim(); };
+  const descricaoEN = (i) => String(i.obs_vp || '').trim() || i.descricao || '';
   const baixarPlanilha = () => {
-    const linhas = itens.map((i) => { const x = form[i.id] || inicial(i, null); return [i.codigo, i.descricao || '', i.quantidade, i.unidade || '', i.exige_certificado ? 'yes' : 'no', x.f[0].preco, x.lt, x.obs]; });
+    const linhas = itens.map((i) => { const x = form[i.id] || inicial(i, null); return [i.codigo, descricaoEN(i), i.quantidade, unidadeEN(i.unidade), i.exige_certificado ? 'yes' : 'no', x.f[0].preco, x.lt, x.obs]; });
     const csv = '\ufeff' + [CSV_COLS].concat(linhas).map((r) => r.map(csvCel).join(',')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = lote.numero + '-quotation.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
@@ -167,7 +215,13 @@ function Portal() {
   const importarPlanilha = async (file) => {
     if (!file) return;
     try {
-      const rows = lerCSV((await file.text()).replace(/^\ufeff/, ''));
+      let rows;
+      if (/\.xlsx$/i.test(file.name || '')) {
+        const EJ = await carregarExcelJS(); const wb = new EJ.Workbook(); await wb.xlsx.load(await file.arrayBuffer());
+        const ws = wb.worksheets[0]; rows = [];
+        const txt = (v) => (v == null ? '' : typeof v === 'object' ? (v.result != null ? String(v.result) : v.text != null ? String(v.text) : (v.richText || []).map((t) => t.text).join('')) : String(v));
+        ws.eachRow({ includeEmpty: false }, (row) => { const arr = []; for (let c = 1; c <= row.cellCount; c++) arr.push(txt(row.getCell(c).value)); rows.push(arr); });
+      } else rows = lerCSV((await file.text()).replace(/^\ufeff/, ''));
       const cab = (rows[0] || []).map((h) => String(h).trim().toLowerCase()); const col = (n) => cab.indexOf(n);
       if (col('ref') < 0) throw new Error('x');
       let n = 0; const novo = { ...form };
@@ -180,7 +234,7 @@ function Portal() {
       });
       setForm(novo); setErro(null);
       setAviso(T(n + ' item(s) loaded from the file. Review and click Send.'));
-    } catch (e) { setErro(T('Could not read the file. Use the template downloaded here (CSV).')); }
+    } catch (e) { setErro(T('Could not read the file. Use the template downloaded here (Excel or CSV).')); }
   };
 
   const th = { textAlign: 'left', padding: '8px 6px', fontSize: 12, borderBottom: '2px solid #222', background: '#ece9e0', position: 'sticky', top: 0 };
@@ -206,8 +260,9 @@ function Portal() {
         {!encerrado && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
             <input style={{ ...inp, width: 260 }} placeholder={T('Search item by REF. or description…')} value={busca} onChange={(e) => setBusca(e.target.value)} />
+            <button type="button" onClick={baixarExcel} disabled={gerando} title={T('Excel file with the product photos')} style={{ ...inp, width: 'auto', cursor: 'pointer', background: '#fff' }}>{gerando ? T('Preparing Excel…') : T('Download Excel (with photos)')}</button>
             <button type="button" onClick={baixarPlanilha} style={{ ...inp, width: 'auto', cursor: 'pointer', background: '#fff' }}>{T('Download spreadsheet (CSV)')}</button>
-            <label style={{ ...inp, width: 'auto', cursor: 'pointer', background: '#fff' }}>{T('Upload filled spreadsheet')}<input type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={(e) => { importarPlanilha(e.target.files && e.target.files[0]); e.target.value = ''; }} /></label>
+            <label style={{ ...inp, width: 'auto', cursor: 'pointer', background: '#fff' }}>{T('Upload filled spreadsheet')}<input type="file" accept=".xlsx,.csv,text/csv" style={{ display: 'none' }} onChange={(e) => { importarPlanilha(e.target.files && e.target.files[0]); e.target.value = ''; }} /></label>
             <span style={{ fontSize: 11, color: '#666' }}>{T('Your typing is kept on this computer until you send.')}</span>
           </div>
         )}
@@ -298,6 +353,66 @@ function Portal() {
           <button onClick={enviar} disabled={enviando} style={{ background: '#f6c000', border: 0, padding: '12px 28px', fontSize: 15, fontWeight: 800, borderRadius: 8, cursor: 'pointer' }}>
             {enviando ? '…' : T('Send quotation')}
           </button>
+        </div>
+      )}
+      <Mensagens token={token} encerrado={encerrado} />
+    </div>
+  );
+}
+
+/* Mensagem + arquivos do fornecedor para a VerticalParts (cai nas Tratativas da RFQ Importação). Só RPC com o token. */
+const MSG_MAX_MB = 25;
+function Mensagens({ token, encerrado }) {
+  const [lista, setLista] = useState([]);
+  const [texto, setTexto] = useState('');
+  const [anexos, setAnexos] = useState([]);
+  const [subindo, setSubindo] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const carregar = () => sbc().rpc('public_ivc_tratativas_listar', { p_token: token }).then(({ data }) => setLista(Array.isArray(data) ? data : []));
+  useEffect(() => { carregar(); }, []);
+  const addArquivos = async (files) => {
+    setMsg(null); setSubindo(true);
+    try {
+      for (const f of Array.from(files || [])) {
+        if (anexos.length >= 5) { setMsg({ erro: T('Up to 5 files per message.') }); break; }
+        if (f.size > MSG_MAX_MB * 1024 * 1024) { setMsg({ erro: T('"' + f.name + '" is larger than ' + MSG_MAX_MB + ' MB.') }); continue; }
+        const path = 'cotacao-varejo-msg/' + token.slice(0, 12) + '/' + Date.now() + '_' + (f.name || 'file').replace(/[^\w.\-]/g, '_');
+        const up = await sbc().storage.from('engenharia').upload(path, f, { upsert: false, contentType: f.type || 'application/octet-stream' });
+        if (up.error) throw up.error;
+        setAnexos((a) => a.concat([{ nome: (f.name || 'file').slice(0, 120), url: sbc().storage.from('engenharia').getPublicUrl(path).data.publicUrl, tipo: f.type || '', tamanho: f.size }]));
+      }
+    } catch (e) { setMsg({ erro: T('Could not upload the file. Try again.') }); }
+    setSubindo(false);
+  };
+  const enviarMsg = async () => {
+    setEnviando(true); setMsg(null);
+    const { data, error } = await sbc().rpc('public_ivc_tratativa_enviar', { p_token: token, p_mensagem: texto, p_anexos: anexos });
+    setEnviando(false);
+    if (error || !data || !data.ok) { setMsg({ erro: data && data.erro === 'cotacao_encerrada' ? T('This quotation is closed.') : T('Could not send. Try again.') }); return; }
+    setTexto(''); setAnexos([]); setMsg({ ok: T('Message sent to VerticalParts.') }); carregar();
+  };
+  const dt = (v) => { try { return new Date(v).toLocaleString('en-GB'); } catch (e) { return ''; } };
+  return (
+    <div style={{ marginTop: 24, borderTop: '1px solid #e5e5df', paddingTop: 16 }}>
+      <h3 style={{ margin: '0 0 6px', fontSize: 16 }}>{T('Messages and files for VerticalParts')}</h3>
+      <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>{T('Send us a question, a comment or documents (PDF, images, Excel, Word — up to 25 MB each).')}</div>
+      {lista.map((m, i) => (
+        <div key={i} style={{ border: '1px solid #e5e5df', borderRadius: 8, padding: '8px 10px', marginBottom: 6, background: m.origem === 'fornecedor' ? '#fffbe6' : '#fff' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}><b>{m.autor}</b><span style={{ color: '#888' }}>{dt(m.em)}</span></div>
+          {m.mensagem && <div style={{ fontSize: 13, whiteSpace: 'pre-wrap', marginTop: 4 }}>{m.mensagem}</div>}
+          {(m.anexos || []).length > 0 && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>{m.anexos.map((a, k) => <a key={k} href={a.url} target="_blank" rel="noopener noreferrer" style={{ border: '1px solid #ddd', padding: '3px 8px', fontSize: 12, borderRadius: 6 }}>{a.nome}</a>)}</div>}
+        </div>
+      ))}
+      {!encerrado && (
+        <div>
+          <textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={3} maxLength={4000} placeholder={T('Write your message to VerticalParts…')} style={{ width: '100%', boxSizing: 'border-box', padding: 8, border: '1px solid #ccc', borderRadius: 6, fontFamily: 'inherit', fontSize: 13 }} />
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', margin: '6px 0' }}>
+            {anexos.map((a, i) => <span key={i} style={{ border: '1px solid #ddd', padding: '3px 8px', fontSize: 12, borderRadius: 6 }}>{a.nome} <button type="button" onClick={() => setAnexos((x) => x.filter((_, j) => j !== i))} style={{ border: 0, background: 'none', cursor: 'pointer' }}>×</button></span>)}
+            <label style={{ border: '1px solid #ccc', padding: '5px 10px', fontSize: 12, borderRadius: 6, cursor: 'pointer', background: '#fff' }}>{subindo ? '…' : T('Attach file')}<input type="file" multiple style={{ display: 'none' }} disabled={subindo} onChange={(e) => { addArquivos(e.target.files); e.target.value = ''; }} /></label>
+          </div>
+          {msg && <div style={{ fontSize: 12, color: msg.erro ? '#b00' : '#1a7f37', marginBottom: 6 }}>{msg.erro || msg.ok}</div>}
+          <button type="button" onClick={enviarMsg} disabled={enviando || subindo || (!texto.trim() && !anexos.length)} style={{ background: '#f6c000', border: 0, padding: '8px 18px', fontWeight: 700, borderRadius: 6, cursor: 'pointer', opacity: enviando || subindo || (!texto.trim() && !anexos.length) ? .5 : 1 }}>{enviando ? '…' : T('Send message')}</button>
         </div>
       )}
     </div>

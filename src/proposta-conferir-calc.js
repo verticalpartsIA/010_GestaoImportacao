@@ -41,8 +41,10 @@
 
     /* ---- cliente e vendedor ---- */
     if (vazio(cli.nome)) add('cliente-nome', 'impede', 'cliente', 'Cliente sem nome', 'A proposta precisa do nome do cliente para ser salva e enviada.', { falta: true });
-    if (vazio(cli.cnpj)) add('cliente-doc', 'atencao', 'cliente', 'Cliente sem CNPJ/CPF', 'Sem o documento o contrato e a consulta ao Omie ficam sem base.', { falta: true });
-    else if (![11, 14].includes(digitos(cli.cnpj).length)) add('cliente-doc-tam', 'atencao', 'cliente', 'CNPJ/CPF com tamanho estranho', `O documento tem ${digitos(cli.cnpj).length} dígitos (CPF tem 11, CNPJ tem 14).`);
+    /* Pessoa física guarda o documento em `cpf` (17/11/2026); PJ e propostas antigas, em `cnpj`. */
+    const docCli = cli.tipo_pessoa === 'PF' ? (cli.cpf || cli.cnpj) : (cli.cnpj || cli.cpf);
+    if (vazio(docCli)) add('cliente-doc', 'atencao', 'cliente', 'Cliente sem CNPJ/CPF', 'Sem o documento o contrato e a consulta ao Omie ficam sem base.', { falta: true });
+    else if (![11, 14].includes(digitos(docCli).length)) add('cliente-doc-tam', 'atencao', 'cliente', 'CNPJ/CPF com tamanho estranho', `O documento tem ${digitos(docCli).length} dígitos (CPF tem 11, CNPJ tem 14).`);
     if (!vazio(cli.email) && !emailValido(cli.email)) add('cliente-email', 'atencao', 'cliente', 'E-mail do cliente inválido', 'Confira o formato (nome@empresa.com.br).');
     if (pareceEmail(cli.telefone)) add('cliente-tel-email', 'atencao', 'cliente', 'E-mail no campo de telefone', 'Parece que um e-mail foi colado no campo Telefone do cliente.');
     if (vazio(ven.celular)) add('vendedor-celular', 'atencao', 'proposta', 'Vendedor sem celular/WhatsApp', 'O cliente precisa de um contato direto na capa da proposta.', { falta: true });
