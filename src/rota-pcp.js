@@ -92,3 +92,5 @@
   }
   document.addEventListener('mouseover', pcpColDelegado);
 }());
+
+// TESTE CLAUDE (descartar): muda o arquivo sem subir o ?v= para o CI falhar
