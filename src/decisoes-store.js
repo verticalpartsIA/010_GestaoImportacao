@@ -170,6 +170,20 @@
     return criarDecisao(args);
   }
 
+  let _ultimoToastPermissaoEm = 0;
+  function tratarErroLeitura(onde, error) {
+    console.warn('[DecisoesStore] ' + onde + ' falhou', error);
+    const semPermissao = error && (error.code === '42501' || error.status === 401 || error.status === 403 || /permission denied|row-level security/i.test(error.message || ''));
+    if (semPermissao) {
+      const agora = Date.now();
+      if (agora - _ultimoToastPermissaoEm >= 5 * 60 * 1000) {
+        _ultimoToastPermissaoEm = agora;
+        if (window.toast) window.toast('Sem sessão ou permissão para carregar decisões. Recarregue o sistema pelo vpsistema.', 'error');
+      }
+    }
+    return [];
+  }
+
   /* ---------- Consulta ---------- */
   async function listarPendentesParaMim() {
     const c = sb(); if (!c) return [];
@@ -177,7 +191,7 @@
     if (!email) return [];
     const { data, error } = await c.from('decisoes_gerenciais')
       .select('*').in('status', ['pendente']).order('criado_em', { ascending: false });
-    if (error) { console.warn('[DecisoesStore] listarPendentesParaMim falhou', error); return []; }
+    if (error) return tratarErroLeitura('listarPendentesParaMim', error);
     return (await atualizarAprovadores(data || [])).filter(souAprovador);
   }
 
@@ -195,7 +209,7 @@
       q = q.or(`decidido_por.eq."${e}",solicitado_por.eq."${e}",aprovadores_esperados.cs.{"${e}"}`);
     }
     const { data, error } = await q.order('decidido_em', { ascending: false, nullsFirst: false }).limit(limite);
-    if (error) { console.warn('[DecisoesStore] listarDecididas falhou', error); return []; }
+    if (error) return tratarErroLeitura('listarDecididas', error);
     if (todas) return data || [];
     return (data || []).filter((d) => souAprovador(d) || (d.decidido_por || '').toLowerCase() === email || (d.solicitado_por || '').toLowerCase() === email);
   }
@@ -210,7 +224,7 @@
     const c = sb(); if (!c) return [];
     const { data, error } = await c.from('decisoes_gerenciais')
       .select('*').in('status', ['pendente', 'bloqueada_por_dependencia']).order('criado_em', { ascending: false });
-    if (error) { console.warn('[DecisoesStore] listarTodasEmAberto falhou', error); return []; }
+    if (error) return tratarErroLeitura('listarTodasEmAberto', error);
     return atualizarAprovadores(data || []);
   }
 
