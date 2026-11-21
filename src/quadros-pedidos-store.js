@@ -19,12 +19,22 @@
     if (v.error) throw v.error;
     const codigosQuadro = Array.from(new Set((v.data || []).map((x) => x.codigo_produto).filter(Boolean)));
 
+    // 1b) pedidos ARQUIVADOS (migration 20261121100000): saem das listas. Falha ao ler (sem alçada) = não filtra, nunca derruba a tela.
+    let arquivados = new Set();
+    try {
+      const a = await sb.rpc('qc_arquivados_listar');
+      if (!a.error && a.data && a.data.length) {
+        const pa = await sb.from('pcp_pedidos').select('codigo_pedido').in('numero_pedido', a.data.map((x) => x.numero_pedido)).limit(2000);
+        if (!pa.error) arquivados = new Set((pa.data || []).map((x) => String(x.codigo_pedido)));
+      }
+    } catch (e) { /* segue sem filtrar */ }
+
     // 2) as OPs de quadro que a Evolução da Fabricação lista (aguardando / em produção) e as OPs-mãe delas (para a Ordem de Serviço)
     const o = await sb.from('pcp_ordens')
       .select('id, numero, titulo, produto, cliente, status, prazo_entrega, data_abertura, pedido_codigo, ordem_mae_id')
       .eq('frente', 'quadro').in('status', ['aguardando', 'em_producao']);
     if (o.error) throw o.error;
-    const ops = o.data || [];
+    let ops = o.data || [];
     const maeIds = Array.from(new Set(ops.map((x) => x.ordem_mae_id).filter(Boolean)));
     const maePedido = {};
     if (maeIds.length) {
@@ -32,6 +42,7 @@
       if (m.error) throw m.error;
       (m.data || []).forEach((x) => { maePedido[x.id] = x.pedido_codigo; });
     }
+    if (arquivados.size) ops = ops.filter((x) => !arquivados.has(String(x.pedido_codigo != null ? x.pedido_codigo : maePedido[x.ordem_mae_id])));
 
     // 3) andamento de cada OP de quadro (o mesmo cálculo da Evolução da Fabricação)
     const [checklist, st] = await Promise.all([
@@ -45,14 +56,14 @@
     if (codigosQuadro.length) {
       const it = await sb.from('pcp_pedido_itens').select('codigo_pedido, codigo, quantidade').in('codigo', codigosQuadro).limit(5000);
       if (it.error) throw it.error;
-      itensQuadro = it.data || [];
+      itensQuadro = (it.data || []).filter((x) => !arquivados.has(String(x.codigo_pedido)));
     }
 
     // 5) cabeçalho e itens dos pedidos (da união das duas fontes)
     const C = window.QuadrosPedidosCalc;
     const qtdIds = Array.from(new Set(itensQuadro.map((x) => String(x.codigo_pedido))));
     const idsOps = new Set(ops.map((op) => C.chaveDaOp(op, maePedido[op.ordem_mae_id])).filter((k) => !k.startsWith('op:')));
-    const ids = Array.from(new Set([...qtdIds, ...idsOps]));
+    const ids = Array.from(new Set([...qtdIds, ...idsOps])).filter((k) => !arquivados.has(k));
     let pedidos = [], itens = [];
     if (ids.length) {
       const [p, ip] = await Promise.all([
@@ -216,5 +227,17 @@
   }
   const linkFormulario = (token) => `${window.location.origin}/formulario-quadro-comando-publico.html?t=${encodeURIComponent(token)}`;
 
-  window.QuadrosPedidosStore = { listarFormularios, gerarFormulario, cancelarFormulario, corrigirFormulario, linkFormulario, carregar, buscarDados, montar, listarPegos, marcar, chavePeguei, listarPrevisoes, gravarPrevisao, linkPublico };
+  /* Arquivo de pedidos (migration 20261121100000): arquiva sozinho (cron de 15 min) quando faturado no Omie ou 100% pego + fabricado. */
+  async function listarArquivados(sb) {
+    const { data, error } = await sb.rpc('qc_arquivados_listar');
+    if (error) throw error;
+    return data || [];
+  }
+  async function desarquivar(sb, numero) {
+    const { data, error } = await sb.rpc('qc_pedido_desarquivar', { p_numero: String(numero) });
+    if (error) throw error;
+    return data;
+  }
+
+  window.QuadrosPedidosStore = { listarArquivados, desarquivar, listarFormularios, gerarFormulario, cancelarFormulario, corrigirFormulario, linkFormulario, carregar, buscarDados, montar, listarPegos, marcar, chavePeguei, listarPrevisoes, gravarPrevisao, linkPublico };
 })();

@@ -51,10 +51,7 @@ function PaginaPedidos({ linhas, pegos }) {
   const hoje = hojeISO();
   const f = busca.trim().toLowerCase();
   const lista = linhas.filter((r) => !f || [r.numero, r.cliente, r.vendedor].some((x) => String(x || '').toLowerCase().includes(f)));
-  const progresso = (itens, chave) => {
-    const total = itens.length, ok = itens.filter((i) => pegos[window.QuadrosPedidosStore.chavePeguei(chave, i.codigo)]).length;
-    return { total, ok, pct: total ? (ok / total) * 100 : 0 };
-  };
+  const progresso = (itens, chave) => window.QuadrosPedidosCalc.progressoSeparacao(itens, chave, pegos);   // a mesma conta da tela interna
   return (
     <>
       <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar pedido, cliente ou vendedor" style={campoBusca} />
