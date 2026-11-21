@@ -166,3 +166,49 @@ test('sem as tabelas no banco a aba avisa e ainda mostra respostas e devoluçõe
   await expect(linhas(page)).toHaveCount(2);
   expect(erros).toEqual([]);
 });
+
+test('responder o cliente: oferece só e-mails do cliente e de quem respondeu, envia pela função e o caso fica aguardando o cliente', async ({ page }) => {
+  const erros = coletarErros(page);
+  const estado = await preparar(page);
+  const envios = [];
+  await page.route('**/*.supabase.co/functions/v1/boletos-avisos', async (route) => {
+    const corpo = JSON.parse(route.request().postData() || '{}');
+    envios.push({ corpo, auth: route.request().headers()['authorization'] });
+    // simula o efeito da função: a resposta fica registrada e o caso passa a aguardar o cliente
+    estado.tratativas.push({ id: 'r' + envios.length, codigo_cliente_omie: corpo.codigo_cliente_omie, tipo: 'resposta_enviada', texto: corpo.texto, autor: 'financeiro.teste@verticalparts.com.br', criado_em: new Date().toISOString(), meta: { para: corpo.para, assunto: corpo.assunto } });
+    estado.casos = estado.casos.filter((c) => c.codigo_cliente_omie !== corpo.codigo_cliente_omie).concat({ codigo_cliente_omie: corpo.codigo_cliente_omie, status: 'aguardando_cliente', responsavel_email: null, promessa_pagamento: null, resolvido_em: null, atualizado_em: new Date().toISOString() });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, para: corpo.para, envioId: 'e1', messageId: '<x@y>', avisos: [] }) });
+  });
+  page.on('dialog', (d) => d.accept());
+  await page.goto('/adm-financeiro/boletos-avisos/tratativas/1');
+  await expect(page.getByLabel('Linha do tempo do caso').locator('[data-tipo="resposta"]')).toBeVisible({ timeout: 45_000 });
+  await page.evaluate(() => { window.VpAuth.getAccessToken = async () => 'TOKEN-DE-TESTE'; });
+
+  await page.getByRole('button', { name: 'Responder o cliente por e-mail' }).click();
+  // só o cadastro do cliente e quem respondeu; ninguém além disso
+  await expect(page.getByLabel('Enviar para fin@erguea.com')).toBeChecked();
+  await expect(page.getByRole('group', { name: 'Responder o cliente' }).locator('input[type=checkbox]')).toHaveCount(1);
+  await expect(page.getByLabel('Assunto da resposta')).toHaveValue('Re: Seu boleto vence hoje — ERGUE');
+
+  await page.getByLabel('Mensagem da resposta').fill('Obrigado pelo comprovante, vamos conferir e baixar o boleto.');
+  await page.getByRole('button', { name: 'Enviar resposta' }).click();
+
+  await expect(page.getByLabel('Linha do tempo do caso').locator('[data-tipo="resposta_enviada"]')).toContainText('Obrigado pelo comprovante');
+  expect(envios).toHaveLength(1);
+  expect(envios[0].corpo).toMatchObject({ acao: 'responder', codigo_cliente_omie: 1, para: ['fin@erguea.com'], simular: false });
+  expect(envios[0].auth).toBe('Bearer TOKEN-DE-TESTE');
+  // o compositor fecha e o caso aparece como aguardando o cliente na lista
+  await expect(page.getByLabel('Mensagem da resposta')).toHaveCount(0);
+  await page.getByRole('button', { name: /Voltar aos casos/ }).click();
+  await expect(linhas(page).filter({ hasText: 'ERGUE ELEVADORES' })).toContainText('Aguardando cliente');
+  expect(erros).toEqual([]);
+});
+
+test('responder: sem alçada de tratar o botão não existe', async ({ page }) => {
+  const erros = coletarErros(page);
+  await preparar(page, { podeTratar: false });
+  await page.goto('/adm-financeiro/boletos-avisos/tratativas/1');
+  await expect(page.getByLabel('Linha do tempo do caso').locator('[data-tipo="resposta"]')).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByRole('button', { name: 'Responder o cliente por e-mail' })).toHaveCount(0);
+  expect(erros).toEqual([]);
+});

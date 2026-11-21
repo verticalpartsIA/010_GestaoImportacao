@@ -183,6 +183,14 @@ window.BoletosAvisosStore = (() => {
     return data;
   }
 
+  /* Responde o cliente por e-mail (função `boletos-avisos`, ação responder). O servidor só aceita e-mail do cliente ou de quem respondeu
+     um aviso dele, grava a resposta no Inbox e na linha do tempo e põe o caso em "aguardando cliente". */
+  async function responderCliente(cliente, dados) {
+    const r = await chamar('responder', { codigo_cliente_omie: cliente.codigo_cliente_omie, para: dados.para, assunto: dados.assunto, texto: dados.texto, simular: !!dados.simular });
+    if (!dados.simular && window.VPLog) window.VPLog.registrar({ modulo: 'Boletos Avisos', acao: 'Respondeu o cliente por e-mail', alvo: cliente.razao_social || String(cliente.codigo_cliente_omie), alvo_id: String(cliente.codigo_cliente_omie), detalhe: { para: r.para, envioId: r.envioId } });
+    return r;
+  }
+
   async function config() {
     const { data, error } = await sb().from('boletos_avisos_config').select('*').eq('id', true).maybeSingle();
     if (error) throw new Error(error.message);
@@ -277,6 +285,6 @@ window.BoletosAvisosStore = (() => {
     return data && data[0] ? data[0].atualizado_em : null;
   }
 
-  return { pode, podeGerir, podeAtualizar, feriados, feriadosCache, listarClientes, boletosAbertos, boletosDoCliente, logDoCliente, enviosDeHoje, devolucoes, painelTratativas, tratativasDoCliente, responsaveis, mudarCaso, anotarTratativa, podeTratar, config, salvarConfig, sincronizar, enviarAviso, simularAutomatico,
+  return { pode, podeGerir, podeAtualizar, feriados, feriadosCache, listarClientes, boletosAbertos, boletosDoCliente, logDoCliente, enviosDeHoje, devolucoes, painelTratativas, tratativasDoCliente, responsaveis, mudarCaso, anotarTratativa, responderCliente, podeTratar, config, salvarConfig, sincronizar, enviarAviso, simularAutomatico,
     indiceDoPeriodo, scoreConfig, salvarScoreConfig, listarScores, titulosDoCliente, listarClientesHistorico, historicoAtualizadoEm, quem };
 })();
