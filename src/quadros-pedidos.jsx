@@ -78,7 +78,53 @@ function QpSeparacao({ info, erro, vazio }) {
   return <QpBarra info={{ pct: info.pct, sub: `${info.ok} de ${info.total} itens pegos` }} titulo="Itens já marcados como Peguei na tela de Separação" />;
 }
 
+// Aba Arquivados: pedidos que saíram das listas (faturados no Omie ou 100% pegos e fabricados). Desarquivar exige a alçada "editar".
+function QpArquivados({ sb }) {
+  const ord = window.useOrdenacao();
+  const [lista, setLista] = React.useState(null);
+  const [erro, setErro] = React.useState(null);
+  const [ocupado, setOcupado] = React.useState(null);
+  const carregar = React.useCallback(async () => {
+    try { setLista(await window.QuadrosPedidosStore.listarArquivados(sb)); setErro(null); }
+    catch (e) { setErro((e && e.message) || String(e)); }
+  }, [sb]);
+  React.useEffect(() => { carregar(); }, [carregar]);
+  const desarquivar = async (r) => {
+    if (!window.confirm(`Desarquivar o pedido ${r.numero_pedido}? Ele volta para as listas e não é arquivado de novo sozinho.`)) return;
+    setOcupado(r.numero_pedido);
+    try { await window.QuadrosPedidosStore.desarquivar(sb, r.numero_pedido); await carregar(); window.toast?.('Pedido desarquivado.'); }
+    catch (e) { window.toast?.('Não foi possível desarquivar: ' + ((e && e.message) || e)); }
+    setOcupado(null);
+  };
+  if (erro) return <div className="card" style={{ padding: 16, color: 'var(--vp-danger)' }}>Não foi possível carregar os arquivados: {erro}</div>;
+  if (!lista) return <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>;
+  const dados = ord.aplicar(lista, { pedido: (r) => Number(r.numero_pedido), cliente: (r) => r.cliente, motivo: (r) => r.motivo, quando: (r) => r.arquivado_em });
+  return (
+    <>
+      <div style={{ fontSize: 13, color: 'var(--fg3)', marginBottom: 8 }}>{lista.length} pedido(s) arquivado(s). Saem das listas e dos links públicos; nada é apagado.</div>
+      <div className="card table-wrap pcp-rolagem qc-caixa" style={{ overflow: 'auto' }}>
+        <table className="t pcp-grid">
+          <thead><tr>{ord.th('pedido', 'Nº do pedido')}{ord.th('cliente', 'Cliente')}{ord.th('motivo', 'Motivo')}{ord.th('quando', 'Arquivado em')}<th></th></tr></thead>
+          <tbody>
+            {dados.map((r) => (
+              <tr key={r.numero_pedido}>
+                <td><b style={{ fontWeight: 500 }}>{r.numero_pedido}</b></td>
+                <td style={{ minWidth: 220 }}>{r.cliente || '—'}</td>
+                <td>{r.motivo === 'faturado' ? 'Faturado' : 'Concluído'}<div style={{ fontSize: 10, color: 'var(--fg3)' }}>{r.detalhe}</div></td>
+                <td>{qpData(r.arquivado_em)}<div style={{ fontSize: 10, color: 'var(--fg3)' }}>{r.arquivado_por}</div></td>
+                <td><button className="btn" disabled={ocupado === r.numero_pedido} onClick={() => desarquivar(r)}>Desarquivar</button></td>
+              </tr>
+            ))}
+            {!dados.length ? <tr><td colSpan={5} style={{ color: 'var(--fg3)', padding: 16 }}>Nenhum pedido arquivado.</td></tr> : null}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 function QuadrosPedidosPage() {
+  const [aba, setAba] = window.useRouteTab('quadros-pedidos', 'ativos', ['ativos', 'arquivados'], false, true);
   const ord = window.useOrdenacao();
   const sb = window.__VP_SB && window.__VP_SB.sb;
   const [linhas, setLinhas] = React.useState(null);
@@ -141,9 +187,14 @@ function QuadrosPedidosPage() {
         </div>
       </div>
       <div className="qc-print-only" style={{ fontSize: 11, marginBottom: 6 }}>Impresso em {new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}{(window.__VP_USER || {}).nome ? ` por ${(window.__VP_USER || {}).nome}` : ''}</div>
-      {erro ? <div className="card" style={{ padding: 16, color: 'var(--vp-danger)' }}>Não foi possível carregar os pedidos: {erro}</div> : null}
-      {!erro && !linhas ? <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div> : null}
-      {linhas ? (
+      <div className="qc-no-print" style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+        <button className={'btn' + (aba === 'ativos' ? ' btn--primary' : '')} onClick={() => setAba('ativos')}>Ativos</button>
+        <button className={'btn' + (aba === 'arquivados' ? ' btn--primary' : '')} onClick={() => setAba('arquivados')}>Arquivados</button>
+      </div>
+      {aba === 'arquivados' ? <QpArquivados sb={sb} /> : null}
+      {aba === 'arquivados' ? null : erro ? <div className="card" style={{ padding: 16, color: 'var(--vp-danger)' }}>Não foi possível carregar os pedidos: {erro}</div> : null}
+      {aba === 'arquivados' ? null : !erro && !linhas ? <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div> : null}
+      {aba !== 'arquivados' && linhas ? (
         <>
           <div style={{ fontSize: 13, color: 'var(--fg3)', marginBottom: 8 }}>
             {linhas.length} linha(s)
