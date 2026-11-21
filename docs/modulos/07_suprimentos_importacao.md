@@ -142,7 +142,7 @@ Cabeçalho "IMPORTAÇÃO · GESTÃO IMPORTAÇÃO" / **Proforma Invoices (P.I.)**
 Nenhum teste de unidade da P.I. (`pi-store.js` não tem `*.test.js`); a rota entra no teste de fumaça (não rodei o e2e). **Cenários de aceitação (sem teste automatizado):** (1) *Dado* itens US$ 2×100 e taxa de 5%, *quando* salvo, *então* o total é US$ 210,00 (**Herdado**, testado ao vivo em 29/09). (2) *Dado* uma transferência "Enviada" de US$ 10.630,75, *então* a % paga da P.I. de origem sobe e a da destino também (**Herdado**).
 
 ### 7.2.10 Pendências e decisões
-- Hard delete e ausência de alçada (7.2.8, PC-6). Sem log no salvar/excluir.
+- Hard delete e ausência de alçada (7.2.8, PC-6). Sem log no salvar/excluir. *(R3 PR-A — Conferido no código em 21/11/2026; RLS testado apenas no esquema mínimo do branch `teste-r3`; migration `20261120100000_r3_pi_importacao_rls.sql` ainda não aplicada: 1ª tabela do PR-A; fecha `anon`, revoga privilégios extras de `authenticated` e corrige `vp_int_del` para exigir Administrador ou `pi-importacao.excluir`.)*
 - **Ideia em aberto (Herdada):** coluna na lista que consulta o Contas a Pagar do Omie pelo nº da P.I. e mostra se foi paga.
 - Transferência entre P.I. é **lançada à mão nas duas pontas** (sem espelho automático).
 

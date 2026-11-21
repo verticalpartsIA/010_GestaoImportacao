@@ -5,8 +5,8 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/07_suprimentos_importacao.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `fe50b5b`)
-- **Palavras:** 13122 · **blocos:** 283 · **seções com selo próprio:** 74 de 145
-- **Origem do selo dos blocos:** próprio 95 · da seção 66 · da seção-pai 0 · do cabeçalho 97 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
+- **Palavras:** 13163 · **blocos:** 283 · **seções com selo próprio:** 75 de 145
+- **Origem do selo dos blocos:** próprio 96 · da seção 68 · da seção-pai 0 · do cabeçalho 94 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
 - **Selo efetivo dos blocos:** Conferido 165 · Herdado 60 · Não verificado 33
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
@@ -38,7 +38,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 7.2.7 Dados | `docs/modulos/07_suprimentos_importacao.md#727-dados` | 3 | Herdado (uniforme) | 3 | b1 s2 |
 | 7.2.8 Regras e armadilhas | `docs/modulos/07_suprimentos_importacao.md#728-regras-e-armadilhas` | 3 | Herdado (misto (vale o mais fraco)) | 6 | b2 s4 |
 | 7.2.9 Testes | `docs/modulos/07_suprimentos_importacao.md#729-testes` | 3 | Herdado (uniforme) | 1 | b1 |
-| 7.2.10 Pendências e decisões | `docs/modulos/07_suprimentos_importacao.md#7210-pendências-e-decisões` | 3 | — | 3 | c3 |
+| 7.2.10 Pendências e decisões | `docs/modulos/07_suprimentos_importacao.md#7210-pendências-e-decisões` | 3 | Conferido (uniforme) | 3 | b1 s2 |
 | 7.2.11 Histórico | `docs/modulos/07_suprimentos_importacao.md#7211-histórico` | 3 | Herdado (uniforme) | 1 | b1 |
 | 7.3 RFQ | `docs/modulos/07_suprimentos_importacao.md#73-rfq` | 2 | — | 0 | — |
 | 7.3.1 O que é | `docs/modulos/07_suprimentos_importacao.md#731-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |
