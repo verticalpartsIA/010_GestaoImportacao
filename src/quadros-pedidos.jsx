@@ -70,11 +70,21 @@ function QcLinkPublico({ tipo }) {
 }
 window.QcLinkPublico = QcLinkPublico;
 
+// Separação (PV ou FAB) de um pedido: barra com "x de y itens pegos", lida do "Peguei" gravado nas telas de Separação.
+// Sem item a separar mostra "—"; se as marcações não puderam ser lidas, mostra "—" com o motivo (nunca 0% de mentira).
+function QpSeparacao({ info, erro, vazio }) {
+  if (!info.total) return <span style={{ color: 'var(--fg3)' }} title={vazio}>—</span>;
+  if (erro) return <span style={{ color: 'var(--fg3)' }} title={'Não foi possível ler o Peguei: ' + erro}>—</span>;
+  return <QpBarra info={{ pct: info.pct, sub: `${info.ok} de ${info.total} itens pegos` }} titulo="Itens já marcados como Peguei na tela de Separação" />;
+}
+
 function QuadrosPedidosPage() {
   const ord = window.useOrdenacao();
   const sb = window.__VP_SB && window.__VP_SB.sb;
   const [linhas, setLinhas] = React.useState(null);
   const [erro, setErro] = React.useState(null);
+  const [pegos, setPegos] = React.useState({});          // "Peguei" das Separações PV/FAB: "<codigo_pedido>|<CODIGO>" → { por, em }
+  const [erroPegos, setErroPegos] = React.useState(null); // por que não leu as marcações (sem sessão/alçada): a coluna mostra "—" e avisa
   // A caixa da tabela ocupa só o que cabe na janela: assim a barra de rolagem lateral fica sempre à vista, no pé da caixa,
   // mesmo com a lista longa (a altura fixa "tela − 190px" do .pcp-rolagem não serve: o cabeçalho desta página é mais alto).
   const caixaRef = React.useRef(null);
@@ -82,8 +92,12 @@ function QuadrosPedidosPage() {
 
   const carregar = React.useCallback(async () => {
     if (!sb) { setErro('Supabase indisponível.'); return; }
-    try { setLinhas(await window.QuadrosPedidosStore.carregar(sb)); setErro(null); }
-    catch (e) { setErro((e && e.message) || String(e)); }
+    try {
+      const lista = await window.QuadrosPedidosStore.carregar(sb);
+      setLinhas(lista); setErro(null);
+      try { setPegos(await window.QuadrosPedidosStore.listarPegos(sb, lista.map((r) => r.chave))); setErroPegos(null); }
+      catch (e) { setErroPegos((e && e.message) || String(e)); }
+    } catch (e) { setErro((e && e.message) || String(e)); }
   }, [sb]);
 
   React.useEffect(() => { carregar(); }, [carregar]);
@@ -103,10 +117,14 @@ function QuadrosPedidosPage() {
   React.useEffect(ajustarCaixa);
   React.useEffect(() => { window.addEventListener('resize', ajustarCaixa); return () => window.removeEventListener('resize', ajustarCaixa); }, []);
 
+  const PC = window.QuadrosPedidosCalc;
+  const sepPv = (r) => PC.progressoSeparacao(r.itensSeparar, r.chave, pegos);
+  const sepFab = (r) => PC.progressoSeparacao([...r.itensKit, ...r.itensComponentes], r.chave, pegos);
   const lista = linhas ? ord.aplicar(linhas, {
     pedido: (r) => (r.numero ? Number(r.numero) : null), cliente: (r) => r.cliente, vendedor: (r) => r.vendedor,
     incluido: (r) => r.incluido, prazo: (r) => r.prazo,
-    fabricacao: (r) => (r.fab ? r.fab.pct : null), separacao: (r) => (r.sep && r.sep.linhas ? r.sep.linhas : null),
+    fabricacao: (r) => (r.fab ? r.fab.pct : null),
+    sepPv: (r) => { const p = sepPv(r); return p.total ? p.pct : null; }, sepFab: (r) => { const p = sepFab(r); return p.total ? p.pct : null; },
   }) : [];
 
   return (
@@ -135,7 +153,7 @@ function QuadrosPedidosPage() {
               <thead><tr>
                 {ord.th('pedido', 'Nº do pedido')}{ord.th('cliente', 'Cliente')}{ord.th('vendedor', 'Vendedor')}
                 {ord.th('incluido', 'Incluído no Omie')}{ord.th('prazo', 'Prazo de entrega')}
-                {ord.th('fabricacao', 'Fabricação')}{ord.th('separacao', 'Separação')}
+                {ord.th('fabricacao', 'Fabricação')}{ord.th('sepPv', 'Separação PV')}{ord.th('sepFab', 'Separação FAB')}
               </tr></thead>
               <tbody>
                 {lista.map((r) => (
@@ -150,17 +168,11 @@ function QuadrosPedidosPage() {
                     <td>{qpData(r.incluido)}</td>
                     <td>{qpData(r.prazo)}</td>
                     <td><QpBarra info={r.fab} titulo="Mesmo andamento da Evolução da Fabricação (média dos quadros do pedido)" /></td>
-                    <td>
-                      {r.sep && r.sep.linhas
-                        ? <div title="Itens da proposta que o almoxarifado separa: tudo o que não é quadro, cabo (vai com o quadro), matéria-prima (VPMP) nem serviço">
-                            <b style={{ fontWeight: 500 }}>{r.sep.linhas} {r.sep.linhas === 1 ? 'item' : 'itens'}</b>
-                            <div style={{ fontSize: 10, color: 'var(--fg3)' }}>{r.sep.unidades.toLocaleString('pt-BR')} un.</div>
-                          </div>
-                        : <span style={{ color: 'var(--fg3)' }} title="Nada a separar neste pedido (só quadro e cabos, ou serviço)">—</span>}
-                    </td>
+                    <td><QpSeparacao info={sepPv(r)} erro={erroPegos} vazio="Nada a separar neste pedido (só quadro e cabos, ou serviço)" /></td>
+                    <td><QpSeparacao info={sepFab(r)} erro={erroPegos} vazio="Este pedido não tem kit nem componentes do quadro" /></td>
                   </tr>
                 ))}
-                {!lista.length ? <tr><td colSpan={7} style={{ color: 'var(--fg3)', padding: 16 }}>Nenhum pedido com quadro de comando.</td></tr> : null}
+                {!lista.length ? <tr><td colSpan={8} style={{ color: 'var(--fg3)', padding: 16 }}>Nenhum pedido com quadro de comando.</td></tr> : null}
               </tbody>
             </table>
           </div>

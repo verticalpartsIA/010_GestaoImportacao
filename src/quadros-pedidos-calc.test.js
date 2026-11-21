@@ -150,3 +150,12 @@ test('calcularFalta: pede 20, tem 4 → faltam 16; tem de sobra → 0; estoque d
   assert.equal(C.calcularFalta(20, undefined), null);
   assert.equal(C.calcularFalta(20, 'x'), null);
 });
+
+test('progressoSeparacao: conta os itens com Peguei do pedido; sem item a separar não vira 100%', () => {
+  const itens = [{ codigo: 'VPB-150' }, { codigo: 'vpb-333' }, { codigo: 'VPB-340' }];
+  const pegos = { '9235960462|VPB-150': { por: 'a' }, '9235960462|VPB-333': { por: 'a' }, '999|VPB-340': { por: 'b' } };
+  assert.deepEqual(C.progressoSeparacao(itens, 9235960462, pegos), { total: 3, ok: 2, pct: 66 });
+  assert.deepEqual(C.progressoSeparacao(itens, 9235960462, {}), { total: 3, ok: 0, pct: 0 });
+  assert.deepEqual(C.progressoSeparacao([], 1, pegos), { total: 0, ok: 0, pct: 0 });
+  assert.equal(C.progressoSeparacao([{ codigo: 'X' }], 1, { '1|X': {} }).pct, 100);
+});
