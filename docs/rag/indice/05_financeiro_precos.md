@@ -5,8 +5,8 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/05_financeiro_precos.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `980586c`)
-- **Palavras:** 28738 · **blocos:** 410 · **seções com selo próprio:** 61 de 84
-- **Origem do selo dos blocos:** próprio 110 · da seção 203 · da seção-pai 0 · do cabeçalho 61 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 36
+- **Palavras:** 28821 · **blocos:** 410 · **seções com selo próprio:** 62 de 84
+- **Origem do selo dos blocos:** próprio 111 · da seção 209 · da seção-pai 0 · do cabeçalho 54 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 36
 - **Selo efetivo dos blocos:** Conferido 236 · Herdado 25 · Não verificado 113
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
@@ -50,7 +50,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 5.3.7 Dados — o que lê e o que grava | `docs/modulos/05_financeiro_precos.md#537-dados--o-que-lê-e-o-que-grava` | 3 | Conferido (uniforme) | 1 | b1 |
 | 5.3.8 Regras e armadilhas | `docs/modulos/05_financeiro_precos.md#538-regras-e-armadilhas` | 3 | — | 5 | c5 |
 | 5.3.9 Testes | `docs/modulos/05_financeiro_precos.md#539-testes` | 3 | Conferido (uniforme) | 4 | b1 s3 |
-| 5.3.10 Pendências e decisões | `docs/modulos/05_financeiro_precos.md#5310-pendências-e-decisões` | 3 | — | 7 | c7 |
+| 5.3.10 Pendências e decisões | `docs/modulos/05_financeiro_precos.md#5310-pendências-e-decisões` | 3 | Conferido (uniforme) | 7 | b1 s6 |
 | 5.3.11 Histórico | `docs/modulos/05_financeiro_precos.md#5311-histórico` | 3 | — | 1 | c1 |
 | 5.4 Emissão de NF | `docs/modulos/05_financeiro_precos.md#54-emissão-de-nf` | 2 | — | 0 | — |
 | 5.4.1 O que é | `docs/modulos/05_financeiro_precos.md#541-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |

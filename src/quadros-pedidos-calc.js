@@ -114,5 +114,15 @@
     return Math.max(0, Math.round((q - Number(estoqueFisico)) * 1000) / 1000);
   }
 
-  window.QuadrosPedidosCalc = { calcularFalta, progressoFabricacao, classificarItem, resumoItens, itensParaSeparar, itensDoKit, lerLinhaComponente, componentesDoQuadro, chaveDaOp };
+  // Andamento da separação de um pedido: quantos dos itens listados já têm "Peguei". `pegos` é o mapa "<codigo_pedido>|<CODIGO>" → marca
+  // (o mesmo de QuadrosPedidosStore.listarPegos). Pedido sem item a separar devolve total 0 (a tela mostra "—", nunca 100%).
+  function progressoSeparacao(itens, codigoPedido, pegos) {
+    const lista = itens || [];
+    const mapa = pegos || {};
+    const ok = lista.filter((i) => mapa[`${codigoPedido}|${String(i.codigo).toUpperCase()}`]).length;
+    const total = lista.length;
+    return { total, ok, pct: total ? Math.floor((ok / total) * 100 + 1e-9) : 0 };
+  }
+
+  window.QuadrosPedidosCalc = { progressoSeparacao, calcularFalta, progressoFabricacao, classificarItem, resumoItens, itensParaSeparar, itensDoKit, lerLinhaComponente, componentesDoQuadro, chaveDaOp };
 })();
