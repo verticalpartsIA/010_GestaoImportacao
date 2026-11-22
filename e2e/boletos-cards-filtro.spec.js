@@ -108,7 +108,8 @@ test('"A vencer" traz o cliente que também está atrasado, mas só com o títul
   await page.goto('/adm-financeiro/boletos-avisos');
   await expect(visivel(page, 'CLIENTE UM A VENCER')).toBeVisible({ timeout: 45_000 });
   await page.getByRole('button', { name: /^A vencer/ }).click();
-  await expect(linhasDaLista(page)).toHaveCount(2);                                // clientes 1 e 4
+  // Em dia útil: clientes 1 e 4. Em fim de semana o que vence "hoje" vale na segunda e entra em "A vencer": clientes 1, 2 e 4.
+  await expect(linhasDaLista(page)).toHaveCount(diaUtilHoje ? 2 : 3);
   await expect(linhasDaLista(page).filter({ hasText: 'CLIENTE QUATRO' })).toContainText('50,00');
   await page.getByRole('button', { name: /Total em aberto/ }).click();
   await expect(linhasDaLista(page)).toHaveCount(4);

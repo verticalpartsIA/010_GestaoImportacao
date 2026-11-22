@@ -25,6 +25,16 @@
   'use strict';
 
   function sb() { return (window.__VP_SB || {}).sb; }
+  let _ultimoToastPermissaoEm = 0;
+  function avisarErroPermissao(error) {
+    if (error && (error.code === '42501' || error.status === 401 || error.status === 403 || /permission denied|row-level security/i.test(error.message || ''))) {
+      const agora = Date.now();
+      if (agora - _ultimoToastPermissaoEm >= 5 * 60 * 1000) {
+        _ultimoToastPermissaoEm = agora;
+        if (window.toast) window.toast('Sem sessão ou permissão para carregar o Aval Financeiro. Recarregue pelo vpsistema.', 'error');
+      }
+    }
+  }
 
   /* Aprovação do dono/criador do sistema — mesmo poder da aprovação do CEO,
      mas restrita por identidade (ninguém além dela pode clicar). Aceita o
@@ -101,7 +111,11 @@
     const { data: propostas, error } = await c.from('propostas')
       .select('id, numero_documento, titulo, valor_total, numero_cotacao, data_json, aprovada_em')
       .eq('status', 'aprovada').in('vigencia', ['vigente', 'pendente_aditivo']).order('aprovada_em', { ascending: false });
-    if (error) { console.warn('[AvalFinanceiroStore] listarFila falhou', error); return []; }
+    if (error) {
+      console.warn('[AvalFinanceiroStore] listarFila falhou', error);
+      avisarErroPermissao(error);
+      return [];
+    }
     const avais = await Promise.all((propostas || []).map((p) => garantirRegistro(p)));
     return (propostas || []).map((p, i) => ({ proposta: p, aval: avais[i] }));
   }

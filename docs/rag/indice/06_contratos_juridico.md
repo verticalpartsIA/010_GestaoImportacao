@@ -5,8 +5,8 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/06_contratos_juridico.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `53e05d6`)
-- **Palavras:** 12029 · **blocos:** 243 · **seções com selo próprio:** 35 de 48
-- **Origem do selo dos blocos:** próprio 68 · da seção 115 · da seção-pai 0 · do cabeçalho 36 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 24
+- **Palavras:** 12105 · **blocos:** 243 · **seções com selo próprio:** 36 de 48
+- **Origem do selo dos blocos:** próprio 69 · da seção 121 · da seção-pai 0 · do cabeçalho 29 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 24
 - **Selo efetivo dos blocos:** Conferido 174 · Herdado 22 · Não verificado 23
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
@@ -38,7 +38,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | 6.2.7 Dados — o que lê e o que grava | `docs/modulos/06_contratos_juridico.md#627-dados--o-que-lê-e-o-que-grava` | 3 | Conferido (uniforme) | 1 | b1 |
 | 6.2.8 Regras e armadilhas | `docs/modulos/06_contratos_juridico.md#628-regras-e-armadilhas` | 3 | — | 5 | c5 |
 | 6.2.9 Testes | `docs/modulos/06_contratos_juridico.md#629-testes` | 3 | Conferido (uniforme) | 6 | b1 s5 |
-| 6.2.10 Pendências e decisões | `docs/modulos/06_contratos_juridico.md#6210-pendências-e-decisões` | 3 | — | 7 | c7 |
+| 6.2.10 Pendências e decisões | `docs/modulos/06_contratos_juridico.md#6210-pendências-e-decisões` | 3 | Conferido (uniforme) | 7 | b1 s6 |
 | 6.2.11 Histórico | `docs/modulos/06_contratos_juridico.md#6211-histórico` | 3 | — | 1 | c1 |
 | 6.3 Contratos & Minutas | `docs/modulos/06_contratos_juridico.md#63-contratos--minutas` | 2 | — | 0 | — |
 | 6.3.1 O que é | `docs/modulos/06_contratos_juridico.md#631-o-que-é` | 3 | Conferido (uniforme) | 2 | b1 s1 |

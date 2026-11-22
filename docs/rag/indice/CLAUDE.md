@@ -5,7 +5,7 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `CLAUDE.md#âncora`. Em divergência vale a origem.
 
 - **Selo:** não se aplica (CLAUDE.md não é documento de módulo; o Art. 6 vale para `docs/modulos/`).
-- **Palavras:** 87387 · **blocos:** 1332
+- **Palavras:** 87520 · **blocos:** 1332
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
 
@@ -20,7 +20,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | Título II — Autoridade, escopo e confirmação | `CLAUDE.md#título-ii--autoridade-escopo-e-confirmação` | 3 | — | 7 | m7 |
 | Título III — Arquitetura e código (do jeito que o site é) | `CLAUDE.md#título-iii--arquitetura-e-código-do-jeito-que-o-site-é` | 3 | — | 7 | m7 |
 | Título IV — Dados e segurança | `CLAUDE.md#título-iv--dados-e-segurança` | 3 | — | 7 | m7 |
-| Título V — Qualidade e testes (o que existe de verdade) | `CLAUDE.md#título-v--qualidade-e-testes-o-que-existe-de-verdade` | 3 | — | 5 | m5 |
+| Título V — Qualidade e testes (o que existe de verdade) | `CLAUDE.md#título-v--qualidade-e-testes-o-que-existe-de-verdade` | 3 | Conferido (uniforme) | 5 | m5 |
 | Título VI — Fluxo de trabalho | `CLAUDE.md#título-vi--fluxo-de-trabalho` | 3 | — | 4 | m4 |
 | Título VII — Documentos | `CLAUDE.md#título-vii--documentos` | 3 | — | 6 | m6 |
 | Título VIII — Contexto técnico do site | `CLAUDE.md#título-viii--contexto-técnico-do-site` | 3 | — | 8 | m8 |
