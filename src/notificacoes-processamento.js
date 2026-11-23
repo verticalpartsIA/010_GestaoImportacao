@@ -50,7 +50,6 @@
     'Almoxarifado': 'almoxarifado',
     'Comercial': 'propostas',                  // 14 dos alertas eram "Comercial" e caíam no Dashboard
     'Compras': 'cotacoes-fornecedor',
-    'Propostas': 'propostas',
     'Inbox': 'inbox',
   };
 

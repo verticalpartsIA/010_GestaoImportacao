@@ -427,8 +427,8 @@ function DecisoesPage({ setRoute, setSubsel }) {
         <div className="row gap-2" style={{ marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           {tabBtn('pendentes', 'Pendentes', (pendentes || []).length)}
           {tabBtn('decididas', 'Decididas', (decididas || []).length)}
-          <input className="input" style={{ maxWidth: 260, marginLeft: 'auto' }} placeholder="Buscar cotação, cliente, pessoa…" value={busca} onChange={(e) => setBusca(e.target.value)}/>
-          <select className="input" style={{ maxWidth: 280 }} value={tipo} onChange={(e) => setTipo(e.target.value)}>
+          <input className="input" style={{ maxWidth: 260, marginLeft: 'auto' }} placeholder="Buscar cotação, cliente, pessoa…" aria-label="Buscar decisão por cotação, cliente ou pessoa" value={busca} onChange={(e) => setBusca(e.target.value)}/>
+          <select className="input" style={{ maxWidth: 280 }} aria-label="Filtrar por tipo de decisão" value={tipo} onChange={(e) => setTipo(e.target.value)}>
             <option value="">Todos os tipos</option>
             {tiposPresentes.map((t) => <option key={t} value={t}>{window.DecisoesStore.TIPO_LABEL[t] || t}</option>)}
           </select>

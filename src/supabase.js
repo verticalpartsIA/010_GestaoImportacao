@@ -97,10 +97,26 @@
     }
 
     // Em localhost sem token → criar flag de desenvolvimento
-    if (isLocalhost && !ssoToken && !hasTabFlag) {
-      sessionStorage.setItem('vpprd_sso_ok', '1');
-      const devUser = { nome: 'Desenvolvimento', email: 'dev@localhost', iniciais: 'DV', id: 'dev-local' };
-      saveUser(devUser);
+    // 04/11/2026: dois usuários de desenvolvimento, escolhidos por /?dev=admin ou /?dev=pleno (só em localhost).
+    //  - admin (padrão): passa em tudo, como o nível Administrador.
+    //  - pleno: usuário comum (não-admin) com TODAS as alçadas — ver PropostaStore.temCapacidade.
+    // O e-mail segue 'dev@localhost' de propósito: outros arquivos o reconhecem (fluxo-pendentes não processa a fila real).
+    if (isLocalhost && !ssoToken) {
+      let atual = null;
+      try { atual = JSON.parse(sessionStorage.getItem('vpprd_user') || 'null'); } catch (e) {}
+      const simulaReal = hasTabFlag && atual && atual.id !== 'dev-local'; // usuário real simulado à mão: não mexer
+      if (!simulaReal) {
+        const pedido = params.get('dev');
+        const perfil = (pedido === 'admin' || pedido === 'pleno') ? pedido : ((atual && atual.devPerfil) || 'admin');
+        // Navegador automatizado (testes e2e) sem ?dev=: mantém o dev comum de antes, sem alçadas nem perfil de admin.
+        const automatizado = !pedido && !(atual && atual.devPerfil) && !!navigator.webdriver;
+        sessionStorage.setItem('vpprd_sso_ok', '1');
+        saveUser(automatizado
+          ? { nome: 'Desenvolvimento', email: 'dev@localhost', iniciais: 'DV', id: 'dev-local', devPerfil: 'nenhum' }
+          : perfil === 'pleno'
+            ? { nome: 'Dev Pleno', email: 'dev@localhost', iniciais: 'DP', id: 'dev-local', devPerfil: 'pleno' }
+            : { nome: 'Dev Admin', email: 'dev@localhost', iniciais: 'DA', id: 'dev-local', devPerfil: 'admin' });
+      }
     }
 
     // Restaura usuário já capturado nesta aba (reloads)
@@ -146,11 +162,32 @@
     // Segurança real (#571) — troca o login do vpsistema por uma sessão nativa do vpprd (Edge Function
     // sso-exchange). Em modo 'shadow' só observa; em 'on' (piloto F0) o cliente de dados acima passa a usar a
     // sessão. Uma falha aqui nunca quebra o app (VpAuth.init não lança; sem sessão = chave pública).
+    function sincronizarRealtime(token) {
+      try {
+        if (!token || !sb || !sb.realtime || typeof sb.realtime.setAuth !== 'function') return;
+        sb.realtime.setAuth(token);
+      } catch (e) { /* Realtime nunca bloqueia o app */ }
+    }
+
     try {
       if (window.VpAuth) {
+        if (typeof window.VpAuth.onChange === 'function') {
+          window.VpAuth.onChange(function (_ev, _u, sessao) {
+            try {
+              const s = window.VpAuth.status && window.VpAuth.status();
+              const tok = sessao && sessao.access_token;
+              if (s && s.dados === 'sessao' && tok) sincronizarRealtime(tok);
+            } catch (e) {}
+          });
+        }
         window.VpAuth.init({ ssoToken: ssoToken || null }).then(function () {
           const s = window.VpAuth.status();
           if (s.modo !== 'off') console.info('[VpAuth] modo=' + s.modo + ' estado=' + s.estado + (s.motivo ? ' (' + s.motivo + ')' : ''));
+          if (s.dados === 'sessao' && window.VpAuth.getAccessToken) {
+            Promise.resolve(window.VpAuth.getAccessToken()).then(function (tok) {
+              if (tok) sincronizarRealtime(tok);
+            }).catch(function () {});
+          }
         });
       }
     } catch (e) { /* sombra: nunca bloqueia */ }
@@ -239,11 +276,12 @@
       })(),
       sb.from('tarefas').select('*').eq('role', (role === 'logistica' || role === 'importacao') ? 'admin' : role).eq('done', false).order('id'),
       sb.from('embarques').select('*').eq('teste', false).order('eta'),
-      sb.from('contratos_venda_equipamentos').select('*').or('status.is.null,status.neq.em_preenchimento').order('issued_date', { ascending: false }),
+      /* só as colunas que as métricas do Dashboard leem (id, proposta_id, status, valores) — antes vinha o contrato inteiro, com o texto (doc) */
+      sb.from('contratos_venda_equipamentos').select('id, proposta_id, status, valor_total_num, value').or('status.is.null,status.neq.em_preenchimento').order('issued_date', { ascending: false }),
       sb.from('comissoes').select('*').order('id'),
       sb.from('gatilhos').select('*').order('due_date'),
-      sb.from('fichas_tecnicas').select('*').order('criado_em', { ascending: false }),
-      sb.from('catalogo_produtos').select('*').order('created_at', { ascending: false }),
+      sb.from('fichas_tecnicas').select('id, criado_em').order('criado_em', { ascending: false }),   // o Dashboard só conta as fichas e as do mês
+      sb.from('catalogo_produtos').select('id, situacao').order('created_at', { ascending: false }),   // só a contagem de ativos
       // Esteira real (Formulário→Proposta→Contrato→Aval Financeiro) — usada
       // pra corrigir os KPIs do Dashboard Admin, que antes só liam a tabela
       // legada/desconectada `projetos` (achado E2E: Faturamento Total R$0 e

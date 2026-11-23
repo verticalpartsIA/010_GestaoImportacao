@@ -52,9 +52,10 @@ test('podeComprarEquipamento somenteLeitura — aprovada libera', async () => {
   assert.deepEqual(await window.DecisoesStore.podeComprarEquipamento(9, undefined, { somenteLeitura: true }), { ok: true });
 });
 
-test('podeComprarEquipamento sem opts — continua reabrindo a decisão cancelada (submit da P.I.)', async () => {
+test('podeComprarEquipamento sem opts — sem gate do CEO por margem (13/11/2026) não reabre nem exige a decisão cancelada', async () => {
   const sb = fakeSb([cancelada]);
   window.__VP_SB = { sb };
-  await window.DecisoesStore.podeComprarEquipamento(9);
-  assert.ok(sb.escritas.some(([op, tabela, v]) => op === 'update' && tabela === 'decisoes_gerenciais' && v.status === 'pendente'));
+  const r = await window.DecisoesStore.podeComprarEquipamento(9);
+  assert.equal(r.ok, true, 'o CEO não é mais exigido por margem');
+  assert.ok(!sb.escritas.some(([op, tabela]) => op === 'update' && tabela === 'decisoes_gerenciais'), 'nada é reaberto');
 });

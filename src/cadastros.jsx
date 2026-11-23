@@ -147,8 +147,19 @@ function useCnpjOmieFirst(form, setForm) {
   return { buscando, buscar: () => (window.EnderecoAPI?.isCnpjValido(digitos) ? aplicar(false) : window.toast?.('Informe um CNPJ válido para buscar.', 'warning')), garantirConsulta };
 }
 
+/* Cliente antigo (carga do Omie, Leads) tem cidade/UF/endereço só nas colunas de compatibilidade (cidade, estado, endereco).
+   A store regrava essas três a partir dos campos endereco_*; sem este preenchimento, salvar a edição as apagaria. */
+function cadCompletarEnderecoLegado(d) {
+  const vazio = (v) => !String(v ?? '').trim();
+  const f = { ...CLI_EMPTY, ...d };
+  if (vazio(f.endereco_cidade) && !vazio(d.cidade)) f.endereco_cidade = d.cidade;
+  if (vazio(f.endereco_estado) && !vazio(d.estado)) f.endereco_estado = d.estado;
+  if (vazio(f.endereco_logradouro) && !vazio(d.endereco)) f.endereco_logradouro = d.endereco;
+  return f;
+}
+
 function ClienteForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
-  const [form, setForm] = React.useState(() => (initialData ? { ...CLI_EMPTY, ...initialData } : CLI_EMPTY));
+  const [form, setForm] = React.useState(() => (initialData ? cadCompletarEnderecoLegado(initialData) : CLI_EMPTY));
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
   const cnpjBusca = useCnpjOmieFirst(form, setForm);
   const submit = async () => {
@@ -168,6 +179,10 @@ function ClienteForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
           </div>
         </PIField>
         <PIField label="Inscrição estadual"><PIInput value={form.inscricao_estadual} onChange={set('inscricao_estadual')}/></PIField>
+        {/* 17/11/2026: o documento do OUTRO tipo é opcional (PJ: CPF do responsável; PF: CNPJ, ex. MEI) — o contrato herda daqui. */}
+        <PIField label={form.tipo_pessoa === 'PF' ? 'CNPJ (opcional — ex.: MEI)' : 'CPF do responsável (opcional)'}>
+          <PIInput value={form.tipo_pessoa === 'PF' ? form.cnpj : form.cpf} onChange={set(form.tipo_pessoa === 'PF' ? 'cnpj' : 'cpf')}/>
+        </PIField>
         <PIField label="Razão social / Nome *" span={2}><PIInput value={form.razao_social} onChange={set('razao_social')}/></PIField>
         <PIField label="Nome fantasia"><PIInput value={form.nome_fantasia} onChange={set('nome_fantasia')}/></PIField>
         <PIField label="E-mail"><PIInput value={form.email} onChange={set('email')}/></PIField>

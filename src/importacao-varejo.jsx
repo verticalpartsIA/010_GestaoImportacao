@@ -295,6 +295,148 @@ function IVModalComprado({ item, onClose, onSaved }) {
   );
 }
 
+/* Ícone de cesta (local: não mexe no conjunto compartilhado de ícones de primitives.jsx) */
+function IVCestaIcone({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginRight: 6, verticalAlign: '-3px' }}>
+      <path d="m15 11-1 9" /><path d="m19 11-4-7" /><path d="M2 11h20" /><path d="m3.5 11 1.6 7.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 2-1.6l1.7-7.4" /><path d="M4.5 15.5h15" /><path d="m5 11 4-7" /><path d="m9 11 1 9" />
+    </svg>
+  );
+}
+
+/* ---------- Modal: solicitação de compra do vendedor — itens + quantidade; o comprador trata depois ---------- */
+function IVModalSolicitacao({ itens, onClose, onFeito }) {
+  const S = window.SolicitacoesCompraStore; const C = window.SolicitacoesCompraCalc;
+  const [linhas, setLinhas] = React.useState(() => C.itensDaSelecao(itens));
+  const [justificativa, setJustificativa] = React.useState('');
+  const [urgencia, setUrgencia] = React.useState('normal');
+  const [dataDesejada, setDataDesejada] = React.useState('');
+  const [pedidoVenda, setPedidoVenda] = React.useState('');
+  const [cotacao, setCotacao] = React.useState('');
+  const [gravando, setGravando] = React.useState(false);
+  const setCampo = (cod, campo, v) => setLinhas((ls) => ls.map((l) => (l.codigo === cod ? { ...l, [campo]: v } : l)));
+  const confirmar = async () => {
+    const pronto = linhas.map((l) => ({ ...l, quantidade: Number(l.quantidade) }));
+    const v = C.validarEnvio(pronto);
+    if (!v.ok) { window.toast?.(v.erros[0], 'error'); return; }
+    setGravando(true);
+    try {
+      const r = await S.enviar(pronto, { justificativa, urgencia, data_desejada: dataDesejada || null, pedido_venda_numero: pedidoVenda, cotacao_numero: cotacao });
+      onFeito(r);
+    } catch (e) { window.toast?.('Erro ao enviar a solicitação: ' + C.mensagemErro(e), 'error'); }
+    finally { setGravando(false); }
+  };
+  return (
+    <Modal title={'Solicitação de compra — ' + linhas.length + ' produto(s)'} onClose={onClose} width={720}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" icon="send" onClick={confirmar} disabled={gravando}>{gravando ? 'Enviando…' : 'Enviar ao comprador'}</Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <p className="small">Informe só a quantidade que você precisa. Fornecedor e preço são com o comprador. Nada vai ao Omie.</p>
+        <div className="table-wrap" style={{ maxHeight: 260, overflowY: 'auto' }}>
+          <table className="t">
+            <thead><tr><th>Código</th><th>Descrição</th><th style={{ width: 110 }}>Quantidade</th><th>Observação</th></tr></thead>
+            <tbody>
+              {linhas.map((l) => (
+                <tr key={l.codigo}>
+                  <td className="mono small">{l.codigo}</td>
+                  <td className="small">{l.descricao || '—'}</td>
+                  <td><input className="input" type="number" min="0" step="any" value={l.quantidade} onChange={(e) => setCampo(l.codigo, 'quantidade', e.target.value)} style={{ borderColor: Number(l.quantidade) > 0 ? undefined : 'var(--vp-yellow, #f5b800)' }} /></td>
+                  <td><input className="input" value={l.obs} onChange={(e) => setCampo(l.codigo, 'obs', e.target.value)} placeholder="opcional" maxLength={200} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="grid-3" style={{ gap: 10 }}>
+          <div><label className="up-eyebrow muted">Urgência</label>
+            <select className="input" value={urgencia} onChange={(e) => setUrgencia(e.target.value)}>{C.URGENCIAS.map((u) => <option key={u.v} value={u.v}>{u.label}</option>)}</select></div>
+          <div><label className="up-eyebrow muted">Preciso para</label>
+            <input className="input" type="date" value={dataDesejada} onChange={(e) => setDataDesejada(e.target.value)} /></div>
+          <div><label className="up-eyebrow muted">Nº do pedido de venda</label>
+            <input className="input" value={pedidoVenda} onChange={(e) => setPedidoVenda(e.target.value)} placeholder="opcional" maxLength={40} /></div>
+          <div><label className="up-eyebrow muted">Nº da cotação/proposta</label>
+            <input className="input" value={cotacao} onChange={(e) => setCotacao(e.target.value)} placeholder="ex.: 31014" maxLength={40} /></div>
+        </div>
+        <div><label className="up-eyebrow muted">Por que precisa? (cliente, obra, motivo)</label>
+          <textarea className="input" rows={2} value={justificativa} onChange={(e) => setJustificativa(e.target.value)} maxLength={1000} /></div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ---------- Modal: cesta — escolher o lote (novo ou um aberto) que recebe os produtos marcados ---------- */
+function IVModalCesta({ itens, emCotacao, onClose, onFeito }) {
+  const S = window.CotacoesVarejoStore;
+  const [lotes, setLotes] = React.useState(null);
+  const [erro, setErro] = React.useState('');
+  const [modo, setModo] = React.useState('novo');      // 'novo' | 'existente'
+  const [loteId, setLoteId] = React.useState('');
+  const [titulo, setTitulo] = React.useState('');
+  const [gravando, setGravando] = React.useState(false);
+  React.useEffect(() => {
+    let vivo = true;
+    S.listarLotes().then((l) => { if (vivo) setLotes(l.filter((x) => window.CotacoesVarejoCalc.loteAceitaItens(x))); })
+      .catch((e) => { if (vivo) { setLotes([]); setErro('Não consegui listar os lotes abertos: ' + (e.message || e)); } });
+    return () => { vivo = false; };
+  }, []);
+  const abertos = lotes || [];
+  const emOutroLote = itens.filter((i) => emCotacao && emCotacao[String(i.codigo).toUpperCase()] && (modo === 'novo' || emCotacao[String(i.codigo).toUpperCase()].id !== loteId));
+  const confirmar = async () => {
+    setGravando(true);
+    try {
+      const linhas = itens.map((i) => ({ codigo: i.codigo, descricao: i.descricao, unidade: i.unidade || null, quantidade: i.sugestaoCompra > 0 ? i.sugestaoCompra : 0 }));
+      if (modo === 'novo') {
+        const lote = await S.criarLote(linhas, { titulo: titulo.trim() || null });
+        onFeito({ lote, adicionados: linhas.length, ignorados: [], novo: true, semQtd: linhas.filter((l) => !(l.quantidade > 0)).length });
+      } else {
+        const r = await S.adicionarItens(loteId, linhas);
+        onFeito({ lote: r.lote, adicionados: r.adicionados, ignorados: r.ignorados, novo: false, semQtd: linhas.filter((l) => !(l.quantidade > 0)).length });
+      }
+    } catch (e) { window.toast?.('Erro ao adicionar ao lote: ' + (e.message || e), 'error'); }
+    finally { setGravando(false); }
+  };
+  return (
+    <Modal title={'Adicionar ' + itens.length + ' produto(s) ao lote'} onClose={onClose} width={600}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={confirmar} disabled={gravando || lotes === null || (modo === 'existente' && !loteId)}>
+          {gravando ? 'Gravando…' : (modo === 'novo' ? 'Criar lote e adicionar' : 'Adicionar ao lote')}
+        </Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <p className="small">O lote fica aberto até você pedir a cotação aos fornecedores (em Cotações de Varejo). Nada vai ao Omie.</p>
+        {erro && <div className="alert danger"><div><div className="alert__sub">{erro}</div></div></div>}
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 700 }}>
+          <input type="radio" name="iv-cesta-modo" checked={modo === 'novo'} onChange={() => setModo('novo')} /> Criar um lote novo
+        </label>
+        {modo === 'novo' && <input className="input" placeholder="Nome do lote (opcional)" value={titulo} onChange={(e) => setTitulo(e.target.value)} maxLength={80} />}
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 700 }}>
+          <input type="radio" name="iv-cesta-modo" checked={modo === 'existente'} onChange={() => setModo('existente')} disabled={!abertos.length} />
+          Usar um lote já aberto {lotes === null ? '(carregando…)' : '(' + abertos.length + ')'}
+        </label>
+        {modo === 'existente' && (
+          <div className="stack" style={{ gap: 6, maxHeight: 220, overflowY: 'auto' }}>
+            {abertos.map((l) => (
+              <label key={l.id} style={{ display: 'flex', gap: 8, alignItems: 'center', border: '1px solid var(--border, #e5e7eb)', borderRadius: 8, padding: '6px 10px', background: loteId === l.id ? 'var(--bg2, #f6f6f6)' : undefined }}>
+                <input type="radio" name="iv-cesta-lote" checked={loteId === l.id} onChange={() => setLoteId(l.id)} />
+                <span><b>{l.numero}</b>{l.titulo ? ' · ' + l.titulo : ''}<br /><span className="small muted">{l.qtdItens} produto(s) · criado por {l.criado_por_nome || l.criado_por || '—'}</span></span>
+              </label>
+            ))}
+          </div>
+        )}
+        {emOutroLote.length > 0 && (
+          <div className="alert warning"><div><div className="alert__sub">
+            {emOutroLote.length} produto(s) já estão em outro lote aberto ({emOutroLote.slice(0, 3).map((i) => i.codigo + ' em ' + emCotacao[String(i.codigo).toUpperCase()].numero).join(', ')}{emOutroLote.length > 3 ? '…' : ''}). Você pode adicionar mesmo assim.
+          </div></div></div>
+        )}
+        {itens.some((i) => !(i.sugestaoCompra > 0)) && <p className="small muted">Produto sem sugestão de compra entra com quantidade 0: informe a quantidade no lote antes de pedir a cotação.</p>}
+      </div>
+    </Modal>
+  );
+}
+
 /* ---------- Modal: enviar requisição em massa pro Omie ---------- */
 function IVModalEnviarOmie({ itens, onClose, onEnviado }) {
   const [enviando, setEnviando] = React.useState(false);
@@ -495,10 +637,14 @@ function ImportacaoVarejoPage({ setRoute }) {
   const [soRevisar, setSoRevisar] = React.useState(false);
   const [modalEnviar, setModalEnviar] = React.useState(false);
   const [podeGerenciar, setPodeGerenciar] = React.useState(false);
+  const [podeSolicitar, setPodeSolicitar] = React.useState(false);   // vendedor: escolhe e ENVIA solicitação (alçada compras.solicitar)
+  const podeSelecionar = podeGerenciar || podeSolicitar;
+  const [modalSolic, setModalSolic] = React.useState(false);
   const [sincronizando, setSincronizando] = React.useState(false);
 
   React.useEffect(() => {
     window.PropostaStore?.temCapacidade?.('compras', 'criar').then(setPodeGerenciar).catch(() => setPodeGerenciar(false));
+    window.SolicitacoesCompraStore?.podeSolicitar().then(setPodeSolicitar).catch(() => setPodeSolicitar(false));
   }, []);
 
   const carregar = React.useCallback(() => {
@@ -580,6 +726,27 @@ function ImportacaoVarejoPage({ setRoute }) {
   }, { estoqueFisico: 0, estoqueDisponivel: 0, estoqueReservado: 0, pendente: 0, sugestaoCompra: 0, sugAteMax: 0, comprado: 0, caminho: 0, valorAPagar: 0, itensSemPreco: 0 });
   const totais = React.useMemo(() => calcularTotais(filtrados), [filtrados]);
 
+  /* "Buscar no Omie": produto que não está na lista é consultado no Omie; se existir e estiver ativo, passa a morar aqui. */
+  const [codigoOmie, setCodigoOmie] = React.useState('');
+  const [buscandoOmie, setBuscandoOmie] = React.useState(false);
+  const buscarNoOmie = async () => {
+    const cod = codigoOmie.trim();
+    if (!cod || buscandoOmie) return;
+    setBuscandoOmie(true);
+    try {
+      const r = await window.ImportacaoVarejoStore.buscarProdutoNoOmie(cod);
+      if (!r.encontrado) { window.toast?.('Produto não cadastrado no Omie!', 'error'); return; }
+      if (r.inativo) { window.toast?.('O produto ' + r.codigo + ' está inativo no Omie, por isso não entra na lista.', 'warning'); return; }
+      if (r.jaNaLista) { setBusca(r.codigo); setCodigoOmie(''); window.toast?.('O produto ' + r.codigo + ' já está na lista.', 'info'); return; }
+      setCodigoOmie('');
+      try { await window.ImportacaoVarejoStore.dispararSyncEstoqueManual(); } catch (e) { console.warn('[ImportacaoVarejo] estoque do produto novo fica pra próxima sincronização', e); }
+      await carregar();
+      setBusca(r.produto.codigo);
+      window.toast?.('Produto ' + r.produto.codigo + ' incluído na lista. O giro/Curva dele entra na próxima sincronização de catálogo/giro.', 'success');
+    } catch (e) { window.toast?.('Erro ao buscar no Omie: ' + e.message, 'error'); }
+    finally { setBuscandoOmie(false); }
+  };
+
   const forcarSync = async () => {
     setSincronizando(true);
     try {
@@ -604,21 +771,31 @@ function ImportacaoVarejoPage({ setRoute }) {
      página Cotações de Varejo, onde os fornecedores respondem. O selo "em cotação" não abate a sugestão: só a compra aprovada abate. */
   const [emCotacao, setEmCotacao] = React.useState({});
   React.useEffect(() => { window.CotacoesVarejoStore?.codigosEmCotacao().then(setEmCotacao).catch(() => setEmCotacao({})); }, [items]);
-  const [pedindoCotacao, setPedindoCotacao] = React.useState(false);
-  const pedirCotacao = async () => {
+  /* Cesta (nov/2026): "Adicionar ao lote" pergunta se é lote novo ou um já aberto (rascunho). O lote só fecha quando a cotação
+     é enviada ao fornecedor, na página Cotações de Varejo. */
+  const [modalCesta, setModalCesta] = React.useState(false);
+  const abrirCesta = () => {
     if (!window.CotacoesVarejoStore) { window.toast?.('Módulo de cotações não carregou — recarregue a página.', 'error'); return; }
-    setPedindoCotacao(true);
-    try {
-      const lote = await window.CotacoesVarejoStore.criarLote(itensSelecionados.map((i) => ({
-        codigo: i.codigo, descricao: i.descricao, unidade: i.unidade || null, quantidade: i.sugestaoCompra > 0 ? i.sugestaoCompra : 0,
-      })));
-      const semQtd = itensSelecionados.filter((i) => !(i.sugestaoCompra > 0)).length;
-      window.toast?.('Lote ' + lote.numero + ' criado com ' + itensSelecionados.length + ' produto(s).' + (semQtd ? ' ' + semQtd + ' sem sugestão de compra: informe a quantidade antes de enviar.' : ' Escolha os fornecedores e envie.'), semQtd ? 'warning' : 'success');
-      setSelecionados(new Set());
-      window.VpRouter.navigate('cotacoes-varejo', lote.id);
-      setRoute && setRoute('cotacoes-varejo');
-    } catch (e) { window.toast?.('Erro ao criar o lote de cotação: ' + (e.message || e), 'error'); }
-    finally { setPedindoCotacao(false); }
+    setModalCesta(true);
+  };
+  const cestaFeita = (r) => {
+    setModalCesta(false);
+    const ign = r.ignorados.length;
+    const inicio = r.novo
+      ? 'Lote ' + r.lote.numero + ' criado com ' + r.adicionados + ' produto(s).'
+      : r.adicionados + ' produto(s) adicionado(s) ao lote ' + r.lote.numero + (ign ? ' (' + ign + ' já estava(m) no lote)' : '') + '.';
+    window.toast?.(inicio + (r.semQtd ? ' ' + r.semQtd + ' sem sugestão de compra: informe a quantidade antes de enviar.' : ' Escolha os fornecedores e envie.'), r.semQtd ? 'warning' : 'success');
+    setSelecionados(new Set());
+    window.VpRouter.navigate('cotacoes-varejo', r.lote.id);
+    setRoute && setRoute('cotacoes-varejo');
+  };
+
+  const solicitacaoFeita = (r) => {
+    setModalSolic(false);
+    window.toast?.('Solicitação ' + r.numero + ' enviada com ' + r.itens + ' produto(s). O comprador vai tratar em Pedidos › Solicitações.', 'success');
+    setSelecionados(new Set());
+    window.VpRouter.navigate('pedidos-acompanhamento');
+    setRoute && setRoute('pedidos-acompanhamento');
   };
 
   const toggleSelecionado = (codigo) => setSelecionados((prev) => {
@@ -743,11 +920,26 @@ function ImportacaoVarejoPage({ setRoute }) {
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
         <input className="input" style={{ maxWidth: 340 }} placeholder="Buscar por código, descrição ou fornecedor…" value={busca} onChange={(e) => setBusca(e.target.value)} />
         <span className="small" style={{ color: 'var(--fg3)' }}>{filtrados.length} de {items.length} produtos</span>
+        {podeGerenciar && (
+          <form style={{ display: 'flex', gap: 6, alignItems: 'center' }} onSubmit={(e) => { e.preventDefault(); buscarNoOmie(); }}>
+            <input className="input" style={{ width: 230 }} placeholder="Não achou? Código p/ buscar no Omie" value={codigoOmie} onChange={(e) => setCodigoOmie(e.target.value)} disabled={buscandoOmie} />
+            <Button variant="outline" size="sm" icon="search" onClick={buscarNoOmie} disabled={buscandoOmie || !codigoOmie.trim()}
+              data-tip="Procura o código no Omie (só leitura). Se estiver cadastrado e ativo, passa a fazer parte desta lista; se não, avisa.">
+              {buscandoOmie ? 'Buscando…' : 'Buscar no Omie'}
+            </Button>
+          </form>
+        )}
         <div className="spacer" style={{ flex: 1 }} />
+        {podeSolicitar && selecionados.size > 0 && (
+          <Button variant={podeGerenciar ? 'outline' : 'primary'} size="sm" icon="send" onClick={() => setModalSolic(true)}
+            data-tip="Envia os produtos marcados como solicitação ao comprador (Pedidos › Solicitações). O comprador escolhe o fornecedor e aloca numa cotação; você acompanha o andamento por lá.">
+            {'Enviar solicitação (' + selecionados.size + ')'}
+          </Button>
+        )}
         {podeGerenciar && selecionados.size > 0 && (
-          <Button variant="primary" size="sm" icon="send" onClick={pedirCotacao} disabled={pedindoCotacao}
-            data-tip="Cria um lote de cotação com os produtos marcados. Nada vai ao Omie até a compra ser aprovada na página Cotações de Varejo.">
-            {pedindoCotacao ? 'Criando lote…' : 'Pedir cotação (' + selecionados.size + ')'}
+          <Button variant="primary" size="sm" onClick={abrirCesta}
+            data-tip="Coloca os produtos marcados na cesta: você escolhe um lote novo ou um já aberto. O lote só fecha quando você pedir a cotação aos fornecedores, em Cotações de Varejo. Nada vai ao Omie.">
+            <IVCestaIcone />{'Adicionar à cesta (' + selecionados.size + ')'}
           </Button>
         )}
         {podeGerenciar && selecionados.size > 0 && (
@@ -809,7 +1001,7 @@ function ImportacaoVarejoPage({ setRoute }) {
 table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var(--vp-surface,#fff);box-shadow:0 1px 0 var(--vp-border,#e5e5e5)}`}</style>
         <table className="t pcp-grid iv-grid">
           <thead><tr>
-            {podeGerenciar && (
+            {podeSelecionar && (
               <th style={{ width: 32 }}>
                 <input
                   type="checkbox"
@@ -853,7 +1045,7 @@ table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var
               return (
                 <React.Fragment key={item.codigo}>
                   <tr style={IV_LINHA_STYLE[status]}>
-                    {podeGerenciar && (
+                    {podeSelecionar && (
                       <td><input type="checkbox" checked={selecionados.has(item.codigo)} onChange={() => toggleSelecionado(item.codigo)} /></td>
                     )}
                     <td className="mono small" style={{ whiteSpace: 'nowrap' }}>{item.codigo}</td>
@@ -1012,7 +1204,7 @@ table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var
           {filtrados.length > 0 && (
             <tfoot>
               <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border)' }}>
-                <td colSpan={podeGerenciar ? 5 : 4}>Total</td>
+                <td colSpan={podeSelecionar ? 5 : 4}>Total</td>
                 {/* Uma célula por coluna do cabeçalho (conferido em 16/10: o bloco em branco tinha 7 colunas para 6 e deslocava todos os totais). */}
                 <td className="text-right">{ivFmtNum(totais.estoqueFisico)}</td>
                 <td className="text-right">{ivFmtNum(totais.estoqueReservado)}</td>
@@ -1036,6 +1228,8 @@ table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var
       {modalComprado && <IVModalComprado item={modalComprado} onClose={fecharModalIv} onSaved={() => { fecharModalIv(); carregar(); }} />}
       {modalCaminho && <IVModalACaminho item={modalCaminho} onClose={fecharModalIv} />}
       {modalRevisao && <IVModalRevisao item={modalRevisao} onClose={fecharModalIv} onSaved={() => { fecharModalIv(); carregar(); }} />}
+      {modalSolic && <IVModalSolicitacao itens={itensSelecionados} onClose={() => setModalSolic(false)} onFeito={solicitacaoFeita} />}
+      {modalCesta && <IVModalCesta itens={itensSelecionados} emCotacao={emCotacao} onClose={() => setModalCesta(false)} onFeito={cestaFeita} />}
       {modalEnviar && <IVModalEnviarOmie itens={itensSelecionados} onClose={() => setModalEnviar(false)} onEnviado={() => { setModalEnviar(false); setSelecionados(new Set()); carregar(); }} />}
     </div>
   );

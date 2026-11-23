@@ -77,19 +77,33 @@
       .not('numero_cotacao', 'is', null).is('vistorias_alerta_15d_em', null);
     if (!dossiers || !dossiers.length) return false;
 
+    /* Leituras em lote (antes: 2 consultas por obra dentro do laço). */
+    const numsCot = [...new Set(dossiers.map((d) => d.numero_cotacao))];
+    const { data: gatsCompra } = await c.from('gatilhos')
+      .select('numero_cotacao, concluido_em').in('numero_cotacao', numsCot).eq('evento_key', 'NEGOCIACAO_COMPRA')
+      .not('concluido_em', 'is', null);
+    const gatPorCot = new Map();
+    (gatsCompra || []).forEach((g) => {
+      const k = String(g.numero_cotacao);
+      if (!gatPorCot.has(k)) gatPorCot.set(k, []);
+      gatPorCot.get(k).push(g);
+    });
+    const { data: vistoriasTodas } = await c.from('vistorias_atividades').select('dossier_id').in('dossier_id', dossiers.map((d) => d.id));
+    const vistPorDossier = new Map();
+    (vistoriasTodas || []).forEach((v) => vistPorDossier.set(v.dossier_id, (vistPorDossier.get(v.dossier_id) || 0) + 1));
+
     let mudou = false;
     for (const d of dossiers) {
-      const { data: gCompra } = await c.from('gatilhos')
-        .select('concluido_em').eq('numero_cotacao', d.numero_cotacao).eq('evento_key', 'NEGOCIACAO_COMPRA')
-        .not('concluido_em', 'is', null).maybeSingle();
+      /* mesmo comportamento do maybeSingle() de antes: só vale se houver exatamente 1 linha concluída */
+      const gs = gatPorCot.get(String(d.numero_cotacao)) || [];
+      const gCompra = gs.length === 1 ? gs[0] : null;
       if (!gCompra || !gCompra.concluido_em) continue;
 
       /* 04/09: trocado de vistorias_obras (agendador manual obsoleto) pra
          vistorias_atividades — dispatch (Despachar em vistorias-envio.jsx)
          já É o ato de agendar, então "agendada" aqui é "existe uma
          atividade despachada", independente do status dela ainda. */
-      const { data: vistorias } = await c.from('vistorias_atividades').select('id').eq('dossier_id', d.id);
-      const qtdAgendadas = (vistorias || []).length;
+      const qtdAgendadas = vistPorDossier.get(d.id) || 0;
       if (qtdAgendadas >= 3) continue; // as 3 já foram agendadas, nada a alertar
 
       const diasPassados = Math.floor((agora - new Date(gCompra.concluido_em).getTime()) / 86400000);

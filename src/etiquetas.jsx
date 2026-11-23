@@ -97,12 +97,14 @@ const ETQ_TIPOS = [
   { id: 'EXPEDICAO', nome: 'Expedição (NF)', modelo: 'EXPEDICAO_100x150', desc: 'Volumes 1/N de uma NF emitida (rolo 100 × 150): destinatário, transportadora, nº do pedido' },
   { id: 'PALETE', nome: 'Palete', modelo: 'PALETE_100x50', desc: 'Palete inteiro: código, P.I. e itens com quantidade' },
   { id: 'IDTAG_EQUIPAMENTO', nome: 'ID-TAG', modelo: 'IDTAG_100x50', desc: 'Identifica cada elevador (VPEL-EL0985-1…)' },
-  { id: 'OP_QUADRO', nome: 'OP / série do quadro', modelo: 'OP_QUADRO_100x50', desc: 'OP do PCP e nº de série do quadro de comando' },
+  { id: 'OP_QUADRO', nome: 'OP / série do quadro', modelo: 'OP_QUADRO_100x100', desc: 'OP do PCP e nº de série do quadro de comando (100 × 100; também há 100 × 50)' },
   { id: 'AVARIA', nome: 'Avaria', modelo: 'AVARIA_100x50', desc: 'Material danificado, retido' },
   { id: 'FABRICACAO_OP', nome: 'Fabricação (OP do PCP)', modelo: 'FABRICACAO_50x30', desc: 'Peça cortada/fabricada no PCP: cabo de aço, corrimão, cabo elétrico e de manobra (50 × 30, só texto)' },
   { id: 'CHICOTE_QUADRO', nome: 'Chicote do quadro', modelo: 'CHICOTE_50x30', desc: 'Fiação que acompanha o quadro: "FAN | 1212 Modernização" (50 × 30, só texto)' },
 ];
 // Endereço de cada tipo na URL: /logistica/etiquetas/gerar/<slug>
+// Rolo inicial (mm) de tipos cujo padrão não é 100 × 50. Vale só enquanto a pessoa não tiver rolo lembrado para o tipo.
+const ETQ_ROLO_PADRAO = { OP_QUADRO: { largura_mm: 100, altura_mm: 100 } };
 const ETQ_SLUG_TIPO = { ENDERECO: 'endereco', PRATELEIRA: 'prateleira', ITEM: 'item', RECEBIMENTO: 'recebimento', SEPARACAO: 'separacao', EXPEDICAO: 'expedicao-nf', PALETE: 'palete', IDTAG_EQUIPAMENTO: 'id-tag', OP_QUADRO: 'op-serie-quadro', AVARIA: 'avaria', CHICOTE_QUADRO: 'chicote-quadro', FABRICACAO_OP: 'fabricacao-op' };
 const ETQ_TIPO_SLUG = Object.fromEntries(Object.entries(ETQ_SLUG_TIPO).map(([k, v]) => [v, k]));
 const etqHoje = () => new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
@@ -1252,7 +1254,12 @@ function EtiquetasPage() {
   React.useEffect(() => {
     if (!tipoGerar) return;
     const salvo = EI.lerPorTipo()[tipoGerar];
-    if (!salvo || !Object.keys(salvo).length) return;
+    if (!salvo || !Object.keys(salvo).length) {
+      // Sem rolo lembrado para este tipo: começa no rolo padrão dele (OP/série do quadro = 100 × 100), sem gravar como escolha da pessoa.
+      const pad = ETQ_ROLO_PADRAO[tipoGerar];
+      if (pad) setCfgEstado((atual) => { const novo = { ...(atual || {}), ...pad }; EI.salvarEscolha(novo); return novo; });
+      return;
+    }
     setCfgEstado((atual) => { const novo = { ...(atual || {}), ...salvo }; EI.salvarEscolha(novo); return novo; });
   }, [tipoGerar]);
   const esquecerTipo = () => { EI.esquecerPorTipo(tipoGerar); setSalvos(EI.lerPorTipo()); etqToast('Configuração deste tipo esquecida (o rolo atual continua até você mudar).'); };

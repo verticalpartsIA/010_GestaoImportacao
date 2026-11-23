@@ -140,6 +140,8 @@ function PdfHeader({ numero }) {
 function PdfFooter() {
   return (
     <div className="pdf-page-footer">
+      {/* Selo OEA (Conformidade – Qualificado): acima do endereço, à esquerda. */}
+      <img className="pdf-page-footer-selo" src="/assets/selo-oea-conformidade-qualificado.png" alt="Operador Econômico Autorizado – Conformidade – Qualificado"/>
       <div className="pdf-page-footer-info">
         <div><Icon.pin size={13}/><span>Rua Armandina Braga de Almeida, 383<br/>Jardim Santa Emília<br/>Guarulhos/SP - CEP 07141-003</span></div>
         <div><Icon.message size={13}/><span>+55 (11) 2528-6473<br/>+55 (11) 2528-6479<br/>+55 (11) 94460-6396</span></div>
@@ -287,7 +289,7 @@ function PreviewClienteObra({ data }) {
         <h2 className="pdf-sub-title">Dados do Cliente</h2>
         <div className="pdf-box">
           <p><b>{nomeSemDoc(c.nome, c.cnpj) || c.nome || "—"}</b></p>
-          {c.cnpj ? <p>CNPJ: {fmtDoc(c.cnpj)}</p> : null}
+          {c.cnpj ? <p>CNPJ: {fmtDoc(c.cnpj)}</p> : (c.cpf ? <p>CPF: {fmtDoc(c.cpf)}</p> : null)}
           {c.responsavel ? <p>A/C: {c.responsavel}</p> : null}
           {c.telefone ? <p>Telefone: {c.telefone}</p> : null}
           {c.email ? <p>E-mail: {c.email}</p> : null}

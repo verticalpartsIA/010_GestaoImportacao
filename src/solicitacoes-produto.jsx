@@ -44,16 +44,23 @@ function SolicitacoesProdutoPage({ solicitacaoId, setRoute, setSubsel }) {
     if (solicitacaoId) {
       _carregarDetalhe(solicitacaoId);
     } else {
+      // Voltar do navegador tira o id da URL: a tela também precisa sair do detalhe (achado de 8.3.8).
+      setView((v) => (v === 'detalhe' ? 'lista' : v));
+      setAtual(null);
       _carregarLista();
     }
   }, [solicitacaoId]);
 
-  async function _carregarLista() {
+  async function _carregarLista(novos = {}) {
     setLoading(true);
     try {
+      // `novos` traz o valor que acabou de ser escolhido: o estado (setFiltro…) só atualiza no próximo render,
+      // então ler filtroStatus/filtroTipo aqui aplicava o filtro da escolha ANTERIOR (achado de 8.3.8).
+      const status = novos.status !== undefined ? novos.status : filtroStatus;
+      const tipo = novos.tipo !== undefined ? novos.tipo : filtroTipo;
       const filtros = {};
-      if (filtroStatus) filtros.status = filtroStatus;
-      if (filtroTipo) filtros.tipo_equipamento = filtroTipo;
+      if (status) filtros.status = status;
+      if (tipo) filtros.tipo_equipamento = tipo;
 
       const dados = await window.SolicitacoesProdutoStore.listar(filtros);
       setSolicitacoes(dados);
@@ -112,11 +119,11 @@ function SolicitacoesProdutoPage({ solicitacaoId, setRoute, setSubsel }) {
           filtroTipo={filtroTipo}
           onFiltroStatusChange={(s) => {
             setFiltroStatus(s);
-            _carregarLista();
+            _carregarLista({ status: s });
           }}
           onFiltroTipoChange={(t) => {
             setFiltroTipo(t);
-            _carregarLista();
+            _carregarLista({ tipo: t });
           }}
           onNovaClick={() => setView('nova')}
           onAbrirClick={_abrirDetalhe}
@@ -138,7 +145,7 @@ function SolicitacoesProdutoPage({ solicitacaoId, setRoute, setSubsel }) {
           user={user}
         />
       ) : (
-        <DetalheView
+        <DetalheComAbas
           setRoute={setRoute}
           setSubsel={setSubsel}
           solicitacao={atual}
@@ -246,8 +253,88 @@ function ModalExcluirSolicitacao({ solicitacao, onClose, onExcluida }) {
   );
 }
 
-function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo, onFiltroStatusChange, onFiltroTipoChange, onNovaClick, onAbrirClick, podeExcluir, onExcluirClick, user }) {
+/* Indicador de etapas (Recebido → Engenharia → Importação → Cadastro). Verde = feito (✓ no Cadastro), amarelo = a próxima,
+   cinza = depois dela, tracejado = sem como saber (eventos ilegíveis). Regra em SolProdTimeline.etapasDoCiclo. */
+/* Aba do detalhe na URL: /engenharia/solicitacoes-produto/<id>[/chat]. Lê da URL a cada render (não duplica em estado):
+   Voltar/Avançar do navegador e link direto funcionam; "informações" deixa a URL limpa. */
+function useAbaDaSolicitacao(id) {
+  const [, setN] = React.useState(0);
+  React.useEffect(() => {
+    const R = window.VpRouter;
+    const re = () => setN((n) => n + 1);
+    const unsub = R && R.subscribe ? R.subscribe(re) : null;
+    window.addEventListener('vp:navigate', re);
+    return () => { if (unsub) unsub(); window.removeEventListener('vp:navigate', re); };
+  }, []);
+  const loc = (window.VpRouter && window.VpRouter.parseLocation && window.VpRouter.parseLocation()) || {};
+  const aba = loc.route === 'solicitacoes-produto' && String(loc.id) === String(id) && loc.tab === 'chat' ? 'chat' : 'info';
+  const ir = (nova) => {
+    if (window.VpRouter) window.VpRouter.navigate('solicitacoes-produto', id, nova === 'chat' ? 'chat' : null);
+    setN((n) => n + 1);
+  };
+  return [aba, ir];
+}
+
+/* Detalhe com abas Informações | Chat. O detalhe de antes (DetalheView) segue intacto na aba Informações. */
+function DetalheComAbas(props) {
+  const { solicitacao, loading, onVoltar, onAtualizar } = props;
+  const [aba, irAba] = useAbaDaSolicitacao(solicitacao && solicitacao.id);
+  if (loading || !solicitacao) return <DetalheView {...props} />;
+  const Faixa = window.SolPendenciaFaixa;
+  const tabBtn = (id, label) => (
+    <button onClick={() => irAba(id)} aria-selected={aba === id} role="tab"
+      style={{ padding: '8px 16px', border: 'none', borderBottom: aba === id ? '3px solid var(--vp-yellow)' : '3px solid transparent', background: 'none', fontWeight: aba === id ? 700 : 500, cursor: 'pointer', color: 'var(--fg1)' }}>
+      {label}
+    </button>
+  );
+  return (
+    <div>
+      {Faixa && aba === 'info' && <div style={{ marginBottom: 10 }}><Faixa sol={solicitacao} /></div>}
+      <div role="tablist" style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 12 }}>
+        {tabBtn('info', '📋 Informações')}
+        {tabBtn('chat', '💬 Chat' + (solicitacao.pendente_com ? ' ⏳' : ''))}
+      </div>
+      {aba === 'chat' && window.SolChat
+        ? <window.SolChat sol={solicitacao} onVoltar={onVoltar} onMudou={() => onAtualizar({})} />
+        : <DetalheView {...props} />}
+    </div>
+  );
+}
+
+function SolEtapas({ etapas }) {
+  const cor = { feito: 'var(--vp-success)', atual: 'var(--vp-yellow)', pendente: 'var(--border)', desconhecido: 'transparent' };
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', padding: '2px 0 6px' }} aria-label="Etapas da solicitação">
+      {etapas.map((e, i) => (
+        <React.Fragment key={e.chave}>
+          {i > 0 && <div style={{ width: 56, height: 4, marginTop: 9, background: etapas[i - 1].estado === 'feito' && e.estado === 'feito' ? 'var(--vp-success)' : 'var(--border)' }} />}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 70 }} title={e.estado === 'desconhecido' ? 'Sem permissão para ler os registros' : e.label + ' — ' + ({ feito: 'concluído', atual: 'próxima etapa', pendente: 'ainda não chegou' }[e.estado])}>
+            <div style={{ width: 22, height: 22, borderRadius: '50%', background: cor[e.estado], border: e.estado === 'desconhecido' ? '2px dashed var(--border)' : '2px solid ' + (e.estado === 'feito' ? 'var(--vp-success)' : e.estado === 'atual' ? 'var(--vp-yellow)' : 'var(--border)'), color: '#fff', fontSize: 13, fontWeight: 700, lineHeight: '18px', textAlign: 'center' }}>
+              {e.estado === 'feito' && e.chave === 'cadastro' ? '✓' : ''}
+            </div>
+            <div style={{ fontSize: 11, marginTop: 3, color: e.estado === 'feito' ? 'var(--fg1)' : 'var(--fg2)', fontWeight: e.estado === 'atual' ? 700 : 500 }}>{e.label}</div>
+          </div>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+function ListaView({ solicitacoes: todas, loading, podeCriar, filtroStatus, filtroTipo, onFiltroStatusChange, onFiltroTipoChange, onNovaClick, onAbrirClick, podeExcluir, onExcluirClick, user }) {
   const statusCores = SP_STATUS_CORES;
+  const [soPendentes, setSoPendentes] = React.useState(false);
+  const solicitacoes = soPendentes ? todas.filter((s) => s.pendente_com) : todas;
+  // eventos de cada solicitação (para o indicador de etapas); null = não consegui ler (ex.: sem sessão)
+  const [eventosPorSol, setEventosPorSol] = React.useState(null);
+  const idsChave = solicitacoes.map((s) => s.id).join(',');
+  React.useEffect(() => {
+    let vivo = true;
+    if (!idsChave) { setEventosPorSol({}); return undefined; }
+    window.SolicitacoesProdutoStore.listarEventosDeVarias(idsChave.split(',').map(Number))
+      .then((m) => { if (vivo) setEventosPorSol(m); })
+      .catch((e) => { console.warn('[Solicitações] eventos indisponíveis:', e); if (vivo) setEventosPorSol(null); });
+    return () => { vivo = false; };
+  }, [idsChave]);
 
   const tiposLabel = {
     elevador: 'Elevador',
@@ -301,6 +388,14 @@ function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo,
           </select>
         </div>
 
+        <div style={styles.filtroGrupo}>
+          <label style={styles.filtroLabel}>Pendência</label>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+            <input type="checkbox" checked={soPendentes} onChange={(e) => setSoPendentes(e.target.checked)} />
+            Só devolvidas, pendentes de resposta ({todas.filter((s) => s.pendente_com).length})
+          </label>
+        </div>
+
         <div style={styles.statsGrupo}>
           <div style={styles.stat}>
             <div style={styles.statNumero}>{solicitacoes.length}</div>
@@ -343,7 +438,8 @@ function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo,
             </thead>
             <tbody>
               {solicitacoes.map((sol) => (
-                <tr key={sol.id} style={styles.tbodyTr}>
+                <React.Fragment key={sol.id}>
+                <tr style={{ ...styles.tbodyTr, borderBottom: 'none' }}>
                   <td style={{ ...styles.td, fontWeight: 600 }}>{sol.numero_solicitacao}</td>
                   <td style={styles.td}>{tiposLabel[sol.tipo_equipamento]}</td>
                   <td style={styles.td}>{sol.categoria_sku || '—'}</td>
@@ -353,6 +449,7 @@ function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo,
                     <div style={{ ...styles.badge, background: statusCores[sol.status] }}>
                       {sol.status.replace(/_/g, ' ').toUpperCase()}
                     </div>
+                    {sol.pendente_com && window.SolPendenciaFaixa && <div style={{ marginTop: 4 }}><window.SolPendenciaFaixa sol={sol} compacta /></div>}
                   </td>
                   <td style={styles.td}>{new Date(sol.data_criacao).toLocaleDateString('pt-BR')}</td>
                   <td style={styles.td}>
@@ -376,6 +473,12 @@ function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo,
                     </div>
                   </td>
                 </tr>
+                <tr style={styles.tbodyTr}>
+                  <td colSpan={8} style={{ ...styles.td, paddingTop: 0 }}>
+                    <SolEtapas etapas={window.SolProdTimeline.etapasDoCiclo(sol, eventosPorSol ? (eventosPorSol[sol.id] || []) : null)} />
+                  </td>
+                </tr>
+                </React.Fragment>
               ))}
             </tbody>
           </table>
@@ -395,6 +498,7 @@ function NovaView({ onSalvar, onCancelar, user }) {
     categoria_sku: '',
     solicitante_nome: user.nome || 'Usuário',
     solicitante_email: user.email || '',
+    avisar_email: '', // quem da Engenharia será avisado(a) — obrigatório
     descricao_inicial: '',
     observacoes_comercial: '',
     fornecedor_contato: '',
@@ -428,6 +532,7 @@ function NovaView({ onSalvar, onCancelar, user }) {
   function _validar() {
     const novosErros = {};
     if (!form.descricao_inicial) novosErros.descricao_inicial = 'Explique o que você precisa';
+    if (!window.SolProdTimeline.escolhaValida(window.SolProdTimeline.ENGENHARIA, form.avisar_email)) novosErros.avisar_email = 'Escolha quem da Engenharia deve ser avisado(a)';
     setErros(novosErros);
     return Object.keys(novosErros).length === 0;
   }
@@ -777,6 +882,21 @@ function NovaView({ onSalvar, onCancelar, user }) {
           </div>
         )}
 
+        <div style={styles.secaoTitulo}>Quem da Engenharia deve ser avisado(a)?</div>
+        <div style={styles.formGroup}>
+          <label style={styles.label}>Avisar por WhatsApp *</label>
+          <div style={styles.ajuda}>A pessoa escolhida recebe a mensagem de que há uma Ficha Técnica a criar. Quem criar a ficha pode ser outra pessoa da Engenharia.</div>
+          <select
+            value={form.avisar_email}
+            onChange={(e) => setForm({ ...form, avisar_email: e.target.value })}
+            style={{ ...styles.input, ...(erros.avisar_email ? { borderColor: 'var(--vp-danger)' } : {}) }}
+          >
+            <option value="">Escolha uma pessoa…</option>
+            {window.SolProdTimeline.ENGENHARIA.map((p) => <option key={p.email} value={p.email}>{p.nome}</option>)}
+          </select>
+          {erros.avisar_email && <div style={{ color: 'var(--vp-danger)', fontSize: 12, marginTop: 4 }}>{erros.avisar_email}</div>}
+        </div>
+
         <div style={styles.formActions}>
           <button onClick={onCancelar} style={styles.btnSecondary}>
             CANCELAR
@@ -786,6 +906,45 @@ function NovaView({ onSalvar, onCancelar, user }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* Linha do tempo REAL da solicitação: cada linha vem de `solicitacao_produto_eventos` (gravada no momento do fato, com o
+   usuário logado como autor). "Foi avisado" e "executou" são pessoas diferentes e aparecem separados. */
+function SolLinhaDoTempo({ solicitacao, irParaFicha }) {
+  const [eventos, setEventos] = React.useState(null);
+  const [erro, setErro] = React.useState('');
+  React.useEffect(() => {
+    let vivo = true;
+    setErro('');
+    window.SolicitacoesProdutoStore.listarEventos(solicitacao.id)
+      .then((l) => { if (vivo) setEventos(window.SolProdTimeline.ordenar(l)); })
+      .catch((e) => { if (vivo) { setEventos([]); setErro(e.message || String(e)); } });
+    return () => { vivo = false; };
+  }, [solicitacao.id, solicitacao.status, solicitacao.data_atualizacao]);
+
+  const fmt = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return (
+    <div style={{ ...styles.detalheSection, marginTop: 16 }}>
+      <div style={styles.detalheSectionTitle}>LINHA DO TEMPO</div>
+      {eventos === null && <div style={styles.detalheText}>⏳ Carregando…</div>}
+      {erro && <div style={{ color: 'var(--vp-danger)', fontSize: 12 }}>Não consegui ler a linha do tempo: {erro}</div>}
+      {eventos && !erro && eventos.length === 0 && <div style={styles.detalheText}>Nenhum registro ainda.</div>}
+      {eventos && eventos.map((ev) => (
+        <div key={ev.id} style={{ display: 'flex', gap: 12, padding: '6px 0', borderBottom: '1px solid var(--border)', alignItems: 'baseline' }}>
+          <div style={{ minWidth: 130, fontSize: 12, fontWeight: 600, color: 'var(--fg2)' }}>{fmt(ev.criado_em)}</div>
+          <div style={{ fontSize: 13 }}>
+            {window.SolProdTimeline.frase(ev)}
+            {ev.tipo === 'ficha_criada' && solicitacao.ficha_tecnica_id && (
+              <> — <button onClick={() => irParaFicha(solicitacao.ficha_tecnica_id)} style={styles.btnLink}>abrir ficha</button></>
+            )}
+            {ev.detalhe && ev.detalhe.origem === 'reconstruido' && (
+              <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--fg2)' }} title="Registro anterior à linha do tempo, reconstruído dos dados que já existiam">(reconstruído)</span>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -880,7 +1039,7 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user, setRou
       await window.SolicitacoesProdutoStore.converterEmFicha(solicitacao.id, rec.id);
       onAtualizar({});
       const familia = solicitacao.categoria_sku ? ` Prefixo do código: ${solicitacao.categoria_sku} — na publicação o sistema usa o próximo número livre no Omie (ou informe o Código do Produto completo).` : '';
-      alert('Ficha técnica criada!' + familia + (semImagem ? '\nA imagem anexada não pôde ser copiada — anexe a foto na ficha.' : '') + '\nAbrindo editor…');
+      alert('Ficha técnica criada!' + familia + (semImagem ? '\nA imagem anexada não pôde ser copiada — anexe a foto na ficha.' : '') + '\nQuando terminar a ficha, escolha na própria edição quem da Importação deve ser avisado(a).\nAbrindo editor…');
       irParaFicha(rec.id);
     } catch (e) {
       alert('Erro ao converter em ficha técnica: ' + e.message);
@@ -1038,6 +1197,8 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user, setRou
           </div>
         )}
       </div>
+
+      <SolLinhaDoTempo solicitacao={solicitacao} irParaFicha={irParaFicha} />
 
       {solicitacao.status === 'novo' && (
         <div style={styles.formActions}>

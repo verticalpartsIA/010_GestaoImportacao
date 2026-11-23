@@ -135,7 +135,12 @@ function FabricacaoOficinaPage({ destino }) {
     } catch (e) { setErro(e.message || String(e)); }
   }, [destino, concluidas]);
   React.useEffect(() => { setDados(null); carregar(); }, [carregar]);
-  React.useEffect(() => { const t = setInterval(carregar, 60000); return () => clearInterval(t); }, [carregar]);
+  React.useEffect(() => {
+    const t = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
+    const vis = () => { if (!document.hidden) carregar(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
+  }, [carregar]);
   React.useEffect(() => {
     let vivo = true;
     Promise.resolve(window.PropostaStore?.temCapacidade?.('fabricacao', 'editar_status_quadro')).then((v) => { if (vivo) setPodeDesmarcar(!!v); }).catch(() => {});

@@ -149,7 +149,13 @@ function SepDetalhe({ codigo, caps, voltar, onMudou, embutido }) {
     catch (e) { setErro(e.message); }
     try { setDestinos(await window.FabricacaoOficinaStore.listarDestinos(codigo)); } catch (e) { /* o "onde está" é complemento: se falhar, a tela segue */ }
   }, [codigo]);
-  React.useEffect(() => { setD(null); carregar(); const t = setInterval(carregar, 30000); return () => clearInterval(t); }, [carregar]);
+  React.useEffect(() => {
+    setD(null); carregar();
+    const t = setInterval(() => { if (!document.hidden) carregar(); }, 30000);
+    const vis = () => { if (!document.hidden) carregar(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
+  }, [carregar]);
 
   async function agir(acao, args, ok, log) {
     setOcupado(true);
@@ -259,7 +265,6 @@ function SepDetalhe({ codigo, caps, voltar, onMudou, embutido }) {
                       {pd && <div style={{ fontSize: 12 }}><Badge variant="warning">{SEP_SIT[pd.situacao]}</Badge> <i>{pd.obs}</i> <span style={{ color: 'var(--fg3)' }}>— {sepNome(pd.por)}, {sepData(pd.em)}</span></div>}
                       {pd && pd.situacao === 'na_operacao' && caps.enviarFab && (
                         <div style={{ marginTop: 4 }}>
-                          <button className="btn btn--sm" disabled={ocupado} title="Registra o item no Quadro de Comando (se for um quadro, cria o pedido de quadro)" onClick={() => enviarDest(i, 'quadro')}>Quadro de Comando</button>{' '}
                           <button className="btn btn--sm" disabled={ocupado} title="Cria a OP e leva o item para a tela de Fabricação Corrimão" onClick={() => enviarFab(i, 'corrimao')}>Corrimão</button>{' '}
                           <button className="btn btn--sm" disabled={ocupado} title="Cria a OP e leva o item para a tela de Fabricação Corte" onClick={() => enviarFab(i, 'corte')}>Corte</button>{' '}
                           <button className="btn btn--sm" disabled={ocupado} title="Registra o item como pronto para a Expedição" onClick={() => enviarDest(i, 'expedicao')}>Expedição</button>
@@ -338,7 +343,13 @@ function SepPedidosAba({ caps, irTv }) {
   const carregar = React.useCallback(async () => {
     try { setDados(await sepChamar('fila')); setErro(null); } catch (e) { setErro(e.message); }
   }, []);
-  React.useEffect(() => { carregar(); const t = setInterval(carregar, 30000); return () => clearInterval(t); }, [carregar]);
+  React.useEffect(() => {
+    carregar();
+    const t = setInterval(() => { if (!document.hidden) carregar(); }, 30000);
+    const vis = () => { if (!document.hidden) carregar(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
+  }, [carregar]);
 
   async function copiarLinkTv() {
     const { data, error } = await SEP_SB().rpc('separacao_tv_listar');

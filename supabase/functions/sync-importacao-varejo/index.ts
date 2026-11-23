@@ -164,7 +164,7 @@ async function processarCatalogo(cursor: Cursor): Promise<Cursor> {
     // qualificar (virou inativo no Omie, ou perdeu origem_mercadoria=1)
     // — marca ativo=false, nunca apaga (histórico de giro/comprado/lote
     // referenciam esse codigo por FK).
-    await sb.from("importacao_varejo_produtos").update({ ativo: false }).lt("updated_at", cursor.started_at).eq("ativo", true);
+    await sb.from("importacao_varejo_produtos").update({ ativo: false }).lt("updated_at", cursor.started_at).eq("ativo", true).eq("manual", false);   // manual = incluído pelo "Buscar no Omie": fica
     return { ...cursor, phase: "faturamento", next_pagina: 1, total_paginas: null };
   }
   return { ...cursor, next_pagina: proximaPagina, total_paginas: totalPaginas };
