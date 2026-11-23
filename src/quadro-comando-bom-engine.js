@@ -389,16 +389,22 @@
     return trechos;
   }
 
-  /* Cabo de manobra (regra do Gelson, 29/10/2026, calibrada num cabo real: 10 paradas de 3 m, sem casa de máquinas = 47 m; 8 paradas = 41 m).
-     O quadro fica na última parada; o cabo desce fixo até a fixação do meio da caixa, continua pendurado até a fixação embaixo do carro
-     (a volta/seio fica no extremo inferior) e sobe pelo costado até a caixa de inspeção no teto. Fixo + pendurado = o curso inteiro,
-     então a parada escolhida como meio não muda o corte. Comprimento = soma dos pisos reais + reserva fixa
-     (seio 3 m + subida 3 m + pontas 2+2 m + 10 m calibrados no caso real, ainda sem nome) + distância do quadro até a descida da laje
-     (só com casa de máquinas; é o campo "Distância quadro → entrada da caixa"). Piso fora do padrão entra pelo valor real. */
-  const CABO_MANOBRA_SEIO_MM = 3000;
-  const CABO_MANOBRA_SUBIDA_MM = 3000;
-  const CABO_MANOBRA_PONTAS_MM = 4000;
-  const CABO_MANOBRA_RESERVA_CALIBRADA_MM = 10000;
+  /* Cabo de manobra — CONTA DA CALCULADORA DE CABOS (decisão do Gelson, 06/11/2026; 14.5). Substitui a regra de 29/10/2026
+     (pisos + seio 3 m + subida 3 m + pontas 4 m + 10 m calibrados; 10 paradas × 3 m = 47 m).
+     A conta mora UMA vez, em calculadora-cabo-manobra-calc.js (window.CaboManobraCalc), e este motor só a chama:
+     curso (soma dos intervalos reais) + K (última altura) + seio (a partir de P, a profundidade do poço) + cabine (1,5 + 3,0 + 2,0 m)
+     + (sem casa de máquinas: margem de 2 m | com casa de máquinas: distância quadro → entrada da caixa). O comprimento do corte é o
+     total arredondado PARA CIMA em metros inteiros (o "comprar arredondado" da calculadora).
+     P e K entram só se medidos (>0) ou se a origem foi marcada "estimado" (padrão 1500/4500 mm). Sem eles o trecho fica pendente_engenharia:
+     nunca se presume número. Os campos "seio" e "pontas" da tela deixaram de entrar na conta (ficam no banco, sem uso). */
+  const POCO_PADRAO_MM = 1500;
+  const ULTIMA_ALTURA_PADRAO_MM = 4500;
+
+  function medidaOuPadrao(valor, origem, padrao) {
+    const v = Number(valor) || 0;
+    if (v > 0) return v;
+    return origem === 'estimado' ? padrao : 0;
+  }
 
   function montarTrechoCaboManobra(geometria, intervalos, tipoAplicacao) {
     const geo = geometria || {};
@@ -421,22 +427,36 @@
         formula: `Percurso = ${percurso_mm}mm. Com casa de máquinas o cliente informa a distância do quadro até a descida da laje (campo "Distância quadro → entrada da caixa") — sem ela o comprimento não é liberado.` });
     }
 
-    const seio = Number(geo.seio_cabo_mm) > 0 ? Number(geo.seio_cabo_mm) : CABO_MANOBRA_SEIO_MM;
-    const pontas = Number(geo.folga_mm) > 0 ? Number(geo.folga_mm) : CABO_MANOBRA_PONTAS_MM;
-    const subida = CABO_MANOBRA_SUBIDA_MM;
-    const reserva = CABO_MANOBRA_RESERVA_CALIBRADA_MM;
-    const lajeMm = comCasaMaquinas ? distLaje : 0;
-    const folga = subida + pontas + reserva + lajeMm;
+    const poco = medidaOuPadrao(geo.poco_mm, geo.poco_origem, POCO_PADRAO_MM);
+    const ultimaAltura = medidaOuPadrao(geo.ultima_altura_mm, geo.ultima_altura_origem, ULTIMA_ALTURA_PADRAO_MM);
+    if (!poco || !ultimaAltura) {
+      return trechoBase({ ...base, comprimento_base_mm: percurso_mm,
+        formula: `Percurso = ${percurso_mm}mm. O cabo de manobra usa a profundidade do poço (P) e a última altura (K): ${!poco ? 'P não informada. ' : ''}${!ultimaAltura ? 'K não informada. ' : ''}Preencha na aba Geometria (ou marque "usar padrão comercial") — o comprimento não é presumido.` });
+    }
+
+    const Calc = window.CaboManobraCalc;
+    if (!Calc) {
+      return trechoBase({ ...base, comprimento_base_mm: percurso_mm, formula: 'Calculadora de cabos (calculadora-cabo-manobra-calc.js) não carregada — comprimento não calculado.' });
+    }
+    const r = Calc.calcular({
+      tipo: comCasaMaquinas ? 'MR' : 'MRL', cursoM: percurso_mm / 1000, profundidadePoco: poco / 1000, overhead: ultimaAltura / 1000,
+      margemMrl: Calc.PADRAO.margemMrl, distanciaMr: distLaje / 1000,
+    });
+    if (!r.ok) {
+      return trechoBase({ ...base, comprimento_base_mm: percurso_mm, formula: r.erro });
+    }
+    const finalMm = r.comprar * 1000;
+    const seioMm = Math.round(r.seio * 1000);
     return trechoBase({
       ...base,
       comprimento_base_mm: percurso_mm,
-      contornos_mm: seio,
-      folga_mm: folga,
-      comprimento_final_mm: percurso_mm + seio + folga,
+      contornos_mm: seioMm,
+      folga_mm: finalMm - percurso_mm - seioMm,
+      comprimento_final_mm: finalMm,
       confianca: 'estimado',
-      formula: `comprimento_final = pisos (${percurso_mm}mm) + seio (${seio}mm) + subida até a caixa de inspeção (${subida}mm) + pontas (${pontas}mm)`
-        + ` + saída do quadro até a caixa (${reserva}mm)` + (comCasaMaquinas ? ` + distância quadro → descida da laje (${lajeMm}mm)` : '')
-        + '. 28 vias = 1 peça só; não multiplicar o comprimento por 28.',
+      formula: `Calculadora de cabos: curso (${percurso_mm}mm) + K (${ultimaAltura}mm) + seio (${seioMm}mm, poço P=${poco}mm) + cabine (${Math.round(r.cabine * 1000)}mm)`
+        + ` + ${comCasaMaquinas ? `distância quadro → descida da laje (${distLaje}mm)` : `margem exterior MRL (${Math.round(r.extra * 1000)}mm)`}`
+        + ` = ${Math.round(r.total * 1000)}mm, arredondado para cima = ${finalMm}mm. 28 vias = 1 peça só; não multiplicar o comprimento por 28.`,
     });
   }
 
@@ -761,7 +781,7 @@
     calcularLop, montarItensLop, montarItensLopParadas, LOP_MODELOS, montarItensInspecao, INSPECAO_MODELOS, montarItensChicotes, CHICOTES_VPEL, CHICOTES_CAIXA_TOPO_NOVOS, MRL_FIO_UA_MM,
     listarVariantes, chaveVariante, chaveVarianteQuadro, montarBomDaEstrutura, montarBomFixo,
     somaIntervalos, alturaTotalMm, perimetroCaixaMm,
-    montarTrechosFiacaoFixa, montarTrechoCaboManobra, CABO_MANOBRA_SEIO_MM, CABO_MANOBRA_SUBIDA_MM, CABO_MANOBRA_PONTAS_MM, CABO_MANOBRA_RESERVA_CALIBRADA_MM, montarChecklist,
+    montarTrechosFiacaoFixa, montarTrechoCaboManobra, POCO_PADRAO_MM, ULTIMA_ALTURA_PADRAO_MM, montarChecklist,
     cabinaDentroDoPadrao, montarTrechosFiacaoCarro,
     grupoSeparacaoPorCategoria, classificarCruzamentoErp,
   };

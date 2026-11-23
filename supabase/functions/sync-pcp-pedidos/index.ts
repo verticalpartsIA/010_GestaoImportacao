@@ -266,7 +266,8 @@ Deno.serve(async (req) => {
       const c = p.cabecalho || {};
       // Etapa 10 é só previsão (pcp_previsao_pedidos, via {"etapa":"10"}): um pedido novo nessa etapa nunca entra em pcp_pedidos, em qualquer modo de leitura (#843 C4).
       if (String(c.etapa) === "10" && !jaGravados.has(Number(c.codigo_pedido))) { ignorados++; continue; }
-      const todos = (p.det || []).map((d: any, i: number) => ({ d: d.produto || {}, seq: i + 1 }));
+      // obs: observação do item no pedido (det[].observacao.obs_item). No quadro de comando traz a lista de componentes da proposta.
+      const todos = (p.det || []).map((d: any, i: number) => ({ d: d.produto || {}, obs: d.observacao?.obs_item, seq: i + 1 }));
       const itens = todos.filter((x: any) => ehPcp(x.d.codigo));
       const soSeparacao = !itens.length;                  // sem item do PCP: só para a fila de separação do almoxarifado
       if (soSeparacao && !todos.length) { ignorados++; continue; }
@@ -316,6 +317,7 @@ Deno.serve(async (req) => {
       await pgInsert("pcp_pedido_itens", todos.map((x: any) => ({
         codigo_pedido: c.codigo_pedido, seq: x.seq, item_pcp: ehPcp(x.d.codigo),
         codigo: codAtual(x.d.codigo), codigo_original: atual.has(x.d.codigo) ? x.d.codigo : null, descricao: limpa(x.d.descricao), unidade: x.d.unidade || null,
+        obs_item: limpa(x.obs) || null,
         quantidade: x.d.quantidade ?? 0, valor_unitario: x.d.valor_unitario ?? 0,
         desconto: x.d.valor_desconto ?? 0, valor_total: x.d.valor_total ?? 0,
       })));

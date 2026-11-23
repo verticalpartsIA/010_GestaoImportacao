@@ -33,7 +33,13 @@ function ObraArtPage() {
   const carregar = React.useCallback(async () => {
     try { setLista(await S.listar()); setErro(null); } catch (e) { setErro(e.message); setLista([]); }
   }, []);
-  React.useEffect(() => { carregar(); const t = setInterval(carregar, 60000); return () => clearInterval(t); }, [carregar]);
+  React.useEffect(() => {
+    carregar();
+    const t = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
+    const vis = () => { if (!document.hidden) carregar(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
+  }, [carregar]);
 
   const rodar = async (art, chave, fn) => {
     setBusy(art.codigo_obra + chave);

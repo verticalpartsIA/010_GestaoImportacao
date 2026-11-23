@@ -112,7 +112,27 @@ function useFichaOrientation(midia) {
   return orientation;
 }
 
-function FtFicha({ state }) {
+/* Rodapé de autoria: quem CRIOU (e quando) e, havendo versão nova, quem ATUALIZOU.
+   Nunca usa o usuário que está com a ficha aberta. Ficha ainda não salva = sem autoria. */
+function ftFmtQuando(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+function FtAutoria({ autoria }) {
+  if (!autoria) return null;
+  const a = autoria;
+  return (
+    <span className="ft-fz-autor">
+      <span className="ft-fz-autor-l">Criada por {a.criadoPor || 'autor não registrado'}{a.criadoEm ? ' em ' + ftFmtQuando(a.criadoEm) : ''}</span>
+      {a.atualizadoEm && (
+        <span className="ft-fz-autor-l">Versão {a.versao} — atualizada por {a.atualizadoPor || 'autor não registrado'} em {ftFmtQuando(a.atualizadoEm)}</span>
+      )}
+    </span>
+  );
+}
+
+function FtFicha({ state, autoria }) {
   const d = window.FT.compile(state);
   const id = d.identificacao;
   const nome = id.nomeProduto || 'Ficha Técnica';
@@ -173,8 +193,8 @@ function FtFicha({ state }) {
         <div className="fb">VERTICAL<span>PARTS</span></div>
         <div className="fc">{id.categoriaProduto || 'Ficha Técnica'}</div>
         <div className="fc">
-          {window.FT.hoje()} · www.verticalparts.com.br
-          {window.__VP_USER?.email && <span className="ft-fz-autor"> · Criado por {window.__VP_USER.email}</span>}
+          Emitida em {window.FT.hoje()} · www.verticalparts.com.br
+          <FtAutoria autoria={autoria}/>
         </div>
       </div>
     </div>
@@ -524,20 +544,116 @@ function FtAddCategoryModal({ onAdd, onClose }) {
 }
 
 /* ============================================================
+   TROCAR VALORES — pares "de → para" aplicados na ficha em edição,
+   com prévia da contagem antes de aplicar. Nada é gravado aqui.
+   ============================================================ */
+function FtTrocarModal({ state, onApply, onClose }) {
+  const [pares, setPares] = _ftUS([{ de: '', para: '' }]);
+  const [ic, setIc] = _ftUS(false);
+  const prev = _ftUM(() => window.FT.substituirEmFicha(state, pares, { ignorarCaixa: ic }), [state, pares, ic]);
+  const setPar = (i, k, v) => setPares((a) => a.map((p, j) => j === i ? { ...p, [k]: v } : p));
+  const inp = { padding: '7px 9px', border: '1px solid var(--ft-border-strong, #ccc)', borderRadius: 6, font: 'inherit', width: '100%' };
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Trocar valores" onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 10, padding: 20, width: 'min(640px, 100%)', maxHeight: '90vh', overflow: 'auto' }}>
+        <h3 style={{ margin: '0 0 4px' }}>Trocar valores na ficha</h3>
+        <p style={{ margin: '0 0 12px', fontSize: 12, color: '#555' }}>
+          Troca texto exato em nome, descrições, part number, marca, modelo, Descrição DUIMP e no valor dos campos técnicos.
+          <strong> Não mexe no código do produto nem no SKU</strong> — digite o código no campo próprio.
+        </p>
+        {pares.map((p, i) => (
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginBottom: 6 }}>
+            <input style={inp} placeholder="Trocar (ex.: 380Vac)" value={p.de} onChange={(e) => setPar(i, 'de', e.target.value)} aria-label={'Trocar ' + (i + 1)}/>
+            <input style={inp} placeholder="Por (ex.: 220Vac)" value={p.para} onChange={(e) => setPar(i, 'para', e.target.value)} aria-label={'Por ' + (i + 1)}/>
+            <button className="ft-btn ghost" disabled={pares.length === 1} onClick={() => setPares((a) => a.filter((_, j) => j !== i))} title="Remover este par">✕</button>
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center', margin: '8px 0 12px', fontSize: 13 }}>
+          <button className="ft-btn ghost" onClick={() => setPares((a) => [...a, { de: '', para: '' }])}>+ Outro par</button>
+          <label><input type="checkbox" checked={ic} onChange={(e) => setIc(e.target.checked)}/> Ignorar maiúsculas/minúsculas</label>
+        </div>
+        <div style={{ background: '#f6f6f6', borderRadius: 8, padding: 10, fontSize: 13, minHeight: 40 }} aria-live="polite">
+          {prev.total === 0
+            ? 'Nenhuma ocorrência encontrada.'
+            : (<><strong>{prev.total} ocorrência(s)</strong> em {prev.mudou.length} campo(s):
+                <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{prev.mudou.map((m, i) => <li key={i}>{m.campo} — {m.n}</li>)}</ul></>)}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+          <button className="ft-btn ghost" onClick={onClose}>Cancelar</button>
+          <button className={'ft-btn primary' + (prev.total ? '' : ' off')} disabled={!prev.total} onClick={() => onApply(prev.state, prev.total)}>Aplicar na ficha</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
    GENERATOR (wizard universal) — sub-componente da página
    ============================================================ */
-function FtGenerator({ initial, onSaved, onCancel }) {
+function FtGenerator({ initial, onSaved, onCancel, setRoute, setSubsel }) {
   const [state, setState] = _ftUS(initial || window.FT.freshState());
   const [search, setSearch] = _ftUS('');
   const [modal, setModal] = _ftUS(null);
   const [overlay, setOverlay] = _ftUS(false);
   const [saving, setSaving] = _ftUS(false);
+  const [trocando, setTrocando] = _ftUS(false);
   const previewWrap = _ftUR(null);
   const [scale, setScale] = _ftUS(0.42);
   /* Alçada — Configurações › Administração › Engenharia › Ficha Técnica ›
      Publica (ou republica) a ficha como anexo no Omie. Admin sempre pode
      (temCapacidade trata nivel==='Administrador' como bypass). */
   const [podePublicarOmie, setPodePublicarOmie] = _ftUS(false);
+  /* Solicitação de Produto de origem (se a ficha veio de uma): habilita o menu "Avisar Importação" e alimenta a linha do tempo. */
+  const [solOrigem, setSolOrigem] = _ftUS(null);
+  const [avisandoImp, setAvisandoImp] = _ftUS(false);
+  const [devolvendo, setDevolvendo] = _ftUS(false);
+  const recarregarSolOrigem = () => {
+    if (fichaIdAtual && window.SolicitacoesProdutoStore) window.SolicitacoesProdutoStore.porFicha(fichaIdAtual).then(setSolOrigem);
+  };
+  /* Conversa da solicitação de origem: Art. 22 — setSubsel + setRoute recebidos por prop; a aba "chat" vai na URL depois. */
+  const abrirChatDaSolicitacao = () => {
+    if (!solOrigem) return;
+    if (setSubsel && setRoute) {
+      setSubsel(String(solOrigem.id)); setRoute('solicitacoes-produto');
+      setTimeout(() => { if (window.VpRouter) window.VpRouter.navigate('solicitacoes-produto', String(solOrigem.id), 'chat'); }, 0);
+    } else if (window.VpRouter) {
+      window.VpRouter.navigate('solicitacoes-produto', String(solOrigem.id), 'chat');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  };
+  const fichaIdAtual = state.__id || (initial && initial.__id) || null;
+  /* Autoria do rodapé: só existe para ficha já salva (não é cópia nem nova). Recarrega após salvar. */
+  const [autoria, setAutoria] = _ftUS(null);
+  const ehCopiaNaoSalva = !!(initial && initial.__copiaDe);
+  const carregarAutoria = React.useCallback(async (id) => {
+    if (!id || !window.FTStore) { setAutoria(null); return; }
+    try { setAutoria(await window.FTStore.autoria(id)); } catch (e) { console.warn('[FT] autoria', e); setAutoria(null); }
+  }, []);
+  _ftUE(() => {
+    if (!initial || !initial.__id || ehCopiaNaoSalva) { setAutoria(null); return; }
+    carregarAutoria(initial.__id);
+  }, [initial && initial.__id, ehCopiaNaoSalva]);
+  _ftUE(() => {
+    let vivo = true;
+    if (fichaIdAtual && window.SolicitacoesProdutoStore) {
+      window.SolicitacoesProdutoStore.porFicha(fichaIdAtual).then((s) => { if (vivo) setSolOrigem(s); });
+    }
+    return () => { vivo = false; };
+  }, [fichaIdAtual]);
+  const avisarImportacao = async (email) => {
+    if (!email || !fichaIdAtual || avisandoImp) return;
+    const alvo = window.SolProdTimeline.pessoa(window.SolProdTimeline.IMPORTACAO, email);
+    if (!alvo) return;
+    if (!confirm('Avisar ' + alvo.nome + ' por WhatsApp para conferir o NCM e publicar esta ficha no Omie?\n\nSalve a ficha antes, se ainda tiver alterações.')) return;
+    setAvisandoImp(true);
+    try {
+      await window.SolicitacoesProdutoStore.avisarImportacao(solOrigem, email, state.identificacao.nomeProduto, { id: fichaIdAtual, codigoProduto: state.identificacao.codigoProduto });
+      window.toast?.('✅ ' + alvo.nome + ' foi avisado(a).', 'success');
+    } catch (e) {
+      window.toast?.(e.message || String(e), 'error');
+    } finally { setAvisandoImp(false); }
+  };
 
   _ftUE(() => {
     const el = previewWrap.current; if (!el) return;
@@ -631,7 +747,7 @@ function FtGenerator({ initial, onSaved, onCancel }) {
       const old = state.midia[slot];
       setState((s) => ({ ...s, midia: { ...s.midia, [slot]: null } }));
       // Apaga do Storage se for path (não dataURL legado)
-      if (window.FTImg && window.FTImg.isStoragePath(old)) {
+      if (window.FTImg && window.FTImg.isStoragePath(old) && window.FTImg.ehDaFicha(old, state.__id)) {
         window.FTImg.remove(old).catch((err) => console.warn('remove falhou', err));
       }
       return;
@@ -671,10 +787,24 @@ function FtGenerator({ initial, onSaved, onCancel }) {
     if (!podeGerar || saving) return;
     setSaving(true);
     try {
-      const editando = !!(initial && initial.__id);
+      const copia = !!(initial && initial.__copiaDe);
+      const editando = !!(initial && initial.__id) && !copia;
+      let stSalvar = state;
+      if (copia) {
+        /* a cópia ganha os PRÓPRIOS arquivos: se falhar, não salva (nunca fica apontando para a foto da original) */
+        const midia = { ...(state.midia || {}) };
+        for (const slot of ['foto', 'desenho']) {
+          const v = midia[slot];
+          if (window.FTImg && window.FTImg.isStoragePath(v) && !window.FTImg.ehDaFicha(v, state.__id)) {
+            midia[slot] = await window.FTImg.copiarPara(v, state.__id);
+          }
+        }
+        stSalvar = { ...state, midia };
+        setState(stSalvar);
+      }
       const rec = editando
-        ? await window.FTStore.update(initial.__id, state)
-        : await window.FTStore.createDraft(state);
+        ? await window.FTStore.update(initial.__id, stSalvar)
+        : await window.FTStore.createDraft(stSalvar);
       /* Histórico do funil (quem criou/editou, quando) — best-effort */
       if (window.FWFStore && rec) {
         const ator = window.FWFStore.atorAtual();
@@ -685,7 +815,7 @@ function FtGenerator({ initial, onSaved, onCancel }) {
           acao: editando ? 'editou' : 'criou',
           de_etapa: rec.etapa || null, para_etapa: rec.etapa || null,
           detalhe: { nome_produto: state.identificacao.nomeProduto },
-        }).catch(() => {});
+        }).then(() => carregarAutoria(rec.id || (initial && initial.__id) || state.__id)).catch(() => {});
       }
       onSaved && onSaved(rec);
     } catch (e) {
@@ -695,6 +825,8 @@ function FtGenerator({ initial, onSaved, onCancel }) {
 
   return (
     <div className="ft-gen-shell">
+      {trocando && <FtTrocarModal state={state} onClose={() => setTrocando(false)}
+        onApply={(novo, n) => { setState(novo); setTrocando(false); window.toast?.('✅ ' + n + ' ocorrência(s) trocada(s). Confira e clique em Salvar ficha.', 'success'); }}/>}
       <div className="ft-namebar">
         <label className="ft-name">
           <span>Nome do produto <i>*</i></span>
@@ -706,6 +838,12 @@ function FtGenerator({ initial, onSaved, onCancel }) {
             <span><strong>Campos faltando:</strong> revise campos com <i>*</i> e Descrição Técnica</span>
           </div>
         )}
+        {state.__copiaDe && (
+          <span className="ft-omie-status is-pend" role="status" title="Nada foi gravado ainda: clique em Salvar ficha">
+            Cópia de {state.__copiaDe.numero || 'outra ficha'} — ainda não salva
+          </span>
+        )}
+        <button className="ft-btn ghost" onClick={() => setTrocando(true)} title="Trocar um texto/valor em toda a ficha (ex.: 380Vac → 220Vac)">⇄ Trocar valores</button>
         <button className="ft-btn ghost" onClick={onCancel}>Cancelar</button>
         <button className={'ft-btn primary' + (podeGerar ? '' : ' off')} disabled={!podeGerar || saving} onClick={handleSalvar}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
@@ -730,12 +868,22 @@ function FtGenerator({ initial, onSaved, onCancel }) {
                 user.nome,
                 user.setor
               );
-              if (res) setState((s) => ({
-                ...s,
-                omie_publicado_em: new Date().toISOString(),
-                // produto novo: herda o código gerado no Omie (ex.: VPEL-1000)
-                identificacao: res.codigo_produto ? { ...s.identificacao, codigoProduto: res.codigo_produto } : s.identificacao,
-              }));
+              if (res) {
+                setState((s) => ({
+                  ...s,
+                  omie_publicado_em: new Date().toISOString(),
+                  // produto novo: herda o código gerado no Omie (ex.: VPEL-1000)
+                  identificacao: res.codigo_produto ? { ...s.identificacao, codigoProduto: res.codigo_produto } : s.identificacao,
+                }));
+                // a função só grava a coluna; sem isto a ficha reabre com "VPEL-" e
+                // o próximo Salvar/Publicar criaria um produto duplicado no Omie
+                if (res.codigo_produto) {
+                  try { await window.FTStore.gravarCodigoPublicado(fichaId, res.codigo_produto); }
+                  catch (er) { window.toast?.('Publicou, mas não consegui gravar o código ' + res.codigo_produto + ' na ficha: ' + (er.message || er) + '. Digite-o no campo Código e salve.', 'error'); }
+                }
+                // quem publicou entra na linha do tempo da Solicitação de origem (se houver)
+                window.SolicitacoesProdutoStore?.registrarPublicacao(fichaId, { codigo_produto: res.codigo_produto || state.identificacao.codigoProduto, republicou: !!state.omie_publicado_em });
+              }
             } catch (e) { console.error('[Omie publish]', e); }
           }}
           title={(() => {
@@ -750,9 +898,33 @@ function FtGenerator({ initial, onSaved, onCancel }) {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
           {state.omie_publicado_em ? 'Republicar no Omie' : 'Publicar no Omie'}
         </button>
-        {state.omie_publicado_em && (
-          <span style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap' }}>
-            Publicado no Omie em {window.FTStore.fmtDateTime(state.omie_publicado_em)}
+        {fichaIdAtual && !state.omie_publicado_em && (
+          <select className="ft-aviso-imp" value="" disabled={avisandoImp}
+            onChange={(e) => avisarImportacao(e.target.value)}
+            title="Terminou a ficha? Escolha quem da Importação deve conferir o NCM e publicar no Omie">
+            <option value="">{avisandoImp ? 'Avisando…' : 'Avisar Importação…'}</option>
+            {window.SolProdTimeline.IMPORTACAO.map((p) => <option key={p.email} value={p.email}>{p.nome}</option>)}
+          </select>
+        )}
+        {solOrigem && (
+          <button type="button" className="ft-aviso-imp" onClick={abrirChatDaSolicitacao}
+            title="Abre a conversa da solicitação de origem (Solicitante, Engenharia e Importação)">💬 Chat da solicitação</button>
+        )}
+        {solOrigem && solOrigem.status === 'convertido_em_ficha' && !solOrigem.pendente_com && !state.omie_publicado_em && window.SolDevolverModal && (
+          <button type="button" className="ft-aviso-imp" onClick={() => setDevolvendo(true)}
+            title="Dúvida ou problema nesta ficha? Devolve à Engenharia (ou à Importação) com motivo e prazo de resposta">↩ Devolver à Engenharia…</button>
+        )}
+        {solOrigem && solOrigem.pendente_com && window.SolPendenciaFaixa && <window.SolPendenciaFaixa sol={solOrigem} compacta />}
+        {devolvendo && window.SolDevolverModal && (
+          <window.SolDevolverModal sol={solOrigem} onClose={() => setDevolvendo(false)} onFeito={() => { setDevolvendo(false); recarregarSolOrigem(); }} />
+        )}
+        {state.omie_publicado_em ? (
+          <span className="ft-omie-status is-ok" role="status">
+            ✓ Publicado no Omie em {window.FTStore.fmtDateTime(state.omie_publicado_em)}
+          </span>
+        ) : (
+          <span className="ft-omie-status is-pend" role="status">
+            Ainda não publicado no Omie
           </span>
         )}
       </div>
@@ -774,7 +946,7 @@ function FtGenerator({ initial, onSaved, onCancel }) {
         <div className="ft-previewcol">
           <div className="ft-preview-head"><span>Pré-visualização</span><em>compila só o preenchido</em></div>
           <div className="ft-preview-wrap" ref={previewWrap}>
-            <div className="ft-preview-scaler" style={{ zoom: scale }}><FtFicha state={state}/></div>
+            <div className="ft-preview-scaler" style={{ zoom: scale }}><FtFicha state={state} autoria={autoria}/></div>
           </div>
         </div>
       </div>
@@ -954,7 +1126,7 @@ function FtGenerator({ initial, onSaved, onCancel }) {
               <button className="ft-btn ghost" onClick={() => setOverlay(false)}>Fechar</button>
             </div>
           </div>
-          <div className="ft-fo-scroll"><FtFicha state={state}/></div>
+          <div className="ft-fo-scroll"><FtFicha state={state} autoria={autoria}/></div>
         </div>,
         document.body
       )}
@@ -965,7 +1137,7 @@ function FtGenerator({ initial, onSaved, onCancel }) {
 /* ============================================================
    DASHBOARD — listagem das fichas
    ============================================================ */
-function FtDashboard({ onNew, onOpen }) {
+function FtDashboard({ onNew, onOpen, onCopy }) {
   const [fichas, setFichas] = _ftUS([]);
   const [loading, setLoading] = _ftUS(true);
   const [query, setQuery] = _ftUS('');
@@ -1042,6 +1214,7 @@ function FtDashboard({ onNew, onOpen }) {
                   <td className="ft-cell-time">{window.FTStore.relative(f.criado_em)}</td>
                   <td style={{textAlign:'right'}}>
                     <button className="ft-mini-btn" onClick={() => onOpen(f)}>Abrir</button>
+                    <button className="ft-mini-btn" onClick={() => onCopy(f)} title="Abre uma ficha nova com os dados desta (sem código); nada é gravado até salvar">Copiar</button>
                     <button className="ft-mini-btn ft-mini-btn--danger" onClick={() => setDelTarget(f)}>Excluir</button>
                   </td>
                 </tr>
@@ -1071,7 +1244,7 @@ function FtDashboard({ onNew, onOpen }) {
 /* ============================================================
    PAGE — abas Painel / Nova ficha
    ============================================================ */
-function FichaTecnicaPage({ fichaId }) {
+function FichaTecnicaPage({ fichaId, setRoute, setSubsel }) {
   const [view, setView] = _ftUS('painel'); // painel | nova
   const [initial, setInitial] = _ftUS(null);
   const [libReady, setLibReady] = _ftUS(false);
@@ -1143,6 +1316,14 @@ function FichaTecnicaPage({ fichaId }) {
     if (window.VpRouter && ficha.id) window.VpRouter.navigate('ficha-tecnica', ficha.id);
   };
 
+  /* Copiar: abre o editor NOVO com os dados da ficha (sem código; fotos copiadas só ao salvar).
+     Não navega para /nova-ficha-tecnica: aquela rota limpa o editor. */
+  const handleCopy = (ficha) => {
+    setInitial(window.FT.copiarFicha(ficha));
+    setView('nova');
+    window.toast?.('Cópia aberta — nada foi gravado. Digite o código do produto, ajuste (⇄ Trocar valores) e salve.', 'info');
+  };
+
   /* Deep-link via URL: /engenharia/ficha-tecnica/nova-ficha-tecnica abre direto o editor */
   _ftUE(() => {
     if (!libReady) return;
@@ -1201,8 +1382,8 @@ function FichaTecnicaPage({ fichaId }) {
       </div>
       <div className="ci-page-body">
         {view === 'painel'
-          ? <FtDashboard onNew={() => { setInitial(null); setView('nova'); }} onOpen={handleOpen}/>
-          : <FtGenerator initial={initial} onSaved={() => { setView('painel'); setInitial(null); }} onCancel={() => { setView('painel'); setInitial(null); }}/>}
+          ? <FtDashboard onNew={() => { setInitial(null); setView('nova'); }} onOpen={handleOpen} onCopy={handleCopy}/>
+          : <FtGenerator initial={initial} setRoute={setRoute} setSubsel={setSubsel} onSaved={() => { setView('painel'); setInitial(null); }} onCancel={() => { setView('painel'); setInitial(null); }}/>}
       </div>
     </div>
   );

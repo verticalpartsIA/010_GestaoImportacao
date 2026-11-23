@@ -1,0 +1,153 @@
+name: Security — npm audit e Gitleaks
+
+# Alternativas gratuitas ao CodeQL / Dependency Review / Secret Scanning,
+# que exigem GitHub Code Security em repositórios privados.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Toda segunda-feira, 06:30 UTC
+    - cron: "30 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  npm-audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # Dependências de produção: falha se houver vulnerabilidade alta ou crítica
+      - name: Audit (produção — bloqueia em high/critical)
+        run: npm audit --omit=dev --audit-level=high
+
+      # Dependências de desenvolvimento: apenas informativo
+      - name: Audit (completo — informativo)
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+  gitleaks:
+    name: Gitleaks (secrets no código e no histórico)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GITLEAKS_VERSION: "8.21.2"
+    steps:
+      - name: Checkout (histórico completo)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Instalar Gitleaks
+        run: |
+          set -euo pipefail
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o gitleaks.tar.gz
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks version
+
+      # O relatório JSON (com os valores) fica somente no runner, em RUNNER_TEMP.
+      # Nada com valor é impresso no log; o stdout do gitleaks mostra só a contagem.
+      - name: Procurar secrets
+        run: |
+          rc=0
+          ./gitleaks detect --source . --no-banner \
+            --report-format json --report-path "$RUNNER_TEMP/gitleaks.json" \
+            --exit-code 1 || rc=$?
+          echo "GITLEAKS_RC=$rc" >> "$GITHUB_ENV"
+          exit 0
+
+      # Política (revisada em 2026-11-02):
+      #  - JWT com role=anon e chaves sb_publishable_ são PÚBLICAS por desenho
+      #    (vão no navegador) e são aceitas.
+      #  - Itens em ALLOW foram conferidos manualmente (falsos positivos).
+      #  - FALHA para: JWT com role diferente de anon (ex.: service_role),
+      #    JWT ilegível, chave sb_secret_, ou qualquer achado desconhecido.
+      # Nunca imprime valores: só papel, nome da variável, arquivo e linha.
+      - name: Classificar achados (sem valores)
+        run: |
+          python3 - <<'PY'
+          import json, os, re, base64, collections, sys
+
+          ALLOW = {
+              ("generic-api-key", "src/fornecedor-rpc-publica.test.js", "TOKEN"),
+              ("generic-api-key", "src/quadro-comando.jsx", "key"),
+              ("curl-auth-header", "research/notes/github_supabase_integrated_guide.md", "Authorization"),
+              ("curl-auth-header", "research/notes/supabase_comprehensive_study_guide.md", "Authorization"),
+          }
+
+          p = os.path.join(os.environ["RUNNER_TEMP"], "gitleaks.json")
+          rc = os.environ.get("GITLEAKS_RC", "0")
+          if rc not in ("0", "1"):
+              print(f"ERRO: gitleaks terminou com código inesperado {rc}")
+              sys.exit(1)
+          data = json.load(open(p)) if os.path.exists(p) else []
+
+          def jwt_role(tok):
+              try:
+                  part = tok.split(".")[1]
+                  part += "=" * (-len(part) % 4)
+                  return json.loads(base64.urlsafe_b64decode(part)).get("role", "?")
+              except Exception:
+                  return None
+
+          def varname(match, secret):
+              m = match or ""
+              if secret and secret in m:
+                  m = m.split(secret)[0]
+              ids = re.findall(r"([A-Za-z_][\w.\-]*)\s*[\"']?\s*[:=]", m)
+              return ids[-1] if ids else "-"
+
+          def classify(d):
+              s = d.get("Secret") or ""
+              if s.startswith("eyJ") and s.count(".") == 2:
+                  role = jwt_role(s)
+                  if role == "anon":
+                      return "ok", "JWT anon (público)"
+                  return "BAD", f"JWT role={role}"
+              if s.startswith("sb_publishable_"):
+                  return "ok", "chave publishable (pública)"
+              if s.startswith("sb_secret_"):
+                  return "BAD", "Supabase SECRET key"
+              key = (d["RuleID"], d["File"], varname(d.get("Match"), s))
+              if key in ALLOW:
+                  return "ok", "falso positivo conferido"
+              return "BAD", "desconhecido (revisar)"
+
+          bad, counts = [], collections.Counter()
+          for d in data:
+              status, desc = classify(d)
+              counts[desc] += 1
+              if status == "BAD":
+                  bad.append((desc, d["RuleID"], d["File"], d.get("StartLine"), d["Commit"][:7]))
+
+          print(f"Total de achados: {len(data)}")
+          for k, n in counts.most_common():
+              print(f"{n:4d}  {k}")
+          if bad:
+              print("\nACHADOS QUE EXIGEM ATENÇÃO (valores ocultos):")
+              for desc, rule, f, line, commit in bad:
+                  hoje = "no código hoje" if os.path.exists(f) else "só histórico"
+                  print(f"  {desc} | {rule} | {f}:{line} | commit {commit} | {hoje}")
+              sys.exit(1)
+          print("\nNenhum segredo real encontrado.")
+          PY

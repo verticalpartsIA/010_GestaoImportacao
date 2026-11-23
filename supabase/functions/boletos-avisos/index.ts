@@ -1,0 +1,758 @@
+// @ts-nocheck
+// ============================================================
+// boletos-avisos — Edge Function (vpprd). Financeiro & Preços › Boletos Avisos (11/11/2026).
+//
+// Ações (corpo JSON {"acao": ...}):
+//   sincronizar  (cron) lê do Omie os boletos em aberto + o e-mail de cada cliente (SÓ LEITURA no Omie)
+//   automatico   (cron) manda os avisos D-5 / D-1 / D0 / D+1 pela caixa hub@ e avisa o financeiro (Joice e Maximira) dos atrasos
+//                       (só age se boletos_avisos_config.envio_automatico = true)
+//   enviar       (tela) aviso manual de um cliente {codigo_cliente_omie}
+//   sincronizar também pode ser pedido pela tela. Os três e-mails da lista (ver migration) são os únicos
+//   que passam; qualquer outro recebe 403. A lista mora no banco (boletos_avisos_email_permitido).
+//
+// Por que NÃO usa a função send-email: ela só envia para e-mail já cadastrado no hub (trava anti-relay da
+// área blindada) e a maioria dos e-mails de cliente do Omie não está lá. Esta função tem a própria trava:
+// o destinatário só pode vir de boletos_avisos_clientes (gravado do Omie), nunca do corpo da requisição.
+// O envio é o mesmo da send-email (Microsoft Graph, rascunho -> internetMessageId -> enviar) e grava em
+// emails_projeto com referencia_tipo 'boleto_aviso' para o read-inbox ligar a resposta do cliente ao envio.
+//
+// Regras do Omie (CLAUDE.md Art. 30): só leitura; nunca sondar item a item onde dê "não encontrado" — para
+// de consultar clientes depois de 3 erros seguidos; pausa entre chamadas.
+// Sem supabase-js (Art. 23): fetch + PostgREST.
+// ============================================================
+
+const supabaseUrl = Deno.env.get("SUPABASE_URL");
+const serviceKey = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS"))["default"];
+const omieKey = Deno.env.get("OMIE_API_KEY") || "";
+const omieSecret = Deno.env.get("OMIE_API_SECRET") || "";
+const SENDER = (Deno.env.get("SENDER_EMAIL") ?? "").trim().toLowerCase();
+const FROM_NAME = Deno.env.get("SMTP_FROM_NAME") || "VerticalParts";
+// 19/11/2026 (Gelson): o aviso sai do hub@ (resposta vem para o hub@) com o Financeiro em cópia. Fora do modo teste.
+const CC_FINANCEIRO = (Deno.env.get("BOLETOS_AVISOS_CC") ?? "financeiro@verticalparts.com.br").trim().toLowerCase();
+/* Quem recebe o alerta diário de títulos em atraso (Gelson, 17/11/2026: Joice e Maximira no lugar da Juliana).
+   As duas usam o mesmo WhatsApp corporativo; o gi-avisos junta os avisos iguais do mesmo número numa mensagem só. */
+const ALERTA_ATRASO_PARA = ["joice.duarte@verticalparts.com.br", "maximira.ribeiro@verticalparts.com.br"];
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+function json(body, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+}
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+/* Data de hoje em Brasília (AAAA-MM-DD), igual a BoletosAvisosCalc.hojeBrasil */
+function hojeBrasil(agora) { return new Date((agora || Date.now()) - 3 * 3600e3).toISOString().slice(0, 10); }
+
+/* ---------- regra pura (igual a src/boletos-avisos-calc.js; conferida por teste) ---------- */
+// BEGIN CALC
+  const ETAPAS = [
+    { cod: 'D-5', dias: -5 },
+    { cod: 'D-1', dias: -1 },
+    { cod: 'D0', dias: 0 },
+    { cod: 'D+1', dias: 1 },
+  ];
+  function diasDesdeVencimento(vencISO, hojeISO) {
+    const a = Date.UTC(+vencISO.slice(0, 4), +vencISO.slice(5, 7) - 1, +vencISO.slice(8, 10));
+    const b = Date.UTC(+hojeISO.slice(0, 4), +hojeISO.slice(5, 7) - 1, +hojeISO.slice(8, 10));
+    return Math.round((b - a) / 86400000);
+  }
+  /* Dia sem expediente (17/11/2026, decisão do Gelson): sábado, domingo e os feriados do calendário do hub que
+     bloqueiam envio (nacionais, estaduais de SP e municipais de Guarulhos) + segunda e terça de Carnaval (banco fechado).
+     feriados = Set de 'AAAA-MM-DD' (conjuntoSemExpediente); sem o Set, vale só o fim de semana. */
+  function conjuntoSemExpediente(linhas) {
+    return new Set((linhas || []).filter((l) => l.ativo !== false && (l.bloqueia_envio === true || /^carnaval/i.test(l.descricao || ''))).map((l) => l.data));
+  }
+  function somarDias(iso, n) {
+    return new Date(Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) + n * 86400000).toISOString().slice(0, 10);
+  }
+  function diaUtil(iso, feriados) {
+    const w = new Date(iso + 'T12:00:00Z').getUTCDay();
+    return w !== 0 && w !== 6 && !(feriados && feriados.has(iso));
+  }
+  function proximoDiaUtil(iso, feriados) {
+    let d = iso;
+    for (let i = 0; i < 60 && !diaUtil(d, feriados); i++) d = somarDias(d, 1);
+    return d;
+  }
+  function diaUtilAnterior(iso, feriados) {
+    let d = somarDias(iso, -1);
+    for (let i = 0; i < 60 && !diaUtil(d, feriados); i++) d = somarDias(d, -1);
+    return d;
+  }
+  /* Boleto que vence em dia sem expediente pode ser pago no próximo dia útil sem encargos: é esse o vencimento que vale. */
+  function vencimentoEfetivo(vencISO, feriados) { return proximoDiaUtil(vencISO, feriados); }
+  /* Data (sempre dia útil) de cada etapa. D-1 é o dia útil ANTES do vencimento efetivo; as demais vão para o próximo
+     dia útil. O aviso de atraso ("D+1") sai no 2º dia útil depois do vencimento efetivo, com ou sem boleto (Gelson,
+     19/11/2026: o banco pode levar 1 dia útil para mostrar o pagamento). semBoleto fica na assinatura por compatibilidade. */
+  function datasDasEtapas(vencISO, semBoleto, feriados) {
+    const efetivo = vencimentoEfetivo(vencISO, feriados);
+    const atraso1 = proximoDiaUtil(somarDias(efetivo, 1), feriados);
+    return {
+      'D-5': proximoDiaUtil(somarDias(vencISO, -5), feriados),
+      'D-1': diaUtilAnterior(efetivo, feriados),
+      'D0': efetivo,
+      'D+1': proximoDiaUtil(somarDias(atraso1, 1), feriados),
+    };
+  }
+  function situacaoDoBoleto(vencISO, hojeISO, feriados) {
+    const d = diasDesdeVencimento(vencimentoEfetivo(vencISO, feriados), hojeISO);
+    return d > 0 ? 'atrasado' : d === 0 ? 'vence_hoje' : 'em_dia';
+  }
+  function diasDeAtraso(vencISO, hojeISO, feriados) {
+    return Math.max(0, diasDesdeVencimento(vencimentoEfetivo(vencISO, feriados), hojeISO));
+  }
+  /* Em dia sem expediente nada sai. Num dia útil sai a etapa cuja data é hoje (a mais adiantada, se coincidirem). */
+  function etapaDevida(vencISO, hojeISO, jaEnviadas, semBoleto, feriados) {
+    if (!diaUtil(hojeISO, feriados)) return null;
+    const datas = datasDasEtapas(vencISO, semBoleto, feriados);
+    let achada = null;
+    for (const e of ETAPAS) {
+      if (e.cod === 'D-5' && datas['D-5'] >= datas['D-1']) continue;   // feriado longo: o D-1 já cobre
+      if (datas[e.cod] === hojeISO) achada = e.cod;
+    }
+    if (!achada || (jaEnviadas || []).includes(achada)) return null;
+    return achada;
+  }
+  function dataBR(iso) { return iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : ''; }
+  function moedaBR(v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  /* Textos aprovados pelo Gelson em 17/11/2026 (mantém "encargos"; sem telefone e sem dados bancários).
+     19/11/2026: um e-mail pode juntar títulos em etapas diferentes (e de vários códigos do mesmo cliente) — cada título vai
+     na seção da SUA etapa (Vencido / Vence hoje / Próximos vencimentos), nunca sob o texto do mais grave; "amanhã" e
+     "em 5 dias" só quando é verdade; corpo em tabela (html) + versão texto (log). etapa = 'D-5'|'D-1'|'D0'|'D+1'|'manual'
+     para todos, ou { codigo_lancamento_omie: etapa }. */
+  const DIA_SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+  function diaDaSemana(iso) { return DIA_SEMANA[new Date(iso + 'T12:00:00Z').getUTCDay()]; }
+  function escHtml(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  /* Vencimento como o cliente lê: se caiu em dia sem expediente, diz até quando pode pagar sem encargos. */
+  function vencimentoTexto(vencISO, feriados) {
+    const ef = vencimentoEfetivo(vencISO, feriados);
+    if (ef === vencISO) return dataBR(vencISO);
+    const w = new Date(vencISO + 'T12:00:00Z').getUTCDay();
+    return dataBR(vencISO) + ' (' + (w === 0 || w === 6 ? diaDaSemana(vencISO) : 'feriado') + ') — pode pagar até ' + dataBR(ef).slice(0, 5);
+  }
+  /* "amanhã" / "em 3 dias" / "no próximo dia útil, segunda-feira, 23/11" — sem hoje, cai nos textos fixos. */
+  function quandoVence(lista, etapa, feriados, hojeISO) {
+    if (etapa === 'D-1') {
+      const efs = [...new Set(lista.map((b) => vencimentoEfetivo(b.data_vencimento, feriados)))];
+      if (!hojeISO || (efs.length === 1 && efs[0] === somarDias(hojeISO, 1))) return { frase: 'amanhã', assunto: 'amanhã' };
+      if (efs.length === 1) return { frase: 'no próximo dia útil, ' + diaDaSemana(efs[0]) + ', ' + dataBR(efs[0]).slice(0, 5), assunto: 'em ' + dataBR(efs[0]).slice(0, 5) };
+      return { frase: 'nos próximos dias', assunto: 'nos próximos dias' };
+    }
+    const vs = [...new Set(lista.map((b) => b.data_vencimento))];
+    if (!hojeISO) return { frase: 'em 5 dias', assunto: 'em 5 dias' };
+    if (vs.length > 1) return { frase: 'nos próximos dias', assunto: 'nos próximos dias' };
+    const n = diasDesdeVencimento(hojeISO, vs[0]);
+    const t = n === 1 ? 'amanhã' : 'em ' + n + ' dias';
+    return { frase: t, assunto: t };
+  }
+  const ORDEM_ETAPA = ['manual', 'D-5', 'D-1', 'D0', 'D+1'];
+  function montarAviso(razao, boletos, etapa, feriados, hojeISO) {
+    const etapaDe = (b) => (typeof etapa === 'string' ? etapa : (etapa && etapa[b.codigo_lancamento_omie]) || 'manual');
+    const grupoDe = (e) => (e === 'D-5' || e === 'D-1' ? 'prox' : e);
+    const porGrupo = {};
+    for (const b of boletos) (porGrupo[grupoDe(etapaDe(b))] = porGrupo[grupoDe(etapaDe(b))] || []).push(b);
+    const grupos = ['D+1', 'D0', 'prox', 'manual'].filter((g) => porGrupo[g]);
+    const maisGrave = boletos.map(etapaDe).sort((a, b) => ORDEM_ETAPA.indexOf(b) - ORDEM_ETAPA.indexOf(a))[0];
+    const algumSemTodos = boletos.some((b) => b.tem_boleto === false);
+
+    // palavras de uma lista (singular/plural, boleto/pagamento)
+    const palavras = (lista) => {
+      const plural = lista.length > 1;
+      const algumSem = lista.some((b) => b.tem_boleto === false);
+      const pl = (s, p) => (plural ? p : s);
+      return { plural, algumSem, pl, item: algumSem ? pl('pagamento', 'pagamentos') : pl('boleto', 'boletos'), vence: pl('vence', 'vencem') };
+    };
+    const linhaTexto = (b) => {
+      let l = '• ' + [b.numero_documento ? 'NF ' + b.numero_documento : null, b.numero_parcela ? 'parcela ' + b.numero_parcela : null].filter(Boolean).join(' · ')
+        + ' — vencimento ' + vencimentoTexto(b.data_vencimento, feriados) + ' — ' + moedaBR(b.valor);
+      if (b.tem_boleto !== false && b.linha_digitavel) l += '\n  Linha digitável: ' + b.linha_digitavel;
+      return l;
+    };
+    const soma = (lista) => lista.reduce((s, b) => s + Math.round(Number(b.valor || 0) * 100), 0) / 100;
+    const ordenar = (lista) => lista.slice().sort((a, b) => (a.data_vencimento < b.data_vencimento ? -1 : a.data_vencimento > b.data_vencimento ? 1 : 0));
+
+    const fechoDe = (e, lista) => {
+      const w = palavras(lista);
+      return {
+        'D-5': 'Se o pagamento já estiver programado, pode desconsiderar este e-mail.\n'
+          + (w.algumSem ? 'Tem alguma dúvida?' : 'Precisa da 2ª via ou tem alguma dúvida?') + ' É só responder esta mensagem.',
+        'D-1': 'Para evitar encargos por atraso, recomendamos o pagamento até a data do vencimento.\n'
+          + 'Se já foi pago ou programado, desconsidere este aviso.\nQualquer dúvida, é só responder este e-mail.',
+        'D0': 'Se o pagamento já foi feito, obrigado e desconsidere esta mensagem.'
+          + (w.algumSem ? '' : '\nSe precisar da 2ª via, responda este e-mail.'),
+        'D+1': 'Se já pagou: responda este e-mail com o comprovante' + (w.algumSem ? ' do depósito ou da transferência' : '') + ' para darmos baixa.\n'
+          + 'Se ainda não pagou: solicitamos a regularização imediata, sujeita aos encargos por atraso.'
+          + (w.algumSem ? '' : ' A 2ª via atualizada pode ser solicitada respondendo este e-mail.'),
+      }[e] || 'Se o pagamento já foi feito, responda este e-mail com o comprovante para darmos baixa.\nQualquer dúvida, é só responder esta mensagem.';
+    };
+    const semExpediente = (lista) => lista.every((b) => !diaUtil(b.data_vencimento, feriados));
+
+    let secoes, intro, fecho;
+    if (grupos.length === 1) {
+      // uma situação só: os textos aprovados em 17/11, com a data certa
+      const lista = ordenar(boletos);
+      const w = palavras(lista);
+      const q = quandoVence(lista, maisGrave, feriados, hojeISO);
+      intro = {
+        'D-5': 'Olá, tudo bem?\n\nPassando para lembrar que ' + w.pl('o ', 'os ') + w.item + ' abaixo ' + w.vence + ' ' + q.frase + ':',
+        'D-1': 'Olá,\n\n' + w.pl('O ', 'Os ') + w.item + ' abaixo ' + w.vence + ' ' + q.frase + ':',
+        'D0': 'Olá,\n\n' + w.pl('O ', 'Os ') + w.item + ' abaixo ' + (semExpediente(lista)
+          ? w.pl('venceu', 'venceram') + ' em dia sem expediente bancário e ' + w.pl('pode', 'podem') + ' ser '
+            + (w.algumSem ? w.pl('feito', 'feitos') : w.pl('pago', 'pagos')) + ' hoje sem encargos:'
+          : w.vence + ' hoje:'),
+        'D+1': 'Olá,\n\n' + (w.algumSem
+          ? 'Até o momento ' + w.pl('o pagamento abaixo, já vencido, ainda não consta como recebido:', 'os pagamentos abaixo, já vencidos, ainda não constam como recebidos:')
+          : 'Até o momento não identificamos o pagamento ' + w.pl('do boleto abaixo, já vencido:', 'dos boletos abaixo, já vencidos:')),
+      }[maisGrave] || 'Olá,\n\n' + w.pl('Segue o ', 'Seguem os ') + w.item + ' em aberto da sua empresa:';
+      secoes = [{ grupo: grupos[0], titulo: null, lista, fecho: null }];
+      fecho = fechoDe(maisGrave, lista);
+    } else {
+      // situações diferentes no mesmo e-mail: uma seção para cada, cada uma com o seu texto
+      intro = 'Olá,\n\nSegue a situação dos seus ' + (algumSemTodos ? 'pagamentos' : 'boletos') + ' com a VerticalParts.';
+      secoes = grupos.map((g) => {
+        const lista = ordenar(porGrupo[g]);
+        const w = palavras(lista);
+        const titulo = {
+          'D+1': w.pl('Vencido — ainda não consta como recebido', 'Vencidos — ainda não constam como recebidos'),
+          'D0': semExpediente(lista)
+            ? w.pl('Venceu em dia sem expediente bancário — pode ser pago hoje sem encargos', 'Venceram em dia sem expediente bancário — podem ser pagos hoje sem encargos')
+            : w.pl('Vence hoje', 'Vencem hoje'),
+          'prox': 'Próximos vencimentos',
+        }[g] || 'Em aberto';
+        return { grupo: g, titulo, lista, fecho: g === 'D+1' ? fechoDe('D+1', lista).split('\n').slice(0, 2).join('\n') : null };
+      });
+      fecho = 'Para evitar encargos por atraso, recomendamos o pagamento até a data de cada vencimento. O que já foi pago ou programado pode ser desconsiderado.\n'
+        + 'Qualquer dúvida' + (boletos.some((b) => b.tem_boleto !== false) ? ' ou se precisar da 2ª via' : '') + ', é só responder este e-mail.';
+    }
+
+    // assunto: a situação mais grave
+    const listaAssunto = boletos.filter((b) => etapaDe(b) === maisGrave);
+    const wa = palavras(listaAssunto);
+    const qa = quandoVence(listaAssunto, maisGrave, feriados, hojeISO);
+    const assunto = (wa.algumSem ? {
+      'D-5': 'Lembrete: ' + wa.pl('pagamento vence', 'pagamentos vencem') + ' ' + qa.assunto,
+      'D-1': wa.pl('Seu pagamento vence', 'Seus pagamentos vencem') + ' ' + qa.assunto,
+      'D0': wa.pl('Seu pagamento vence', 'Seus pagamentos vencem') + ' hoje',
+      'D+1': wa.pl('Pagamento em aberto — vencido', 'Pagamentos em aberto — vencidos'),
+      'manual': 'Pagamentos em aberto',
+    } : {
+      'D-5': 'Lembrete: ' + wa.pl('boleto vence', 'boletos vencem') + ' ' + qa.assunto,
+      'D-1': wa.pl('Seu boleto vence', 'Seus boletos vencem') + ' ' + qa.assunto,
+      'D0': wa.pl('Seu boleto vence', 'Seus boletos vencem') + ' hoje',
+      'D+1': wa.pl('Boleto em aberto — vencido', 'Boletos em aberto — vencidos'),
+      'manual': 'Boletos em aberto',
+    })[maisGrave] + ' — ' + razao;
+
+    // forma de pagamento uma vez só, no rodapé (Gelson, 19/11/2026)
+    const temSem = boletos.some((b) => b.tem_boleto === false), temCom = boletos.some((b) => b.tem_boleto !== false);
+    const formaPagamento = 'Forma de pagamento: ' + (temSem && temCom
+      ? 'boleto (linha digitável junto do título) ou, onde não há linha digitável, depósito/transferência, conforme combinado.'
+      : temSem ? 'depósito/transferência, conforme combinado.' : 'boleto (linha digitável junto de cada título).');
+    const assinatura = 'Atenciosamente,\nFinanceiro — VerticalParts';
+    const texto = intro + '\n\n'
+      + secoes.map((s) => (s.titulo ? s.titulo + ':\n' : '') + s.lista.map(linhaTexto).join('\n')
+        + (s.lista.length > 1 ? '\nTotal: ' + moedaBR(soma(s.lista)) : '') + (s.fecho ? '\n\n' + s.fecho : '')).join('\n\n')
+      + '\n\n' + fecho + '\n\n' + formaPagamento + '\n\n' + assinatura;
+
+    // html (19/11/2026, formato aprovado pelo Gelson — pacote "email-cobranca" da sessão CoworkOutlook): cartão de 640px,
+    // "Pagamentos de <cliente>", frase de resumo, uma tabela por situação (Vencem hoje → Vencidos → A vencer) com total,
+    // e a assinatura do hub (cobrança sem assinatura parece golpe). Cada título fica na seção da SUA etapa (dia útil/feriado),
+    // nunca pela data do calendário. Só <table> e estilo em linha (Outlook); tudo escapado.
+    const F = "font-family:'Segoe UI',Arial,Helvetica,sans-serif;";
+    const C1 = '#1f2933', C2 = '#52606d', LINHA = '#e3e8ee';
+    const corDe = { 'D0': '#b45309', 'D+1': '#b91c1c', prox: '#1d4ed8', manual: C1 };
+    const ordemHtml = ['D0', 'D+1', 'prox', 'manual'].filter((g) => porGrupo[g]);
+    const notaVencimento = (b) => {
+      const ef = vencimentoEfetivo(b.data_vencimento, feriados);
+      const partes = [];
+      if (ef !== b.data_vencimento) {
+        const w = new Date(b.data_vencimento + 'T12:00:00Z').getUTCDay();
+        partes.push((w === 0 || w === 6 ? diaDaSemana(b.data_vencimento) : 'feriado') + ' — pode pagar até ' + dataBR(ef).slice(0, 5));
+      }
+      if (hojeISO && diasDesdeVencimento(ef, hojeISO) > 0) {
+        const n = diasDesdeVencimento(ef, hojeISO);
+        partes.push('vencido há ' + n + (n === 1 ? ' dia' : ' dias'));
+      }
+      return partes.join(' · ');
+    };
+    const secaoHtml = (g) => {
+      const lista = ordenar(porGrupo[g]);
+      const w = palavras(lista);
+      const titulo = { 'D0': w.pl('Vence hoje', 'Vencem hoje'), 'D+1': w.pl('Vencido', 'Vencidos'), prox: 'A vencer', manual: 'Em aberto' }[g];
+      const nota = {
+        'D0': (semExpediente(lista) ? w.pl('Venceu', 'Venceram') + ' em dia sem expediente bancário e ' + w.pl('pode', 'podem') + ' ser '
+          + (w.algumSem ? w.pl('feito', 'feitos') : w.pl('pago', 'pagos')) + ' hoje sem encargos. ' : '')
+          + 'Se o pagamento já foi feito, obrigado e desconsidere.',
+        'D+1': (w.algumSem ? w.pl('Ainda não consta como recebido.', 'Ainda não constam como recebidos.') : w.pl('Ainda não identificamos o pagamento.', 'Ainda não identificamos os pagamentos.'))
+          + '\n' + fechoDe('D+1', lista).split('\n').slice(0, 2).join('\n'),
+        prox: 'Lembrete: ' + w.pl('este ' + w.item + ' vence', 'estes ' + w.item + ' vencem') + ' nos próximos dias, na data indicada.',
+        manual: w.pl('Título em aberto nesta data.', 'Títulos em aberto nesta data.'),
+      }[g];
+      const th = 'padding:10px 12px;' + F + 'font-size:12px;color:' + C2 + ';background-color:#f4f6f8;border-bottom:1px solid ' + LINHA + ';';
+      const td = 'padding:11px 12px;' + F + 'font-size:14px;color:' + C1 + ';border-bottom:1px solid ' + LINHA + ';vertical-align:top;';
+      let t = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid ' + LINHA + ';border-collapse:collapse;">'
+        + '<tr><th align="left" style="' + th + '">Nota fiscal</th><th align="left" style="' + th + '">Parcela</th><th align="left" style="' + th + '">Vencimento</th><th align="right" style="' + th + '">Valor</th></tr>';
+      for (const b of lista) {
+        const ld = b.tem_boleto !== false && b.linha_digitavel;
+        const tdl = ld ? td.replace('border-bottom:1px solid ' + LINHA + ';', '') : td;
+        const nv = notaVencimento(b);
+        t += '<tr><td style="' + tdl + 'font-weight:bold;">' + escHtml(b.numero_documento ? 'NF ' + b.numero_documento : '—') + '</td>'
+          + '<td style="' + tdl + '">' + escHtml(b.numero_parcela || '') + '</td>'
+          + '<td style="' + tdl + '">' + escHtml(dataBR(b.data_vencimento)) + (nv ? '<br><span style="font-size:12px;color:' + (g === 'D+1' ? corDe['D+1'] : C2) + ';">' + escHtml(nv) + '</span>' : '') + '</td>'
+          + '<td align="right" style="' + tdl + 'font-weight:bold;white-space:nowrap;">' + escHtml(moedaBR(b.valor)) + '</td></tr>';
+        if (ld) t += '<tr><td colspan="4" style="padding:0 12px 10px 12px;' + F + 'font-size:12px;color:' + C2 + ';border-bottom:1px solid ' + LINHA + ';">Linha digitável: <span style="font-family:Consolas,Menlo,monospace;color:' + C1 + ';word-break:break-all;">' + escHtml(b.linha_digitavel) + '</span></td></tr>';
+      }
+      t += '<tr><td colspan="3" style="' + td + 'font-weight:bold;background-color:#f9fafb;">Total (' + lista.length + ' ' + w.pl('parcela', 'parcelas') + ')</td>'
+        + '<td align="right" style="' + td + 'font-weight:bold;background-color:#f9fafb;white-space:nowrap;">' + escHtml(moedaBR(soma(lista))) + '</td></tr></table>';
+      return '<tr><td style="padding:22px 28px 6px 28px;' + F + 'font-size:17px;font-weight:bold;color:' + corDe[g] + ';">' + escHtml(titulo) + ' <span style="color:' + C1 + ';">' + escHtml(moedaBR(soma(lista))) + '</span></td></tr>'
+        + '<tr><td style="padding:0 28px 10px 28px;' + F + 'font-size:13px;line-height:1.5;color:' + C2 + ';">' + escHtml(nota).replace(/\n/g, '<br>') + '</td></tr>'
+        + '<tr><td style="padding:0 28px;">' + t + '</td></tr>';
+    };
+    const partesResumo = ordemHtml.map((g) => {
+      const n = porGrupo[g].length, pl = (s1, p1) => (n > 1 ? p1 : s1);
+      const r = { 'D0': pl('parcela que vence hoje', 'parcelas que vencem hoje'), 'D+1': pl('já vencida', 'já vencidas'), prox: 'a vencer', manual: 'em aberto' }[g];
+      return '<strong>' + n + ' ' + r + '</strong> (' + escHtml(moedaBR(soma(porGrupo[g]))) + ')';
+    });
+    const resumo = partesResumo.length > 1 ? partesResumo.slice(0, -1).join(', ') + ' e ' + partesResumo[partesResumo.length - 1] : partesResumo[0];
+    const so = ordemHtml.length === 1 ? ordemHtml[0] : null;
+    const fechoHtml = so === 'D+1'
+      ? 'Qualquer dúvida' + (temCom ? ' ou se precisar da 2ª via atualizada' : '') + ', é só responder este e-mail.'
+      : 'Para evitar encargos por atraso, recomendamos o pagamento até a data de cada vencimento. O que já foi pago ou programado pode ser desconsiderado.\n'
+        + 'Qualquer dúvida' + (temCom ? ' ou se precisar da 2ª via' : '') + ', é só responder este e-mail.';
+    const assinaturaHub = '<table role="presentation" id="vp-assinatura-hub" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;max-width:600px"><tr><td>'
+      + '<a href="https://verticalparts.com.br" target="_blank" style="text-decoration:none"><img src="https://jxtqwzmpgofwctqajewt.supabase.co/storage/v1/object/public/engenharia/email-assinatura/assinatura-hub.jpg" width="600" alt="VerticalParts" style="display:block;width:100%;max-width:600px;height:auto;border:0"></a></td></tr>'
+      + '<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.5;color:#777;padding-top:6px"><b>E-mail corporativo VerticalParts</b> &mdash; fale com todas as áreas da empresa por aqui. Basta responder.<br>'
+      + '<b>VerticalParts corporate e-mail</b> &mdash; reach every area of the company here. Just reply.<br>'
+      + '<a href="mailto:financeiro@verticalparts.com.br" style="color:#777">financeiro@verticalparts.com.br</a> &middot; <a href="https://verticalparts.com.br" style="color:#777">verticalparts.com.br</a></td></tr></table>';
+    const html = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f6f8;"><tr><td align="center" style="padding:24px 12px;">'
+      + '<table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0" style="width:640px;max-width:100%;background-color:#ffffff;border:1px solid ' + LINHA + ';">'
+      + '<tr><td style="padding:26px 28px 4px 28px;' + F + 'font-size:12px;font-weight:bold;letter-spacing:1px;color:#b45309;">VERTICALPARTS · FINANCEIRO</td></tr>'
+      + '<tr><td style="padding:0 28px 8px 28px;' + F + 'font-size:24px;font-weight:bold;color:' + C1 + ';">Pagamentos de ' + escHtml(razao) + '</td></tr>'
+      + '<tr><td style="padding:10px 28px 0 28px;' + F + 'font-size:14px;line-height:1.5;color:' + C1 + ';">Olá, segue o resumo dos pagamentos desta empresa' + (hojeISO ? ' em ' + escHtml(dataBR(hojeISO)) : '') + ': ' + resumo + '.</td></tr>'
+      + ordemHtml.map(secaoHtml).join('')
+      + '<tr><td style="padding:22px 28px 0 28px;' + F + 'font-size:14px;line-height:1.5;color:' + C1 + ';">' + escHtml(fechoHtml).replace(/\n/g, '<br>') + '</td></tr>'
+      + '<tr><td style="padding:12px 28px 0 28px;' + F + 'font-size:13px;line-height:1.5;color:' + C2 + ';">' + escHtml(formaPagamento) + '</td></tr>'
+      + '<tr><td style="padding:24px 28px 8px 28px;' + F + 'font-size:14px;color:' + C1 + ';">Atenciosamente,<br><strong>Financeiro — VerticalParts</strong></td></tr>'
+      + '<tr><td style="padding:8px 28px 22px 28px;">' + assinaturaHub + '</td></tr>'
+      + '</table></td></tr></table>';
+    return { assunto, texto, html };
+  }
+  // END CALC
+
+/* ---------- PostgREST ---------- */
+function pgHeaders(extra) {
+  return { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json", ...extra };
+}
+async function pgSelect(tabela, query, range) {
+  const res = await fetch(`${supabaseUrl}/rest/v1/${tabela}?${query}`, { headers: pgHeaders(range ? { Range: `${range[0]}-${range[1]}` } : undefined) });
+  if (!res.ok) throw new Error(`select ${tabela}: HTTP ${res.status} ${await res.text()}`);
+  return await res.json();
+}
+async function pgSelectTudo(tabela, query) {
+  const PAG = 1000; const out = []; let off = 0;
+  for (;;) {
+    const d = await pgSelect(tabela, query, [off, off + PAG - 1]);
+    out.push(...d);
+    if (d.length < PAG) break;
+    off += PAG;
+  }
+  return out;
+}
+async function pgInsert(tabela, linhas, prefer = "return=representation") {
+  const res = await fetch(`${supabaseUrl}/rest/v1/${tabela}`, { method: "POST", headers: pgHeaders({ Prefer: prefer }), body: JSON.stringify(linhas) });
+  if (!res.ok) throw new Error(`insert ${tabela}: HTTP ${res.status} ${await res.text()}`);
+  return prefer.includes("minimal") ? [] : await res.json();
+}
+async function pgUpsert(tabela, onConflict, linhas, prefer = "resolution=merge-duplicates,return=minimal") {
+  for (let i = 0; i < linhas.length; i += 500) {
+    const res = await fetch(`${supabaseUrl}/rest/v1/${tabela}?on_conflict=${onConflict}`, { method: "POST", headers: pgHeaders({ Prefer: prefer }), body: JSON.stringify(linhas.slice(i, i + 500)) });
+    if (!res.ok) throw new Error(`upsert ${tabela}: HTTP ${res.status} ${await res.text()}`);
+  }
+}
+async function pgPatch(tabela, filtro, corpo) {
+  const res = await fetch(`${supabaseUrl}/rest/v1/${tabela}?${filtro}`, { method: "PATCH", headers: pgHeaders({ Prefer: "return=minimal" }), body: JSON.stringify(corpo) });
+  if (!res.ok) throw new Error(`patch ${tabela}: HTTP ${res.status} ${await res.text()}`);
+}
+async function rpc(nome, args) {
+  const res = await fetch(`${supabaseUrl}/rest/v1/rpc/${nome}`, { method: "POST", headers: pgHeaders(), body: JSON.stringify(args) });
+  if (!res.ok) throw new Error(`rpc ${nome}: HTTP ${res.status}`);
+  return await res.json();
+}
+
+/* ---------- Omie (só leitura) ---------- */
+async function omiePost(endpoint, call, param, tentativa = 1) {
+  const res = await fetch(`https://app.omie.com.br/api/v1/${endpoint}/`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ call, app_key: omieKey, app_secret: omieSecret, param: [param] }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (data.faultstring) {
+    if (/redundante|redundant|too many requests|j[aá] existe uma requisi/i.test(data.faultstring) && tentativa < 5) {
+      await esperar(tentativa * 3000);
+      return omiePost(endpoint, call, param, tentativa + 1);
+    }
+    throw new Error(`Omie: ${data.faultstring}`);
+  }
+  if (!res.ok) throw new Error(`Omie HTTP ${res.status}`);
+  return data;
+}
+const isoDeBR = (s) => { const [d, m, y] = String(s || "").split("/"); return d && m && y ? `${y}-${m}-${d}` : null; };
+const EMAIL_RE = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]{2,}$/;
+function listaEmails(s) {
+  return [...new Set(String(s || "").split(/[,;\s]+/).map((x) => x.trim().toLowerCase()).filter((x) => EMAIL_RE.test(x)))];
+}
+function decodificar(s) { return String(s || "").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">"); }
+
+/* Título SEM boleto (cliente que paga por depósito/transferência) também entra, marcado tem_boleto=false.
+   Para não trazer dívida antiga e esquecida (o "A VENCER" do Omie vai pela data de previsão, não pelo vencimento),
+   o sem-boleto só entra até este atraso em dias. Boleto gerado entra sempre, como antes. */
+const LIMITE_SEM_BOLETO_DIAS = 180;
+/* Empresas com corte MAIOR (decisão do Gelson, 12/11/2026): Escamax, do grupo, paga por depósito. Tem título de 2024
+   e 2025 no Omie (R$ 523 mil), então o corte dela é de 365 dias, não 180.
+   Casa pela RAIZ do CNPJ (8 primeiros dígitos) dos clientes já resolvidos em boletos_avisos_clientes, mais os códigos
+   Omie das filiais já conhecidas (garante a 1ª leitura de um cliente ainda não resolvido). */
+const RAIZES_CNPJ_SEM_CORTE = ["24845692", "42689068"];
+const LIMITE_ESCAMAX_DIAS = 365;
+const CODIGOS_SEM_CORTE = [9171897422, 709496211, 9189022146, 9156116333, 8907119881, 8970602418];
+
+async function sincronizar() {
+  const vistos = new Map();
+  const hojeSync = hojeBrasil();
+  const semCorte = new Set(CODIGOS_SEM_CORTE);
+  for (const c of await pgSelectTudo("boletos_avisos_clientes", "select=codigo_cliente_omie,cnpj")) {
+    if (RAIZES_CNPJ_SEM_CORTE.includes(String(c.cnpj || "").replace(/\D/g, "").slice(0, 8))) semCorte.add(Number(c.codigo_cliente_omie));
+  }
+  for (const status of ["AVENCER", "VENCEHOJE", "ATRASADO"]) {
+    let pagina = 1, total = 1;
+    while (pagina <= total) {
+      const r = await omiePost("financas/contareceber", "ListarContasReceber", { pagina, registros_por_pagina: 100, apenas_importado_api: "N", filtrar_por_status: status });
+      total = r.total_de_paginas || 1;
+      for (const t of r.conta_receber_cadastro || []) {
+        const temBoleto = t.boleto?.cGerado === "S";
+        if (/RECEBIDO|CANCELADO|LIQUIDADO/i.test(t.status_titulo || "")) continue;
+        const venc = isoDeBR(t.data_vencimento);
+        if (!venc) continue;
+        if (!temBoleto && diasDesdeVencimento(venc, hojeSync) > (semCorte.has(Number(t.codigo_cliente_fornecedor)) ? LIMITE_ESCAMAX_DIAS : LIMITE_SEM_BOLETO_DIAS)) continue;
+        vistos.set(t.codigo_lancamento_omie, {
+          codigo_lancamento_omie: t.codigo_lancamento_omie,
+          codigo_cliente_omie: t.codigo_cliente_fornecedor,
+          numero_documento: t.numero_documento_fiscal || null,
+          numero_parcela: t.numero_parcela || null,
+          numero_boleto: temBoleto ? (t.boleto?.cNumBoleto || null) : null,
+          linha_digitavel: temBoleto ? (t.codigo_barras_ficha_compensacao || null) : null,
+          tem_boleto: temBoleto,
+          data_vencimento: venc,
+          valor: t.valor_documento ?? null,
+          status_omie: t.status_titulo || null,
+          aberto: true,
+          atualizado_em: new Date().toISOString(),
+        });
+      }
+      pagina++;
+      await esperar(400);
+    }
+  }
+  const linhas = [...vistos.values()];
+  await pgUpsert("boletos_avisos_boletos", "codigo_lancamento_omie", linhas);
+
+  // quem estava em aberto e não veio mais (pago, cancelado, boleto removido) deixa de estar em aberto
+  const abertos = await pgSelectTudo("boletos_avisos_boletos", "select=codigo_lancamento_omie&aberto=eq.true");
+  const sumiram = abertos.map((x) => x.codigo_lancamento_omie).filter((id) => !vistos.has(id));
+  for (let i = 0; i < sumiram.length; i += 100) {
+    await pgPatch("boletos_avisos_boletos", `codigo_lancamento_omie=in.(${sumiram.slice(i, i + 100).join(",")})`, { aberto: false, atualizado_em: new Date().toISOString() });
+  }
+
+  // garante a linha de cada cliente e resolve os e-mails dos que faltam (ou estão com mais de 7 dias)
+  const codigos = [...new Set(linhas.map((l) => l.codigo_cliente_omie))];
+  await pgUpsert("boletos_avisos_clientes", "codigo_cliente_omie", codigos.map((c) => ({ codigo_cliente_omie: c })), "resolution=ignore-duplicates,return=minimal");
+  const limite = new Date(Date.now() - 7 * 86400e3).toISOString();
+  const pendentes = (await pgSelect("boletos_avisos_clientes",
+    `select=codigo_cliente_omie&codigo_cliente_omie=in.(${codigos.join(",")})&or=(emails_atualizado_em.is.null,emails_atualizado_em.lt.${limite})&order=emails_atualizado_em.asc.nullsfirst&limit=60`)) || [];
+  let resolvidos = 0, errosSeguidos = 0;
+  for (const p of pendentes) {
+    try {
+      const c = await omiePost("geral/clientes", "ConsultarCliente", { codigo_cliente_omie: p.codigo_cliente_omie });
+      const fat = listaEmails(c.recomendacoes?.email_fatura), ger = listaEmails(c.email);
+      await pgPatch("boletos_avisos_clientes", `codigo_cliente_omie=eq.${p.codigo_cliente_omie}`, {
+        razao_social: decodificar(c.razao_social) || null,
+        cnpj: c.cnpj_cpf || null,
+        emails: fat.length ? fat : ger,
+        email_origem: fat.length ? "faturamento" : ger.length ? "geral" : "nenhum",
+        emails_atualizado_em: new Date().toISOString(),
+      });
+      resolvidos++; errosSeguidos = 0;
+    } catch (e) {
+      console.warn("[boletos-avisos] cliente", p.codigo_cliente_omie, String(e?.message || e));
+      if (++errosSeguidos >= 3) break;   // o Omie bloqueia a API toda depois de ~10 erros seguidos
+    }
+    await esperar(300);
+  }
+  await pgPatch("boletos_avisos_config", "id=eq.true", { sincronizado_em: new Date().toISOString() });
+  return { boletosAbertos: linhas.length, semBoleto: linhas.filter((l) => !l.tem_boleto).length, encerrados: sumiram.length, clientes: codigos.length, emailsResolvidos: resolvidos, clientesSemEmailResolvido: Math.max(0, pendentes.length - resolvidos) };
+}
+
+/* ---------- Microsoft Graph (igual ao send-email) ---------- */
+let tokenCache = null;
+async function tokenGraph() {
+  if (tokenCache && tokenCache.expira > Date.now() + 60000) return tokenCache.token;
+  const tenant = Deno.env.get("AZURE_TENANT_ID") ?? "";
+  const r = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(tenant)}/oauth2/v2.0/token`, {
+    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ client_id: Deno.env.get("AZURE_CLIENT_ID") ?? "", client_secret: Deno.env.get("AZURE_CLIENT_SECRET") ?? "", scope: "https://graph.microsoft.com/.default", grant_type: "client_credentials" }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.access_token) throw new Error("login Microsoft recusado");
+  tokenCache = { token: j.access_token, expira: Date.now() + (Number(j.expires_in) || 3600) * 1000 };
+  return j.access_token;
+}
+async function graph(method, caminho, token, corpo) {
+  const r = await fetch(`https://graph.microsoft.com/v1.0${caminho}`, { method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: corpo === undefined ? undefined : JSON.stringify(corpo) });
+  const j = r.status === 202 || r.status === 204 ? {} : await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, j };
+}
+function escaparHtml(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+/* ---------- Assinatura corporativa do hub@ (a mesma da send-email, aprovada em 09/11/2026) ----------
+   19/11/2026: cobrança sem assinatura parece golpe para o cliente (Gelson). Vai só no e-mail enviado; o corpo
+   gravado no log e no emails_projeto fica sem ela. Se a send-email trocar a imagem, trocar aqui também.
+   Desligar sem redeploy: secret ASSINATURA_HUB=off. */
+const ASSINATURA_MARCA = "vp-assinatura-hub";
+const ASSINATURA_IMG = Deno.env.get("ASSINATURA_IMG_URL") ||
+  "https://jxtqwzmpgofwctqajewt.supabase.co/storage/v1/object/public/engenharia/email-assinatura/assinatura-hub.jpg";
+function assinaturaHtml() {
+  return `<table role="presentation" id="${ASSINATURA_MARCA}" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;border-collapse:collapse;max-width:600px"><tr><td>` +
+    `<a href="https://verticalparts.com.br" target="_blank" style="text-decoration:none">` +
+    `<img src="${ASSINATURA_IMG}" width="600" alt="VerticalParts — Assistente Virtual | hub@verticalparts.com.br | verticalparts.com.br | Rua Armandina Braga de Almeida, 383, Guarulhos/SP" style="display:block;width:100%;max-width:600px;height:auto;border:0">` +
+    `</a></td></tr><tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.5;color:#777;padding-top:6px">` +
+    `<b>E-mail corporativo VerticalParts</b> &mdash; fale com todas as áreas da empresa por aqui. Basta responder.<br>` +
+    `<b>VerticalParts corporate e-mail</b> &mdash; reach every area of the company here. Just reply.<br>` +
+    `<a href="mailto:hub@verticalparts.com.br" style="color:#777">hub@verticalparts.com.br</a> &middot; ` +
+    `<a href="https://verticalparts.com.br" style="color:#777">verticalparts.com.br</a></td></tr></table>`;
+}
+function comAssinatura(html) {
+  if ((Deno.env.get("ASSINATURA_HUB") || "").toLowerCase() === "off" || html.includes(ASSINATURA_MARCA)) return html;
+  return html + assinaturaHtml();
+}
+
+async function enviarGraph(para, assunto, texto, html, cc = []) {
+  const token = await tokenGraph();
+  const caixa = `/users/${encodeURIComponent(SENDER)}`;
+  const criado = await graph("POST", `${caixa}/messages`, token, {
+    subject: assunto,
+    body: { contentType: "HTML", content: comAssinatura(html || `<div style="white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;font-size:14px">${escaparHtml(texto)}</div>`) },
+    toRecipients: para.map((a) => ({ emailAddress: { address: a } })),
+    ccRecipients: cc.map((a) => ({ emailAddress: { address: a } })),
+    from: { emailAddress: { address: SENDER, name: FROM_NAME } },
+  });
+  if (!criado.ok || !criado.j?.id) throw new Error("falha ao preparar o e-mail na Microsoft (" + (criado.j?.error?.code || criado.status) + ")");
+  const id = criado.j.id;
+  let messageId = criado.j.internetMessageId ?? null;
+  if (!messageId) messageId = (await graph("GET", `${caixa}/messages/${encodeURIComponent(id)}?$select=internetMessageId`, token)).j?.internetMessageId ?? null;
+  const env = await graph("POST", `${caixa}/messages/${encodeURIComponent(id)}/send`, token);
+  if (!env.ok) {
+    await graph("DELETE", `${caixa}/messages/${encodeURIComponent(id)}`, token).catch(() => {});
+    throw new Error("falha ao enviar pela Microsoft (" + (env.j?.error?.code || env.status) + ")");
+  }
+  return messageId;
+}
+
+/* ---------- envio de um e-mail (log + Inbox) ----------
+   19/11/2026: um e-mail por destinatário — códigos do Omie diferentes com o mesmo e-mail (ex.: Escamax, 3 códigos)
+   recebem UMA mensagem. O log continua por código de cliente (uma linha em boletos_avisos_envios para cada código do
+   grupo, mesmo message_id), para a tela de cada cliente mostrar o último aviso. */
+function emailsDoCliente(cliente) {
+  return [...new Set((cliente.emails || []).map((e) => String(e || "").trim().toLowerCase()).filter((e) => EMAIL_RE.test(e)))].sort().slice(0, 10);
+}
+async function enviarParaCliente({ cliente, clientes, boletos, etapaPorBoleto, etapaAssunto, origem, enviadoPor, config, simular, feriados, hoje }) {
+  const doGrupo = clientes && clientes.length ? clientes : [cliente];
+  const modoTeste = !!config.destino_teste;
+  const reais = emailsDoCliente(cliente);
+  const para = modoTeste ? [config.destino_teste] : reais;
+  if (!para.length) return { ok: false, motivo: "sem_email" };
+  const razao = cliente.razao_social || `Cliente ${cliente.codigo_cliente_omie}`;
+  const msg = montarAviso(razao, boletos, origem === "manual" ? "manual" : etapaPorBoleto, feriados, hoje || hojeBrasil());
+  const assunto = (modoTeste ? "[MODO TESTE] " : "") + msg.assunto;
+  const aviso = `[MODO TESTE — este aviso iria para: ${reais.join(", ") || "nenhum e-mail"}]`;
+  const texto = (modoTeste ? aviso + "\n\n" : "") + msg.texto;
+  const html = (modoTeste ? `<p style="font-family:Arial,sans-serif;color:#b91c1c">${escaparHtml(aviso)}</p>` : "") + msg.html;
+  const cc = !modoTeste && EMAIL_RE.test(CC_FINANCEIRO) && !para.includes(CC_FINANCEIRO) ? [CC_FINANCEIRO] : [];
+  if (simular) return { ok: true, simulado: true, para, cc, assunto, texto, html };
+
+  let messageId = null, erro = null;
+  try { messageId = await enviarGraph(para, assunto, texto, html, cc); } catch (e) { erro = String(e?.message || e); }
+  const linhas = doGrupo.map((c) => ({
+    codigo_cliente_omie: c.codigo_cliente_omie, cliente_razao: c.razao_social || `Cliente ${c.codigo_cliente_omie}`,
+    etapa: origem === "manual" ? "manual" : etapaAssunto, origem, para, assunto, corpo: texto,
+    boleto_ids: boletos.filter((b) => b.codigo_cliente_omie === c.codigo_cliente_omie).map((b) => b.codigo_lancamento_omie), message_id: messageId,
+    status: erro ? "erro" : "enviado", erro, modo_teste: modoTeste, enviado_por: enviadoPor || null,
+  }));
+  const envios = await pgInsert("boletos_avisos_envios", linhas);
+  const envioDe = new Map(envios.map((e) => [e.codigo_cliente_omie, e.id]));
+  if (erro) return { ok: false, motivo: erro, envioId: envios[0]?.id };
+  if (!modoTeste) {
+    await pgInsert("boletos_avisos_envio_itens", boletos.map((b) => ({ envio_id: envioDe.get(b.codigo_cliente_omie) ?? envios[0].id, codigo_lancamento_omie: b.codigo_lancamento_omie, etapa: origem === "manual" ? "manual" : (etapaPorBoleto[b.codigo_lancamento_omie] || "manual") })), "return=minimal").catch((e) => console.warn("[boletos-avisos] itens", e));
+  }
+  // registra em emails_projeto: o read-inbox liga a resposta do cliente a este envio pelo Message-ID
+  try {
+    await pgInsert("emails_projeto", [{
+      numero_cotacao: null, referencia_tipo: "boleto_aviso", referencia_id: envios[0].id, direcao: "saida",
+      de_email: SENDER, de_nome: FROM_NAME, para, cc, assunto, corpo_texto: texto, corpo_html: html,
+      message_id: messageId, data_mensagem: new Date().toISOString(), anexos: [], enviado_por: enviadoPor || null,
+    }], "return=minimal");
+  } catch (e) { console.warn("[boletos-avisos] emails_projeto", String(e?.message || e)); }
+  return { ok: true, envioId: envios[0].id, para };
+}
+
+async function carregarBase() {
+  const [config] = await pgSelect("boletos_avisos_config", "select=*&id=eq.true");
+  const boletos = await pgSelectTudo("boletos_avisos_boletos", "select=*&aberto=eq.true");
+  const clientes = await pgSelectTudo("boletos_avisos_clientes", "select=*");
+  const porCliente = new Map(clientes.map((c) => [c.codigo_cliente_omie, c]));
+  // sem o calendário não há como saber se hoje é feriado: o erro sobe e nada é enviado
+  const feriados = conjuntoSemExpediente(await pgSelectTudo("calendario_feriados", "select=data,descricao,bloqueia_envio,ativo&ativo=is.true"));
+  return { config, boletos, porCliente, feriados };
+}
+
+async function automatico(simular) {
+  const { config, boletos, porCliente, feriados } = await carregarBase();
+  if (!config?.envio_automatico && !simular) return { pulado: "envio automático desligado" };
+  const hoje = hojeBrasil();
+  if (!diaUtil(hoje, feriados)) return { hoje, pulado: "dia sem expediente (fim de semana ou feriado): nenhum aviso sai hoje" };
+  const ids = boletos.map((b) => b.codigo_lancamento_omie);
+  const itens = ids.length ? await pgSelectTudo("boletos_avisos_envio_itens", "select=codigo_lancamento_omie,etapa&etapa=neq.manual") : [];
+  const jaPorBoleto = new Map();
+  for (const it of itens) { if (!jaPorBoleto.has(it.codigo_lancamento_omie)) jaPorBoleto.set(it.codigo_lancamento_omie, []); jaPorBoleto.get(it.codigo_lancamento_omie).push(it.etapa); }
+
+  // um e-mail por destinatário: junta os códigos do Omie que têm os mesmos e-mails (sem e-mail: fica sozinho e é contado em semEmail)
+  const grupos = new Map();
+  for (const b of boletos) {
+    const etapa = etapaDevida(b.data_vencimento, hoje, jaPorBoleto.get(b.codigo_lancamento_omie) || [], b.tem_boleto === false, feriados);
+    if (!etapa) continue;
+    const cliente = porCliente.get(b.codigo_cliente_omie) || { codigo_cliente_omie: b.codigo_cliente_omie, emails: [] };
+    const emails = emailsDoCliente(cliente);
+    const chave = emails.length ? emails.join(",") : `sem-email:${b.codigo_cliente_omie}`;
+    if (!grupos.has(chave)) grupos.set(chave, { clientes: new Map(), boletos: [], etapaPorBoleto: {} });
+    const g = grupos.get(chave);
+    g.clientes.set(cliente.codigo_cliente_omie, cliente);
+    g.boletos.push(b); g.etapaPorBoleto[b.codigo_lancamento_omie] = etapa;
+  }
+  const modoTeste = !!config?.destino_teste;
+  const limite = modoTeste ? 3 : 40;
+  const ordem = ["D-5", "D-1", "D0", "D+1"];
+  const resultado = { hoje, modoTeste, clientesComAviso: [...grupos.values()].reduce((t, g) => t + g.clientes.size, 0), emailsComAviso: grupos.size, enviados: 0, erros: 0, semEmail: 0, simulados: [] };
+  let n = 0;
+  for (const [, g] of grupos) {
+    if (n >= limite) break;
+    // o mais grave manda no assunto (e a razão social do assunto é a do cliente desse título)
+    const grave = g.boletos.slice().sort((a, b) => ordem.indexOf(g.etapaPorBoleto[b.codigo_lancamento_omie]) - ordem.indexOf(g.etapaPorBoleto[a.codigo_lancamento_omie]))[0];
+    const etapaAssunto = g.etapaPorBoleto[grave.codigo_lancamento_omie];
+    const cliente = g.clientes.get(grave.codigo_cliente_omie);
+    const r = await enviarParaCliente({ cliente, clientes: [...g.clientes.values()], boletos: g.boletos, etapaPorBoleto: g.etapaPorBoleto, etapaAssunto, origem: "automatico", enviadoPor: null, config: config || {}, simular, feriados, hoje });
+    if (r.motivo === "sem_email") { resultado.semEmail++; continue; }
+    n++;
+    if (simular) resultado.simulados.push({ cliente: cliente.razao_social || cliente.codigo_cliente_omie, codigos: [...g.clientes.keys()], etapa: etapaAssunto, para: r.para, assunto: r.assunto, texto: r.texto });
+    else if (r.ok) resultado.enviados++; else resultado.erros++;
+    await esperar(700);
+  }
+  if (!simular && !modoTeste) resultado.avisoFinanceiro = await avisarFinanceiro(boletos, porCliente, hoje, feriados);
+  return resultado;
+}
+
+const DIAS = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
+async function avisarFinanceiro(boletos, porCliente, hoje, feriados) {
+  const atrasados = boletos.filter((b) => diasDeAtraso(b.data_vencimento, hoje, feriados) > 0);
+  if (!atrasados.length) return "nenhum atraso";
+  const porCli = new Map();
+  for (const b of atrasados) {
+    const c = porCli.get(b.codigo_cliente_omie) || { dias: 0, valor: 0, qtd: 0 };
+    c.dias = Math.max(c.dias, diasDeAtraso(b.data_vencimento, hoje, feriados)); c.valor += Number(b.valor || 0); c.qtd++;
+    porCli.set(b.codigo_cliente_omie, c);
+  }
+  const maiores = [...porCli.entries()].sort((a, b) => b[1].dias - a[1].dias).slice(0, 3)
+    .map(([cod, c]) => `${(porCliente.get(cod)?.razao_social || "Cliente " + cod).slice(0, 28)} (${c.dias}d)`).join("; ");
+  const total = atrasados.reduce((s, b) => s + Number(b.valor || 0), 0);
+  const dow = DIAS[new Date(hoje + "T12:00:00Z").getUTCDay()];
+  const [, m, d] = hoje.split("-");
+  await pgUpsert("alertas", "id", ALERTA_ATRASO_PARA.map((para) => ({
+    id: `boletos-atraso-${hoje}-${para.split("@")[0]}`, level: "warning", module: "Financeiro", rota: "/adm-financeiro/boletos-avisos", resolved: false, destinatario_email: para,
+    title: `Títulos em atraso — ${dow}, ${d}/${m}: ${porCli.size} cliente(s)`,
+    sub: `${atrasados.length} título(s) vencido(s), ${moedaBR(total)} no total. Mais antigos: ${maiores}. Veja em Boletos Avisos.`.slice(0, 330),
+  })), "resolution=ignore-duplicates,return=minimal");
+  return `alerta de atraso para ${ALERTA_ATRASO_PARA.length} pessoa(s): ${porCli.size} cliente(s)`;
+}
+
+async function enviarManual(codigo, email, simular) {
+  const { config, boletos, porCliente, feriados } = await carregarBase();
+  const cliente = porCliente.get(Number(codigo));
+  const doCliente = boletos.filter((b) => b.codigo_cliente_omie === Number(codigo));
+  if (!cliente || !doCliente.length) return { status: 404, corpo: { error: "Cliente sem boleto em aberto." } };
+  const r = await enviarParaCliente({ cliente, boletos: doCliente, etapaPorBoleto: {}, etapaAssunto: "manual", origem: "manual", enviadoPor: email, config: config || {}, simular, feriados });
+  if (r.motivo === "sem_email") return { status: 400, corpo: { error: "Este cliente não tem e-mail válido no Omie (campo e-mail de faturamento ou e-mail)." } };
+  if (!r.ok) return { status: 502, corpo: { error: "Não foi possível enviar: " + r.motivo, envioId: r.envioId } };
+  return { status: 200, corpo: r };
+}
+
+/* ---------- autenticação ---------- */
+const INTERVALO_MIN_ATUALIZAR_MS = 5 * 60 * 1000;
+async function autenticar(req) {
+  const segredo = req.headers.get("x-cron-secret") || "";
+  if (segredo) {
+    try { if ((await rpc("segredo_valido", { p_nome: "cron_secret", p_valor: segredo })) === true) return { modo: "cron" }; } catch (_) { /* cai no 401 */ }
+    return null;
+  }
+  const bearer = req.headers.get("authorization") || "";
+  if (!/^Bearer\s+\S+/i.test(bearer)) return null;
+  try {
+    const r = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { Authorization: bearer, apikey: serviceKey } });
+    if (!r.ok) return null;
+    const email = String((await r.json())?.email || "").toLowerCase();
+    if (!email) return null;
+    if ((await rpc("boletos_avisos_email_permitido", { p_email: email })) === true) return { modo: "usuario", email };
+    // 18/11/2026: quem tem só a alçada "atualizar" (Administração › Alçadas) pode ler o Omie; o resto continua dos 3 fixos
+    if ((await rpc("boletos_avisos_email_pode_atualizar", { p_email: email })) === true) return { modo: "usuario", email, soAtualizar: true };
+    return { modo: "negado", email };
+  } catch (_) { return null; }
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+  if (req.method !== "POST") return json({ error: "Método não suportado" }, 405);
+  const auth = await autenticar(req);
+  if (!auth) return json({ error: "Não autorizado" }, 401);
+  if (auth.modo === "negado") return json({ error: "Esta tela é restrita." }, 403);
+  let p = {};
+  try { p = await req.json(); } catch (_) { /* corpo vazio */ }
+  const acao = p?.acao;
+  try {
+    if (acao === "sincronizar") {
+      if (!omieKey || !omieSecret) return json({ error: "OMIE_API_KEY / OMIE_API_SECRET não configuradas" }, 500);
+      if (auth.soAtualizar) {
+        // protege o Omie (limite de consumo): quem não é dos 3 fixos só atualiza se a última leitura tiver mais de 5 minutos
+        const cfg = ((await pgSelect("boletos_avisos_config", "select=sincronizado_em&id=eq.true")) || [])[0];
+        const ult = cfg?.sincronizado_em ? Date.parse(cfg.sincronizado_em) : 0;
+        if (ult && Date.now() - ult < INTERVALO_MIN_ATUALIZAR_MS) {
+          const min = Math.max(1, Math.ceil((INTERVALO_MIN_ATUALIZAR_MS - (Date.now() - ult)) / 60000));
+          return json({ error: `O Omie foi lido há pouco. Tente de novo em ${min} minuto(s) — a tela já mostra a leitura mais recente.` }, 429);
+        }
+      }
+      return json({ ok: true, ...(await sincronizar()) });
+    }
+    if (auth.soAtualizar) return json({ error: "Com a alçada \"atualizar\" só dá para atualizar do Omie." }, 403);
+    if (acao === "automatico") {
+      if (auth.modo === "usuario" && !p.simular) return json({ error: "Pela tela só dá para simular; o envio automático roda pela rotina." }, 403);
+      if (!SENDER || !Deno.env.get("AZURE_TENANT_ID")) return json({ error: "Microsoft Graph não configurada" }, 503);
+      return json({ ok: true, ...(await automatico(!!p.simular)) });
+    }
+    if (acao === "enviar") {
+      if (auth.modo !== "usuario") return json({ error: "Só pela tela." }, 403);
+      if (!SENDER || !Deno.env.get("AZURE_TENANT_ID")) return json({ error: "Microsoft Graph não configurada" }, 503);
+      const r = await enviarManual(p.codigo_cliente_omie, auth.email, !!p.simular);
+      return json(r.corpo, r.status);
+    }
+    return json({ error: "Ação inválida" }, 400);
+  } catch (e) {
+    console.error("[boletos-avisos]", e);
+    return json({ error: String(e?.message || e) }, 500);
+  }
+});
