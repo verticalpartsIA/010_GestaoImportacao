@@ -5,8 +5,8 @@
 > Derivado, **nunca é fonte da verdade** (Art. 44): cada linha aponta para `docs/modulos/04_comercial_pre_venda.md#âncora`. Em divergência vale a origem.
 
 - **Selo do cabeçalho:** Conferido em 31/10/2026 (origin/main `746db79`)
-- **Palavras:** 22994 · **blocos:** 333 · **seções com selo próprio:** 50 de 85
-- **Origem do selo dos blocos:** próprio 100 · da seção 146 · da seção-pai 10 · do cabeçalho 52 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
+- **Palavras:** 23037 · **blocos:** 333 · **seções com selo próprio:** 50 de 85
+- **Origem do selo dos blocos:** próprio 101 · da seção 145 · da seção-pai 10 · do cabeçalho 52 · nenhum (Não verificado) 0 · meta (numeração, índice, glossário) 25
 - **Selo efetivo dos blocos:** Conferido 201 · Herdado 74 · Não verificado 33
 
 Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da seção · `p` herdado de seção-pai · `c` herdado do cabeçalho · `n` nenhum (Não verificado) · `m` meta.
@@ -93,7 +93,7 @@ Legenda de "Blocos por origem do selo": `b` próprio do bloco · `s` herdado da 
 | PC-3 RFQ ao fornecedor: idiomas, letra de revisão e e-mail | `docs/modulos/04_comercial_pre_venda.md#pc-3-rfq-ao-fornecedor-idiomas-letra-de-revisão-e-e-mail` | 2 | Herdado (misto (vale o mais fraco)) | 4 | b2 s2 |
 | PC-4 Trava, destrave e revisões comerciais | `docs/modulos/04_comercial_pre_venda.md#pc-4-trava-destrave-e-revisões-comerciais` | 2 | Herdado (misto (vale o mais fraco)) | 5 | b2 s3 |
 | PC-5 Regras de preço que atravessam as telas | `docs/modulos/04_comercial_pre_venda.md#pc-5-regras-de-preço-que-atravessam-as-telas` | 2 | — | 4 | c4 |
-| PC-6 Identidade, alçadas e segurança | `docs/modulos/04_comercial_pre_venda.md#pc-6-identidade-alçadas-e-segurança` | 2 | Conferido (uniforme) | 6 | b1 s5 |
+| PC-6 Identidade, alçadas e segurança | `docs/modulos/04_comercial_pre_venda.md#pc-6-identidade-alçadas-e-segurança` | 2 | Conferido (uniforme) | 6 | b2 s4 |
 | PC-7 Gatilhos e rotinas | `docs/modulos/04_comercial_pre_venda.md#pc-7-gatilhos-e-rotinas` | 2 | Conferido (uniforme) | 5 | b3 s2 |
 | PC-8 Tabelas | `docs/modulos/04_comercial_pre_venda.md#pc-8-tabelas` | 2 | Conferido (uniforme) | 2 | b1 s1 |
 | PC-9 Navegação, cache e testes | `docs/modulos/04_comercial_pre_venda.md#pc-9-navegação-cache-e-testes` | 2 | Conferido (uniforme) | 4 | b1 s3 |
