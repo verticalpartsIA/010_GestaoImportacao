@@ -271,7 +271,7 @@ body[data-density="airy"] {
 .sidebar__group-head { position: relative; }
 .sidebar__group-help {
   position: absolute; top: 50%; right: 36px; transform: translateY(-50%);
-  width: 20px; height: 20px; padding: 0;
+  width: 24px; height: 24px; padding: 0; /* 24x24 = mínimo de alvo do WCAG 2.2 (2.5.8); era 20x20 */
   display: flex; align-items: center; justify-content: center;
   border-radius: 50%; border: 1px solid var(--vp-gray-700); background: none;
   color: var(--vp-gray-400); font-size: 11px; font-weight: 700; line-height: 1; cursor: pointer;

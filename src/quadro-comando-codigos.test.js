@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 global.window = {};
+require('./calculadora-cabo-manobra-calc.js');
 require('./quadro-comando-bom-engine.js');
 require('./quadro-comando-codigos.js');
 const E = window.QuadroComandoBomEngine;
@@ -149,26 +150,38 @@ test('chicotes da caixa de topo: um por conector, 2,40 m (3,50 m SOS e WT2), có
   assert.deepStrictEqual(Object.keys(por(E.montarItensChicotes([{ sku: 'VPB-209' }], {}))).filter((k) => k.startsWith('A-DEFINIR')), []);
 });
 
-test('cabo de manobra: soma dos pisos + reserva (10 paradas de 3 m = 47 m, 8 paradas = 41 m); piso maior soma o excedente', () => {
+test('cabo de manobra = conta da Calculadora de Cabos: 10 paradas de 3 m, P 1,5 m, K 4,5 m, sem casa de máquinas = 45 m; piso maior soma o excedente', () => {
   const pisos = (n, mm = 3000) => Array.from({ length: n - 1 }, () => ({ distancia_mm: mm }));
-  const mm = (n, extra = {}, tipo = 'MRL', geo = {}) => E.montarTrechoCaboManobra(geo, pisos(n), tipo, extra).comprimento_final_mm;
-  assert.strictEqual(mm(10), 47000);
-  assert.strictEqual(mm(8), 41000);
+  const geo = { poco_mm: 1500, ultima_altura_mm: 4500 };
+  const mm = (n, tipo = 'MRL', g = geo) => E.montarTrechoCaboManobra(g, pisos(n), tipo).comprimento_final_mm;
+  assert.strictEqual(mm(10), 45000);   // 27 + 4,5 + 4,82 (seio) + 6,5 + 2 = 44,82 → 45
+  assert.strictEqual(mm(8), 39000);    // 21 + 4,5 + 4,82 + 6,5 + 2 = 38,82 → 39
   const um4m = [...pisos(10)]; um4m[3] = { distancia_mm: 4000 };
-  assert.strictEqual(E.montarTrechoCaboManobra({}, um4m, 'MRL').comprimento_final_mm, 48000);
-  const t = E.montarTrechoCaboManobra({}, pisos(10), 'MRL');
+  assert.strictEqual(E.montarTrechoCaboManobra(geo, um4m, 'MRL').comprimento_final_mm, 46000);   // 28 + ... = 45,82 → 46
+  const t = E.montarTrechoCaboManobra(geo, pisos(10), 'MRL');
   assert.strictEqual(t.confianca, 'estimado');
   assert.strictEqual(t.comprimento_base_mm, 27000);
-  assert.strictEqual(t.contornos_mm, 3000);
+  assert.strictEqual(t.contornos_mm, 4821);
+  // o motor e a calculadora dão o mesmo número para o mesmo poço
+  assert.strictEqual(window.CaboManobraCalc.calcular({ tipo: 'MRL', paradas: 10, pisoAPiso: 3, profundidadePoco: 1.5, overhead: 4.5, margemMrl: 2 }).comprar * 1000, 45000);
 });
 
-test('cabo de manobra: seio/pontas editáveis; com casa de máquinas exige e soma a distância do quadro até a laje; sem percurso fica pendente', () => {
+test('cabo de manobra: P e K só entram medidos ou marcados "estimado"; com casa de máquinas soma a distância quadro → laje; sem percurso fica pendente', () => {
   const pisos = Array.from({ length: 9 }, () => ({ distancia_mm: 3000 }));
-  assert.strictEqual(E.montarTrechoCaboManobra({ seio_cabo_mm: 4000, folga_mm: 5000 }, pisos, 'MRL').comprimento_final_mm, 27000 + 4000 + 3000 + 5000 + 10000);
-  const semDist = E.montarTrechoCaboManobra({}, pisos, 'MR');
+  const semPK = E.montarTrechoCaboManobra({}, pisos, 'MRL');
+  assert.strictEqual(semPK.comprimento_final_mm, null);
+  assert.strictEqual(semPK.confianca, 'pendente_engenharia');
+  assert.match(semPK.formula, /P não informada/);
+  assert.match(E.montarTrechoCaboManobra({ poco_mm: 1500 }, pisos, 'MRL').formula, /K não informada/);
+  // padrão comercial só vale se marcado
+  const estimado = E.montarTrechoCaboManobra({ poco_origem: 'estimado', ultima_altura_origem: 'estimado' }, pisos, 'MRL');
+  assert.strictEqual(estimado.comprimento_final_mm, 45000);   // 27 + 4,5 + 4,82 + 6,5 + 2 = 44,82 → 45
+  const semDist = E.montarTrechoCaboManobra({ poco_mm: 1500, ultima_altura_mm: 4500 }, pisos, 'MR');
   assert.strictEqual(semDist.comprimento_final_mm, null);
   assert.strictEqual(semDist.confianca, 'pendente_engenharia');
-  const mr = E.montarTrechoCaboManobra({ distancia_quadro_entrada_caixa_mm: 8000 }, pisos, 'MR');
-  assert.strictEqual(mr.comprimento_final_mm, 47000 + 8000);
-  assert.strictEqual(E.montarTrechoCaboManobra({}, [], 'MRL').comprimento_final_mm, null);
+  const mr = E.montarTrechoCaboManobra({ poco_mm: 1500, ultima_altura_mm: 4500, distancia_quadro_entrada_caixa_mm: 8000 }, pisos, 'MR');
+  assert.strictEqual(mr.comprimento_final_mm, 51000);          // 27 + 4,5 + 4,82 + 6,5 + 8 = 50,82 → 51
+  assert.strictEqual(E.montarTrechoCaboManobra({ poco_mm: 1500, ultima_altura_mm: 4500 }, [], 'MRL').comprimento_final_mm, null);
+  // poço raso (≤ 15 cm) não vira número
+  assert.strictEqual(E.montarTrechoCaboManobra({ poco_mm: 100, ultima_altura_mm: 4500 }, pisos, 'MRL').comprimento_final_mm, null);
 });

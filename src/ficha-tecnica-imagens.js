@@ -100,6 +100,25 @@
     [..._urlCache.keys()].forEach((k) => { if (k.startsWith(path + '::')) _urlCache.delete(k); });
   }
 
+  /* ---------- Copia um arquivo da ficha para a pasta de OUTRA ficha ----------
+     Usado ao salvar uma cópia de ficha: a cópia ganha o próprio arquivo, então
+     limpar/trocar a foto dela nunca apaga a da original. Lança erro se falhar. */
+  async function copiarPara(path, fichaId) {
+    if (!path || !fichaId) throw new Error('caminho ou ficha inválidos');
+    const c = sb(); if (!c) throw new Error('Supabase indisponível');
+    const nome = String(path).split('/').pop();
+    const novo = `fichas/${fichaId}/${nome}`;
+    if (novo === path) return path;
+    await c.storage.from(BUCKET).remove([novo]).catch(() => {});
+    const { error } = await c.storage.from(BUCKET).copy(path, novo);
+    if (error) throw error;
+    return novo;
+  }
+  /* true se o caminho pertence à pasta desta ficha */
+  function ehDaFicha(path, fichaId) {
+    return typeof path === 'string' && !!fichaId && path.startsWith(`fichas/${fichaId}/`);
+  }
+
   /* ---------- Heuristica: é path do Storage ou dataURL legado? ---------- */
   function isStoragePath(v) {
     return typeof v === 'string' && v.startsWith('fichas/');
@@ -119,7 +138,7 @@
   window.FTImg = {
     BUCKET, slugify,
     compress, upload, compressAndUpload,
-    signedURL, remove,
+    signedURL, remove, copiarPara, ehDaFicha,
     isStoragePath, isDataURL, resolveURL,
   };
 }());

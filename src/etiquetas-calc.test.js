@@ -224,11 +224,21 @@ test('fase 4: palete, ID-TAG, OP do quadro e avaria — dados e QR', () => {
   assert.equal(E.dadosOpQuadro({ numero: '1', serie: 'S123' }).serie_txt, 'Nº de série: S123');
   const av = E.dadosAvaria({ codigo: 'VPEL-156', descricao: 'Rolete', quantidade: 2, unidade: 'UN', motivo: 'amassado', responsavel: 'Tiago', data: '18/10/2026' });
   assert.equal(av.qr, 'VPEL-156'); assert.equal(av.quem_txt, 'Por: Tiago · 18/10/2026');
-  for (const id of ['PALETE_100x50', 'IDTAG_100x50', 'OP_QUADRO_100x50', 'AVARIA_100x50']) {
+  for (const id of ['PALETE_100x50', 'IDTAG_100x50', 'OP_QUADRO_100x50', 'OP_QUADRO_100x100', 'AVARIA_100x50']) {
     const m = E.modeloPorId(id); assert.ok(m, id);
-    const dados = { PALETE_100x50: pal, IDTAG_100x50: tag, OP_QUADRO_100x50: op, AVARIA_100x50: av }[id];
+    const dados = { PALETE_100x50: pal, IDTAG_100x50: tag, OP_QUADRO_100x50: op, OP_QUADRO_100x100: op, AVARIA_100x50: av }[id];
     const z = E.renderZPL(m, dados, { dpi: 203 }); assert.match(z.zpl, /\^XA[\s\S]*\^XZ/);
   }
+});
+
+test('OP do quadro 100x100: é o padrão do tipo e a OP longa não é cortada', () => {
+  const m = E.modeloPorId('OP_QUADRO_100x100');
+  assert.equal(m.largura_mm, 100); assert.equal(m.altura_mm, 100);
+  assert.ok(E.modelosDoTipo('OP_QUADRO').some((x) => x.id === 'OP_QUADRO_100x50'), 'o 100x50 continua disponível');
+  const dados = E.dadosOpQuadro({ numero: 'OP-0021-Q1', produto: 'VPEL-704a', cliente: 'LEANDRO MOTTA', serie: '30696', data: '03/11/2026' });
+  const z = E.renderZPL(m, dados, { dpi: 203 });
+  assert.match(z.zpl, /\^PW800/); assert.match(z.zpl, /\^LL800/); assert.match(z.zpl, /OP:OP-0021-Q1/);
+  assert.deepEqual(z.avisos, []);
 });
 
 test('fase 3: modelos da empresa — registro, validação e campos protegidos', () => {

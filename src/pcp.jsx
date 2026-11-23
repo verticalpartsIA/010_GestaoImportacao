@@ -1162,44 +1162,9 @@ function PCPFilaProducao({ ctx, abrirOp }) {
   const [busy, setBusy] = React.useState(false);
   const [preparo, setPreparo] = React.useState(null);
   const [abertos, setAbertos] = React.useState({});
-  const [enviados, setEnviados] = React.useState({});   // 'codigo_pedido|codigo_item' → nº de quadros já enviados a Pedidos de Quadro
-  const [enviando, setEnviando] = React.useState(null);
-  const [codigosQuadro, setCodigosQuadro] = React.useState(new Set());   // produtos que são quadro de comando (pcp_quadro_variante) — só estes podem ir para Pedidos de Quadro
   const alternar = (cod) => setAbertos(a => ({ ...a, [cod]: !a[cod] }));
 
-  // Envia UM item do pedido do Omie (ex.: o quadro VPEL-702b) para a aba "Pedidos de Quadro": cria o pedido de quadro (1 por unidade)
-  // já com o escopo "Quadro de comando = fornecer" e o vínculo com o pedido do Omie em configuracao.origem_omie.
-  const enviarParaQuadro = async (p, x) => {
-    if (!codigosQuadro.has(x.codigo)) { window.toast?.('Só quadro de comando pode ir para Pedidos de Quadro.'); return; }
-    const qtd = Math.max(1, Math.round(Number(x.quantidade) || 1));
-    const ja = enviados[`${p.codigo_pedido}|${x.codigo}`] || 0;
-    if (ja >= qtd) { window.toast?.('Este item já foi enviado para Pedidos de Quadro.'); return; }
-    const falta = qtd - ja;
-    if (!window.confirm(`Enviar ${x.codigo} do pedido ${p.numero_pedido} para Pedidos de Quadro?\n\nSerá criado ${falta} pedido(s) de quadro (1 por unidade). Depois, em "Pedidos de Quadro", complete o formulário e use "Gerar OPs".`)) return;
-    setEnviando(`${p.codigo_pedido}|${x.codigo}`);
-    try {
-      const quem = pcpUsuario();
-      const rows = Array.from({ length: falta }, (_, i) => ({
-        origem_fabricacao: 'interno', criado_por: quem,
-        escopo_fornecimento: { quadro_comando: { decisao: 'fornecer' } },
-        configuracao: { origem_omie: { codigo_pedido: p.codigo_pedido, numero_pedido: p.numero_pedido, item_codigo: x.codigo, item_descricao: x.descricao || null, cliente_nome: p.cliente_nome || null, unidade: ja + i + 1, total: qtd, prazo: p.data_previsao || null } },
-      }));
-      const r = await sb.from('quadros_comando').insert(rows).select('id, numero_pedido');
-      if (r.error) throw new Error(r.error.message);
-      window.VPLog?.registrar?.({ modulo: 'PCP', acao: 'Enviou item do pedido do Omie para Pedidos de Quadro', alvo: `pedido ${p.numero_pedido} · ${x.codigo} × ${falta}` });
-      window.toast?.(`${x.codigo} enviado: pedido(s) de quadro ${(r.data || []).map(q => q.numero_pedido).join(', ')}. Veja na aba "Pedidos de Quadro".`);
-      await carregar();
-    } catch (e) { window.toast?.('Não foi possível enviar: ' + e.message); }
-    setEnviando(null);
-  };
-
   const carregar = React.useCallback(async () => {
-    sb.from('pcp_quadro_variante').select('codigo_produto').then(({ data }) => setCodigosQuadro(new Set((data || []).map(v => v.codigo_produto).filter(Boolean))));
-    sb.from('quadros_comando').select('configuracao').is('excluido_em', null).order('created_at', { ascending: false }).limit(1000).then(({ data }) => {
-      const e = {};
-      (data || []).forEach(q => { const o = q.configuracao && q.configuracao.origem_omie; if (o) { const k = `${o.codigo_pedido}|${o.item_codigo}`; e[k] = (e[k] || 0) + 1; } });
-      setEnviados(e);
-    });
     const { data: p } = await sb.from('pcp_pedidos').select('*').eq('etapa', '20').eq('cancelado', false).eq('so_separacao', false).order('data_previsao', { ascending: true }).limit(200);
     const ids = (p || []).map(x => x.codigo_pedido);
     const [i, o] = await Promise.all([
@@ -1306,7 +1271,7 @@ function PCPFilaProducao({ ctx, abrirOp }) {
                   <tr>
                     <td colSpan={8} style={{ background: 'var(--bg2, #fafafa)', padding: '8px 16px' }}>
                       <table className="t pcp-grid" style={{ width: '100%' }}>
-                        <thead><tr><th>#</th><th>Código</th><th>Descrição</th><th className="text-right">Qtd.</th><th>Un.</th><th>Tipo</th><th>Pedidos de Quadro</th></tr></thead>
+                        <thead><tr><th>#</th><th>Código</th><th>Descrição</th><th className="text-right">Qtd.</th><th>Un.</th><th>Tipo</th></tr></thead>
                         <tbody>
                           {its.map((x, i) => (
                             <tr key={x.seq ?? i}>
@@ -1316,15 +1281,9 @@ function PCPFilaProducao({ ctx, abrirOp }) {
                               <td className="text-right">{pcpFmt(x.quantidade)}</td>
                               <td>{x.unidade || '—'}</td>
                               <td>{x.item_pcp ? <b style={{ fontWeight: 500 }}>Item do PCP</b> : <span style={{ color: 'var(--fg3)' }}>Outro item</span>}</td>
-                              <td>{x.item_pcp && p.origem !== 'ordem_servico' && codigosQuadro.has(x.codigo) ? (() => {
-                                const k = `${p.codigo_pedido}|${x.codigo}`, qtd = Math.max(1, Math.round(Number(x.quantidade) || 1)), ja = enviados[k] || 0;
-                                return ja >= qtd
-                                  ? <span className="pcp-tag" title="Já criado na aba Pedidos de Quadro">Enviado{qtd > 1 ? ` (${ja}/${qtd})` : ''}</span>
-                                  : (podeCriar ? <button className="btn btn--sm" disabled={enviando === k} onClick={() => enviarParaQuadro(p, x)} title="Cria o pedido de quadro deste item na aba Pedidos de Quadro">{enviando === k ? 'Enviando…' : ja ? `Enviar o restante (${qtd - ja})` : 'Enviar para Pedidos de Quadro'}</button> : '—');
-                              })() : '—'}</td>
                             </tr>
                           ))}
-                          {its.length === 0 && <tr><td colSpan={7} style={{ color: 'var(--fg3)' }}>Este pedido não tem itens gravados.</td></tr>}
+                          {its.length === 0 && <tr><td colSpan={6} style={{ color: 'var(--fg3)' }}>Este pedido não tem itens gravados.</td></tr>}
                         </tbody>
                       </table>
                     </td>
@@ -1338,13 +1297,14 @@ function PCPFilaProducao({ ctx, abrirOp }) {
         </table>
       </div>
       <div style={{ marginTop: 8, fontSize: 12, color: 'var(--fg3)' }}>
-        Aqui chega o pedido para disparar a fabricação: pedidos de venda e Ordens de Serviço (clientes de licitação, Capex/Opex) do Omie na etapa <b style={{ fontWeight: 500 }}>20 — Separar Estoque / Produção</b> que têm quadro de comando, corrimão ou cabo. Pedidos que já viraram OP mostram o número da OP-mãe. Para detalhar um quadro com escopo, geometria e botoeiras use a aba “Pedidos de Quadro”.
+        Aqui chega o pedido para disparar a fabricação: pedidos de venda e Ordens de Serviço (clientes de licitação, Capex/Opex) do Omie na etapa <b style={{ fontWeight: 500 }}>20 — Separar Estoque / Produção</b> que têm quadro de comando, corrimão ou cabo. Pedidos que já viraram OP mostram o número da OP-mãe.
       </div>
     </div>
   );
 }
 
 /* ---------------- Pedidos de Quadro (formulário → OP-mãe + frentes) ---------------- */
+/* DESLIGADO em 04/11/2026 (a aba saiu do PCP): tudo de quadro de comando passou para o módulo Quadros de Comando. Código mantido por ora, sem uso. */
 const PCP_ESCOPO_NUM = (v) => { const n = parseInt(String(v ?? '').replace(/\D/g, ''), 10); return Number.isFinite(n) && n > 0 ? n : null; };
 
 function pcpVarianteDe(maquina) {
@@ -1624,7 +1584,7 @@ function PCPPedidosQuadro({ ctx, abrirOp }) {
 function PCPPage({ setRoute, setSubsel }) {
   const [dados, setDados] = React.useState(null);
   const [erro, setErro] = React.useState(null);
-  const [aba, setAba] = window.useRouteTab('pcp', 'ordens', ['ordens', 'fila', 'pedidos', 'planejamento', 'controle'], false, true);
+  const [aba, setAba] = window.useRouteTab('pcp', 'ordens', ['ordens', 'fila', 'planejamento', 'controle'], false, true);
   // OP aberta na URL: /logistica/pcp/ordens/{id} (rota-pcp.js). Abrir a partir de OUTRA aba troca a aba e grava o id com
   // replace, para o Voltar do navegador voltar à aba de origem (e não a uma URL intermediária).
   const [opId, setOpId] = window.useRotaItem('pcp', 'ordens');
@@ -1680,7 +1640,6 @@ function PCPPage({ setRoute, setSubsel }) {
       <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <button className={'btn btn--sm' + (aba === 'ordens' ? ' btn--primary' : '')} onClick={() => setAba('ordens')}>Ordens de Produção</button>
         <button className={'btn btn--sm' + (aba === 'fila' ? ' btn--primary' : '')} onClick={() => setAba('fila')}>Pedidos para Produzir</button>
-        <button className={'btn btn--sm' + (aba === 'pedidos' ? ' btn--primary' : '')} onClick={() => setAba('pedidos')}>Pedidos de Quadro</button>
         <button className={'btn btn--sm' + (aba === 'planejamento' ? ' btn--primary' : '')} onClick={() => setAba('planejamento')}>Planejamento</button>
         <button className={'btn btn--sm' + (aba === 'controle' ? ' btn--primary' : '')} onClick={() => setAba('controle')}>Controle</button>
       </div>
@@ -1688,7 +1647,6 @@ function PCPPage({ setRoute, setSubsel }) {
       {!erro && !dados && <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>}
       {ctx && aba === 'ordens' && <PCPOrdens ctx={ctx}/>}
       {ctx && aba === 'fila' && <PCPFilaProducao ctx={ctx} abrirOp={abrirOp}/>}
-      {ctx && aba === 'pedidos' && <PCPPedidosQuadro ctx={ctx} abrirOp={abrirOp}/>}
       {ctx && aba === 'planejamento' && <PCPPlanejamento ctx={ctx}/>}
       {ctx && aba === 'controle' && <PCPControle ctx={ctx}/>}
     </div>

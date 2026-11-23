@@ -213,9 +213,33 @@
   /* ---------- Containers ---------- */
   async function listarContainers() {
     const c = sb(); if (!c) return [];
-    const { data, error } = await c.from('custos_containers').select('*').order('tipo');
+    /* Ordem por ID-TAG (06/11/2026): o mesmo tipo pode repetir em portos diferentes, então
+       `tipo` não identifica mais a linha; o ID-TAG (CONT-001…) é estável e único. */
+    const { data, error } = await c.from('custos_containers').select('*').order('id_tag');
     if (error) { console.warn('[CadastroCustosStore] listarContainers falhou', error); return []; }
     return data || [];
+  }
+
+  /* Quantas precificações já citam o ID-TAG (função do banco `container_id_tag_em_uso`).
+     Container usado não pode ser excluído. Devolve null se a consulta falhar: a tela segue
+     e o gatilho do banco barra a exclusão de qualquer jeito (nunca é só a tela). */
+  async function containerEmUso(idTag) {
+    const c = sb(); if (!c || !idTag) return null;
+    const { data, error } = await c.rpc('container_id_tag_em_uso', { p_id_tag: idTag });
+    if (error) { console.warn('[CadastroCustosStore] containerEmUso falhou', error); return null; }
+    return Number(data) || 0;
+  }
+
+  /* AFRMM de um container (13/10/2026; taxa de porto em 06/11/2026): 8% de Preço + Capatazia
+     + GRI + Taxa de porto. Taxa vazia não entra na soma (conta zero). Só exibição. */
+  const AFRMM_PCT = 0.08;
+  function afrmmDoContainer(row) {
+    const n = (v) => Number(v) || 0;
+    const r = row || {};
+    return {
+      usd: AFRMM_PCT * (n(r.preco_usd) + n(r.capatazia_usd) + n(r.gri_usd) + n(r.taxa_porto_usd)),
+      rs: AFRMM_PCT * (n(r.preco_rs) + n(r.capatazia_rs) + n(r.gri_rs) + n(r.taxa_porto_rs)),
+    };
   }
 
   async function salvarContainer(row) {
@@ -386,7 +410,7 @@
     listarDifalEstados, atualizarDifalEstado,
     listarCustosElevador, salvarCustoElevador, atualizarCampoElevador, removerCustoElevador, buscarCustoElevador, estimarValorElevador,
     listarCustosEscadaEsteira, salvarCustoEscadaEsteira, buscarCustoEscadaEsteira,
-    listarContainers, salvarContainer, removerContainer,
+    listarContainers, salvarContainer, removerContainer, containerEmUso, afrmmDoContainer,
     listarFrete, atualizarCampoFrete, listarFreteObservacoes, atualizarFreteObservacao, sugerirFrete, normalizarTexto,
   };
 }());

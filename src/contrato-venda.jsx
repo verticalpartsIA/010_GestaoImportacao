@@ -56,6 +56,8 @@ function CVSelect({ label, value, onChange, options, width }) {
       <select className="cv-input cv-select" value={value || ''} onChange={(e) => onChange(e.target.value)}>
         <option value="">Selecione…</option>
         {options.map(o => <option key={o.value || o} value={o.value || o}>{o.label || o}</option>)}
+        {/* Valor herdado da Proposta que não está na lista (ex.: 4 paradas) continua visível em vez de o campo ficar vazio. */}
+        {value && !options.some(o => String(o.value || o) === String(value)) && <option value={value}>{value}</option>}
       </select>
     </div>
   );
@@ -142,6 +144,24 @@ function CVStepCadastro({ form, setComp, errors, onSelecionarProposta }) {
         <small>CNPJ 15.822.325/0001-27 · Guarulhos/SP · Rep. Diego Yutaka Maeno</small>
       </div>
       <div className="cv-grid">
+        <CVSelect label="Tipo de pessoa do comprador" value={form.comprador.tipoPessoa || 'PJ'} onChange={(v) => setComp(v === 'PF' ? { tipoPessoa: 'PF', rep: form.comprador.razao || '' } : { tipoPessoa: 'PJ' })} options={[{ value: 'PJ', label: 'Pessoa Jurídica (CNPJ)' }, { value: 'PF', label: 'Pessoa Física (CPF)' }]}/>
+      </div>
+      {form.comprador.tipoPessoa === 'PF' ? (<>
+        <div className="cv-grid">
+          <CVField label="Nome completo" required width="full" value={form.comprador.razao} onChange={(v) => setComp({ razao: v, rep: v })} placeholder="Nome completo do comprador" error={errors.razao}/>
+        </div>
+        <div className="cv-grid">
+          <CVField label="CPF" required mask="maskCPF" mono value={form.comprador.repCpf} onChange={(v) => setComp({ repCpf: v })} placeholder="000.000.000-00" error={errors.repCpf}/>
+          <CVField label="Telefone" mask="maskPhone" mono value={form.comprador.tel} onChange={(v) => setComp({ tel: v })} placeholder="(11) 90000-0000"/>
+        </div>
+        <div className="cv-grid">
+          <CVField label="Endereço" required width="full" value={form.comprador.endereco} onChange={(v) => setComp({ endereco: v })} placeholder="Rua, nº, bairro, cidade/estado, CEP" hint="Vem do Cadastro de Clientes; no contrato é o endereço de residência e domicílio do comprador." error={errors.endereco}/>
+        </div>
+        <div className="cv-grid">
+          <CVField label="E-mail para assinatura" width="full" value={form.comprador.email} onChange={(v) => setComp({ email: v })} placeholder="contato@cliente.com.br" hint="Usado no envio do link de assinatura e como contato de comunicação (cláusula 10.1)."/>
+        </div>
+      </>) : (<>
+      <div className="cv-grid">
         <CVField label="Razão social" required width="full" value={form.comprador.razao} onChange={(v) => setComp({ razao: v })} placeholder="ex: Shopping Center Aricanduva Ltda." error={errors.razao}/>
       </div>
       <div className="cv-grid">
@@ -175,6 +195,7 @@ function CVStepCadastro({ form, setComp, errors, onSelecionarProposta }) {
           <CVField label="Endereço residencial do representante" required width="full" value={form.comprador.repEnderecoResidencial} onChange={(v) => setComp({ repEnderecoResidencial: v })} placeholder="Rua, nº, bairro, cidade/estado, CEP" hint="Onde o representante reside e é domiciliado — exigido pelo preâmbulo do contrato." error={errors.repEnderecoResidencial}/>
         </div>
       </div>
+      </>)}
     </div>
   );
 }
@@ -254,13 +275,13 @@ function CVStepPreco({ form, set, errors }) {
         <CVMoneyField label="Valor total do contrato" required width="wide" value={form.valor} onChange={(v) => set({ valor: v })} error={errors.valor}/>
       </div>
       <div className="cv-grid">
-        <CVField label="Sinal / entrada (%)" type="number" suffix="%" value={form.sinalPct} onChange={(v) => set({ sinalPct: Math.max(0, Math.min(100, parseInt(v) || 0)) })}/>
+        <CVField label="Sinal / entrada (%)" type="number" suffix="%" value={Math.round(Number(form.sinalPct) * 100) / 100} onChange={(v) => set({ sinalPct: Math.max(0, Math.min(100, Math.round((parseFloat(String(v).replace(',', '.')) || 0) * 100) / 100)) })}/>
         <CVSelect label="Nº de parcelas do saldo" value={String(form.parcelas)} onChange={(v) => set({ parcelas: parseInt(v) })} options={['1','2','3','4','5','6','8','10','12'].map(n => ({ value: n, label: n + '×' }))}/>
       </div>
       {valor > 0 && (
         <div className="cv-pay-summary">
           <div className="cv-mini-label">Resumo do pagamento</div>
-          <div className="cv-pay-row"><span>Sinal ({form.sinalPct}%)</span><b className="cv-mono">{window.CV.brl(valor * form.sinalPct / 100)}</b></div>
+          <div className="cv-pay-row"><span>Sinal ({String(Math.round(Number(form.sinalPct) * 100) / 100).replace('.', ',')}%)</span><b className="cv-mono">{window.CV.brl(valor * form.sinalPct / 100)}</b></div>
           {(() => {
             const det = Array.isArray(form.parcelasDetalhe) ? form.parcelasDetalhe.map(Number) : null;
             const sinalV = valor * form.sinalPct / 100;
@@ -574,9 +595,54 @@ const CV_STEPS = [
   { id: 'revisao',   label: 'Revisão',   sub: 'Anexos & envio' },
 ];
 
+/* Monta o `comprador` do contrato a partir de um cliente no formato da Proposta (nome, cnpj, cpf, tipo_pessoa,
+   endereço…). Campo vazio mantém o que já estava (`prev`). PF: o nome também é o "representante" e o CPF é o do
+   próprio comprador; PJ: CNPJ + responsável, como sempre. */
+function cvCompradorDeCliente(cli, prev) {
+  const doc = window.CV.documentoDoCliente(cli);
+  const pf = doc.tipoPessoa === 'PF';
+  return {
+    ...prev,
+    tipoPessoa: doc.tipoPessoa,
+    razao: cli.nome || prev.razao,
+    cnpj: pf ? '' : ((doc.cnpj && window.CV.maskCNPJ(doc.cnpj)) || prev.cnpj),
+    repCpf: window.CV.maskCPF(doc.cpf) || prev.repCpf,
+    rep: pf ? (cli.nome || prev.razao || '') : (cli.responsavel || prev.rep),
+    repCargo: cli.cargo || cli.responsavel_cargo || prev.repCargo,
+    email: cli.email || prev.email,
+    tel: cli.telefone || prev.tel,
+    endereco: window.CV.montarEndereco(cli) || prev.endereco,
+  };
+}
+
+/* Linha do Cadastro de Clientes ligada à proposta (propostas.cliente_id). Sem vínculo = null (vale o texto da proposta).
+   Falha ao ler = avisa e segue com o texto da proposta (nunca trava o contrato). */
+async function cvCadastroDaProposta(p) {
+  try {
+    const sb = (window.__VP_SB || {}).sb;
+    let id = p && p.cliente_id;
+    if (!id && sb && p && p.id) {
+      const { data, error } = await sb.from('propostas').select('cliente_id').eq('id', p.id).maybeSingle();
+      if (error) throw error;
+      id = data && data.cliente_id;
+    }
+    if (!id || !window.CadastrosClientesStore) return null;
+    return await window.CadastrosClientesStore.obter(id);
+  } catch (e) {
+    console.warn('[contrato-venda] não leu o cadastro do cliente da proposta', e);
+    window.toast?.('Não foi possível ler o Cadastro de Clientes; os dados do comprador vieram do texto da proposta. Confira antes de seguir.', 'warning');
+    return null;
+  }
+}
+
 function validateStep(idx, s) {
   const e = {};
-  if (idx === 0) {
+  if (idx === 0 && s.comprador.tipoPessoa === 'PF') {
+    /* Pessoa física: só nome, CPF e endereço são obrigatórios (decisão de 17/11/2026). */
+    if (!s.comprador.razao || !s.comprador.razao.trim()) e.razao = 'Informe o nome completo.';
+    if (!window.CV.isCPFValid(s.comprador.repCpf)) e.repCpf = 'CPF inválido (confira os dígitos).';
+    if (!s.comprador.endereco || !String(s.comprador.endereco).trim()) e.endereco = 'Informe o endereço.';
+  } else if (idx === 0) {
     if (!s.comprador.razao || !s.comprador.razao.trim()) e.razao = 'Informe a razão social.';
     if (window.CV.onlyDigits(s.comprador.cnpj).length !== 14) e.cnpj = 'CNPJ incompleto (14 dígitos).';
     if (!s.comprador.rep || !s.comprador.rep.trim()) e.rep = 'Informe o representante.';
@@ -653,7 +719,7 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
     /* Equipamento: antes NADA da especificação era herdado, então o objeto
        do contrato ficava no default ("1× Elevador Social, 10 paradas") em vez
        do equipamento real da proposta (achado E2E C). */
-    const paradasInf = (String(spec.andaresParadasPortas || '').match(/\d+/) || [])[0] || '';
+    const paradasInf = window.CV.paradasDaEspecificacao(spec); // "04/04/04" → "4"
     const modeloInf = spec.modelo || valores.equipamento || '';
     const cargaInf = (String(spec.capacidade || '').match(/(\d+)\s*kg/i) || [])[1] || '';
     const TIPO_MAP = { passageiros: 'Social', passageiro: 'Social', social: 'Social', panoramico: 'Panorâmico', 'panorâmico': 'Panorâmico', carga: 'Carga', montacargas: 'Montacargas' };
@@ -669,7 +735,6 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
     const descPropostaInf = [
       (spec.carac && !new RegExp('\\b' + String(spec.carac).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(String(spec.capacidade || ''))) ? spec.carac : '',
       spec.capacidade,
-      spec.andaresParadasPortas,
       spec.vel && `velocidade ${String(spec.vel).replace('.', ',')} m/s`,
       spec.dimensoesCaixa && `caixa ${spec.dimensoesCaixa}`,
     ].map((x) => String(x || '').trim()).filter(Boolean).join(', ');
@@ -679,7 +744,6 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
     /* Endereço completo (bairro, cidade/UF e CEP também) — antes só rua +
        número herdavam, e o CEP da obra (que a cláusula 1 cita como base de
        reajuste) nunca chegava ao contrato. */
-    const endCli = window.CV.montarEndereco(cli);
     const endObra = window.CV.montarEndereco(obra);
 
     /* Sinal/Parcelas: a Proposta já calcula isso (Sinal de 40% + N parcelas
@@ -691,28 +755,11 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
        só as parcelas do saldo (sem a linha do sinal) — por isso o -1.
        O percentual do sinal na Proposta é sempre fixo em 40% (hardcoded em
        gerarParcelasAutomaticas), não configurável por lá. */
-    let sinalPctInf = null;
-    let parcelasInf = null;
-    /* Cronograma real da Proposta (o vendedor pode ter editado, ex.: 20/15/15/10
-       em vez de parcelas iguais): valores em R$ das linhas depois do sinal. */
-    let parcelasDetalheInf = null;
-    const numBR = (v) => {
-      const s = String(v == null ? '' : v).trim();
-      if (!s) return NaN;
-      return Number(s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s);
-    };
-    if (valores.formaTipo === 'vista') {
-      sinalPctInf = 100;
-      parcelasInf = 0;
-    } else if (valores.formaTipo === 'parcelado' && Number(valores.qtdParcelas) > 0) {
-      sinalPctInf = 40;
-      parcelasInf = Math.max(Number(valores.qtdParcelas) - 1, 0);
-      const linhas = Array.isArray(valores.parcelas) ? valores.parcelas : [];
-      if (linhas.length === Number(valores.qtdParcelas) && /sinal/i.test(String(linhas[0] && linhas[0].desc))) {
-        const v = linhas.slice(1).map((l) => numBR(l.valor));
-        if (v.length && v.every((x) => Number.isFinite(x) && x > 0)) parcelasDetalheInf = v;
-      }
-    }
+    /* Sinal e parcelas vêm do cronograma REAL da Proposta (valor da 1ª linha = sinal), não de 40% fixo. */
+    const cron = window.CV.cronogramaDaProposta(valores, totalProposta);
+    const sinalPctInf = cron ? cron.sinalPct : null;
+    const parcelasInf = cron ? cron.parcelas : null;
+    const parcelasDetalheInf = cron ? cron.parcelasDetalhe : null;
 
     setForm(prev => ({
       ...prev,
@@ -720,16 +767,7 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
       sinalPct: sinalPctInf != null ? sinalPctInf : prev.sinalPct,
       parcelas: parcelasInf != null ? parcelasInf : prev.parcelas,
       parcelasDetalhe: parcelasDetalheInf,
-      comprador: {
-        ...prev.comprador,
-        razao: cli.nome || prev.comprador.razao,
-        cnpj: (cli.cnpj && window.CV.maskCNPJ(cli.cnpj)) || prev.comprador.cnpj,
-        rep: cli.responsavel || prev.comprador.rep,
-        repCargo: cli.cargo || cli.responsavel_cargo || prev.comprador.repCargo,
-        email: cli.email || prev.comprador.email,
-        tel: cli.telefone || prev.comprador.tel,
-        endereco: endCli || prev.comprador.endereco,
-      },
+      comprador: cvCompradorDeCliente(cli, prev.comprador),
       localObra: endObra || prev.localObra,
       obraCidade: (obra.cidade && String(obra.cidade).trim()) || prev.obraCidade || '',
       obraUf: (obra.uf && String(obra.uf).trim()) || prev.obraUf || '',
@@ -746,6 +784,13 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
       descProposta: descPropostaInf || prev.descProposta,
       equipamentosIds: idsAtivosInf.length ? idsAtivosInf : prev.equipamentosIds,
     }));
+
+    /* Cadastro de Clientes primeiro (decisão do Gelson, 17/11/2026): se a proposta tem cliente_id, nome, documento,
+       endereço, e-mail e telefone vêm do cadastro; o texto da proposta (acima) fica só como reserva. */
+    cvCadastroDaProposta(p).then((cad) => {
+      if (!cad) return;
+      setForm((prev) => ({ ...prev, comprador: cvCompradorDeCliente(window.CV.clienteComCadastro(cli, cad), prev.comprador) }));
+    });
   };
 
   /* Aberto pela fila "aguardando contrato" do Painel: já entra com a proposta
@@ -1353,7 +1398,7 @@ async function cvMontarAssinaturas(rec) {
     const au = rec.audit || {};
     const mapa = (papel, nome, em, a) => ({ papel, nome, em, dispositivo: a.signDevice, ip: a.signIp, hash: a.hash, imagem: /^data:image\//.test(a.signatureData || '') ? a.signatureData : null });
     const lista = [];
-    if (au.signedAt || rec.signed_at) lista.push(mapa('Representante legal do Comprador', au.signerName || '', au.signedAt || rec.signed_at, au));
+    if (au.signedAt || rec.signed_at) lista.push(mapa(window.CV.papelAssinaturaComprador(rec.form_state), au.signerName || '', au.signedAt || rec.signed_at, au));
     const [extras, genericos] = await Promise.all([
       window.CVSignatarioStore ? window.CVSignatarioStore.listarPorContrato(rec.id) : [],
       window.DocumentoSignatariosStore ? window.DocumentoSignatariosStore.listarPorDocumento('contrato_venda', rec.id) : [],
@@ -1497,8 +1542,11 @@ function CVDashboard({ onCriarDeProposta, onContinuarRascunho }) {
 
   _cvUE(() => {
     window.CVStore.sweepExpired().then(refresh);
-    const t = setInterval(refresh, 5000);
-    return () => clearInterval(t);
+    /* 5 s -> 30 s e pausa com a aba oculta; ao voltar para a aba atualiza na hora. */
+    const t = setInterval(() => { if (!document.hidden) refresh(); }, 30000);
+    const vis = () => { if (!document.hidden) refresh(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
   }, []);
 
   const drawerRec = drawerId ? contracts.find(c => c.id === drawerId) : null;

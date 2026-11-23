@@ -69,6 +69,9 @@
      de uma precificação já existente/recarregada). */
   function enriquecerContainersComCusto(containers, custosContainers) {
     return (containers || []).map((ct) => {
+      // Linha com ID-TAG (06/11/2026): os valores vieram do cadastro quando o ID-TAG foi escolhido
+      // (aplicarIdTagNaLinha) e não são reaplicados por tipo ao abrir a tela.
+      if (ct && ct.id_tag) return ct;
       const custo = buscarContainerCustoPorIso(ct.tipo_tamanho, custosContainers);
       if (!custo) return ct;
       const out = { ...ct };
@@ -89,15 +92,51 @@
   function divergenciasContainerComCadastro(containers, custosContainers) {
     const out = [];
     (containers || []).forEach((ct, i) => {
-      const custo = buscarContainerCustoPorIso(ct.tipo_tamanho, custosContainers);
+      const custo = ct && ct.id_tag
+        ? (custosContainers || []).find((c) => c.id_tag === ct.id_tag) || null
+        : buscarContainerCustoPorIso(ct.tipo_tamanho, custosContainers);
       if (!custo) return;
-      [['preco_rs', 'preço do container'], ['capatazia_rs', 'capatazia'], ['gri_rs', 'GRI']].forEach(([campo, rotulo]) => {
+      [['preco_rs', 'preço do container'], ['capatazia_rs', 'capatazia'], ['gri_rs', 'GRI'], ['taxa_porto_rs', 'taxa de porto']].forEach(([campo, rotulo]) => {
         const atual = Number(ct[campo]) || 0;
         const cadastro = Number(custo[campo]) || 0;
         if (atual > 0 && cadastro > 0 && Math.abs(atual - cadastro) > 0.01) out.push({ indice: i, campo, rotulo, atual, cadastro });
       });
     });
     return out;
+  }
+
+  /* ID-TAG do container (06/11/2026): na Precificação o Financeiro cita o ID-TAG (CONT-001…) + a
+     quantidade e os valores do cadastro de Containers vêm sozinhos. Só precificações NOVAS (ou linhas
+     em que alguém escolhe o ID-TAG) herdam; precificação salva guarda o snapshot. */
+
+  // Tipo ISO a partir do nome do cadastro ("40HC (High Cube)" → "40'HC"). Sem equivalente → 'Outro'
+  // (o Embarque lê só os códigos ISO; ver o comentário do mapa acima).
+  function isoDoTipoCustos(tipoCustos) {
+    const par = Object.entries(CONTAINER_ISO_PARA_CUSTOS).find(([, nome]) => nome === tipoCustos);
+    return par ? par[0] : 'Outro';
+  }
+
+  // Aplica à linha da Precificação os valores da linha do cadastro escolhida pelo ID-TAG. Mantém a
+  // quantidade. Devolve uma linha nova (não muta). Valor ausente no cadastro vira 0.
+  function aplicarIdTagNaLinha(linha, custo) {
+    const n = (v) => Number(v) || 0;
+    return {
+      ...linha,
+      id_tag: custo.id_tag,
+      porto: custo.porto || '',
+      tipo_tamanho: isoDoTipoCustos(custo.tipo),
+      preco_rs: n(custo.preco_rs),
+      capatazia_rs: n(custo.capatazia_rs),
+      gri_rs: n(custo.gri_rs),
+      taxa_porto_rs: n(custo.taxa_porto_rs),
+    };
+  }
+
+  // A linha tem valor digitado/herdado que DIFERE do que o ID-TAG escolhido traria? (a tela pede
+  // confirmação antes de substituir.) Valor zero/vazio da linha não conta.
+  function linhaTemValorDiferenteDoIdTag(linha, custo) {
+    return ['preco_rs', 'capatazia_rs', 'gri_rs', 'taxa_porto_rs']
+      .some((k) => Number(linha[k]) > 0 && Math.abs(Number(linha[k]) - (Number(custo[k]) || 0)) > 0.01);
   }
 
   /* ============================================================
@@ -486,7 +525,7 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { data: cots, error } = await c.from('cotacoes_elevador_fornecedor')
       .select('id, numero_documento, revisao, fornecedor, formulario_elevador_id, status, responded_at, categoria_produto')
-      .in('status', ['respondido', 'em_analise', 'aprovada']).eq('categoria_produto', 'elevador').order('responded_at', { ascending: false });
+      .in('status', ['respondido', 'em_analise', 'aprovada']).in('categoria_produto', ['elevador', 'escada_rolante', 'esteira_rolante']).order('responded_at', { ascending: false });
     if (error) throw error;
 
     /* "Direto pra Precificação" (pedido do usuário, 19/08): preço já veio
@@ -502,6 +541,14 @@
       ? await c.from('formularios_elevador').select('id, numero_cotacao, cliente_id, clientes(razao_social, cnpj)').in('id', formularioIds)
       : { data: [] };
     const { data: precificacoes } = await c.from('precificacoes_elevador').select('id, cotacao_fornecedor_id, formulario_elevador_id, status');
+    /* 05/11 (cotação 1009) — escada/esteira também entram na fila, mas a precificação
+       delas mora em tabela própria (sem motor: preço de venda lançado à mão). */
+    let pzEscEst = [];
+    try {
+      const r = await c.from('precificacoes_escada_esteira').select('id, cotacao_fornecedor_id, formulario_elevador_id, categoria, status');
+      if (!r.error) pzEscEst = r.data || [];
+    } catch (e) { /* tabela ausente: tudo "não iniciada" */ }
+    const pzEscEstPorCotacao = {}; (pzEscEst || []).forEach((p) => { if (p.cotacao_fornecedor_id) pzEscEstPorCotacao[p.cotacao_fornecedor_id] = p; });
     const formPorId = {}; (forms || []).forEach((f) => { formPorId[f.id] = f; });
     const pzPorCotacao = {}; (precificacoes || []).forEach((p) => { if (p.cotacao_fornecedor_id) pzPorCotacao[p.cotacao_fornecedor_id] = p; });
     const pzPorFormulario = {}; (precificacoes || []).forEach((p) => { if (!p.cotacao_fornecedor_id) pzPorFormulario[p.formulario_elevador_id] = p; });
@@ -549,8 +596,10 @@
 
     const daCotacao = (cots || []).map((cot) => {
       const form = formPorId[cot.formulario_elevador_id] || {};
-      const pz = pzPorCotacao[cot.id];
+      const ehEscEst = cot.categoria_produto === 'escada_rolante' || cot.categoria_produto === 'esteira_rolante';
+      const pz = ehEscEst ? pzEscEstPorCotacao[cot.id] : pzPorCotacao[cot.id];
       return {
+        categoria: cot.categoria_produto || 'elevador',
         substituidaPor: criadoEm[cot.id] ? substituidaPor(cot, criadoEm[cot.id]) : null,
         cotacaoFornecedorId: cot.id, numeroDocumentoFornecedor: rotuloComLetra(cot), fornecedor: cot.fornecedor,
         /* 23/10 (pedido do usuário) — a letra desta LINHA (a revisão real
@@ -574,7 +623,44 @@
         respondedAt: form.envio_direto_precificacao_em, precificacaoId: null, precificacaoStatus: null,
         statusCotacao: null, direto: true,
       }));
-    return [...diretosResultado, ...daCotacao];
+    /* 06/11/2026 — "Alterar valor" da Proposta: cotação com pedido de aumento aberto ganha a marca
+       `revisaoValor` (lista de pedidos) para o Financeiro ver na fila. Só leitura; falha não derruba a fila. */
+    let pedidosAumento = {};
+    try {
+      if (window.PropostaAumentoStore) {
+        const nums = [...diretosResultado, ...daCotacao].map((r) => r.numeroCotacao).filter((n) => n != null);
+        pedidosAumento = await window.PropostaAumentoStore.pendentesPorCotacao(nums);
+      }
+    } catch (e) { console.warn('[PrecificacaoElevadorStore] pedidos de aumento indisponíveis', e); }
+    return [...diretosResultado, ...daCotacao].map((r) => ({ ...r, revisaoValor: (r.numeroCotacao != null && pedidosAumento[String(r.numeroCotacao)]) || null }));
+  }
+
+  /* Quantidade por unidade (13/11/2026, decisão do Gelson: "o formulário do vendedor manda"). Caso real: o vendedor enviou 1 equipamento,
+     o fornecedor cotou 2 e a precificação nasceu com 2. Compara, UNIDADE A UNIDADE, a quantidade dos modelos com a da Unidade do
+     Formulário (mesmo id). Não compara totais: uma cotação PARCIAL (um fornecedor só cota algumas unidades — VPPC-1009-A/1011-A) é legítima.
+     Unidade que não está no Formulário (equipamento acrescentado à mão, id 'avulso-…') não entra. Função pura. */
+  function divergenciasQuantidade(modelos, unidadesFormulario) {
+    const porId = {};
+    (unidadesFormulario || []).forEach((u) => { porId[String(u.id)] = u; });
+    const out = [];
+    (modelos || []).forEach((m) => {
+      const u = porId[String(m.unidadeId)];
+      if (!u) return;
+      const qm = Number(m.quantidade) || 0, qf = Number(u.quantidade) || 1;
+      if (qm !== qf) out.push({ unidadeId: m.unidadeId, identificador: m.identificador || u.identificador || '', quantidadePrecificacao: qm, quantidadeFormulario: qf });
+    });
+    return out;
+  }
+  function mensagemQuantidadeDivergente(divs) {
+    return 'A quantidade de equipamentos não bate com o Formulário do vendedor (o Formulário manda): ' +
+      divs.map((d) => `${d.identificador || 'unidade'} — precificação ${d.quantidadePrecificacao}, Formulário ${d.quantidadeFormulario}`).join('; ') +
+      '. Peça ao Vendas/Compras para acertar a cotação do fornecedor ou o Formulário antes de continuar.';
+  }
+  async function conferirQuantidadeComFormulario(c, formularioElevadorId, modelos) {
+    const { data, error } = await c.from('formularios_elevador_unidades').select('id, identificador, quantidade').eq('formulario_id', formularioElevadorId);
+    if (error) throw error; // falha ao conferir = não segue (Art. 9)
+    const divs = divergenciasQuantidade(modelos, data || []);
+    if (divs.length) { const err = new Error(mensagemQuantidadeDivergente(divs)); err.quantidadeDivergente = divs; throw err; }
   }
 
   /* ---------- Monta o snapshot inicial (modelos, quantidade, VMLE) a partir do
@@ -646,6 +732,8 @@
       }
     }
 
+    if (cotacaoFornecedorId) await conferirQuantidadeComFormulario(c, formularioElevadorId, modelos);
+
     const parametros = await listarParametrosFiscais();
     const moLookup = await buscarMaoDeObraAutomatica(modelos);
 
@@ -672,7 +760,8 @@
       // precisa ser real". margem_desejada_pct fica preenchida como
       // referência caso o Financeiro troque de modo na tela.
       modo_formacao_preco: 'planilha',
-      margem_desejada_pct: Number(parametros.margem_minima_pct) || 0.2,
+      // Margem mínima/desejada não existe na planilha (Gelson, 13/11/2026): desconto = pedir reprecificação. Fica vazio.
+      margem_desejada_pct: null,
       // 10/10/2026 — OBRIGATÓRIO e do Financeiro: nasce em branco (null) e a tela exige digitar de 0% a 5% (0 vale)
       // antes de Calcular. Precificações já existentes mantêm o valor que têm.
       comissao_consultoria_pct: null,
@@ -791,8 +880,42 @@
   }
 
   /* ---------- Calcula (2 passadas por causa do DIFAL — ver nota abaixo) e salva ---------- */
+  /* ---------- Alçadas de Calcular e Aprovar (07/11/2026, pendência 4 de 5.2.10) ----------
+     Duas ações novas no módulo `precificacao`: `calcular` e `aprovar`. Quem concede é o vpsistema.com/administracao
+     (o hub só lê `alcadas_capacidade`); Administrador sempre passa (PropostaStore.temCapacidade).
+     REGRA DE TRANSIÇÃO (para ninguém perder o acesso no deploy): enquanto NINGUÉM tiver a ação concedida, a conferência
+     fica DESLIGADA (todos que abrem a tela fazem tudo, como antes); assim que alguém recebe a ação, ela passa a valer
+     para todos. Falha ao consultar a alçada = recusa (nunca libera por erro, Art. 9). A trava é do front (o banco segue
+     aberto até a #571): é organização, não segurança. */
+  const ACOES_ALCADA = { calcular: 'Calcular a precificação', aprovar: 'Aprovar a precificação' };
+  function avaliarAlcada({ temAlcada, existeConcessao }) {
+    if (!existeConcessao) return { pode: true, ativa: false };
+    return { pode: !!temAlcada, ativa: true };
+  }
+  async function conferirAlcada(acao) {
+    const rotulo = ACOES_ALCADA[acao] || acao;
+    const falha = (motivo) => ({ pode: false, ativa: true, erro: true, motivo });
+    try {
+      const c = sb(); const PS = window.PropostaStore;
+      if (!c || !PS || typeof PS.temCapacidade !== 'function') return falha('Não foi possível conferir a alçada agora. Tente de novo.');
+      const { data, error } = await c.from('alcadas_capacidade').select('id').eq('modulo', 'precificacao').eq('capacidade', acao).limit(1);
+      if (error) return falha('Não foi possível conferir a alçada agora. Tente de novo.');
+      const temAlcada = await PS.temCapacidade('precificacao', acao);
+      const r = avaliarAlcada({ temAlcada, existeConcessao: (data || []).length > 0 });
+      return r.pode ? r : { ...r, motivo: `Você não tem a alçada "${rotulo}" na Precificação. Peça em vpsistema.com/administracao.` };
+    } catch (e) {
+      return falha('Não foi possível conferir a alçada agora. Tente de novo.');
+    }
+  }
+  async function exigirAlcada(acao) {
+    const r = await conferirAlcada(acao);
+    if (!r.pode) { const err = new Error(r.motivo); err.semAlcada = true; throw err; }
+    return r;
+  }
+
   async function calcularEsalvar(id) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    await exigirAlcada('calcular');
     const pz = await obter(id);
     const { data: formulario, error: e1 } = await c.from('formularios_elevador').select('*').eq('id', pz.formulario_elevador_id).single();
     if (e1) throw e1;
@@ -845,7 +968,7 @@
        uma passada já dá o valor exato. V1 fica só de reserva (precificação antiga sem V2). */
     const pass1V2 = window.PrecificacaoElevadorEngine.calcularV2({
       ...baseInputs, difalCustoRs: 0, modoFormacaoPreco: 'planilha',
-      margemDesejadaPct: pz.margem_desejada_pct != null ? pz.margem_desejada_pct : (params.margemMinimaPct || 0.2),
+      margemDesejadaPct: pz.margem_desejada_pct != null ? pz.margem_desejada_pct : 0,
       contingenciaValor: pz.contingencia_valor, outrosCustosNaoRecuperaveisRs: pz.outros_custos_nao_recuperaveis_rs,
     });
     /* 19/10/2026 — REGRA do Financeiro (cotação 988): o DIFAL incide SÓ no preço do EQUIPAMENTO (produto),
@@ -855,7 +978,14 @@
     const valorOperacaoDifal = pv2.precoVendaProposta > 0 ? pv2.precoVendaProduto : pv1.precoVendaProduto;
 
     // ufFaturamento/ufDestino e a regra de ICMS já foram resolvidos acima, antes da 1ª passada.
-    const estadoDestino = await window.DifalEngine.buscarEstado(ufDestino);
+    /* 13/11/2026 (Gelson): o ICMS interestadual (4%) tem UMA fonte só — a alíquota da venda já resolvida acima (regra por UF de destino em
+       Atualização de Custos › Regras de ICMS, ou o % global dos Parâmetros Fiscais como reserva). O DIFAL usa essa mesma alíquota, em vez
+       da coluna aliquota_interestadual_* de difal_estados (que continua cadastrada, mas não manda mais no cálculo da Precificação). */
+    const estadoDestinoTabela = await window.DifalEngine.buscarEstado(ufDestino);
+    const icmsInterestadualUnico = Number(snapshotIcms.icms_venda_pct);
+    const estadoDestino = estadoDestinoTabela && isFinite(icmsInterestadualUnico)
+      ? { ...estadoDestinoTabela, aliquota_interestadual_estrangeira: icmsInterestadualUnico, aliquota_interestadual_nacional: icmsInterestadualUnico }
+      : estadoDestinoTabela;
     const calcularDifal = (valorOperacao) => window.DifalEngine.calcular({
       ufFaturamento, ufEntrega: ufEntregaNorm,
       finalidadeCompra: formulario.finalidade_compra, contribuinteIcms: cliente ? cliente.contribuinte_icms : null,
@@ -875,7 +1005,7 @@
     // pra registro novo); sem este fallback, calcularV2 tratava null como
     // 0% de margem desejada (Number(null)||0) e o preço/margem V2 saía
     // artificialmente baixo, sem o usuário nunca ter escolhido isso.
-    const margemDesejadaPct = pz.margem_desejada_pct != null ? pz.margem_desejada_pct : (params.margemMinimaPct || 0.2);
+    const margemDesejadaPct = pz.margem_desejada_pct != null ? pz.margem_desejada_pct : 0;
     const v2Extras = {
       modoFormacaoPreco: 'planilha',
       margemDesejadaPct,
@@ -884,8 +1014,10 @@
     };
     let resultadoV2 = window.PrecificacaoElevadorEngine.calcularV2({ ...baseInputs, difalCustoRs, ...v2Extras });
 
-    /* 19/10/2026 — o DIFAL incide EXATAMENTE no preço do equipamento FINAL (cotação 988: R$ 10.684.587,30). O custo do DIFAL
-       entra no preço, então a base e o preço final dependem um do outro: repete até a base igualar o equipamento final (centavos). */
+    /* 19/10/2026 — o DIFAL incide EXATAMENTE no preço do equipamento FINAL (cotação 988: R$ 10.684.587,30). Na planilha o DIFAL NÃO entra no
+       preço (só abate do lucro, U71), então o preço não depende do DIFAL e este laço fecha na 1ª volta; fica como proteção caso a base mude
+       (revisado em 13/11/2026). DIFAL: cliente contribuinte = custo 0 para a VerticalParts (recolhe o próprio cliente); não contribuinte = a
+       VerticalParts absorve, abatido do lucro, e só aparece na tela (nada é doado a Proposta/Contrato). */
     let baseDifal = valorOperacaoDifal;
     for (let it = 0; it < 30; it++) {
       const equipFinal = resultadoV2.precificacao.precoVendaProduto;
@@ -896,6 +1028,39 @@
       resultadoV2 = window.PrecificacaoElevadorEngine.calcularV2({ ...baseInputs, difalCustoRs, ...v2Extras });
     }
     resultado = window.PrecificacaoElevadorEngine.calcular({ ...baseInputs, difalCustoRs });
+
+    /* 06/11/2026 — coluna "Alterar valor" (Gelson): diferenças em R$ por equipamento digitadas pelo Financeiro.
+       Total = preço base (no mark-up digitado) + soma das diferenças. O MARK-UP EFETIVO que fecha nesse total vem da
+       conta inversa do motor (alavancaParaPreco) e o V2 roda de novo com ele, então impostos, comissões e DIFAL
+       recalculam sobre o novo total. Os modelos ficam no rateio do preço BASE: a Proposta soma a diferença de cada
+       equipamento por cima (os outros equipamentos não mudam). O mark-up digitado NÃO é sobrescrito. */
+    const AJ = window.PrecificacaoAjustes;
+    const ajustes = AJ ? AJ.normalizar(pz.ajustes_valor) : {};
+    if (AJ && Object.keys(ajustes).length) {
+      const E = window.PrecificacaoElevadorEngine;
+      const precoBase = resultadoV2.precificacao.precoVendaProposta;
+      const modelosBase = E.ratearPorModelo(baseInputs.modelos, precoBase);
+      const alvo = AJ.totalComAjustes(precoBase, ajustes);
+      const al = E.alavancaParaPreco(resultadoV2, alvo);
+      if (!al || !al.valido) throw new Error('Os ajustes de valor levam o preço a um ponto que o cálculo não alcança (abaixo do custo + impostos). Revise a coluna "Alterar valor".');
+      const rodar = (mk) => {
+        let r = E.calcularV2({ ...baseInputs, difalCustoRs, ...v2Extras, markUpPct: mk });
+        let bd = valorOperacaoDifal;
+        for (let it = 0; it < 30; it++) {
+          const eq = r.precificacao.precoVendaProduto;
+          if (!(eq > 0) || Math.abs(eq - bd) < 0.005) break;
+          bd = eq;
+          difal = calcularDifal(bd);
+          difalCustoRs = difal.responsavel_recolhimento === 'emitente_verticalparts' ? difal.valor_difal : 0;
+          r = E.calcularV2({ ...baseInputs, difalCustoRs, ...v2Extras, markUpPct: mk });
+        }
+        return r;
+      };
+      resultadoV2 = rodar(al.valor);
+      resultado = E.calcular({ ...baseInputs, difalCustoRs });
+      resultadoV2.modelos = modelosBase;
+      resultadoV2.ajustes = { porEquipamento: ajustes, total: AJ.soma(ajustes), precoBase, markUpBase: Number(pz.mark_up_pct) || 0, markUpEfetivo: al.valor };
+    }
 
     /* Duas modalidades de entrega (issue "Precificação real"): 90 dias
        (container exclusivo, frete mais caro) × 120 dias (container
@@ -917,6 +1082,8 @@
     /* 10/10/2026 — o método da planilha do Financeiro é o ÚNICO método de formação de preço; precificação antiga
        (markup sobre o custo / margem sobre a venda) é convertida ao calcular de novo. */
     await salvar(id, { resultado, resultado_v2: resultadoV2, resultado_v2_expresso: resultadoV2Expresso, difal, parametros_fiscais_snapshot: snapshotIcms, modo_formacao_preco: 'planilha', status: 'calculado' });
+    /* 06/11/2026 — pedido de aumento de valor da Proposta: se o preço mudou, avisa quem pediu (best-effort, não espera). */
+    try { if (window.PropostaAumentoStore) window.PropostaAumentoStore.aoSalvarPrecificacao(formulario.numero_cotacao); } catch (_) { /* aviso nunca impede o cálculo */ }
     return { resultado, resultadoV2, resultadoV2Expresso, difal };
   }
 
@@ -949,25 +1116,33 @@
     return faltando;
   }
 
-  async function aprovar(id, { forcarAbaixoMinima } = {}) {
+  /* DIFAL pendente (07/11/2026, spec de 15/10/2026 e pendência 3 de 5.2.10): o cadastro do cliente não diz se ele é
+     Contribuinte de ICMS, então o DIFAL não pôde ser calculado (mensagem do DifalEngine "Informe se o cliente é
+     Contribuinte de ICMS…"). Enquanto estiver assim, NÃO se aprova a precificação (e, como a Proposta nasce ao aprovar,
+     nem se gera a Proposta). Outros avisos do DIFAL (UF ausente, UF sem linha na tabela, revenda com cliente não
+     contribuinte) continuam só avisos. Função pura, usada pelo aprovar() e pela tela. */
+  const MOTIVO_DIFAL_PENDENTE = 'DIFAL pendente: o cadastro do cliente não informa se ele é Contribuinte de ICMS. Devolva ao Vendas para completar o cadastro e clique em Calcular antes de aprovar.';
+  function difalPendente(difal) {
+    if (!difal || typeof difal !== 'object') return false;
+    if (difal.contribuinte_icms === true || difal.contribuinte_icms === false) return false;
+    return /^Informe se o cliente/.test(difal.mensagem || '');
+  }
+
+  async function aprovar(id) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    await exigirAlcada('aprovar');
     const pz = await obter(id);
     if (!pz.resultado) throw new Error('Calcule a precificação antes de aprovar.');
     const faltando = camposObrigatoriosFaltando(pz);
     if (faltando.length) throw new Error(`Campos obrigatórios sem valor: ${faltando.join(', ')}.`);
-    const margemMinima = Number((pz.parametros_fiscais_snapshot || {}).margem_minima_pct) || 0;
-    // Motor oficial desde 29/08 é o V2 (custo econômico completo) — o V1
-    // deixava markup positivo conviver com margem real negativa (issue
-    // "Precificação real"). Precificação sem resultado_v2 ainda (nunca
-    // recalculada após a migração) cai pro V1, não trava aprovação por
-    // um dado que nunca existiu pra ela.
-    const margemV2 = pz.resultado_v2 && pz.resultado_v2.precificacao ? Number(pz.resultado_v2.precificacao.margemEfetivaPct) : null;
-    const margemFinal = margemV2 != null ? margemV2 : Number((pz.resultado.precificacao || {}).margemFinalPct) || 0;
-    if (margemFinal < margemMinima && !forcarAbaixoMinima) {
-      const err = new Error(`Margem ${margemV2 != null ? 'efetiva (V2)' : 'final (V1)'} (${(margemFinal * 100).toFixed(2)}%) abaixo da margem mínima (${(margemMinima * 100).toFixed(2)}%).`);
-      err.margemAbaixoMinima = true;
+    if (difalPendente(pz.difal)) {
+      const err = new Error(MOTIVO_DIFAL_PENDENTE);
+      err.difalPendente = true; // bloqueio absoluto: "aprovar mesmo assim" (margem) não vale aqui
       throw err;
     }
+    /* 13/11/2026 (Gelson): a "margem mínima" saiu da precificação (não consta da planilha). Preço não se aprova nem se trava por ela;
+       desconto na Proposta volta para a Precificação e recalcula tudo. */
+    await conferirQuantidadeComFormulario(c, pz.formulario_elevador_id, pz.modelos);
     const now = new Date().toISOString();
     // status usa o enum já existente na tabela ('rascunho'|'calculado'|'finalizado') — 'finalizado' é o estado de aprovado.
     const { error } = await c.from('precificacoes_elevador').update({
@@ -977,7 +1152,7 @@
     if (window.VPLog) window.VPLog.registrar({
       modulo: 'Formulário de Elevadores', acao: 'Aprovou a precificação',
       alvo: pz.numero_documento || id, alvo_id: id,
-      detalhe: { margemFinal, forcarAbaixoMinima: !!forcarAbaixoMinima },
+      detalhe: { margemFinal: (pz.resultado_v2 && pz.resultado_v2.precificacao) ? Number(pz.resultado_v2.precificacao.margemEfetivaPct) : null },
     });
 
     /* Proposta nasce sozinha ao aprovar (pedido do usuário, 27/08) — puxa
@@ -1129,8 +1304,9 @@
     devolverParaVendas,
     listarParametrosFiscais, salvarParametrosFiscais,
     listarPendentes, criar, obter, salvar, calcularEsalvar,
-    camposObrigatoriosFaltando, aprovar, criarPropostaAutomatica, ressincronizarDoFornecedor,
+    camposObrigatoriosFaltando, divergenciasQuantidade, aprovar, criarPropostaAutomatica, ressincronizarDoFornecedor,
     parseContainerNo, buscarContainerCustoPorIso, enriquecerContainersComCusto, divergenciasContainerComCadastro,
+    isoDoTipoCustos, aplicarIdTagNaLinha, linhaTemValorDiferenteDoIdTag, difalPendente, MOTIVO_DIFAL_PENDENTE, avaliarAlcada, conferirAlcada, exigirAlcada,
     classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, atualizarMaoDeObra, renumerarPorParadas, montarBaseInputs,
     acrescentarEquipamento, removerEquipamento, restaurarEquipamentoMO,
   };

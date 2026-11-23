@@ -467,3 +467,213 @@ test('criar(): sem revisão na cotação do fornecedor (original), número sai i
   const pz = await criar('FORM-1', 'COT-ORIGINAL');
   assert.equal(pz.numero_documento, 'VPPC-0990');
 });
+
+/* ---------- Containers por ID-TAG (06/11/2026): o Financeiro cita o ID-TAG + quantidade ---------- */
+const PZS = window.PrecificacaoElevadorStore;
+const CUSTOS_TAG = [
+  { id_tag: 'CONT-001', tipo: '20HC (High Cube)', porto: 'Santos', ativo: true, preco_rs: 24138.45, capatazia_rs: 1877.3, gri_rs: 0, taxa_porto_rs: null },
+  { id_tag: 'CONT-002', tipo: '40HC (High Cube)', porto: 'Santos', ativo: true, preco_rs: 26820.5, capatazia_rs: 1877.3, gri_rs: 0, taxa_porto_rs: 1341 },
+  { id_tag: 'CONT-003', tipo: '40HC (High Cube)', porto: 'Itajaí', ativo: true, preco_rs: 27900, capatazia_rs: 1600, gri_rs: 100, taxa_porto_rs: 900 },
+  { id_tag: 'CONT-004', tipo: 'Tank (Cisterna)', porto: 'Santos', ativo: true, preco_rs: 50000, capatazia_rs: 0, gri_rs: 0, taxa_porto_rs: 0 },
+];
+
+test('isoDoTipoCustos — nome do cadastro vira o código ISO que o Embarque lê; sem equivalente vira "Outro"', () => {
+  assert.equal(PZS.isoDoTipoCustos('40HC (High Cube)'), "40'HC");
+  assert.equal(PZS.isoDoTipoCustos('20GP (Padrão)'), "20'DV");
+  assert.equal(PZS.isoDoTipoCustos('Tank (Cisterna)'), 'Outro');
+  assert.equal(PZS.isoDoTipoCustos(undefined), 'Outro');
+});
+
+test('aplicarIdTagNaLinha — puxa tipo ISO, porto e os 4 valores; mantém a quantidade; não muta a linha', () => {
+  const linha = { tipo_tamanho: '', quantidade: 3, preco_rs: 0 };
+  const out = PZS.aplicarIdTagNaLinha(linha, CUSTOS_TAG[2]);
+  assert.deepEqual(out, { tipo_tamanho: "40'HC", quantidade: 3, id_tag: 'CONT-003', porto: 'Itajaí', preco_rs: 27900, capatazia_rs: 1600, gri_rs: 100, taxa_porto_rs: 900 });
+  assert.deepEqual(linha, { tipo_tamanho: '', quantidade: 3, preco_rs: 0 });
+  // mesmo tamanho em outro porto traz os valores do OUTRO ID-TAG (não "a primeira linha do tipo")
+  assert.equal(PZS.aplicarIdTagNaLinha(linha, CUSTOS_TAG[1]).porto, 'Santos');
+  assert.equal(PZS.aplicarIdTagNaLinha(linha, CUSTOS_TAG[1]).taxa_porto_rs, 1341);
+  // valor ausente no cadastro vira 0 (taxa vazia não entra na conta)
+  assert.equal(PZS.aplicarIdTagNaLinha(linha, CUSTOS_TAG[0]).taxa_porto_rs, 0);
+  // tipo sem equivalente ISO fica 'Outro'
+  assert.equal(PZS.aplicarIdTagNaLinha(linha, CUSTOS_TAG[3]).tipo_tamanho, 'Outro');
+});
+
+test('enriquecerContainersComCusto — linha com ID-TAG não é reaplicada por tipo (nem preenchida quando o valor é 0)', () => {
+  const linha = { id_tag: 'CONT-001', tipo_tamanho: "20'HC", quantidade: 1, preco_rs: 0, capatazia_rs: 0 };
+  const [out] = PZS.enriquecerContainersComCusto([linha], [{ tipo: '20HC (High Cube)', ativo: true, preco_rs: 99999, capatazia_rs: 500 }]);
+  assert.equal(out.preco_rs, 0);
+  assert.equal(out.capatazia_rs, 0);
+  // linha SEM ID-TAG segue a regra de sempre (regra blindada)
+  const [sem] = PZS.enriquecerContainersComCusto([{ tipo_tamanho: "20'HC", quantidade: 1, preco_rs: 0 }], [{ tipo: '20HC (High Cube)', ativo: true, preco_rs: 99999 }]);
+  assert.equal(sem.preco_rs, 99999);
+});
+
+test('divergenciasContainerComCadastro — linha com ID-TAG compara com a PRÓPRIA linha do cadastro, inclusive a taxa de porto', () => {
+  const linha = { id_tag: 'CONT-003', tipo_tamanho: "40'HC", quantidade: 1, preco_rs: 27900, capatazia_rs: 1600, gri_rs: 100, taxa_porto_rs: 1000 };
+  const div = PZS.divergenciasContainerComCadastro([linha], CUSTOS_TAG);
+  assert.equal(div.length, 1);
+  assert.equal(div[0].campo, 'taxa_porto_rs');
+  assert.equal(div[0].cadastro, 900);
+  // igual ao cadastro: sem aviso. (Compararia com CONT-002 se fosse "o primeiro 40'HC".)
+  assert.deepEqual(PZS.divergenciasContainerComCadastro([{ ...linha, taxa_porto_rs: 900 }], CUSTOS_TAG), []);
+});
+
+test('linhaTemValorDiferenteDoIdTag — só valor > 0 que difere pede confirmação; vazio ou igual não', () => {
+  const alvo = CUSTOS_TAG[2];
+  assert.equal(PZS.linhaTemValorDiferenteDoIdTag({ preco_rs: 0, capatazia_rs: 0 }, alvo), false);
+  assert.equal(PZS.linhaTemValorDiferenteDoIdTag({ preco_rs: 27900, capatazia_rs: 1600, gri_rs: 100, taxa_porto_rs: 900 }, alvo), false);
+  assert.equal(PZS.linhaTemValorDiferenteDoIdTag({ preco_rs: 26820.5 }, alvo), true);
+  assert.equal(PZS.linhaTemValorDiferenteDoIdTag({ taxa_porto_rs: 5 }, CUSTOS_TAG[0]), true);
+});
+
+/* ---------- DIFAL pendente barra a aprovação (07/11/2026; spec de 15/10/2026, pendência 3 de 5.2.10) ---------- */
+test('difalPendente — só "falta informar se o cliente é contribuinte" é pendência; os outros avisos não bloqueiam', () => {
+  const { difalPendente } = window.PrecificacaoElevadorStore;
+  const MSG = 'Informe se o cliente é Contribuinte de ICMS para determinar o responsável pelo recolhimento do DIFAL.';
+  assert.equal(difalPendente({ mensagem: MSG, contribuinte_icms: null }), true);
+  assert.equal(difalPendente({ mensagem: MSG }), true);
+  // contribuinte informado (sim ou não): não é pendência
+  assert.equal(difalPendente({ mensagem: MSG, contribuinte_icms: true }), false);
+  assert.equal(difalPendente({ mensagem: MSG, contribuinte_icms: false }), false);
+  // outros avisos do motor continuam só avisos
+  assert.equal(difalPendente({ mensagem: 'Informe a UF de entrega ou o UF do endereço do cliente para calcular o DIFAL.', contribuinte_icms: null }), false);
+  assert.equal(difalPendente({ mensagem: 'Estado de destino (XX) não encontrado na tabela de referência do DIFAL.', contribuinte_icms: null }), false);
+  assert.equal(difalPendente({ mensagem: 'Venda para comercialização (revenda) — tributada normalmente, sem incidência de DIFAL.', contribuinte_icms: null, alerta: 'Atenção: Não Contribuintes…' }), false);
+  // sem DIFAL calculado (nunca calculou) ou lixo: não decide nada aqui (o aprovar já exige "Calcule antes")
+  assert.equal(difalPendente(null), false);
+  assert.equal(difalPendente(undefined), false);
+  assert.equal(difalPendente('x'), false);
+});
+
+/* Fake com a tabela das alçadas (select().eq().eq().limit()) e a da precificação (select().eq().single(), update().eq()). */
+function makeFakeSbAlcada(row, { concessoes = [], erroAlcada = null, unidadesFormulario = [{ id: 'u1', identificador: 'U1', quantidade: 1 }] } = {}) {
+  return {
+    from(tabela) {
+      if (tabela === 'formularios_elevador_unidades') {
+        return { select() { return { eq: async () => ({ data: unidadesFormulario, error: null }) }; } };
+      }
+      if (tabela === 'alcadas_capacidade') {
+        return { select() { const q = { eq() { return q; }, limit: async () => ({ data: erroAlcada ? null : concessoes, error: erroAlcada }) }; return q; } };
+      }
+      return {
+        select() { return { eq() { return { single: async () => ({ data: row, error: null }) }; } }; },
+        update(patch) { return { eq: async () => { Object.assign(row, patch); return { error: null }; } }; },
+      };
+    },
+  };
+}
+const comAlcada = (temCapacidade) => { window.PropostaStore = { temCapacidade: async () => temCapacidade }; };
+
+function linhaParaAprovar(difal, margemMinima) {
+  return {
+    id: 'pz-dif', status: 'calculado', numero_documento: 'VPPC-0001', numero_cotacao: 1,
+    vmle_usd: 1000, tx_cambial: 5, modelos: [{ unidadeId: 'u1', quantidade: 1 }],
+    itens_instalacao_montagem: [{ descricao: 'ART', valor: 100 }], comissao_vendedor_pct: 0.02, comissao_consultoria_pct: 0,
+    parametros_fiscais_snapshot: { margem_minima_pct: margemMinima },
+    resultado: { precificacao: { margemFinalPct: 0.3 } }, resultado_v2: { precificacao: { margemEfetivaPct: 0.3 } },
+    difal,
+  };
+}
+
+test('aprovar — DIFAL pendente recusa, com marca própria, e NÃO grava nada (nem com "aprovar mesmo assim")', async () => {
+  const row = linhaParaAprovar({ mensagem: 'Informe se o cliente é Contribuinte de ICMS para determinar o responsável pelo recolhimento do DIFAL.', contribuinte_icms: null }, 0.15);
+  const antigoSb = window.__VP_SB;
+  window.__VP_SB = { sb: makeFakeSbAlcada(row) }; comAlcada(true);
+  try {
+    await assert.rejects(() => window.PrecificacaoElevadorStore.aprovar('pz-dif'),
+      (e) => e.difalPendente === true && /Contribuinte de ICMS/.test(e.message));
+    assert.equal(row.status, 'calculado', 'a precificação continua não aprovada');
+    assert.equal(row.aprovado_em, undefined);
+  } finally { window.__VP_SB = antigoSb; }
+});
+
+test('aprovar — com o contribuinte informado o DIFAL deixa de bloquear e a precificação é aprovada (sem margem mínima)', async () => {
+  // 13/11/2026: a "margem mínima" saiu (Gelson). Mesmo com mínima de 90% no snapshot e margem de 30%, nada trava por margem.
+  const row = linhaParaAprovar({ mensagem: 'DIFAL de R$ 1,00 é responsabilidade da VerticalParts.', contribuinte_icms: false }, 0.9);
+  const antigoSb = window.__VP_SB;
+  window.__VP_SB = { sb: makeFakeSbAlcada(row) }; comAlcada(true);
+  try {
+    await window.PrecificacaoElevadorStore.aprovar('pz-dif');
+    assert.equal(row.status, 'finalizado');
+  } finally { window.__VP_SB = antigoSb; }
+});
+
+test('aprovar — quantidade diferente do Formulário (por unidade) recusa e NÃO grava nada; o Formulário manda', async () => {
+  const row = linhaParaAprovar({ mensagem: 'ok', contribuinte_icms: false }, 0.15);
+  row.modelos = [{ unidadeId: 'u1', identificador: 'VPEL-EL1048-1', quantidade: 2 }]; // fornecedor cotou 2
+  const antigoSb = window.__VP_SB;
+  window.__VP_SB = { sb: makeFakeSbAlcada(row, { unidadesFormulario: [{ id: 'u1', identificador: 'VPEL-EL1048-1', quantidade: 1 }] }) }; comAlcada(true);
+  try {
+    await assert.rejects(() => window.PrecificacaoElevadorStore.aprovar('pz-dif'),
+      (e) => Array.isArray(e.quantidadeDivergente) && e.quantidadeDivergente.length === 1 && /Formulário manda/.test(e.message));
+    assert.equal(row.status, 'calculado');
+  } finally { window.__VP_SB = antigoSb; }
+});
+
+/* ---------- Alçadas de Calcular e Aprovar (07/11/2026; pendência 4 de 5.2.10) ---------- */
+test('avaliarAlcada — sem nenhuma concessão a conferência fica desligada; com concessão vale a alçada da pessoa', () => {
+  const { avaliarAlcada } = window.PrecificacaoElevadorStore;
+  assert.deepEqual(avaliarAlcada({ temAlcada: false, existeConcessao: false }), { pode: true, ativa: false });
+  assert.deepEqual(avaliarAlcada({ temAlcada: true, existeConcessao: false }), { pode: true, ativa: false });
+  assert.deepEqual(avaliarAlcada({ temAlcada: true, existeConcessao: true }), { pode: true, ativa: true });
+  assert.deepEqual(avaliarAlcada({ temAlcada: false, existeConcessao: true }), { pode: false, ativa: true });
+});
+
+test('conferirAlcada — desligada, concedida, negada e falhas (nunca libera por erro)', async () => {
+  const { conferirAlcada } = window.PrecificacaoElevadorStore;
+  const antigoSb = window.__VP_SB; const antigoPS = window.PropostaStore;
+  try {
+    window.__VP_SB = { sb: makeFakeSbAlcada({}, { concessoes: [] }) }; comAlcada(false);
+    assert.deepEqual(await conferirAlcada('aprovar'), { pode: true, ativa: false }, 'ninguém tem a alçada: segue como antes');
+
+    window.__VP_SB = { sb: makeFakeSbAlcada({}, { concessoes: [{ id: 'x' }] }) }; comAlcada(true);
+    assert.deepEqual(await conferirAlcada('aprovar'), { pode: true, ativa: true });
+
+    comAlcada(false);
+    const negada = await conferirAlcada('calcular');
+    assert.equal(negada.pode, false);
+    assert.match(negada.motivo, /Calcular a precificação/);
+    assert.match(negada.motivo, /vpsistema\.com\/administracao/);
+
+    window.__VP_SB = { sb: makeFakeSbAlcada({}, { erroAlcada: { message: 'rls' } }) }; comAlcada(true);
+    const erro = await conferirAlcada('aprovar');
+    assert.equal(erro.pode, false); assert.equal(erro.erro, true);
+
+    window.__VP_SB = { sb: makeFakeSbAlcada({}, { concessoes: [{ id: 'x' }] }) }; window.PropostaStore = undefined;
+    assert.equal((await conferirAlcada('aprovar')).pode, false, 'sem PropostaStore: recusa');
+  } finally { window.__VP_SB = antigoSb; window.PropostaStore = antigoPS; }
+});
+
+test('aprovar e calcularEsalvar — sem a alçada (ativa) recusam com marca própria e NÃO gravam nada', async () => {
+  const S = window.PrecificacaoElevadorStore;
+  const row = linhaParaAprovar({ mensagem: 'ok', contribuinte_icms: false }, 0.15);
+  const antigoSb = window.__VP_SB; const antigoPS = window.PropostaStore;
+  try {
+    window.__VP_SB = { sb: makeFakeSbAlcada(row, { concessoes: [{ id: 'x' }] }) }; comAlcada(false);
+    await assert.rejects(() => S.aprovar('pz-dif'), (e) => e.semAlcada === true && /Aprovar a precificação/.test(e.message));
+    await assert.rejects(() => S.calcularEsalvar('pz-dif'), (e) => e.semAlcada === true && /Calcular a precificação/.test(e.message));
+    assert.equal(row.status, 'calculado', 'nada foi gravado');
+    assert.equal(row.aprovado_em, undefined);
+    // com a alçada, segue para as demais conferências (aqui: a quantidade diverge do Formulário, de propósito)
+    row.modelos = [{ unidadeId: 'u1', identificador: 'U1', quantidade: 3 }]; comAlcada(true);
+    await assert.rejects(() => S.aprovar('pz-dif'), (e) => Array.isArray(e.quantidadeDivergente) && !e.semAlcada);
+  } finally { window.__VP_SB = antigoSb; window.PropostaStore = antigoPS; }
+});
+
+/* 13/11/2026 — o Formulário do vendedor manda na quantidade (decisão do Gelson). Confere unidade a unidade, nunca por total. */
+test('divergenciasQuantidade — fornecedor cotou 2 e o Formulário tem 1: divergência da unidade', () => {
+  const d = window.PrecificacaoElevadorStore.divergenciasQuantidade(
+    [{ unidadeId: 'U1', identificador: 'VPEL-EL1048-1', quantidade: 2 }],
+    [{ id: 'U1', identificador: 'VPEL-EL1048-1', quantidade: 1 }]);
+  assert.equal(d.length, 1);
+  assert.equal(d[0].quantidadePrecificacao, 2);
+  assert.equal(d[0].quantidadeFormulario, 1);
+});
+test('divergenciasQuantidade — cotação PARCIAL (só algumas unidades, quantidades iguais) não diverge', () => {
+  const form = [{ id: 'U1', quantidade: 5 }, { id: 'U2', quantidade: 8 }]; // formulário soma 13
+  assert.deepEqual(window.PrecificacaoElevadorStore.divergenciasQuantidade([{ unidadeId: 'U1', quantidade: 5 }], form), []);
+});
+test('divergenciasQuantidade — equipamento acrescentado à mão (id avulso-) e lista vazia não entram', () => {
+  assert.deepEqual(window.PrecificacaoElevadorStore.divergenciasQuantidade([{ unidadeId: 'avulso-1', quantidade: 3 }], [{ id: 'U1', quantidade: 1 }]), []);
+  assert.deepEqual(window.PrecificacaoElevadorStore.divergenciasQuantidade(null, null), []);
+});
