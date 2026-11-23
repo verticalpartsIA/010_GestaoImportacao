@@ -66,7 +66,7 @@ function CfArquivosFornecedor({ cot, numeroCotacao, tipo }) {
 
   React.useEffect(() => {
     carregar(false);
-    const t = setInterval(() => carregar(true), 60000);
+    const t = setInterval(() => { if (!document.hidden) carregar(true); }, 60000);
     const vis = () => { if (document.visibilityState === 'visible') carregar(true); };
     document.addEventListener('visibilitychange', vis);
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };

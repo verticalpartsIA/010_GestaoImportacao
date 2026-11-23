@@ -91,6 +91,34 @@ function CatalogoGrupo({ grupo, itens, concedidas, manual, onToggle }) {
   );
 }
 
+/* Bloco só leitura "Valores R$" (14/11/2026): o vpsistema.com/administracao
+   decide por pessoa quem vê valores em R$ (valores_acesso); o hub não mostrava
+   isso. AVISO: por enquanto só mostra o que está gravado — NÃO esconde nada
+   nas telas do hub (o desfoque ainda não foi implementado no front). */
+function BlocoValoresRS({ perfilId, manual }) {
+  const [r, setR] = React.useState(null);
+  React.useEffect(() => { setR(null); window.ColaboradoresAdminStore.valoresAcessoDe(perfilId).then(setR); }, [perfilId]);
+  const lista = (a) => (Array.isArray(a) && a.length ? a.join(', ') : '—');
+  const quando = (t) => { try { return new Date(t).toLocaleString('pt-BR'); } catch (e) { return '—'; } };
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 6, background: '#fff', marginBottom: 12, padding: '10px 14px' }}>
+      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Valores R$ (só leitura)</div>
+      {r === null ? <div className="small muted">Carregando…</div>
+        : r.erro ? <div className="small" style={{ color: 'var(--vp-danger)' }}>Não foi possível ler os valores: {r.erro}</div>
+        : !r.dados ? <div className="small muted">Nenhum registro de valores para esta pessoa no hub.</div>
+        : (
+          <div className="small">
+            <div><b>Modo:</b> {r.dados.modo === 'todos' ? 'vê todos os valores' : r.dados.modo === 'nenhum' ? 'não vê valores' : r.dados.modo}</div>
+            <div><b>Liberados:</b> {lista(r.dados.liberar)}</div>
+            <div><b>Escondidos:</b> {lista(r.dados.esconder)}</div>
+            <div className="muted">Atualizado em {quando(r.dados.atualizado_em)}{manual ? ' — esta pessoa está em modo manual, mas este dado continua vindo do vpsistema' : ''}.</div>
+          </div>
+        )}
+      <div className="small muted" style={{ marginTop: 6 }}>Quem altera é o vpsistema.com/administracao. Hoje isto <b>não esconde</b> valores nas telas do hub.</div>
+    </div>
+  );
+}
+
 /* Painel cheio (não modal pequeno) — pedido explícito do usuário 19/08:
    lista, mesmo indentada, é grande, então precisa de rolagem natural da
    página inteira, nada travado em cima/embaixo. Fica no lugar da lista
@@ -178,6 +206,8 @@ function PainelAlocacaoModulos({ colaborador, onVoltar }) {
           ))}
         </div>
       )}
+
+      <BlocoValoresRS perfilId={colaborador.id} manual={manual}/>
 
       {concedidas === null ? (
         <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>

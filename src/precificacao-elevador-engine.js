@@ -1,8 +1,9 @@
 /* ============================================================
    precificacao-elevador-engine.js
-   Motor de cálculo da Precificação de Elevador — réplica fiel da planilha
-   "Modelo_Pricing_Elevador.xlsx" (aba "FIN Pricing EL"). Cada variável traz
-   em comentário a célula original, pra facilitar auditoria/manutenção.
+   Motor de cálculo da Precificação de Elevador. A fonte da verdade é a planilha do
+   Financeiro ("JA - COTAÇÃO N° ...", aba FIN - ELEV; golden 963 e 1048 nos testes), com UMA
+   exceção decidida pelo Gelson (13/11/2026): comissão sobre o valor líquido de impostos.
+   Cada variável traz em comentário a célula original, pra facilitar auditoria/manutenção.
    Função pura — sem I/O, sem Supabase. window.PrecificacaoElevadorEngine
    ============================================================ */
 (function () {
@@ -51,8 +52,11 @@
     // GRI (General Rate Increase) — sobretaxa do frete marítimo, vem do cadastro de Containers
     // (01/10/2026), mesma mecânica da capatazia: despesa operacional, dividida no rateio.
     const K13c_griRs = containers.reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.gri_rs) || 0), 0) / rateio;
-    // AFRMM = 8% do frete marítimo: frete informado (USD) + container + capatazia + GRI (R$).
-    const D11_afrmmRs = (D8_freteSeguroCapataziaUsd * D12_txCambial + K13_containersRs + K13b_capataziaRs + K13c_griRs) * 0.08;
+    // Taxa de porto (06/11/2026): taxa do porto de chegada, por container (cadastro de Containers, por ID-TAG).
+    // Mesmo tratamento da capatazia/GRI: dividida no rateio e dentro da base do AFRMM. Vazia conta zero.
+    const K13d_taxaPortoRs = containers.reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.taxa_porto_rs) || 0), 0) / rateio;
+    // AFRMM = 8% do frete marítimo: frete informado (USD) + container + capatazia + GRI + taxa de porto (R$).
+    const D11_afrmmRs = (D8_freteSeguroCapataziaUsd * D12_txCambial + K13_containersRs + K13b_capataziaRs + K13c_griRs + K13d_taxaPortoRs) * 0.08;
 
     // ---------- Despesas extras (K6:K12) ----------
     const itensInstalacao = Array.isArray(inputs.itensInstalacaoMontagem) ? inputs.itensInstalacaoMontagem : [];
@@ -77,7 +81,7 @@
     const S23_vmldRs = S20_vmleRs + S21_seguroRs + S22_freteRs;
 
     const K7_adValoremRs = S23_vmldRs * 0.001; // Ad-Valorem = VMLD * 0,1%
-    const K12_despesasExtrasTotalRs = K6_despachanteRs + K7_adValoremRs + K8_demurrageRs + K9_freteInternoRs + K10_armazenagemRs + K11_instalacaoMontagemRs + K13_containersRs + K13b_capataziaRs + K13c_griRs + K14_despesasExtrasItensRs;
+    const K12_despesasExtrasTotalRs = K6_despachanteRs + K7_adValoremRs + K8_demurrageRs + K9_freteInternoRs + K10_armazenagemRs + K11_instalacaoMontagemRs + K13_containersRs + K13b_capataziaRs + K13c_griRs + K13d_taxaPortoRs + K14_despesasExtrasItensRs;
 
     // ---------- Cascata de impostos na importação (M24:S30) ----------
     const M24_bcII = S23_vmldRs;
@@ -142,10 +146,12 @@
     const K57_comissaoIndicacaoPct = Number(inputs.comissaoIndicacaoPct ?? p.comissaoIndicacaoPct) || 0;
 
     const K50_impostosPagarProdutoPct = K39_icmsVendaPct + K40_ipiVendaPct + K41_pisVendaPct + K42_cofinsVendaPct + K43_irpjVendaPct + K44_csllVendaPct + K45_irpjAdicionalPct;
-    /* 19/10/2026 — REGRA do Financeiro: ICMS, IPI, PIS, COFINS, IRPJ, CSLL e o restante incidem SÓ sobre o preço do PRODUTO;
-       os impostos de serviços (16%) incidem SÓ sobre o preço dos SERVIÇOS. A formação do preço usa a mesma regra (antes os impostos
-       de produto valiam sobre 100% do preço e os de serviços não entravam). Sem serviços (% = 0) o resultado é o de sempre. */
-    const K63_subTotalPct = (1 - percentualServicos) * K50_impostosPagarProdutoPct + percentualServicos * K51_impostosServicosPct + K53_markUpPct;
+    /* 13/11/2026 — DECISÃO do Gelson: "o cálculo é o da planilha, sempre". O divisor da planilha (K64 = K49 + K52, K66 = 100% − K64)
+       soma os impostos de PRODUTO (K49) e o MARK-UP sobre 100% do preço; o imposto de SERVIÇOS (K50) NÃO entra no divisor — ele só
+       aparece depois, na apuração do lucro (S50 = −parcela de serviços × K50). Isto REVOGA a ponderação de 19/10/2026 (que usava
+       (1 − serv)×impostos de produto + serv×impostos de serviços no divisor e elevava o preço ~3,9% no caso 1048 com 30% de serviços).
+       A apuração do lucro abaixo continua separando produto × serviços (impostos de produto só nos 70%, de serviços só nos 30%). */
+    const K63_subTotalPct = K50_impostosPagarProdutoPct + K53_markUpPct;
     const K65_precoVendaPct = 1 - K63_subTotalPct;
 
     const S65_precoVendaProposta = K65_precoVendaPct > 0 ? U35_custoTotalMercadorias / K65_precoVendaPct : 0;
@@ -168,9 +174,16 @@
 
     const S51_impostosPagarServicosRs = -(S67_precoVendaServicos * K51_impostosServicosPct);
     const S53_markUpRs = -S65_precoVendaProposta * K53_markUpPct;
-    const S55_comissaoConsultoriaRs = S65_precoVendaProposta * K55_comissaoConsultoriaPct;
-    const S56_comissaoVendedorRs = S65_precoVendaProposta * K56_comissaoVendedorPct;
-    const U57_comissaoIndicacaoRs = S65_precoVendaProposta * K57_comissaoIndicacaoPct;
+    /* 13/11/2026 — DECISÃO do Gelson: a comissão é sobre o valor LÍQUIDO de impostos, nunca sobre o bruto. Base = preço de venda
+       menos os impostos de PRODUTO da venda (ICMS, IPI, PIS, COFINS, IRPJ, CSLL e IRPJ adicional — S39:S45, brutos, antes do
+       crédito de importação). O imposto de serviços (16%) NÃO sai da base (opção A). Vale para vendedor, indicação e consultoria.
+       A planilha calcula sobre o preço bruto (S55 = S66 × K55); aqui a regra é do Gelson e a planilha não é seguida neste ponto. */
+    const impostosVendaProdutoBrutosRs = Math.abs(S39_custoIcmsVenda) + Math.abs(S40_custoIpiVenda) + Math.abs(S41_custoPisVenda) + Math.abs(S42_custoCofinsVenda)
+      + Math.abs(S43_custoIrpjVenda) + Math.abs(S44_custoCsllVenda) + Math.abs(S45_custoIrpjAdicional);
+    const baseComissaoRs = Math.max(0, S65_precoVendaProposta - impostosVendaProdutoBrutosRs);
+    const S55_comissaoConsultoriaRs = baseComissaoRs * K55_comissaoConsultoriaPct;
+    const S56_comissaoVendedorRs = baseComissaoRs * K56_comissaoVendedorPct;
+    const U57_comissaoIndicacaoRs = baseComissaoRs * K57_comissaoIndicacaoPct;
     const U59_totalComissaoRs = S56_comissaoVendedorRs + U57_comissaoIndicacaoRs;
 
     const U70_difalRs = Number(inputs.difalCustoRs) || 0; // custo do DIFAL, só quando responsabilidade é da VerticalParts
@@ -196,7 +209,7 @@
         totalNotaFiscal: U31_totalNotaFiscal, despesasInstalacaoMontagem: U32_despesasInstalacaoMontagem,
         totalDesembolso: U33_totalDesembolso, creditos: U34_creditos,
         custoTotalMercadorias: U35_custoTotalMercadorias, custoPorEquipamento: U36_custoPorEquipamento,
-        afrmm: D11_afrmmRs, adValorem: K7_adValoremRs, despesasExtrasTotal: K12_despesasExtrasTotalRs, containersRs: K13_containersRs, capataziaRs: K13b_capataziaRs, griRs: K13c_griRs,
+        afrmm: D11_afrmmRs, adValorem: K7_adValoremRs, despesasExtrasTotal: K12_despesasExtrasTotalRs, containersRs: K13_containersRs, capataziaRs: K13b_capataziaRs, griRs: K13c_griRs, taxaPortoRs: K13d_taxaPortoRs,
         itensDespesasExtrasRs: K14_despesasExtrasItensRs,
       },
       modelos: modelosComRateio,
@@ -211,7 +224,7 @@
         creditoPisVenda: S48_creditoPisVenda, creditoCofinsVenda: S49_creditoCofinsVenda,
         impostosPagarProdutoRs: S50_impostosPagarProdutoRs, impostosPagarServicosRs: S51_impostosPagarServicosRs,
         markUpRs: S53_markUpRs, comissaoConsultoriaRs: S55_comissaoConsultoriaRs, comissaoVendedorRs: S56_comissaoVendedorRs,
-        comissaoIndicacaoRs: U57_comissaoIndicacaoRs, totalComissaoRs: U59_totalComissaoRs,
+        comissaoIndicacaoRs: U57_comissaoIndicacaoRs, totalComissaoRs: U59_totalComissaoRs, baseComissaoRs, impostosVendaProdutoBrutosRs,
         difalRs: U70_difalRs,
         lucroVenda: S71_lucroVenda, lucroFinal: S77_lucroFinal, margemFinalPct: U78_margemFinalPct,
         lucroPorEquipamento: V79_lucroPorEquipamento,
@@ -328,7 +341,7 @@
      interno, armazenagem, instalação…) só entram no LUCRO, depois do preço.
      A cascata é a do V1 (que reproduz a planilha ao centavo — ver o teste
      "golden 963"). Diferença de insumo em relação ao V2: na planilha o frete
-     internacional (container + capatazia + GRI) está DENTRO do valor CIF
+     internacional (container + capatazia + GRI + taxa de porto) está DENTRO do valor CIF
      (célula D8, em US$) e portanto entra na base de II/PIS/COFINS/ICMS e
      do AFRMM; aqui os containers do cadastro (R$) são convertidos para US$ pelo
      câmbio da cotação e somados ao frete informado. Contingência e outros
@@ -339,7 +352,9 @@
     const tx = Number(inputs.txCambial) || 0;
     const containers = Array.isArray(inputs.containers) ? inputs.containers : [];
     const rateio = Math.max(Number(inputs.containerRateioDivisor) || 1, 1);
-    const containersRs = containers.reduce((s, c) => s + (Number(c.quantidade) || 0) * ((Number(c.preco_rs) || 0) + (Number(c.capatazia_rs) || 0) + (Number(c.gri_rs) || 0)), 0) / rateio;
+    // Taxa de porto (06/11/2026) soma junto: entra no CIF como a capatazia e o GRI (paga II/PIS/COFINS/ICMS/AFRMM).
+    const containersRs = containers.reduce((s, c) => s + (Number(c.quantidade) || 0) * ((Number(c.preco_rs) || 0) + (Number(c.capatazia_rs) || 0) + (Number(c.gri_rs) || 0) + (Number(c.taxa_porto_rs) || 0)), 0) / rateio;
+    const taxaPortoRs = containers.reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.taxa_porto_rs) || 0), 0) / rateio;
     const containersUsd = tx > 0 ? containersRs / tx : 0;
     const freteSeguroCapataziaUsd = (Number(inputs.freteSeguroCapataziaUsd) || 0) + containersUsd;
     const v1 = calcular({ ...inputs, freteSeguroCapataziaUsd, containers: [], containerRateioDivisor: 1 });
@@ -365,7 +380,7 @@
         despesasOperacionais: v1.importacao.despesasInstalacaoMontagem,
         contingenciaValor, outrosCustosNaoRecuperaveisRs,
       },
-      planilha: { containersRs, containersUsd, freteSeguroCapataziaUsdNaBase: freteSeguroCapataziaUsd },
+      planilha: { containersRs, containersUsd, taxaPortoRs, freteSeguroCapataziaUsdNaBase: freteSeguroCapataziaUsd },
       importacao: v1.importacao,
       precificacao: {
         ...pv,
@@ -430,6 +445,26 @@
     return { modo, campo: 'margem_desejada_pct', valor: marg, valido: marg > 0 && marg < 1 };
   }
 
+  /* Quanto de cada R$ a mais (ou a menos) de PREÇO vira LUCRO (12/11/2026, caso 1048: o campo "Lucro líquido
+     desejado (CEO)" prometia R$ 80.000 e entregava R$ 70.834). Tudo o que depende do preço sai da conta: impostos da
+     venda (cada um já calculado sobre a sua base), imposto de serviços, comissões e DIFAL (proporcional ao preço do
+     produto). Créditos de importação, custos e despesas não mudam com o preço. O lucro é linear no preço, então
+     desconto/acréscimo de preço = diferença de lucro ÷ este número (exato, sem tentativa e erro).
+     Sem os campos detalhados (resultado de modo antigo), cai na conta simples de antes: 1 − % impostos − % comissões. */
+  function margemMarginal(pv) {
+    if (!pv) return 0;
+    const P = Number(pv.precoVendaProposta) || 0;
+    if (!(P > 0)) return 0;
+    const abs = (k) => Math.abs(Number(pv[k]) || 0);
+    const comissoes = abs('comissaoConsultoriaRs') + abs('comissaoVendedorRs') + abs('comissaoIndicacaoRs');
+    const detalhado = ['custosIcmsVenda', 'custosPisVenda', 'custosCofinsVenda', 'custosIrpjVenda', 'custosCsllVenda'].every((k) => pv[k] != null);
+    if (!detalhado) return 1 - (Number(pv.impostosPagarProdutoPct) || 0) - comissoes / P;
+    const impostosVenda = abs('custosIcmsVenda') + abs('custosIpiVenda') + abs('custosPisVenda') + abs('custosCofinsVenda')
+      + abs('custosIrpjVenda') + abs('custosCsllVenda') + abs('custosIrpjAdicional');
+    const variavel = impostosVenda + abs('impostosPagarServicosRs') + abs('difalRs') + comissoes;
+    return 1 - variavel / P;
+  }
+
   /* Lucro LÍQUIDO de cada equipamento (10/10/2026) — resposta oficial para "quanto cada equipamento deixa de lucro?".
      Tudo o que é custo ou imposto é rateado pela participação do equipamento no PREÇO (e o preço já é rateado pelo custo
      em US$ de cada modelo, então mercadoria, despesas gerais, impostos da venda, comissões, DIFAL e contingência seguem
@@ -445,5 +480,5 @@
     return lista.map((l) => (P > 0 ? (L + somaMo) * ((Number(l.preco) || 0) / P) - (Number(l.mo) || 0) : 0));
   }
 
-  window.PrecificacaoElevadorEngine = { calcular, calcularV2, calcularPlanilha, alavancaParaPreco, ratearLucroPorEquipamento, creditoElegivel, ratearPorModelo };
+  window.PrecificacaoElevadorEngine = { calcular, calcularV2, calcularPlanilha, alavancaParaPreco, margemMarginal, ratearLucroPorEquipamento, creditoElegivel, ratearPorModelo };
 }());

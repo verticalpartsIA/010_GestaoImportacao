@@ -1,28 +1,92 @@
-name: Deploy — Hostinger
+name: Deploy — Hostinger (manual, reserva)
 
+# O deploy de produção é feito pela integração Git do hPanel ("Deploy Node.js app
+# from Git", build isolado por commit a cada push em main). Este workflow NÃO é
+# o caminho normal: ele só roda quando alguém o dispara à mão (workflow_dispatch),
+# por exemplo para um `git pull` de emergência por SSH.
+# O gate de qualidade é a proteção da branch main (checks "Validar estrutura do
+# projeto" e "Todas as telas abrem sem erro" exigidos antes do merge).
+# Antes de 20/11/2026 ele disparava sozinho após o CI; foi tirado para não haver
+# dois deploys concorrentes na mesma pasta.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Evita dois deploys ao mesmo tempo; um mais novo espera o anterior terminar.
+concurrency:
+  group: deploy-hostinger
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Preparar chave SSH
+        env:
+          SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -uo pipefail
+          install -m 700 -d ~/.ssh
+
+          # Remove espaços e quebras de linha acidentais nos secrets de host/usuário
+          SSH_HOST="$(printf '%s' "$SSH_HOST" | tr -d ' \r\n')"
+          SSH_USER="$(printf '%s' "$SSH_USER" | tr -d ' \r\n')"
+          [ -n "$SSH_HOST" ] || { echo "ERRO: secret HOSTINGER_SSH_HOST vazio"; exit 1; }
+          [ -n "$SSH_USER" ] || { echo "ERRO: secret HOSTINGER_SSH_USER vazio"; exit 1; }
+          [ -n "$SSH_KEY" ]  || { echo "ERRO: secret HOSTINGER_SSH_KEY vazio"; exit 1; }
+
+          # Remove CR (chaves geradas no Windows) e garante a quebra de linha final
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # Valida o formato da chave sem imprimir nada sensível
+          if ! ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null 2> ~/keygen.err; then
+            echo "ERRO: HOSTINGER_SSH_KEY não é uma chave privada SSH válida:"
+            sed 's/^/  /' ~/keygen.err
+            exit 1
+          fi
+          echo "Chave privada válida."
+
+          # Obtém a identidade do servidor (até 20 s)
+          ssh-keyscan -T 20 -p 65002 -H "$SSH_HOST" >> ~/.ssh/known_hosts 2> ~/keyscan.err
+          if [ ! -s ~/.ssh/known_hosts ]; then
+            echo "ERRO: não foi possível obter a chave do servidor em ${SSH_HOST}:65002 (rede/firewall ou host incorreto):"
+            sed 's/^/  /' ~/keyscan.err
+            exit 1
+          fi
+          echo "Identidade do servidor obtida."
+
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.HOSTINGER_SSH_HOST }}
-          username: ${{ secrets.HOSTINGER_SSH_USER }}
-          key: ${{ secrets.HOSTINGER_SSH_KEY }}
-          port: 65002
-          script: |
-            cd /home/u969661049/domains/hub.vpsistema.com/nodejs
-            export PATH=/opt/alt/alt-nodejs22/root/usr/bin:$PATH
-            set -e
-            git checkout -- package-lock.json 2>/dev/null || true
-            git pull origin main
-            npm install --omit=dev
-            echo "{\"buildTime\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"commit\":\"$(git rev-parse HEAD)\"}" > version.json
-            touch tmp/restart.txt
-            echo "Deploy concluído: $(git log --oneline -1)"
+        env:
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          # Token temporário do próprio workflow (somente leitura, expira ao fim do job).
+          # O servidor usa o token para o git pull (funciona também se o repositório virar privado).
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SSH_HOST="$(printf '%s' "$SSH_HOST" | tr -d ' \r\n')"
+          SSH_USER="$(printf '%s' "$SSH_USER" | tr -d ' \r\n')"
+          {
+            printf 'export GH_TOKEN=%q\n' "$GH_TOKEN"
+            cat <<'REMOTE'
+          cd /home/u969661049/domains/hub.vpsistema.com/nodejs
+          export PATH=/opt/alt/alt-nodejs22/root/usr/bin:$PATH
+          set -e
+          git checkout -- package-lock.json 2>/dev/null || true
+          AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          GIT_TERMINAL_PROMPT=0 git -c "http.extraheader=AUTHORIZATION: basic $AUTH" pull origin main
+          unset GH_TOKEN AUTH
+          npm install --omit=dev
+          echo "{\"buildTime\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"commit\":\"$(git rev-parse HEAD)\"}" > version.json
+          touch tmp/restart.txt
+          echo "Deploy concluído: $(git log --oneline -1)"
+          REMOTE
+          } | ssh -i ~/.ssh/deploy_key -p 65002 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=30 "$SSH_USER@$SSH_HOST" 'bash -s'
+
+      - name: Remover chave do runner
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

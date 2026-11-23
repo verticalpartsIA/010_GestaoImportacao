@@ -48,7 +48,7 @@
 
   --fg1:          var(--vp-black);       /* primary text */
   --fg2:          var(--vp-gray-700);    /* secondary */
-  --fg3:          var(--vp-gray-500);    /* meta / hint */
+  --fg3:          #6B6B6B;               /* meta / hint — 5,3:1 sobre branco (WCAG AA pede 4,5:1; o gray-500 #808080 dava 3,94:1). Tema escuro redefine em sidebar-busca.css. */
   --fg-on-dark:   var(--vp-white);
   --fg-accent:    var(--vp-yellow-press);/* yellow when used as text on light */
 

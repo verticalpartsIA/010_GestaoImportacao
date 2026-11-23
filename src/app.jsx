@@ -25,18 +25,23 @@ const ROUTE_TITLE = {
   almoxarifado: "Almoxarifado",
   "carga-maquina": "Carga Máquina",
   "montagem-produto": "Montagem do Produto",
-  "evolucao-fabricacao": "Evolução da Fabricação",
+  "evolucao-fabricacao": "Quadros de Comando · Fabricação QC",
   "fabricacao-corrimao": "Fabricação Corrimão",
   "fabricacao-corte": "Fabricação Corte",
+  "quadros-pedidos": "Quadros de Comando · Pedidos",
+  "quadros-formularios-respondidos": "Quadros de Comando · Formulários Respondidos",
+  "quadros-separacao": "Quadros de Comando · Separação PV QC",
+  "quadros-separacao-fab": "Quadros de Comando · Separação FAB QC",
+  "quadros-calculadora-cabos": "Quadros de Comando · Calculadora de Cabos",
   "simulacao-producao": "Simulação",
   "relatorios-pcp": "Relatórios do PCP",
   expedicao: "Expedição",
   separacao: "Separação",
   etiquetas: "Etiquetas",
   "emissao-nf": "Emissão de NF",
+  "boletos-avisos": "Boletos Avisos",
   pcp: "PCP — Planejamento e Controle da Produção",
   mes: "MES — Sistema de Execução da Manufatura",
-  "mes-cadastros": "MES — Cadastros do chão de fábrica",
   leads: "Pipeline de Leads",
   "lead-detail": "Detalhe de Lead",
   formularios: "Formulários",
@@ -386,7 +391,7 @@ function App() {
       case "ncm-detail": return <NcmDetailPage product={subsel?.ncmProduct} setRoute={setRoute}/>;
       case "eng-projeto-elevadores": return <window.ProjetoElevadorPage setRoute={setRoute}/>;
       case "eng-configurador": return <ConfiguradorPage setRoute={setRoute}/>;
-      case "ficha-tecnica": return <FichaTecnicaPage fichaId={subsel}/>; /* deep-link support: /nova-ficha-tecnica */
+      case "ficha-tecnica": return <FichaTecnicaPage fichaId={subsel} setRoute={setRoute} setSubsel={setSubsel}/>; /* deep-link support: /nova-ficha-tecnica */
       case "solicitacoes-produto": return <SolicitacoesProdutoPage solicitacaoId={subsel} setRoute={setRoute} setSubsel={setSubsel}/>; /* deep-link support */
       case "juridico": return <JuridicoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "contrato-editor": return <ContratoEditorPage contrato={subsel} setRoute={setRoute} onSaved={() => {}} />;
@@ -423,22 +428,26 @@ function App() {
       case "separacao": return <window.SeparacaoPage/>;
       case "etiquetas": return <window.EtiquetasPage/>;
       case "emissao-nf": return <window.EmissaoNFPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "boletos-avisos": return <window.BoletosAvisosPage/>;
       case "relatorios-pcp": return <window.RelatoriosPCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "simulacao-producao": return <window.SimulacaoProducaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "montagem-produto": return <window.MontagemProdutoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "evolucao-fabricacao": return <window.EvolucaoFabricacaoQuadroPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "fabricacao-corrimao": return <window.FabricacaoCorrimaoPage/>;
       case "fabricacao-corte": return <window.FabricacaoCortePage/>;
+      case "quadros-pedidos": return <window.QuadrosPedidosPage/>;
+      case "quadros-formularios-respondidos": return <window.FormulariosRespondidosPage/>;
+      case "quadros-separacao": return <window.QuadrosSeparacaoPage/>;
+      case "quadros-separacao-fab": return <window.QuadrosSeparacaoFabPage/>;
+      case "quadros-calculadora-cabos": return <window.CalculadoraCabosPage/>;
       case "pcp": return <window.PCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "mes": return <window.MESPage setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "mes-cadastros": return <window.MESCadastrosPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "pi-importacao": return <window.PIPage/>;
       case "rfq-importacao": return <window.RFQPage/>;
       case "ims-importacao": return <window.IMSPage/>;
       case "embarques-importacao": return <window.EmbarquesImportacaoPage/>;
       case "gi-painel": return <window.GIPainelPage/>;
       case "gi-analise-precos": return <window.GIAnalisePrecosPage/>;
-      case "pedidos-acompanhamento": return <window.PedidosAcompanhamentoPage/>;
+      case "pedidos-acompanhamento": return <window.PedidosAcompanhamentoPage setRoute={setRoute}/>;
       case "cadastro-clientes": return <window.CadastroClientesPage/>;
       case "cadastro-fornecedores": return <window.CadastroFornecedoresPage/>;
       case "cadastro-materias-primas": return <window.CadastroMateriasPrimasPage setRoute={setRoute} setSubsel={setSubsel}/>;

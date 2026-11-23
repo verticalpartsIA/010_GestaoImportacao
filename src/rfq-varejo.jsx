@@ -59,7 +59,7 @@ function RVTratativa({ lote, convite, itens, respostas, editavel }) {
   }, [convite.id]);
   React.useEffect(() => {
     carregar();
-    const t = setInterval(carregar, 60000);
+    const t = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
     const vis = () => { if (!document.hidden) carregar(); };
     document.addEventListener('visibilitychange', vis);
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
@@ -130,7 +130,7 @@ function RVTratativa({ lote, convite, itens, respostas, editavel }) {
             const m = it.m;
             return (
               <div key={it.k} style={{ border: '1px solid var(--border)', padding: '8px 10px', borderRadius: 4 }}>
-                <div className="row sb" style={{ marginBottom: 4 }}><span className="row gap-2"><b style={{ fontSize: 12 }}>{m.autor}</b><span className="badge" style={{ fontSize: 10 }}>Tratativa</span></span><span className="muted small mono">{rvData(m.created_at)}</span></div>
+                <div className="row sb" style={{ marginBottom: 4 }}><span className="row gap-2"><b style={{ fontSize: 12 }}>{m.autor}</b><span className="badge" style={{ fontSize: 10 }}>{m.origem === 'fornecedor' ? 'Portal do fornecedor' : 'Tratativa'}</span></span><span className="muted small mono">{rvData(m.created_at)}</span></div>
                 {m.mensagem && <div style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{m.mensagem}</div>}
                 {(m.anexos || []).length > 0 && <div className="row gap-2" style={{ flexWrap: 'wrap', marginTop: 6 }}>{m.anexos.map((a, i) => <a key={i} href={a.url} target="_blank" rel="noreferrer" style={{ border: '1px solid var(--border)', padding: '4px 8px', fontSize: 12 }}>{a.nome}</a>)}</div>}
               </div>
@@ -227,7 +227,13 @@ function RFQVarejoDetalhe({ loteId, onVoltar }) {
   const carregar = React.useCallback(() => {
     C.obterLote(loteId).then((d) => { if (!d) setErro('Lote não encontrado.'); else setDados(d); }).catch((e) => setErro(e.message || String(e)));
   }, [loteId]);
-  React.useEffect(() => { carregar(); const t = setInterval(carregar, 60000); return () => clearInterval(t); }, [carregar]);
+  React.useEffect(() => {
+    carregar();
+    const t = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
+    const vis = () => { if (!document.hidden) carregar(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
+  }, [carregar]);
 
   if (erro) return <div className="page fade-in"><div className="alert danger"><div><div className="alert__title">Não foi possível abrir o lote</div><div className="alert__sub">{erro}</div></div></div><Button variant="outline" onClick={onVoltar}>← RFQ</Button></div>;
   if (!dados) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;

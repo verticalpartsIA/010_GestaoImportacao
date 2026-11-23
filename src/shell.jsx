@@ -42,7 +42,6 @@ const NAV_GROUPS = [
     { id: "formularios", label: "Formulários", icon: "layers" },
     { id: "controle-cotacoes", label: "Controle de Cotações", icon: "history" },
     { id: "cotacoes-fornecedor", label: "Cotações a Fornecedor", icon: "globe" },
-    { id: "cotacao-quadro-comando", label: "Cotação Quadro de Comando", icon: "grid" },
     { id: "propostas", label: "Propostas", icon: "proposal" },
     { id: "contratos-sociais", label: "Contratos Social", icon: "fileText" },
   ]},
@@ -51,6 +50,7 @@ const NAV_GROUPS = [
     { id: "precificacao", label: "Precificação", icon: "calculator", restrict: ["financeiro", "admin"] },
     { id: "aval-financeiro", label: "Aval Financeiro", icon: "shield", restrict: ["financeiro", "admin"] },
     { id: "emissao-nf", label: "Emissão de NF", icon: "fileText", restrict: ["financeiro", "admin"] },
+    { id: "boletos-avisos", label: "Boletos Avisos", icon: "mail", emails: ["gelson.simoes@verticalparts.com.br", "diego@verticalparts.com.br", "juliana@verticalparts.com.br"] },
     { id: "comissoes", label: "Comissões", icon: "award", restrict: ["financeiro", "admin"] },
   ]},
   { label: "Contratos & Jurídico", items: [
@@ -144,18 +144,27 @@ const NAV_GROUPS = [
   /* Fabricação (17/10/2026): só reagrupa no menu o que já era PCP/MES. As rotas e URLs continuam /logistica/<rota> (mudar a URL é outra decisão). */
   { label: "Fabricação", items: [
     { id: "pcp", label: "PCP", icon: "calendar" },
-    { id: "mes", label: "MES", icon: "settings" },
-    { id: "mes-cadastros", label: "MES · Cadastros", icon: "layers" },
     { id: "carga-maquina", label: "Carga Máquina", icon: "calculator" },
     /* 18/10/2026: Matérias-Primas (só VPMP) e Produtos saíram de Cadastros Mestres — quem consome é a Fabricação. Rotas/URLs/alçadas não mudaram. */
     { id: "cadastro-materias-primas", label: "Matérias-Primas", icon: "layers" },
     { id: "cadastro-produtos", label: "Produtos", icon: "package" },
     { id: "montagem-produto", label: "Montagem do Produto", icon: "layers" },
-    { id: "evolucao-fabricacao", label: "Evolução da Fabricação", icon: "history" },
     { id: "fabricacao-corrimao", label: "Fabricação Corrimão", icon: "history" },
     { id: "fabricacao-corte", label: "Fabricação Corte", icon: "history" },
     { id: "simulacao-producao", label: "Simulação", icon: "history" },
     { id: "relatorios-pcp", label: "Relatórios", icon: "fileText" },
+  ]},
+  /* Quadros de Comando (04/11/2026, pedido do Gelson): módulo 14 — nasce VAZIO ("Em breve"), sem telas nem rotas.
+     O conteúdo entra aos poucos, ponto a ponto. Administração passa a ser o 15 (ver docs/modulos). */
+  { label: "Quadros de Comando", items: [
+    { id: "quadros-pedidos", label: "Pedidos com Quadro", icon: "layers" },
+    { id: "quadros-separacao", label: "Separação PV QC", icon: "package" },
+    { id: "quadros-separacao-fab", label: "Separação FAB QC", icon: "package" },
+    /* 04/11/2026: a antiga "Evolução da Fabricação" (grupo Fabricação) mudou para cá com o nome "Fabricação QC". O id da rota continua
+       evolucao-fabricacao, então links antigos (/logistica/evolucao-fabricacao) seguem abrindo. */
+    { id: "evolucao-fabricacao", label: "Fabricação QC", icon: "history" },
+    { id: "quadros-calculadora-cabos", label: "Calculadora de Cabos", icon: "bolt" },
+    { id: "quadros-formularios-respondidos", label: "Formulários Respondidos", icon: "fileText" },
   ]},
   { label: "Administração", items: [
     { id: "logs", label: "Logs de Atividade", icon: "history", restrict: ["admin"] },
@@ -183,12 +192,52 @@ function formatBuildTime(iso) {
 const GROUPS_LS_KEY = "vp_sidebar_collapsed_groups";
 
 function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
-  const filterVisible = (item) => !item.restrict || item.restrict.includes(role);
+  const emailLogado = String((window.__VP_USER || {}).email || "").toLowerCase();
+  /* "emails": item visível só para esses e-mails (organização do menu; a trava de verdade está no banco, Art. 25) */
+  /* Boletos Avisos (17/11/2026): aparece para os 3 e-mails fixos OU para quem o banco libera pela grade de alçadas
+     (boletos_avisos_pode). Não depende do perfil de visão (role): na 1ª versão dependia e o item sumia para o Financeiro. */
+  const [podeBoletos, setPodeBoletos] = React.useState(false);
+  React.useEffect(() => {
+    let vivo = true;
+    const checar = () => { try { const p = window.BoletosAvisosStore && window.BoletosAvisosStore.pode(); if (p && p.then) p.then(ok => { if (vivo) setPodeBoletos(ok === true); }).catch(() => {}); } catch (e) { /* menu segue sem o item */ } };
+    checar();
+    window.addEventListener('vpprd:user', checar);
+    return () => { vivo = false; window.removeEventListener('vpprd:user', checar); };
+  }, [emailLogado]);
+  const filterVisible = (item) => item.id === "boletos-avisos"
+    ? (item.emails.includes(emailLogado) || podeBoletos)
+    : ((!item.restrict || item.restrict.includes(role)) && (!item.emails || item.emails.includes(emailLogado)));
   /* Badge de decisões pendentes — o dado já existia em DecisoesStore
      (listarPendentesParaMim, usado por decisoes.jsx), só nunca tinha sido
      plugado no nav. Sidebar já re-renderiza a cada navegação (recebe
      `route`), reaproveita isso pra recalcular ao sair de /decisoes. */
   const [pendentesDecisoes, setPendentesDecisoes] = React.useState(0);
+  /* Contador de Notificações: o mesmo hook leve do sino do cabeçalho (sem consulta nova). */
+  const naoLidasNotif = window.NotificacoesLidasStore && window.NotificacoesLidasStore.useNaoLidas ? window.NotificacoesLidasStore.useNaoLidas() : 0;
+  /* Busca de telas (Ctrl/⌘ K) e interruptores opcionais Vidro/Escuro (05/11/2026) — guardados por navegador;
+     padrão = visual de sempre. Aplicados em <html data-vp-vidro / data-vp-escuro> (ver styles/sidebar-busca.css). */
+  const [buscaAberta, setBuscaAberta] = React.useState(false);
+  const lerFlag = (k) => { try { return localStorage.getItem(k) === "1"; } catch { return false; } };
+  const [vidro, setVidro] = React.useState(() => lerFlag("vp_sidebar_vidro"));
+  const [escuro, setEscuro] = React.useState(() => lerFlag("vp_tema_escuro"));
+  React.useEffect(() => {
+    document.documentElement.dataset.vpVidro = vidro ? "1" : "0";
+    try { localStorage.setItem("vp_sidebar_vidro", vidro ? "1" : "0"); } catch {}
+  }, [vidro]);
+  React.useEffect(() => {
+    document.documentElement.dataset.vpEscuro = escuro ? "1" : "0";
+    try { localStorage.setItem("vp_tema_escuro", escuro ? "1" : "0"); } catch {}
+  }, [escuro]);
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && String(e.key).toLowerCase() === "k") {
+        e.preventDefault();
+        setBuscaAberta(true);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
   React.useEffect(() => {
     const atualizar = () => window.DecisoesStore?.listarPendentesParaMim().then((l) => setPendentesDecisoes(l.length)).catch(() => {});
     atualizar();
@@ -205,7 +254,7 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
   const gruposAlocados = (window.__VP_USER || {}).gruposAlocados;
   const filtrarPorAlocacao = Array.isArray(gruposAlocados) && gruposAlocados.length > 0;
   /* Quem já tinha "Logística Interna" alocada continua vendo o grupo novo (o PCP/MES saiu de lá). */
-  const GRUPO_ALIAS = { "Fabricação": ["Logística Interna"] };
+  const GRUPO_ALIAS = { "Fabricação": ["Logística Interna"], "Quadros de Comando": ["Fabricação", "Logística Interna"] };
   const grupoVisivel = (group) => !filtrarPorAlocacao || group.label === "Geral" || group.empty || gruposAlocados.includes(group.label) || (GRUPO_ALIAS[group.label] || []).some((a) => gruposAlocados.includes(a));
   /* Módulos recolhidos individualmente (clique no título) — persiste por navegador. */
   const [collapsedGroups, setCollapsedGroups] = React.useState(() => {
@@ -236,6 +285,8 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
   }, []);
   const version = window.__VP_VERSION;
   const versionLabel = version && formatBuildTime(version.buildTime);
+  /* Lista da busca = a MESMA filtragem que desenha o menu (perfil + alocação): não mostra tela que a pessoa não vê. */
+  const gruposBusca = NAV_GROUPS.filter((g) => grupoVisivel(g)).map((g) => ({ label: g.label, items: g.items.filter(filterVisible) }));
   return (
     <aside className="sidebar">
       <div className="sidebar__brand">
@@ -246,6 +297,13 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
       <button className="sidebar__collapse" onClick={onToggle} aria-label="Toggle sidebar">
         {collapsed ? <Icon.chevRight size={12}/> : <Icon.chevLeft size={12}/>}
       </button>
+      <button type="button" className="sidebar__busca" onClick={() => setBuscaAberta(true)}
+        aria-label="Pesquisar telas (Ctrl K)" data-tooltip="Pesquisar telas (Ctrl K)">
+        <Icon.search size={15}/><span>Pesquisar telas…</span><kbd>Ctrl K</kbd>
+      </button>
+      {window.SidebarBusca ? <window.SidebarBusca aberto={buscaAberta} grupos={gruposBusca}
+        onFechar={() => setBuscaAberta(false)}
+        onEscolher={(r) => { setBuscaAberta(false); setRoute(r.id); }}/> : null}
       <div className="sidebar__scroll">
         {NAV_GROUPS.filter((group) => grupoVisivel(group)).map((group) => {
           const items = group.items.filter(filterVisible);
@@ -317,8 +375,8 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
                     data-tooltip={item.label}>
                     <span className="nav-item__icon">{ItemIcon}</span>
                     <span className="nav-item__label">{item.label}</span>
-                    {(item.id === 'decisoes' ? pendentesDecisoes : item.badge)
-                      ? <span className="nav-item__badge">{item.id === 'decisoes' ? pendentesDecisoes : item.badge}</span> : null}
+                    {(item.id === 'decisoes' ? pendentesDecisoes : item.id === 'notificacoes' ? naoLidasNotif : item.badge)
+                      ? <span className="nav-item__badge">{item.id === 'decisoes' ? pendentesDecisoes : item.id === 'notificacoes' ? (naoLidasNotif > 99 ? '99+' : naoLidasNotif) : item.badge}</span> : null}
                   </button>
                 );
               })}
@@ -328,6 +386,16 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
         })}
       </div>
       <div className="sidebar__foot">
+        <div className="sidebar__tgls">
+          <button type="button" className="sidebar__tgl" role="switch" aria-checked={vidro}
+            onClick={() => setVidro((v) => !v)} title="Painel flutuante com efeito de vidro">
+            <span>Modo vidro</span><span className="sidebar__tgl-sw"/>
+          </button>
+          <button type="button" className="sidebar__tgl" role="switch" aria-checked={escuro}
+            onClick={() => setEscuro((v) => !v)} title="Escurece a sidebar e o cabeçalho (as telas internas seguem claras)">
+            <span>Tema escuro</span><span className="sidebar__tgl-sw"/>
+          </button>
+        </div>
         <div className="sidebar__user">
           {window.AvatarColaborador
             ? <window.AvatarColaborador src={(window.__VP_USER || {}).avatarUrl} nome={(window.__VP_USER || {}).nome || (ROLE_MAP[role] || {}).name}/>
@@ -411,15 +479,21 @@ const BREADCRUMB_MAP = {
   almoxarifado: { module: "Logística", page: "Almoxarifado", icon: "package" },
   "carga-maquina": { module: "Logística", page: "Carga Máquina", icon: "calculator" },
   "montagem-produto": { module: "Logística", page: "Montagem do Produto", icon: "layers" },
-  "evolucao-fabricacao": { module: "Logística", page: "Evolução da Fabricação", icon: "history" },
+  "evolucao-fabricacao": { module: "Quadros de Comando", page: "Fabricação QC", icon: "history" },
   "fabricacao-corrimao": { module: "Logística", page: "Fabricação Corrimão", icon: "history" },
   "fabricacao-corte": { module: "Logística", page: "Fabricação Corte", icon: "history" },
+  "quadros-pedidos": { module: "Quadros de Comando", page: "Pedidos com Quadro", icon: "layers" },
+  "quadros-formularios-respondidos": { module: "Quadros de Comando", page: "Formulários Respondidos", icon: "fileText" },
+  "quadros-separacao": { module: "Quadros de Comando", page: "Separação PV QC", icon: "package" },
+  "quadros-separacao-fab": { module: "Quadros de Comando", page: "Separação FAB QC", icon: "package" },
+  "quadros-calculadora-cabos": { module: "Quadros de Comando", page: "Calculadora de Cabos", icon: "bolt" },
   "simulacao-producao": { module: "Logística", page: "Simulação", icon: "history" },
   "relatorios-pcp": { module: "Logística", page: "Relatórios", icon: "fileText" },
   expedicao: { module: "Logística", page: "Expedição", icon: "truck" },
   separacao: { module: "Logística", page: "Separação", icon: "layers" },
   etiquetas: { module: "Logística", page: "Etiquetas", icon: "fileText" },
   "emissao-nf": { module: "Financeiro", page: "Emissão de NF", icon: "fileText" },
+  "boletos-avisos": { module: "Financeiro", page: "Boletos Avisos", icon: "mail" },
   pcp:           { module: "Logística", page: "PCP — Planejamento e Controle da Produção", icon: "calendar" },
   mes:           { module: "Logística", page: "MES — Sistema de Execução da Manufatura", icon: "settings" },
   "mes-cadastros": { module: "Logística", page: "MES — Cadastros do chão de fábrica", icon: "layers" },

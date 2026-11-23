@@ -1,0 +1,428 @@
+/* Financeiro & Preços › Boletos Avisos — ver boletos-avisos-store.js e docs/modulos/05_financeiro_precos.md (5.5) */
+function BavSemaforo({ situacao, dias }) {
+  const C = window.BoletosAvisosCalc;
+  const s = C.SITUACOES[situacao] || C.SITUACOES.em_dia;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+      <span aria-hidden="true" style={{ width: 12, height: 12, borderRadius: '50%', background: s.cor, display: 'inline-block' }}/>
+      <b>{s.rotulo}</b>
+      {situacao === 'atrasado' && dias > 0 && <span className="muted">{dias} dia{dias > 1 ? 's' : ''}</span>}
+    </span>
+  );
+}
+
+/* Filtro por caixas na coluna Situação (18/11/2026, pedido do Gelson): marca quais situações aparecem. Nada marcado = todas. */
+const BAV_SITUACOES = [['atrasado', 'Atrasado'], ['vence_hoje', 'Vence hoje'], ['em_dia', 'Em dia']];
+function BavFiltroSituacao({ marcadas, onChange }) {
+  const [aberto, setAberto] = React.useState(false);
+  const [pos, setPos] = React.useState({ top: 0, left: 0 });
+  const ref = React.useRef(null), btn = React.useRef(null);
+  /* Abre para baixo; se não couber na tela (título da coluna no fim da janela), abre para cima. */
+  const ALTURA_MENU = 140;
+  const reposicionar = () => {
+    if (!btn.current) return;
+    const r = btn.current.getBoundingClientRect();
+    const cabeEmbaixo = r.bottom + 4 + ALTURA_MENU <= window.innerHeight;
+    setPos(cabeEmbaixo ? { top: r.bottom + 4, left: r.left } : { bottom: Math.max(4, window.innerHeight - r.top + 4), left: r.left });
+  };
+  React.useEffect(() => {
+    if (!aberto) return undefined;
+    const fora = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
+    const esc = (e) => { if (e.key === 'Escape') setAberto(false); };
+    /* rolar a página ou mudar o tamanho NÃO fecha o menu (marcar uma caixa encolhe a lista e rola a página): ele só acompanha o botão */
+    document.addEventListener('mousedown', fora); document.addEventListener('keydown', esc); window.addEventListener('scroll', reposicionar, true); window.addEventListener('resize', reposicionar);
+    return () => { document.removeEventListener('mousedown', fora); document.removeEventListener('keydown', esc); window.removeEventListener('scroll', reposicionar, true); window.removeEventListener('resize', reposicionar); };
+  }, [aberto]);
+  /* O menu é "fixed" (calculado a partir do botão): dentro da tabela ele seria cortado pela área de rolagem quando a lista tem poucas linhas. */
+  const abrirOuFechar = () => { reposicionar(); setAberto(!aberto); };
+  const alternar = (chave) => onChange(marcadas.includes(chave) ? marcadas.filter(x => x !== chave) : [...marcadas, chave]);
+  const ativo = marcadas.length > 0;
+  return (
+    <span ref={ref} style={{ position: 'relative', display: 'inline-block', marginLeft: 6 }} onClick={e => e.stopPropagation()}>
+      <button ref={btn} type="button" aria-label="Filtrar por situação" aria-expanded={aberto} title="Escolher quais situações aparecem" onClick={abrirOuFechar}
+        style={{ cursor: 'pointer', border: '1px solid ' + (ativo ? '#111827' : 'var(--border, #d1d5db)'), background: ativo ? '#111827' : 'transparent', color: ativo ? '#fff' : 'inherit', borderRadius: 4, padding: '0 6px', fontSize: 11, fontWeight: 700 }}>
+        {ativo ? '▾ ' + marcadas.length : '▾'}
+      </button>
+      {aberto && (
+        <div role="group" aria-label="Situações" style={{ position: 'fixed', zIndex: 50, top: pos.top, bottom: pos.bottom, left: pos.left, background: 'var(--surface, #fff)', border: '1px solid var(--border, #d1d5db)', borderRadius: 6, boxShadow: '0 4px 14px rgba(0,0,0,.15)', padding: '8px 12px', display: 'grid', gap: 6, minWidth: 150, fontWeight: 400 }}>
+          {BAV_SITUACOES.map(([chave, rot]) => (
+            <label key={chave} style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <input type="checkbox" checked={marcadas.includes(chave)} onChange={() => alternar(chave)}/> {rot}
+            </label>
+          ))}
+          <a href="#" className="small" onClick={e => { e.preventDefault(); onChange([]); }}>Mostrar todas</a>
+        </div>
+      )}
+    </span>
+  );
+}
+
+function BavDetalhe({ cliente, faixa }) {
+  const S = window.BoletosAvisosStore, C = window.BoletosAvisosCalc;
+  const [boletos, setBoletos] = React.useState(null);
+  const [log, setLog] = React.useState(null);
+  const [erro, setErro] = React.useState(null);
+  const hoje = C.hojeBrasil();
+
+  const carregar = React.useCallback(async () => {
+    try {
+      const [b, l] = await Promise.all([S.boletosDoCliente(cliente.codigo_cliente_omie), S.logDoCliente(cliente.codigo_cliente_omie)]);
+      setBoletos(b); setLog(l); setErro(null);
+    } catch (e) { setErro(e.message); }
+  }, [cliente.codigo_cliente_omie]);
+  React.useEffect(() => {
+    carregar();
+    const t = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
+    return () => clearInterval(t);
+  }, [carregar]);
+
+  return (
+    <div style={{ padding: '8px 16px 16px 40px', display: 'grid', gap: 16 }}>
+      {erro && <div style={{ color: 'var(--vp-danger)' }}>{erro}</div>}
+      <div>
+        <div className="small" style={{ fontWeight: 700, marginBottom: 6 }}>Títulos em aberto{faixa ? ' — só: ' + (C.FAIXAS.find(f => f.chave === faixa) || {}).rotulo : ''}</div>
+        <table className="t pcp-grid">
+          <thead><tr><th>Situação</th><th>NF · parcela</th><th>Vencimento</th><th>Valor</th><th>Boleto</th></tr></thead>
+          <tbody>
+            {boletos === null && <tr><td colSpan={5}>Carregando…</td></tr>}
+            {(boletos || []).filter(b => !faixa || C.faixaDoBoleto(b.data_vencimento, hoje, S.feriadosCache()) === faixa).map(b => (
+              <tr key={b.codigo_lancamento_omie}>
+                <td><BavSemaforo situacao={C.situacaoDoBoleto(b.data_vencimento, hoje, S.feriadosCache())} dias={C.diasDeAtraso(b.data_vencimento, hoje, S.feriadosCache())}/></td>
+                <td>{[b.numero_documento, b.numero_parcela].filter(Boolean).join(' · ') || '—'}</td>
+                <td>{C.dataBR(b.data_vencimento)}</td>
+                <td>{C.moedaBR(b.valor)}</td>
+                <td>{b.tem_boleto === false ? <Badge variant="neutral">sem boleto</Badge> : (b.numero_boleto || '—')}</td>
+              </tr>
+            ))}
+          </tbody>
+          {boletos && boletos.length > 0 && <tfoot><tr><td colSpan={3}><b>{faixa ? 'Total desta faixa neste cliente' : 'Total em aberto deste cliente'}</b></td><td colSpan={2}><b>{C.moedaBR(boletos.filter(b => !faixa || C.faixaDoBoleto(b.data_vencimento, hoje, S.feriadosCache()) === faixa).reduce((a, b) => a + Math.round(Number(b.valor || 0) * 100), 0) / 100)}</b></td></tr></tfoot>}
+        </table>
+      </div>
+      <div>
+        <div className="small" style={{ fontWeight: 700, marginBottom: 6 }}>Log de envios e respostas · <a href="#" onClick={e => { e.preventDefault(); if (window.VpRouter) window.VpRouter.navigate('boletos-avisos', 'tratativas', String(cliente.codigo_cliente_omie)); }}>Abrir tratativa deste cliente</a></div>
+        {log !== null && !log.length && <div className="muted">Nenhum aviso enviado a este cliente ainda.</div>}
+        <div style={{ display: 'grid', gap: 10 }}>
+          {(log || []).map(e => (
+            <div key={e.id} style={{ border: '1px solid var(--border, #e5e7eb)', borderRadius: 6, padding: 10 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <b>{new Date(e.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</b>
+                <Badge variant={e.status === 'enviado' ? 'success' : 'danger'}>{e.status === 'enviado' ? 'Enviado' : 'Erro'}</Badge>
+                <Badge variant="neutral">{C.ETAPA_ROTULO[e.etapa] || e.etapa}</Badge>
+                <span className="muted small">{e.origem === 'manual' ? `manual · ${e.enviado_por || ''}` : 'automático'}</span>
+                {e.modo_teste && <Badge variant="warning">modo teste</Badge>}
+              </div>
+              <div className="small" style={{ marginTop: 4 }}>Para: {(e.para || []).join(', ') || '—'}</div>
+              <div className="small muted">{e.assunto}</div>
+              {e.erro && <div className="small" style={{ color: 'var(--vp-danger)' }}>{e.erro}</div>}
+              {e.respostas.length > 0
+                ? e.respostas.map(r => (
+                  <div key={r.id} style={{ marginTop: 8, borderLeft: '3px solid ' + (C.ehDevolucao(r) ? '#dc2626' : '#16a34a'), paddingLeft: 10 }}>
+                    <div className="small"><b style={C.ehDevolucao(r) ? { color: '#dc2626' } : undefined}>{C.ehDevolucao(r) ? 'E-mail devolvido pelo servidor do cliente' : 'Resposta do cliente'}</b>{C.ehDevolucao(r) && <span className="muted"> — confira o endereço em "Para" acima e corrija no Omie</span>} · {r.de_nome || r.de_email} · {new Date(r.data_mensagem).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</div>
+                    <div className="small" style={{ whiteSpace: 'pre-wrap' }}>{String(r.corpo_texto || '').slice(0, 600) || '(sem texto)'}</div>
+                  </div>
+                ))
+                : <div className="small muted" style={{ marginTop: 6 }}>Sem resposta do cliente.</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BoletosAvisosPage() {
+  const S = window.BoletosAvisosStore, C = window.BoletosAvisosCalc;
+  const [acesso, setAcesso] = React.useState(null);
+  const [podeAtualizar, setPodeAtualizar] = React.useState(false); // alçada "atualizar": só o botão "Atualizar do Omie"
+  const [gerir, setGerir] = React.useState(false); // só os 3 fixos; quem tem só a alçada "ver" consulta, sem botões de ação
+  const [lista, setLista] = React.useState(null);
+  const [abertos, setAbertos] = React.useState([]);
+  const [feriados, setFeriados] = React.useState(new Set());
+  const [cfg, setCfg] = React.useState(null);
+  const [erro, setErro] = React.useState(null);
+  const [busy, setBusy] = React.useState(null);
+  const [aberto, setAberto] = window.useRotaId ? window.useRotaId('boletos-avisos') : React.useState(null);
+  const [soSem, setSoSem] = React.useState(false);
+  const [q, setQ] = window.useQueryParam ? window.useQueryParam('q', '') : React.useState('');
+  const [faixaUrl, setFaixa] = window.useQueryParam ? window.useQueryParam('faixa', '') : React.useState('');
+  const [selecionados, setSelecionados] = React.useState(() => new Set());   // clientes marcados na lista (só conta e soma; não vai para a URL)
+  const [erroUrl, setErroUrl] = window.useQueryParam ? window.useQueryParam('erro', '') : React.useState('');      // 1 = só clientes com e-mail devolvido/falho
+  const [envioUrl, setEnvioUrl] = window.useQueryParam ? window.useQueryParam('envio', '') : React.useState('');  // D-5 | D-1 | D0 | D+1 = só quem recebeu essa etapa hoje
+  const [painel, setPainel] = React.useState({ casos: [], tratativas: [], entradas: [], envios: [], semTabelas: false, erro: null });   // aba Tratativas
+  const [podeTratar, setPodeTratar] = React.useState(false);
+  const [enviosHoje, setEnviosHoje] = React.useState([]);
+  const [devs, setDevs] = React.useState({ devolucoes: [], envios: [] });
+  const [sitUrl, setSit] = window.useQueryParam ? window.useQueryParam('sit', '') : React.useState('');   // situações marcadas, separadas por vírgula
+  const ord = window.useOrdenacao ? window.useOrdenacao() : { th: (k, r) => <th>{r}</th>, aplicar: (l) => l };   // setas ▲▼ nos títulos (18/11/2026, pedido do Gelson)
+  const sc = window.useBoletosScores ? window.useBoletosScores() : { map: new Map() };   // classe A–D de cada cliente (boletos-score.jsx)
+
+  const carregar = React.useCallback(async () => {
+    try {
+      const [l, c, b, f, eh, dv, pt] = await Promise.all([S.listarClientes(), S.config(), S.boletosAbertos(), S.feriados(), S.enviosDeHoje(), S.devolucoes(), S.painelTratativas()]);
+      setLista(l); setCfg(c); setAbertos(b); setFeriados(f); setEnviosHoje(eh); setDevs(dv); setPainel(pt); setErro(null);
+    } catch (e) { setErro(e.message); setLista([]); }
+  }, []);
+  React.useEffect(() => {
+    let vivo = true;
+    S.pode().then(ok => { if (vivo) { setAcesso(ok); if (ok) carregar(); } });
+    S.podeGerir().then(ok => { if (vivo) setGerir(ok); });
+    S.podeTratar().then(ok => { if (vivo) setPodeTratar(ok); });
+    S.podeAtualizar().then(ok => { if (vivo) setPodeAtualizar(ok); });
+    const t = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
+    return () => { vivo = false; clearInterval(t); };
+  }, [carregar]);
+
+  if (acesso === null) return <div className="page fade-in"><div className="muted" style={{ padding: 24 }}>Carregando…</div></div>;
+  if (!acesso) {
+    return (
+      <div className="page fade-in">
+        <div className="page-head"><div className="page-head__l"><h1 className="page-head__title">Boletos Avisos</h1></div></div>
+        <Card><div style={{ padding: 24 }}>Esta tela é restrita. Seu usuário não tem acesso.</div></Card>
+      </div>
+    );
+  }
+
+  // /adm-financeiro/boletos-avisos/score[/<cliente>]: "score" é palavra reservada do 2º segmento (o resto é o código de um cliente)
+  if (aberto === 'score' && window.BoletosConsultaCliente) return <window.BoletosConsultaCliente voltar={() => setAberto(null)} gerir={gerir}/>;
+
+  const rodar = async (chave, fn, msgOk) => {
+    setBusy(chave);
+    try { const r = await fn(); if (msgOk) window.toast?.(msgOk(r), 'success'); await carregar(); }
+    catch (e) { window.toast?.(e.message, 'error'); }
+    setBusy(null);
+  };
+  const enviar = (c) => {
+    const para = (c.emails || []).join(', ');
+    const teste = cfg && cfg.destino_teste;
+    if (!confirm(teste ? `MODO TESTE: o aviso de ${c.razao_social} vai só para ${cfg.destino_teste}. Enviar?` : `Enviar aviso de boleto para ${c.razao_social}?\n\nPara: ${para}`)) return;
+    rodar('env' + c.codigo_cliente_omie, () => S.enviarAviso(c), (r) => `Aviso enviado para ${(r.para || []).join(', ')}.`);
+  };
+  const alternarAutomatico = () => {
+    const ligar = !(cfg && cfg.envio_automatico);
+    const texto = ligar
+      ? 'LIGAR o envio automático?\n\nDe segunda a sexta, às 08h30, o sistema manda e-mail real aos clientes: 5 dias antes, 1 dia antes, no dia e 2 dias úteis depois do vencimento (um e-mail por cliente), e avisa a Joice e a Maximira dos atrasos (WhatsApp).' + (cfg && cfg.destino_teste ? `\n\nModo teste ATIVO: tudo vai só para ${cfg.destino_teste}.` : '\n\nO modo teste está DESLIGADO: os e-mails vão para os clientes de verdade.')
+      : 'Desligar o envio automático? Nenhum aviso sai sozinho até religar.';
+    if (!confirm(texto)) return;
+    rodar('auto', () => S.salvarConfig({ envio_automatico: ligar }), () => ligar ? 'Envio automático LIGADO.' : 'Envio automático desligado.');
+  };
+  const definirTeste = () => {
+    const v = prompt('Modo teste: todo e-mail vai SÓ para este endereço (deixe vazio para desligar o modo teste e enviar aos clientes de verdade).', (cfg && cfg.destino_teste) || '');
+    if (v === null) return;
+    const e = v.trim().toLowerCase();
+    if (e && !/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]{2,}$/.test(e)) { window.toast?.('E-mail inválido.', 'error'); return; }
+    rodar('teste', () => S.salvarConfig({ destino_teste: e || null }), () => e ? `Modo teste ligado: avisos só para ${e}.` : 'Modo teste desligado.');
+  };
+  const sincronizar = () => rodar('sync', () => S.sincronizar(), (r) => `Omie lido: ${r.boletosAbertos} boletos em aberto de ${r.clientes} clientes.`);
+  const simular = () => rodar('sim', async () => {
+    const r = await S.simularAutomatico();
+    alert(`Simulação de hoje (${C.dataBR(r.hoje)}): ${r.clientesComAviso} cliente(s) com aviso devido; ${r.semEmail} sem e-mail.\n\n` + (r.simulados || []).map(x => `• ${x.cliente} — ${x.etapa} → ${(x.para || []).join(', ')}`).join('\n'));
+    return r;
+  });
+
+  /* Clique num card = só os clientes que têm título naquela faixa (mesma regra dos cards: C.faixaDoBoleto). Os cards NÃO acompanham
+     este filtro (senão os outros zerariam); só a busca e "sem boleto" mexem nos números. Clicar de novo no card, ou em "Total", limpa. */
+  const faixaAtiva = C.FAIXAS.some(f => f.chave === faixaUrl) ? faixaUrl : '';
+  const hojeISO = C.hojeBrasil();
+  const naFaixa = new Map();   // cliente -> { qtd, centavos } dos títulos da faixa ativa
+  if (faixaAtiva) for (const b of abertos) {
+    if (C.faixaDoBoleto(b.data_vencimento, hojeISO, feriados) !== faixaAtiva) continue;
+    const x = naFaixa.get(b.codigo_cliente_omie) || { qtd: 0, centavos: 0 };
+    x.qtd++; x.centavos += Math.round(Number(b.valor || 0) * 100); naFaixa.set(b.codigo_cliente_omie, x);
+  }
+  const bateBusca = (c) => (!soSem || Number(c.qtd_sem_boleto) > 0) && (!q || `${c.razao_social} ${c.cnpj || ''}`.toLowerCase().includes(q.toLowerCase()));
+  const sitMarcadas = String(sitUrl || '').split(',').filter(x => BAV_SITUACOES.some(([k]) => k === x));
+  /* Cliente com e-mail devolvido ou com falha no último envio (sai sozinho quando o aviso seguinte é entregue) e quem recebeu cada etapa hoje. */
+  const errosDeEnvio = C.clientesComErro(lista, devs.devolucoes, devs.envios);
+  const doDia = C.contarEnviosDoDia(enviosHoje, hojeISO);
+  const erroAtivo = erroUrl === '1';
+  const envioAtivo = C.ETAPAS_DO_DIA.includes(envioUrl) ? envioUrl : '';
+  const nDevolvidos = [...errosDeEnvio.values()].filter(x => x.tipo === 'devolvido').length;
+  const nFalhas = errosDeEnvio.size - nDevolvidos;
+  /* Aba Tratativas: casos por cliente (resposta sem tratar, e-mail devolvido, caso aberto). O número no botão = quantos pedem ação. */
+  const TT = window.BoletosTratativasCalc;
+  const casosTrat = TT ? TT.casosAtivos({ lista, entradas: painel.entradas, envios: painel.envios, casos: painel.casos, tratativas: painel.tratativas, erros: errosDeEnvio, hojeISO }) : [];
+  const nTrat = TT ? TT.pedemAcao(casosTrat) : 0;
+  if (aberto === 'tratativas' && window.BoletosTratativas) return <window.BoletosTratativas voltar={() => setAberto(null)} casos={casosTrat} painel={painel} lista={lista || []} recarregar={carregar} podeTratar={podeTratar}/>;
+  const filtrada = (lista || []).filter(c => bateBusca(c) && (!faixaAtiva || naFaixa.has(c.codigo_cliente_omie)) && (!sitMarcadas.length || sitMarcadas.includes(c.situacao))
+    && (!erroAtivo || errosDeEnvio.has(c.codigo_cliente_omie)) && (!envioAtivo || doDia[envioAtivo].clientes.has(c.codigo_cliente_omie)));
+  const escolherFaixa = (chave) => setFaixa(chave && chave !== faixaAtiva ? chave : '');
+  /* Os cards acompanham a busca e o filtro: somam só os títulos dos clientes que estão na lista */
+  /* Classificar pelos títulos das colunas. Sem clique, vale a ordem de antes (maior atraso primeiro). Valor e quantidade seguem a faixa ativa. */
+  const RANK_CLASSE = { A: 1, B: 2, C: 3, D: 4, N: 5 };
+  const doScore = (c) => { const r = sc.map.get(Number(c.codigo_cliente_omie)); return r && r.cls ? r.cls.classe : null; };
+  const qtdDe = (c) => (faixaAtiva ? (naFaixa.get(c.codigo_cliente_omie) || { qtd: 0 }).qtd : Number(c.qtd_boletos));
+  const centavosDe = (c) => (faixaAtiva ? (naFaixa.get(c.codigo_cliente_omie) || { centavos: 0 }).centavos : Math.round(Number(c.valor_total || 0) * 100));
+  const linhasOrdenadas = ord.aplicar(filtrada, {
+    situacao: (c) => (c.situacao === 'atrasado' ? Number(c.dias_atraso) || 0 : c.situacao === 'vence_hoje' ? 0 : -1),
+    razao: (c) => c.razao_social,
+    score: (c) => { const k = doScore(c); return k ? (RANK_CLASSE[k] || 9) : null; },
+    qtd: (c) => qtdDe(c),
+    valor: (c) => centavosDe(c) / 100,
+    email: (c) => (c.emails || [])[0] || '',
+    aviso: (c) => (c.ultimo_aviso_em ? Date.parse(c.ultimo_aviso_em) : null),
+  });
+  /* Marcar: o resumo conta só quem está visível na lista atual; marcado escondido por filtro continua marcado e aparece como "fora do filtro". */
+  const visiveis = filtrada.filter(c => selecionados.has(c.codigo_cliente_omie));
+  const resumoSel = C.resumoSelecao(visiveis.map(c => ({ qtd: qtdDe(c), centavos: centavosDe(c) })));
+  const foraDoFiltro = selecionados.size - visiveis.length;
+  const todosMarcados = linhasOrdenadas.length > 0 && linhasOrdenadas.every(c => selecionados.has(c.codigo_cliente_omie));
+  const algunsMarcados = linhasOrdenadas.some(c => selecionados.has(c.codigo_cliente_omie));
+  const marcar = (cod, sim) => setSelecionados(s => { const n = new Set(s); if (sim) n.add(cod); else n.delete(cod); return n; });
+  const marcarTodos = (sim) => setSelecionados(s => { const n = new Set(s); linhasOrdenadas.forEach(c => (sim ? n.add(c.codigo_cliente_omie) : n.delete(c.codigo_cliente_omie))); return n; });
+  const filtrando = !!q || soSem;
+  const codigosFiltrados = new Set((lista || []).filter(bateBusca).map(c => c.codigo_cliente_omie));
+  /* Com clientes marcados (19/11/2026, pedido do Gelson) os cards mostram só o que é deles: marcado AND passa na busca/"sem boleto".
+     Como já era, os cards não seguem a faixa clicada nem o filtro da Situação (senão os outros cards zerariam). */
+  const comSelecao = selecionados.size > 0;
+  const codigosDosCards = comSelecao ? new Set([...codigosFiltrados].filter(cod => selecionados.has(cod))) : codigosFiltrados;
+  const fin = C.resumoFinanceiro((filtrando || comSelecao) ? abertos.filter(b => codigosDosCards.has(b.codigo_cliente_omie)) : abertos, C.hojeBrasil(), feriados);
+  const atrasadoDoCliente = new Map();
+  for (const b of abertos) { if (C.situacaoDoBoleto(b.data_vencimento, C.hojeBrasil(), feriados) === 'atrasado') atrasadoDoCliente.set(b.codigo_cliente_omie, Math.round(((atrasadoDoCliente.get(b.codigo_cliente_omie) || 0) + Number(b.valor || 0)) * 100) / 100); }
+  const tot = filtrada.reduce((a, c) => { a.boletos += Number(c.qtd_boletos || 0); a.sem += Number(c.qtd_sem_boleto || 0); if (c.situacao === 'atrasado') a.atr++; if (c.situacao === 'vence_hoje') a.hoje++; if (!(c.emails || []).length) a.semEmail++; return a; }, { boletos: 0, sem: 0, atr: 0, hoje: 0, semEmail: 0 });
+  const semEmailNosCards = comSelecao ? (lista || []).filter(c => codigosDosCards.has(c.codigo_cliente_omie) && !(c.emails || []).length).length : tot.semEmail;
+
+  return (
+    <div className="page fade-in">
+      <div className="page-head">
+        <div className="page-head__l">
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro &amp; Preços · Boletos Avisos</div>
+          <h1 className="page-head__title">Boletos Avisos</h1>
+          <p className="page-head__sub">Clientes com título em aberto no Omie (com boleto ou, para quem paga por depósito, sem boleto até 180 dias de atraso). O sistema avisa por e-mail (um por cliente, com os títulos separados por situação) 5 dias antes, 1 dia antes, no dia e, se atrasar, 2 dias úteis depois (com ou sem boleto: o banco pode levar 1 dia útil para mostrar o pagamento); a Joice e a Maximira são avisadas dos atrasos. Tela restrita: Gelson, Diego e Juliana gerenciam; quem recebeu a alçada só consulta.</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <Button size="sm" variant="primary" onClick={() => setAberto('score')}>Consultar cliente (score)</Button>
+          <Button size="sm" variant={nTrat ? 'primary' : 'outline'} onClick={() => setAberto('tratativas')}>{'Tratativas' + (nTrat ? ' (' + nTrat + ')' : '')}</Button>
+          {(gerir || podeAtualizar) && <Button size="sm" variant="outline" disabled={busy === 'sync'} onClick={sincronizar}>{busy === 'sync' ? 'Lendo o Omie…' : 'Atualizar do Omie'}</Button>}
+          {gerir && <Button size="sm" variant="outline" disabled={busy === 'sim'} onClick={simular}>Simular envio de hoje</Button>}
+        </div>
+      </div>
+
+      {window.BoletosIndiceCard && <window.BoletosIndiceCard/>}
+
+      <Card>
+        <div style={{ padding: '12px 16px', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 600 }}>
+            <input type="checkbox" checked={!!(cfg && cfg.envio_automatico)} disabled={!gerir || busy === 'auto'} onChange={alternarAutomatico}/>
+            Envio automático {cfg && cfg.envio_automatico ? 'LIGADO' : 'desligado'}
+          </label>
+          <span className="small">Modo teste: {cfg && cfg.destino_teste ? <b>{cfg.destino_teste}</b> : <span className="muted">desligado (vai para os clientes)</span>}{gerir && <> · <a href="#" onClick={e => { e.preventDefault(); definirTeste(); }}>alterar</a></>}</span>
+          <span className="small muted">Última leitura do Omie: {cfg && cfg.sincronizado_em ? new Date(cfg.sincronizado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'nunca'}</span>
+        </div>
+        <div style={{ padding: '4px 16px 12px', display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+          {[
+            { f: '', t: comSelecao ? 'Total em aberto (selecionados)' : filtrando ? 'Total em aberto (filtrado)' : 'Total em aberto', v: fin.total, cor: '#111827', sub: fin.total.clientes + ' clientes · ' + fin.total.boletos + ' títulos' },
+            { f: 'aVencer', t: 'A vencer', v: fin.aVencer, cor: '#16a34a', sub: fin.aVencer.clientes + ' clientes · ' + fin.aVencer.boletos + ' títulos' },
+            { f: 'venceHoje', t: 'Vence hoje', v: fin.venceHoje, cor: '#a16207', sub: fin.venceHoje.clientes + ' clientes · ' + fin.venceHoje.boletos + ' títulos' },
+            { f: 'atrasado30', t: 'Atrasado (1 a 30 dias)', v: fin.atrasado30, cor: '#dc2626', sub: fin.atrasado30.clientes + ' clientes · ' + fin.atrasado30.boletos + ' títulos' },
+            { f: 'atrasadoMais30', t: 'Atrasado (mais de 30 dias)', v: fin.atrasadoMais30, cor: '#991b1b', sub: fin.atrasadoMais30.clientes + ' clientes · ' + fin.atrasadoMais30.boletos + ' títulos' },
+          ].map(k => {
+            const ativo = k.f ? faixaAtiva === k.f : !faixaAtiva;
+            return (
+              <div key={k.t} role="button" tabIndex={0} aria-pressed={ativo}
+                title={k.f ? (ativo ? 'Clique para ver todos de novo' : 'Clique para ver só os clientes desta faixa') : 'Clique para ver todos os clientes'}
+                onClick={() => escolherFaixa(k.f)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); escolherFaixa(k.f); } }}
+                style={{ border: '1px solid var(--border, #e5e7eb)', borderLeft: '4px solid ' + k.cor, borderRadius: 6, padding: '8px 12px', cursor: 'pointer',
+                  boxShadow: ativo && k.f ? '0 0 0 2px ' + k.cor : undefined, background: ativo && k.f ? k.cor + '12' : undefined }}>
+                <div className="small muted">{k.t}</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: k.cor }}>{C.moedaBR(k.v.valor)}</div>
+                <div className="small muted">{ativo && k.f ? 'filtrando — clique para limpar' : k.sub}</div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ padding: '0 16px 12px', display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+          <div role="button" tabIndex={0} aria-pressed={erroAtivo} aria-label="E-mails com erro"
+            title={errosDeEnvio.size ? (erroAtivo ? 'Clique para ver todos de novo' : 'Clique para ver só os clientes com e-mail devolvido ou com falha no envio') : 'Nenhum cliente com e-mail devolvido ou com falha'}
+            onClick={() => { if (errosDeEnvio.size || erroAtivo) setErroUrl(erroAtivo ? '' : '1'); }}
+            onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && (errosDeEnvio.size || erroAtivo)) { e.preventDefault(); setErroUrl(erroAtivo ? '' : '1'); } }}
+            style={{ border: '1px solid var(--border, #e5e7eb)', borderLeft: '4px solid ' + (errosDeEnvio.size ? '#dc2626' : '#9ca3af'), borderRadius: 6, padding: '8px 12px', cursor: errosDeEnvio.size ? 'pointer' : 'default',
+              boxShadow: erroAtivo ? '0 0 0 2px #dc2626' : undefined, background: erroAtivo ? '#dc262612' : undefined }}>
+            <div className="small muted">E-mails com erro (sem entrega)</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: errosDeEnvio.size ? '#dc2626' : '#6b7280' }}>{errosDeEnvio.size ? errosDeEnvio.size + ' cliente(s)' : 'nenhum'}</div>
+            <div className="small muted">{erroAtivo ? 'filtrando — clique para limpar' : errosDeEnvio.size ? nDevolvidos + ' devolvido(s) pelo cliente · ' + nFalhas + ' falha(s) no envio' : 'todos os avisos recentes foram entregues'}</div>
+          </div>
+          <div style={{ border: '1px solid var(--border, #e5e7eb)', borderLeft: '4px solid #2563eb', borderRadius: 6, padding: '8px 12px' }}>
+            <div className="small muted">Avisos enviados hoje (e-mails)</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+              {[['D-5', '5 dias antes'], ['D-1', '1 dia antes'], ['D0', 'No dia'], ['D+1', 'Atraso']].map(([et, rot]) => {
+                const n = doDia[et], ativo = envioAtivo === et;
+                return (
+                  <button key={et} type="button" aria-pressed={ativo} aria-label={rot + ': ' + n.emails + ' e-mail(s) enviado(s) hoje'}
+                    title={n.emails ? n.clientes.size + ' cliente(s) · clique para ver só quem recebeu' + (ativo ? ' (clique de novo para limpar)' : '') : 'Nenhum envio hoje nesta etapa'}
+                    onClick={() => setEnvioUrl(ativo ? '' : et)} disabled={!n.emails && !ativo}
+                    style={{ cursor: n.emails || ativo ? 'pointer' : 'default', textAlign: 'center', minWidth: 78, padding: '4px 8px', borderRadius: 6, border: '1px solid ' + (ativo ? '#2563eb' : 'var(--border, #d1d5db)'),
+                      background: ativo ? '#2563eb18' : 'transparent', boxShadow: ativo ? '0 0 0 2px #2563eb' : undefined, opacity: !n.emails && !ativo ? 0.55 : 1 }}>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: '#1d4ed8' }}>{n.emails}</div>
+                    <div className="small muted">{rot}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <div style={{ padding: '0 16px 12px', display: 'flex', gap: 16, flexWrap: 'wrap' }} className="small">
+          <span><b>{fin.pctAtrasado.toLocaleString('pt-BR')}%</b> do valor em aberto{comSelecao ? ' dos selecionados' : ''} está atrasado ({C.moedaBR(fin.atrasado.valor)} de {fin.atrasado.clientes} clientes)</span>
+          <span className="muted"><b>{semEmailNosCards}</b> sem e-mail</span>
+          <label className="muted" style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={soSem} onChange={e => setSoSem(e.target.checked)}/> Só clientes com título sem boleto ({tot.sem} título(s), pagam por depósito/transferência)</label>
+        </div>
+        <div style={{ padding: '0 16px 12px' }}>
+          <input className="input" placeholder="Buscar por razão social ou CNPJ…" value={q} onChange={e => setQ(e.target.value)} style={{ maxWidth: 320 }}/>
+        </div>
+        {erro && <div style={{ padding: 16, color: 'var(--vp-danger)' }}>{erro}</div>}
+        {faixaAtiva && (
+          <div role="status" style={{ margin: '0 16px 12px', padding: '8px 12px', borderRadius: 6, background: 'var(--surface-2, #f3f4f6)', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span>Mostrando só: <b>{C.FAIXAS.find(f => f.chave === faixaAtiva).rotulo}</b> — {filtrada.length} cliente(s). As colunas "Qtd de títulos" e "Valor em aberto" mostram só os títulos desta faixa.</span>
+            <a href="#" onClick={e => { e.preventDefault(); escolherFaixa(''); }}>Limpar filtro</a>
+          </div>
+        )}
+        {(erroAtivo || envioAtivo) && (
+          <div role="status" aria-label="Filtro de envios" style={{ margin: '0 16px 12px', padding: '8px 12px', borderRadius: 6, background: 'var(--surface-2, #f3f4f6)', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span>Mostrando só: <b>{erroAtivo ? 'clientes com e-mail devolvido ou com falha no envio' : 'clientes que receberam hoje o aviso de ' + (C.ETAPA_ROTULO[envioAtivo] || envioAtivo).toLowerCase()}</b> — {filtrada.length} cliente(s).{erroAtivo && ' Abra o cliente para ver o endereço e o motivo; corrija o e-mail no Omie e o aviso seguinte tira o cliente daqui.'}</span>
+            <a href="#" onClick={e => { e.preventDefault(); setErroUrl(''); setEnvioUrl(''); }}>Limpar filtro</a>
+          </div>
+        )}
+        {selecionados.size > 0 && (
+          <div role="status" aria-label="Clientes selecionados" style={{ margin: '0 16px 12px', padding: '8px 12px', borderRadius: 6, background: 'var(--surface-2, #f3f4f6)', display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span><b>{resumoSel.clientes}</b> cliente(s) selecionado(s) · <b>{resumoSel.titulos}</b> título(s) · <b>{C.moedaBR(resumoSel.valor)}</b>{foraDoFiltro > 0 && <span className="muted"> · +{foraDoFiltro} marcado(s) fora do filtro, não contado(s)</span>}</span>
+            <a href="#" onClick={e => { e.preventDefault(); setSelecionados(new Set()); }}>Limpar seleção</a>
+          </div>
+        )}
+        <div className="table-wrap">
+          <table className="t pcp-grid">
+            <thead><tr><th style={{ width: 32 }}><input type="checkbox" aria-label="Selecionar todos os clientes da lista" title="Marcar ou desmarcar todos os clientes que estão na lista" disabled={!linhasOrdenadas.length}
+              checked={todosMarcados} ref={el => { if (el) el.indeterminate = algunsMarcados && !todosMarcados; }} onChange={e => marcarTodos(e.target.checked)}/></th><th style={{ width: 28 }}></th>{ord.th('situacao', <>Situação<BavFiltroSituacao marcadas={sitMarcadas} onChange={(v) => setSit(v.join(','))}/></>)}{ord.th('razao', 'Razão Social')}{ord.th('score', 'Score')}{ord.th('qtd', 'Qtd de títulos', { style: { textAlign: 'right' } })}{ord.th('valor', 'Valor em aberto', { style: { textAlign: 'right' } })}{ord.th('email', 'E-mail')}{ord.th('aviso', 'Último aviso')}<th></th></tr></thead>
+            <tbody>
+              {lista === null && <tr><td colSpan={10}>Carregando…</td></tr>}
+              {lista && !filtrada.length && <tr><td colSpan={10} className="muted">{(lista || []).length ? 'Nenhum cliente encontrado.' : 'Nenhum boleto em aberto lido do Omie ainda. Clique em "Atualizar do Omie".'}</td></tr>}
+              {linhasOrdenadas.map(c => {
+                const id = String(c.codigo_cliente_omie), isOpen = aberto === id;
+                const semEmail = !(c.emails || []).length;
+                return (
+                  <React.Fragment key={id}>
+                    <tr onClick={() => setAberto(isOpen ? null : id)} style={{ cursor: 'pointer', background: isOpen ? 'var(--surface-2, #fafafa)' : undefined }}>
+                      <td onClick={e => e.stopPropagation()}><input type="checkbox" aria-label={'Selecionar ' + c.razao_social} checked={selecionados.has(c.codigo_cliente_omie)} onChange={e => marcar(c.codigo_cliente_omie, e.target.checked)}/></td>
+                      <td>{isOpen ? '▾' : '▸'}</td>
+                      <td><BavSemaforo situacao={c.situacao} dias={c.dias_atraso}/></td>
+                      <td><b>{c.razao_social}</b>{c.cnpj ? <span className="muted small"> · {c.cnpj}</span> : null}</td>
+                      <td onClick={e => { e.stopPropagation(); if (window.VpRouter) window.VpRouter.navigate('boletos-avisos', 'score', id); }} style={{ cursor: 'pointer' }}>{window.BsChip ? <window.BsChip r={sc.map.get(Number(c.codigo_cliente_omie)) ? sc.map.get(Number(c.codigo_cliente_omie)).cls : (sc.cfg ? window.BoletosScoreCalc.classificar({}, sc.cfg) : null)}/> : null}</td>
+                      <td style={{ textAlign: 'right' }}>{faixaAtiva ? qtdDe(c) : c.qtd_boletos}{!faixaAtiva && Number(c.qtd_sem_boleto) > 0 && <div className="small muted">{c.qtd_sem_boleto} sem boleto</div>}</td>
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><b>{C.moedaBR(faixaAtiva ? centavosDe(c) / 100 : c.valor_total)}</b>{!faixaAtiva && atrasadoDoCliente.get(c.codigo_cliente_omie) > 0 && <div className="small" style={{ color: '#dc2626' }}>{C.moedaBR(atrasadoDoCliente.get(c.codigo_cliente_omie))} atrasado</div>}</td>
+                      <td>{semEmail ? <Badge variant="warning">sem e-mail</Badge> : <span className="small" title={c.emails.join(', ')}>{c.emails[0]}{c.emails.length > 1 ? ` +${c.emails.length - 1}` : ''}</span>}</td>
+                      <td className="small">{c.ultimo_aviso_em ? <>{new Date(c.ultimo_aviso_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · {C.ETAPA_ROTULO[c.ultimo_aviso_etapa] || c.ultimo_aviso_etapa}{c.ultimo_aviso_status === 'erro' ? ' (erro)' : ''}{errosDeEnvio.has(c.codigo_cliente_omie) && <div title={errosDeEnvio.get(c.codigo_cliente_omie).motivo + ((errosDeEnvio.get(c.codigo_cliente_omie).para || []).length ? ' — para: ' + errosDeEnvio.get(c.codigo_cliente_omie).para.join(', ') : '')}><Badge variant="danger">{errosDeEnvio.get(c.codigo_cliente_omie).tipo === 'devolvido' ? 'e-mail devolvido' : 'falha no envio'}</Badge></div>}</> : <span className="muted">—</span>}</td>
+                      <td onClick={e => e.stopPropagation()}>
+                        {gerir && <Button size="sm" variant="primary" disabled={semEmail || busy === 'env' + id} onClick={() => enviar(c)}>{busy === 'env' + id ? 'Enviando…' : 'Enviar aviso'}</Button>}
+                      </td>
+                    </tr>
+                    {isOpen && <tr><td colSpan={10} style={{ padding: 0 }}><BavDetalhe cliente={c} faixa={faixaAtiva}/></td></tr>}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+Object.assign(window, { BoletosAvisosPage });

@@ -6,10 +6,20 @@ on:
   pull_request:
     branches: [main]
 
+# Permissões mínimas: o CI só lê o código.
+permissions:
+  contents: read
+
+# Um novo push cancela o CI antigo da mesma branch/PR (economiza minutos).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     name: Validar estrutura do projeto
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -26,11 +36,46 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
-      - name: Lint (stub)
+      # ESLint com regras de erro real (eslint.config.js). Erro falha o CI.
+      - name: Lint
         run: npm run lint
 
-      - name: Test (stub)
+      # Recompila os 4 bundles de PDF (Vite, ~6 s). Falha se algum build quebrar.
+      - name: Build (bundles de PDF)
+        run: npm run build
+
+      # Os bundles gerados são versionados: se o resultado difere do commit,
+      # alguém editou um .entry.js sem rodar o build (ou o inverso).
+      - name: Bundles de PDF em dia com o código-fonte
+        run: |
+          if ! git diff --quiet -- src/*.bundle.js; then
+            echo "❌ src/*.bundle.js difere do build. Rode 'npm run build' e commite:"
+            git diff --stat -- src/*.bundle.js
+            exit 1
+          fi
+          echo "✅ Bundles de PDF idênticos ao build."
+
+      # docs/rag/ é gerado por scripts/gerar-rag.js a partir de docs/modulos/, CLAUDE.md e README.md.
+      # Mudou um desses documentos? Rode `npm run rag` e commite docs/rag/ (mesmo desenho do passo acima).
+      - name: Índice RAG (docs/rag) em dia com os documentos
+        run: node scripts/gerar-rag.js --conferir
+
+      # Mudou arquivo de um módulo (src/ ou supabase/functions/)? O documento do módulo tem que mudar junto (Arts. 42 e 46).
+      # Por ora só AVISA; trocar --modo aviso por --modo falha quando a fase de aviso terminar (ver a spec 2026-11-02-documentos-em-dia).
+      # Escape, numa mensagem de commit do PR: "Docs: não se aplica — <motivo>".
+      - name: Documentos de módulo em dia com o código (aviso)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/check-docs-em-dia.js "$BASE_SHA" --modo aviso
+
+      # Testes reais: node --test em src/*.test.js (ver scripts/run-tests.js).
+      - name: Testes unitários (node --test)
         run: npm run test
+
+      # Informativo (sem limite mínimo): cobertura nativa do Node.
+      - name: Cobertura (informativo)
+        continue-on-error: true
+        run: node --test --experimental-test-coverage src/*.test.js 2>&1 | tail -30
 
       - name: Cache-busting (?v=) incrementado nos arquivos alterados
         env:
