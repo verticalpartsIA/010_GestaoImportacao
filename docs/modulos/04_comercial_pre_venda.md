@@ -650,7 +650,7 @@ Criada em 30/09/2026 (o item novo do menu abria o Dashboard por causa do cache d
 | Tabela | RLS | Políticas |
 |---|---|---|
 | `formularios_elevador`, `_unidades`, `cotacoes_elevador_fornecedor` (e anexos), `cotacoes_elevador_historico`, `quadros_comando` (e as filhas `_maquina` e `_bom_itens`; as demais filhas **não foram conferidas**), `fornecedores_elevador`, `elevador_*` | ligada | **tudo liberado** a `anon` e `authenticated` |
-| `propostas` | ligada | tudo liberado a `anon` e `authenticated` **mais** a política de leitura `vp_valores_dono` e o gatilho `vp_valores_guarda` (só valem para sessão nativa) |
+| `propostas` | ligada | tudo liberado a `anon` e `authenticated` **mais** a política de leitura `vp_valores_dono` e o gatilho `vp_valores_guarda` (só valem para sessão nativa). *(R3 PR-C — Conferido no código em 22/11/2026; migration `20261122100000_r3_propostas_rls.sql` ainda não aplicada: remove `propostas_all_authenticated`, fecha `anon`, restringe `DELETE` a Administrador ou `propostas.excluir`, e adiciona trigger `INVOKER` `fn_propostas_guarda` bloqueando `INSERT` fora de `rascunho`, transições de assinatura/cliente e alterações em `audit`/`signed_at`/`aprovada_em`/token existente por `authenticated`.)* |
 | `tratativas_cotacao` | ligada | **ler, inserir, atualizar e apagar** liberados ao público |
 | `contratos_sociais` | ligada | ler, inserir e atualizar liberados ao público; **sem DELETE** |
 | `proposta_tokens` | ligada | só leitura para usuário ativo (`vp_usuario_ativo()`) |
