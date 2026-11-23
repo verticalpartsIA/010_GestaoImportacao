@@ -445,7 +445,9 @@ function SgApp() {
           const cEm = ehPai ? rv.signed_at : rv.contratoSignedAt;
           const mapa = (papel, nome, em, au) => ({ papel, nome, em, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null });
           const lista = [];
-          if (cAudit.signedAt || cEm) lista.push(mapa('Representante legal do Comprador', cAudit.signerName || '', cAudit.signedAt || cEm, cAudit));
+          /* Pessoa física assina por si: papel "Comprador" (17/11/2026); empresa continua "Representante legal do Comprador". */
+          const papelComprador = window.CV.papelAssinaturaComprador(doc) === 'Comprador' ? 'Comprador' : window.CV.papelAssinaturaComprador(rv.form_state);
+          if (cAudit.signedAt || cEm) lista.push(mapa(papelComprador, cAudit.signerName || '', cAudit.signedAt || cEm, cAudit));
           if (cId) {
             /* F1 (#571): quem já assinou vem da RPC public_cv_assinaturas (token desta página), com queda para a leitura antiga. */
             const { extras, genericos } = (window.CVStore && window.CVStore.assinaturasDoContrato)

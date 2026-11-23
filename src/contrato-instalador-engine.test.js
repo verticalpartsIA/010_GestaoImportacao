@@ -209,7 +209,74 @@ test('cláusulas novas do advogado (1.x liberação, 4.3, 6.2–6.6, 9.2)', () =
   const doc = CI.buildContract(Object.assign(CI.defaultState ? CI.defaultState() : {}, { distancia:'252' }), 'VPNI-0001');
   const ns = c => doc.clauses.find(x => x.id === c).items.map(i => i.n);
   assert.ok(ns('objeto').some(n => /^1\.\d+\.2$/.test(n)));
-  assert.deepEqual(ns('resp_contratada'), ['4.1','4.2','4.3','4.3.1','4.3.2']);
+  assert.deepEqual(ns('resp_contratada'), ['4.1','4.2','4.3','4.3.1','4.3.2','4.4']);
   assert.deepEqual(ns('logistica'), ['6.1','6.2','6.3','6.4','6.5','6.6']);
-  assert.deepEqual(ns('penalidades'), ['10.1','10.2']);   // com logística, penalidades é a 10ª cláusula
+  assert.deepEqual(ns('penalidades'), ['10.1','10.1.1','10.2','10.3','10.4','10.5','10.6','10.7','10.8','10.8.1','10.9','10.10']);   // com logística, penalidades é a 10ª cláusula
+});
+
+/* Redação nova do advogado (02/11/2026): obrigações 2.14/2.15, responsabilidade 4.3–4.4, pagamento 5.3–5.9, rescisão e penalidades. */
+function docNovo(over) {
+  return CI.buildContract(Object.assign(CI.defaultState(), { distancia:'252' }, over || {}), 'VPNI-0001');
+}
+const clausula = (doc, id) => doc.clauses.find(c => c.id === id);
+const textoTudo = (c) => c.items.map(i => i.text + ' ' + (i.list || []).join(' ')).join(' ');
+
+test('obrigações da contratada — 2.14 (abandono) e 2.15 (relatório), sem pular o número', () => {
+  const ns = clausula(docNovo(), 'obrig_contratada').items.map(i => i.n);
+  assert.deepEqual(ns.slice(-3), ['2.13', '2.14', '2.15']);
+  assert.equal(ns.includes('2.16'), false);
+});
+
+test('pagamento — 5.3 a 5.9, medição com lista a–e e referência à cláusula de penalidades', () => {
+  const doc = docNovo();
+  const pg = clausula(doc, 'pagamento');
+  const ns = pg.items.map(i => i.n);
+  ['5.2','5.3','5.4','5.5','5.6','5.6.1','5.6.2','5.7','5.8','5.9'].forEach(n => assert.ok(ns.includes(n), 'falta ' + n));
+  const i56 = pg.items.find(i => i.n === '5.6');
+  assert.equal(i56.list.length, 5);
+  assert.equal(i56.listType, 'alpha');
+  assert.match(i56.list[2], /Cronograma de Pagamento da Instalação/);
+  assert.doesNotMatch(textoTudo(pg), /físico-financeiro/);
+  assert.match(pg.items.find(i => i.n === '5.9').text, /Cláusula Décima,/);   // com logística, penalidades é a Décima
+  assert.match(pg.items.find(i => i.n === '5.5').text, /entrada prevista no item 5\.1\.1\./);
+});
+
+test('rescisão e penalidades — multas 20% / 0,2% por dia útil limitada a 10%, sem a redação antiga', () => {
+  const doc = docNovo();
+  const pen = clausula(doc, 'penalidades');
+  const t = textoTudo(pen);
+  assert.match(pen.items.find(i => i.n === '10.2').text, /0,2% \(dois décimos por cento\) do valor global contratado por dia útil de atraso, limitada a 10% \(dez por cento\)/);
+  assert.match(pen.items.find(i => i.n === '10.1').text, /20% \(vinte por cento\) do valor global do contrato/);
+  assert.doesNotMatch(t, /0,5%/);
+  const res = clausula(doc, 'rescisao');
+  assert.equal(res.items.find(i => i.n === '8.1').list.length, 8);
+  assert.match(res.items.find(i => i.n === '8.13').text, /termo escrito, que conterá a relação/);
+  assert.doesNotMatch(textoTudo(res), /medidas necessárias, à segurança/);
+});
+
+test('referências cruzadas acompanham a posição real das cláusulas (com e sem logística)', () => {
+  const com = docNovo();
+  assert.match(textoTudo(clausula(com, 'penalidades')), /apuradas na forma do item 8\.7\.1;|apurados na forma do item 8\.7\.1;/);
+  assert.match(clausula(com, 'rescisao').items.find(i => i.n === '8.3').text, /item 8\.2\./);
+  const sem = CI.buildContract(Object.assign(CI.defaultState(), { distancia:'10' }), 'VPNI-0001');
+  assert.match(textoTudo(clausula(sem, 'penalidades')), /item 7\.7\.1;/);
+  assert.match(clausula(sem, 'rescisao').items.find(i => i.n === '7.3').text, /item 7\.2\./);
+  assert.match(clausula(sem, 'pagamento').items.find(i => i.n === '5.9').text, /Cláusula Nona,/);
+  [com, sem].forEach(d => d.clauses.forEach(c => c.items.forEach(it => {
+    assert.doesNotMatch(it.text + (it.list || []).join(' '), /\[\[item|__[A-Z]+__|____/, 'referência não resolvida em ' + it.n);
+  })));
+});
+
+test('modalidade — remoção troca "montagem", "aproveitáveis" e inclui o equipamento desmontado na devolução', () => {
+  const inst = docNovo({ modalidade:'instalacao' });
+  const rem = docNovo({ modalidade:'remocao' });
+  assert.match(clausula(inst, 'resp_contratada').items.find(i => i.n === '4.3').text, /defeitos de montagem/);
+  assert.match(clausula(rem, 'resp_contratada').items.find(i => i.n === '4.3').text, /defeitos de desmontagem, remoção ou adequação/);
+  assert.match(textoTudo(clausula(inst, 'rescisao')), /executados e aproveitáveis/);
+  assert.match(textoTudo(clausula(rem, 'rescisao')), /executados e comprovados/);
+  assert.doesNotMatch(textoTudo(clausula(inst, 'rescisao')), /equipamento desmontado/);
+  assert.match(textoTudo(clausula(rem, 'rescisao')), /equipamento desmontado/);
+  assert.match(clausula(inst, 'rescisao').items.find(i => i.n === '8.7').text, /segurança da instalação e/);
+  assert.match(clausula(rem, 'rescisao').items.find(i => i.n === '8.7').text, /segurança da obra, do equipamento/);
+  assert.match(clausula(rem, 'pagamento').items.find(i => i.n === '5.6').list[2], /cronograma de pagamento, mantido/);
 });

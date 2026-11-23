@@ -79,6 +79,92 @@
     };
     return dv(d.slice(0, 9)) === parseInt(d[9], 10) && dv(d.slice(0, 10)) === parseInt(d[10], 10);
   }
+  /* Documento do cliente vindo da Proposta/Cadastro: decide PF × PJ.
+     PF quando tipo_pessoa/tipoPessoa = 'PF', quando há `cpf`, ou quando o campo
+     `cnpj` traz 11 dígitos / texto "CPF: ..." (jeito antigo de contornar a falta
+     de campo — ex.: cotação 1004). Devolve { tipoPessoa, cnpj, cpf } com CNPJ e
+     CPF só em dígitos (a máscara fica por conta da tela). */
+  function documentoDoCliente(cli) {
+    cli = cli || {};
+    const dCnpj = onlyDigits(cli.cnpj);
+    const dCpf = onlyDigits(cli.cpf);
+    const pf = String(cli.tipo_pessoa || cli.tipoPessoa || '').toUpperCase() === 'PF'
+      || (!!dCpf && dCnpj.length !== 14)
+      || /cpf/i.test(String(cli.cnpj || ''))
+      || (dCnpj.length === 11 && !dCpf);
+    if (pf) return { tipoPessoa: 'PF', cnpj: '', cpf: dCpf || (dCnpj.length === 11 ? dCnpj : '') };
+    return { tipoPessoa: 'PJ', cnpj: dCnpj, cpf: dCpf };
+  }
+  /* Cronograma de pagamento da Proposta → campos do contrato (sinal %, parcelas do saldo e valores de cada parcela).
+     `valores` = proposta.data_json.elevador.valores; `total` = valor total da proposta.
+     O SINAL vem do valor real da 1ª linha ("Sinal de 43,40% …" = R$ 102.075,16), não de um 40% fixo: o vendedor pode
+     ter ajustado o cronograma (17/11/2026, cotação 1004). Mantido em precisão total — arredondar a % faria o sinal
+     deixar de bater com as parcelas e o contrato cair na divisão em parcelas iguais. Devolve null quando a proposta
+     não traz forma de pagamento (o contrato mantém o que já tinha). */
+  function cronogramaDaProposta(valores, total) {
+    valores = valores || {};
+    const num = (v) => {
+      const s = String(v == null ? '' : v).trim();
+      if (!s) return NaN;
+      return Number(s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s);
+    };
+    if (valores.formaTipo === 'vista') return { sinalPct: 100, parcelas: 0, parcelasDetalhe: null };
+    if (valores.formaTipo === 'parcelado' && Number(valores.qtdParcelas) > 0) {
+      const q = Number(valores.qtdParcelas);
+      const linhas = Array.isArray(valores.parcelas) ? valores.parcelas : [];
+      let sinalPct = 40; // padrão da Proposta quando não há cronograma detalhado
+      let detalhe = null;
+      if (linhas.length === q && /sinal/i.test(String(linhas[0] && linhas[0].desc))) {
+        const sinalV = num(linhas[0].valor);
+        const resto = linhas.slice(1).map((l) => num(l.valor));
+        if (resto.length && resto.every((x) => Number.isFinite(x) && x > 0)) detalhe = resto;
+        if (Number.isFinite(sinalV) && sinalV > 0 && total > 0 && sinalV < total) sinalPct = (sinalV / total) * 100;
+      }
+      return { sinalPct, parcelas: Math.max(q - 1, 0), parcelasDetalhe: detalhe };
+    }
+    return null;
+  }
+  /* Papel de quem assina pelo COMPRADOR no bloco de assinaturas digitais: pessoa física assina por si ("Comprador");
+     pessoa jurídica, pelo representante ("Representante legal do Comprador"). Aceita o `doc` do contrato
+     (assinatura.comprador.pf) ou o `form_state` do registro (comprador.tipoPessoa). */
+  function papelAssinaturaComprador(origem) {
+    origem = origem || {};
+    const pf = !!(origem.assinatura && origem.assinatura.comprador && origem.assinatura.comprador.pf)
+      || !!(origem.comprador && origem.comprador.tipoPessoa === 'PF');
+    return pf ? 'Comprador' : 'Representante legal do Comprador';
+  }
+  /* Quantidade de paradas da especificação da Proposta: "04/04/04" (andares/paradas/portas) → "4". Vazio se não houver número. */
+  function paradasDaEspecificacao(spec) {
+    const m = String((spec && spec.andaresParadasPortas) || '').match(/\d+/);
+    return m ? String(parseInt(m[0], 10)) : '';
+  }
+  /* Cadastro de Clientes primeiro, texto da Proposta só como reserva (decisão do Gelson, 17/11/2026,
+     "opção A"). `cli` = proposta.data_json.cliente; `cad` = linha de `clientes` (ou null).
+     Campo a campo: o que o cadastro tem vence; o que está vazio no cadastro cai para a proposta.
+     O ENDEREÇO vai em bloco (logradouro, bairro, cidade, UF, CEP): se o cadastro tem logradouro,
+     usa o endereço inteiro dele — nunca mistura rua de um com CEP do outro. Cidade "São Paulo (SP)"
+     (sufixo digitado no cadastro) perde o "(SP)", senão sairia "São Paulo (SP)/SP" no contrato. */
+  function clienteComCadastro(cli, cad) {
+    cli = cli || {};
+    if (!cad) return cli;
+    const t = (v) => String(v == null ? '' : v).trim();
+    const cidade = (v) => t(v).replace(/\s*\(\s*[A-Za-z]{2}\s*\)\s*$/, '');
+    const pf = cad.tipo_pessoa === 'PF';
+    const end = t(cad.endereco_logradouro)
+      ? { endereco: t(cad.endereco_logradouro), numero: '', bairro: t(cad.endereco_bairro), cidade: cidade(cad.endereco_cidade), uf: t(cad.endereco_estado), cep: t(cad.endereco_cep) }
+      : { endereco: cli.endereco, numero: cli.numero, bairro: cli.bairro, cidade: cli.cidade, uf: cli.uf, cep: cli.cep };
+    return {
+      ...cli, ...end,
+      nome: t(cad.razao_social) || cli.nome,
+      tipo_pessoa: pf ? 'PF' : (cad.tipo_pessoa === 'PJ' ? 'PJ' : cli.tipo_pessoa),
+      /* PF: não herda o "CPF: …" digitado no campo CNPJ da proposta; PJ: CNPJ do cadastro, senão o da proposta. */
+      cnpj: pf ? t(cad.cnpj) : (t(cad.cnpj) || cli.cnpj),
+      cpf: t(cad.cpf) || t(cli.cpf),
+      email: t(cad.email) || cli.email,
+      telefone: t(cad.telefone) || cli.telefone,
+      responsavel: t(cad.contato) || cli.responsavel,
+    };
+  }
   /* Endereço completo no padrão do contrato ("Rua, nº, bairro, cidade/UF, CEP")
      a partir de {endereco, numero, bairro, cidade, uf, cep} — antes só
      logradouro + número herdavam da Proposta. Partes vazias são omitidas. */
@@ -278,6 +364,10 @@
       dossier_id: null,  // ISSUE #6: Vinculação ao Dossier da Obra
       masterId: null, propostaId: null,  // Master ID Fase 2 — herda da Proposta selecionada
       comprador: {
+        /* 'PJ' (padrão) ou 'PF'. PF: razao = nome completo, repCpf = CPF do
+           próprio comprador, sem representante/RG/estado civil (decisão do
+           Gelson, 17/11/2026: só endereço, CPF, e-mail e telefone). */
+        tipoPessoa: 'PJ',
         razao: '', cnpj: '', endereco: '',
         rep: '', repCargo: '', repCpf: '', email: '', tel: '',
         /* Qualificação do representante — cláusula do preâmbulo (minuta oficial) */
@@ -364,11 +454,12 @@
         }))
       : null;
 
-    const compRazao = c.razao || 'RAZÃO SOCIAL';
-    const compCnpj  = c.cnpj  || 'XX.XXX.XXX/XXXX-XX';
+    const ehPF      = c.tipoPessoa === 'PF';
+    const compRazao = c.razao || (ehPF ? 'NOME COMPLETO' : 'RAZÃO SOCIAL');
+    const compCnpj  = ehPF ? '' : (c.cnpj  || 'XX.XXX.XXX/XXXX-XX');
     const compEnd   = c.endereco || 'Rua XXX, nº XXX, bairro, cidade/estado, CEP XX.XXX-XX';
-    const compRep   = c.rep   || 'NOME DO RESPONSÁVEL';
-    const compCpf   = c.repCpf || 'XXX';
+    const compRep   = ehPF ? compRazao : (c.rep || 'NOME DO RESPONSÁVEL');
+    const compCpf   = c.repCpf || (ehPF ? 'XXX.XXX.XXX-XX' : 'XXX');
     const compNac   = c.repNacionalidade || 'nacionalidade';
     const compEstCivil = c.repEstadoCivil || 'estado civil';
     const compProf  = c.repProfissao || 'profissão';
@@ -384,7 +475,9 @@
       body: [
         p('Pelo presente instrumento particular e na melhor forma de direito, as partes a seguir nomeadas:'),
         p(`<b>VENDEDORA:</b> ${esc(V.razao)}, inscrita no CNPJ sob o nº ${esc(V.cnpj)}, com sede à ${esc(V.endereco)}, neste ato representada nos termos de seu Contrato social por <b>${esc(V.rep)}</b>, ${esc(V.repQualif)}, com escritório no endereço acima mencionado e;`, { html: true }),
-        p(`<b>COMPRADOR:</b> ${esc(compRazao)}, inscrito no CNPJ sob o nº ${esc(compCnpj)}, com sede à ${esc(compEnd)}, neste ato representada nos termos de seu ato constitutivo por <b>${esc(compRep)}</b>, ${esc(compNac)}, ${esc(compEstCivil)}, ${esc(compProf)}, portador da cédula de identidade RG de nº ${esc(compRg)}, inscrito no CPF nº ${esc(compCpf)}, residente e domiciliado na ${esc(compEndResp)}.`, { html: true }),
+        ehPF
+          ? p(`<b>COMPRADOR:</b> <b>${esc(compRazao)}</b>, inscrito(a) no CPF sob o nº ${esc(compCpf)}, residente e domiciliado(a) na ${esc(compEnd)}.`, { html: true })
+          : p(`<b>COMPRADOR:</b> ${esc(compRazao)}, inscrito no CNPJ sob o nº ${esc(compCnpj)}, com sede à ${esc(compEnd)}, neste ato representada nos termos de seu ato constitutivo por <b>${esc(compRep)}</b>, ${esc(compNac)}, ${esc(compEstCivil)}, ${esc(compProf)}, portador da cédula de identidade RG de nº ${esc(compRg)}, inscrito no CPF nº ${esc(compCpf)}, residente e domiciliado na ${esc(compEndResp)}.`, { html: true }),
         p('Têm, entre si, certo e ajustado o presente Contrato de compra e venda de equipamento, o qual se regerá pelas disposições do Código Civil e demais condições abaixo, às quais as partes mutuamente se obrigam.'),
       ],
     });
@@ -393,11 +486,10 @@
     sections.push({
       id: 's1', num: '1', title: 'OBJETO DO CONTRATO',
       body: [
-        p('<b>1.1 Objeto.</b> O objeto deste Contrato consiste no descrito a seguir, observados e respeitados os termos e as condições estabelecidos neste instrumento contratual:', { html: true }),
+        p('<b>1.1 Objeto.</b> O objeto deste Contrato consiste no fornecimento de equipamento com serviço de instalação e garantia, observados e respeitados os termos e as condições estabelecidos neste instrumento contratual:', { html: true }),
         p(`Compra e venda de <b>${esc(descEq)}</b> (${esc(descProposta)})${idsEquip ? `, identificados como <b>${esc(idsEquip)}</b>` : ''}, denominado equipamentos, conforme especificações do Anexos I e II.`, { html: true, li: true }),
-        p('Modalidade: “CIF” (“Cost, Insurance and Freight”).', { li: true }),
         p('Instalação dos equipamentos mencionados acima de forma a entregá-los ao COMPRADOR em condições de uso imediato (“turn key”). A instalação compreende as seguintes atividades:', { li: true }),
-        p('Frete (transporte e desembarque);', { li: true, indent: true }),
+        p('Frete e seguro (transporte e desembarque);', { li: true, indent: true }),
         p('Entrega, Instalação e montagem dos equipamentos ocorrerão no endereço abaixo e qualquer alteração no CEP do local de entrega poderá sofrer reajuste de preço.', { li: true, indent: true }),
         p(`<b>LOCAL DE ENTREGA:</b> ${esc(localObra)}`, { html: true, callout: true }),
         p('<b>1.1.1</b> Os seguintes anexos a este Contrato constituem parte indissociável e podem servir para complementar os termos e as condições firmadas neste instrumento contratual.', { html: true }),
@@ -405,7 +497,7 @@
           ['Anexo I', 'Proposta Comercial nº ' + propostaExib],
           ['Anexo II', 'Desenho(s) Técnico(s)'],
         ] }),
-        p('<b>1.1.2</b> Os Desenhos Técnicos referidos no Anexo II acima (Projeto de Instalação) não serão entregues fisicamente na data de assinatura deste Contrato. A VENDEDORA fornecê-los-á separadamente ao COMPRADOR em até 5 (cinco) dias úteis, contados da assinatura deste Contrato, desde que estiverem cumpridas, cumulativamente, as seguintes condições: (i) o pagamento do sinal, mediante confirmação pelo setor Financeiro da VENDEDORA; e (ii) a aprovação pelo setor Jurídico da VENDEDORA.', { html: true, indent: true }),
+        p('<b>1.1.2</b> Os Desenhos Técnicos referidos no Anexo II acima (Projeto de Instalação) não serão entregues fisicamente na data de assinatura deste Contrato. A VENDEDORA fornecê-los-á separadamente ao COMPRADOR em até 10 (dez) dias úteis, contados da assinatura deste Contrato, desde que estiverem cumpridas, cumulativamente, as seguintes condições: (i) o pagamento do sinal, mediante confirmação pelo setor Financeiro da VENDEDORA; e (ii) a aprovação pelo setor Jurídico da VENDEDORA.', { html: true, indent: true }),
       ],
     });
 
@@ -415,11 +507,11 @@
       body: [
         p('<b>2.1 Instalação e funcionamento dos equipamentos.</b> A instalação dos equipamentos a serem entregues ao COMPRADOR observarão as normas técnicas pertinentes à natureza do trabalho. O COMPRADOR declara ciência de que o funcionamento definitivo desses equipamentos dependerá das boas condições do local em que serão montados e ainda das instalações elétricas adequadas e permanentes que os alimentarão.', { html: true }),
         p('<b>2.1.1</b> As instalações elétricas deverão ser providenciadas, antecipada e exclusivamente, pelo COMPRADOR, seguindo as especificações técnicas contidas nos Anexos I e II, para que após aprovação seja iniciada produção dos equipamentos, vide cláusula 2.8.', { html: true, indent: true }),
-        p('<b>2.2 Guarda e manutenção.</b> O COMPRADOR se obriga a receber os equipamentos, dentro do prazo acordado para a entrega, vide cláusula 2.4 e a mantê-los devidamente protegidos contra qualquer tipo de avaria, dano e/ou deterioração, incluindo a proteção contra detritos originados das obras civis, como por exemplo: cimento, gesso, massa corrida, poeira, tinta, umidade, chuva, entre outros.', { html: true }),
+        p('<b>2.2 Guarda e manutenção.</b> O COMPRADOR se obriga a receber os equipamentos, dentro do prazo acordado para a entrega, vide cláusula 2.5 e a mantê-los devidamente protegidos contra qualquer tipo de avaria, dano e/ou deterioração, incluindo a proteção contra detritos originados das obras civis, como por exemplo: cimento, gesso, massa corrida, poeira, tinta, umidade, chuva, entre outros.', { html: true }),
         p('<b>2.2.1</b> Essa obrigação perdurará do ato de entrega dos equipamentos no local da instalação até a vistoria final e a efetiva entrega dos mesmos em pleno funcionamento. Ocasião na qual deverá ser assinado o Termo de Conclusão da Instalação pelas partes deste Contrato e pela empresa designada para a manutenção dos equipamentos.', { html: true, indent: true }),
         p('<b>2.2.2</b> Caso a obra não esteja apta ao recebimento dos equipamentos até a data de entrega, o COMPRADOR deverá indicar um local para a entrega, vide cláusula 1.1, se o COMPRADOR não indicar o local, os equipamentos serão armazenados em local de terceiros e todos os custos decorrentes da armazenagem e posterior movimentação dos equipamentos para a obra, serão de total responsabilidade do COMPRADOR.', { html: true, indent: true }),
         p('<b>2.3 Autorização para descarga.</b> A descarga dos equipamentos será realizada diretamente no local da obra indicado na cláusula 1.1. O COMPRADOR se obriga a providenciar junto às autoridades competentes a autorização para descarga no endereço da obra dos equipamentos em dia e horário previamente agendado entre as Partes.', { html: true }),
-        p('<b>2.4 Frete.</b> A VENDEDORA garante o frete rodoviário e marítimo sem custo para o COMPRADOR desde que a obra esteja pronta na data de entrega dos equipamentos, vide cláusula 2.5. Em caso de descumprimento dessa condição, será de inteira responsabilidade do COMPRADOR quaisquer custos referentes ao frete rodoviário, à descarga e ao armazenamento dos equipamentos.', { html: true }),
+        p('<b>2.4 Frete.</b> A entrega dos equipamentos no local da obra está incluída no preço, desde que a obra esteja pronta na data de entrega (cláusula 2.5). Caso contrário, serão de inteira responsabilidade do COMPRADOR os custos adicionais de frete, descarga e armazenamento dos equipamentos.', { html: true }),
         p('<b>2.5 Prazo de entrega na obra.</b> A VENDEDORA se compromete a entregar os equipamentos adquiridos no prazo de 120 (cento e vinte) a 150 (cento e cinquenta) dias, a contar da data que o último requisito for preenchido, quais sejam: assinatura do Contrato, pagamento do sinal e aprovação do projeto. A conclusão desses 03 (três) requisitos são condições essenciais e indispensáveis para o início da contagem do prazo de entrega dos equipamentos.', { html: true }),
         p('<b>2.5.1</b> Caso a VENDEDORA não realize a entrega dos equipamentos na obra no prazo convencionado, ficará sujeita ao pagamento da multa moratória diária de 0,05% (cinco centésimos por cento) limitado até 2% (dois por cento) sobre o valor do(s) equipamento(s) em atraso.', { html: true, indent: true }),
         p('<b>2.6 Cronograma de Obra.</b> O COMPRADOR deverá apresentar à validação da VENDEDORA o cronograma de obra contendo as datas de liberação para início das montagens e datas finais de entrega.', { html: true }),
@@ -432,7 +524,7 @@
         p('a) no caso de elevadores, o(s) poço(s) estiver(em) devidamente liberado(s) para instalação;', { indent: true }),
         p('b) no caso de escadas ou esteiras rolantes, os “berços” (inferior e superior) estiverem totalmente finalizados.', { indent: true }),
         p('<b>2.6.3</b> A VENDEDORA não se responsabiliza por eventual atraso na instalação e montagem dos equipamentos por alterações no cronograma de obra ou por motivos a que o COMPRADOR der causa.', { html: true, indent: true }),
-        p('<b>2.7 Alterações nos prazos acordados.</b> Todos os prazos com os quais a VENDEDORA se compromete estão sujeitos a alterações em caso de eventuais paralisações, interrupções ou atrasos decorrentes de situações imprevisíveis, irresistíveis e/ou inevitáveis (“Caso Fortuito ou Força Maior”). Este rol inclui, mas não se limita a: Eventos Climáticos e Sanitários: Pandemias, epidemias, calamidades públicas e desastres naturais; Instabilidade Política e Social: Guerras, conflitos armados, embargos comerciais, revoluções, atos de terrorismo e greves; Logística e Comércio Exterior: Trâmites aduaneiros morosos, congestionamentos portuários, escassez de equipamentos e rolagem comprovada de carga (rollover) por decisão unilateral do transportador/armador, que impeçam ou dificultem o cumprimento do cronograma originalmente acordado.', { html: true }),
+        p('<b>2.7 Alterações nos prazos acordados.</b> Todos os prazos com os quais a VENDEDORA se compromete estão sujeitos a alterações em caso de eventuais paralisações, interrupções ou atrasos decorrentes de situações imprevisíveis, irresistíveis e/ou inevitáveis (“Caso Fortuito ou Força Maior”). Este rol inclui, mas não se limita a: Eventos Climáticos e Sanitários: Pandemias, epidemias, calamidades públicas e desastres naturais; Instabilidade Política e Social: Guerras, conflitos armados, embargos comerciais, revoluções, atos de terrorismo e greves de categorias alheias às partes (portuárias, de transportes, de órgãos públicos); atrasos de transporte ou de liberação por autoridades públicas, alheios à vontade da VENDEDORA e devidamente comprovados, que impeçam ou dificultem o cumprimento do cronograma originalmente acordado.', { html: true }),
         p('<b>2.8 Condições importantes.</b> O cumprimento dos prazos acordados também está condicionado à permissão de acesso à VENDEDORA ao local de execução dos serviços, à existência de um ambiente de trabalho seguro conforme as normas aplicáveis e à disponibilidade no mercado de Equipamento de Proteção Individual, mão-de-obra e material necessários para o devido cumprimento do Contrato.', { html: true }),
       ],
     };
@@ -448,7 +540,7 @@
           p('<b>3.1.1</b> O valor total acima discrimina-se, a título informativo, por equipamento conforme tabela a seguir — a obrigação de pagamento permanece única e integral nos termos da cláusula 3.1.', { html: true, indent: true }),
           p('__TABELA_EQUIPAMENTOS__', { equipamentos: tabelaEquipamentos }),
         ] : []),
-        p('<b>3.2 Serviços.</b> A porcentagem de serviços em relação ao preço total pode chegar a até 30% (trinta por cento) podendo ser considerado serviço a instalação, frete rodoviário, projetos de engenharia, treinamentos entre outros.', { html: true }),
+        p('<b>3.2 Serviços.</b> A parcela correspondente a serviços será de 30% (trinta por cento) do preço total do fornecimento.', { html: true }),
         p('<b>3.3 Formas de pagamento.</b> Todos os valores mencionados neste Contrato deverão ser pagos pelo COMPRADOR à VENDEDORA por meio de boleto bancário, depósito bancário ou transferência eletrônica (TED, DOC ou PIX), mediante crédito na conta corrente de titularidade da Vertical Parts Ltda., conforme os dados bancários abaixo:', { html: true }),
         p(`Banco: ${esc(V.banco)}<br/>Agência: ${esc(V.agencia)}<br/>Conta Corrente: ${esc(V.contaCorrente)}<br/>Chave PIX: ${esc(V.cnpj)}`, { html: true, callout: true, bancario: true }),
         p('<b>Parágrafo Único:</b> As partes poderão, mediante comum acordo por escrito, ajustar outras formas de pagamento que julguem convenientes.', { html: true }),
@@ -458,7 +550,8 @@
         p('<b>3.4.3</b> Não será concedido ao COMPRADOR qualquer prorrogação, novação ou prazo de carência. Porém, qualquer concessão ou outro benefício dado ao COMPRADOR pela VENDEDORA não implicará em novação da dívida ou alteração das condições pactuadas neste Contrato, sendo mera liberalidade e, portanto, mantendo-se o pactuado inalterado, válido e exigível.', { html: true, indent: true }),
         p('<b>3.5 Tributos e Contribuições:</b> Os impostos serão lançados na época de sua exigibilidade e serão calculados e lançados em função do objeto e/ou serviço fornecido, na forma legal própria.', { html: true }),
         p('<b>3.5.1</b> Estão inclusos no preço todos os impostos decorrentes de emissão de Notas Fiscais de venda/serviços, montagem, instalação dos equipamentos, bem como ART’S.', { html: true, indent: true }),
-        p('<b>3.5.2</b> Não estão inclusos no preço taxas de alvará de funcionamento ou outras licenças de qualquer natureza vinculadas às obrigações do COMPRADOR, bem como majorações de taxas e impostos, a exemplo de DIFAL de ICMS e de tributos e encargos incidentes sobre a importação e nacionalização das mercadorias (incluindo, sem limitação, Imposto de Importação (II), IPI, PIS/COFINS-Importação, ICMS-importação, AFRMM e taxa SISCOMEX), havidos após a emissão desta proposta ou da NF de venda.', { html: true, indent: true }),
+        p('<b>3.5.2</b> Não estão inclusos no preço taxas de alvará de funcionamento ou outras licenças de qualquer natureza vinculadas às obrigações do COMPRADOR. Caso, após a assinatura deste Contrato, sejam criados ou majorados tributos incidentes sobre a venda dos equipamentos ou sobre os serviços objeto deste Contrato, a exemplo do DIFAL de ICMS, o preço será revisto na proporção do impacto comprovado.', { html: true, indent: true }),
+        p('<b>3.6 Aquisição dos equipamentos e natureza do sinal.</b> A VENDEDORA adquire os equipamentos de seus fornecedores em nome próprio, por sua conta e risco e com recursos próprios, sem qualquer participação do COMPRADOR nessa aquisição. Os valores pagos pelo COMPRADOR antes da entrega constituem arras e princípio de pagamento do preço, nos termos dos arts. 417 a 420 do Código Civil.', { html: true }),
       ],
     });
 
@@ -469,7 +562,7 @@
         p('<b>4.1 Normas seguidas.</b> A VENDEDORA se obriga a adotar todas as disposições das Normas Regulamentadoras de Segurança e Saúde no Trabalho do Ministério do Trabalho e Emprego referentes aos serviços prestados, responsabilizando-se pelo fornecimento e uso adequado e regular de Equipamentos de Proteção Individuais (EPIs) e coletivos (EPCs) por sua equipe de profissionais.', { html: true }),
         p('<b>4.2 Providência de material e pessoal.</b> A VENDEDORA providenciará todo o material e a mão-de-obra necessários à execução dos serviços contratados. Igualmente, a VENDEDORA manterá a sua equipe de profissionais devidamente uniformizada e identificada por crachás de fácil visualização durante a permanência deles nas dependências do COMPRADOR.', { html: true }),
         p('<b>4.3 Responsabilidade por funcionários.</b> A VENDEDORA é a única e integral responsável por seus funcionários e/ou prepostos, seja pela segurança deles, seja por seus atos ou omissões. A VENDEDORA arcará, inclusive, em caráter de exclusividade, com todas as responsabilidades trabalhistas, previdenciárias e sociais advindas da relação estabelecida com os empregados contratados, isentando o COMPRADOR de qualquer responsabilidade daí decorrente.', { html: true }),
-        p('<b>4.4 Indenização por danos.</b> Na hipótese de danos materiais ou morais comprovadamente causados por dolo ou culpa grave dos profissionais da VENDEDORA durante a execução dos serviços no estabelecimento da COMPRADORA, esta será indenizada exclusivamente por danos diretos, limitados ao valor total do Contrato, mediante nexo causal apurado em juízo. Reciprocamente, a COMPRADORA indenizará a VENDEDORA por danos causados por atos ou omissões de seus prepostos ou instalações inadequadas. A parte responsável arcará com custos, despesas e honorários advocatícios comprovados.', { html: true }),
+        p('<b>4.4 Indenização por danos.</b> Na hipótese de danos materiais ou morais comprovadamente causados por dolo ou culpa grave dos profissionais da VENDEDORA durante a execução dos serviços no estabelecimento do COMPRADOR, esta será indenizada exclusivamente por danos diretos, limitados ao valor total do Contrato, mediante nexo causal apurado em juízo. Reciprocamente, o COMPRADOR indenizará a VENDEDORA por danos causados por atos ou omissões de seus prepostos ou instalações inadequadas. A parte responsável arcará com custos, despesas e honorários advocatícios comprovados.', { html: true }),
       ],
     });
 
@@ -513,7 +606,7 @@
     sections.push({
       id: 's8', num: '8', title: 'CONDIÇÕES DE ENCERRAMENTO DO CONTRATO',
       body: [
-        p('<b>8.1 Encerramento por falta de pagamento.</b> Fica expressamente convencionado que, decorrido 30 (trinta) dias de atraso no pagamento de qualquer quantia integrante do preço ajustado, sem justificativa por parte da COMPRADORA, a VENDEDORA notificará a COMPRADORA por escrito, concedendo-lhe prazo de 5 (cinco) dias úteis para regularizar a obrigação. Não efetuado o pagamento nesse prazo, o presente Contrato estará rescindido de pleno direito, de forma automática e irrevogável, sem necessidade de interpelação judicial ou extrajudicial adicional.', { html: true }),
+        p('<b>8.1 Encerramento por falta de pagamento.</b> Fica expressamente convencionado que, decorrido 30 (trinta) dias de atraso no pagamento de qualquer quantia integrante do preço ajustado, sem justificativa por parte do COMPRADOR, a VENDEDORA notificará o COMPRADOR por escrito, concedendo-lhe prazo de 5 (cinco) dias úteis para regularizar a obrigação. Não efetuado o pagamento nesse prazo, o presente Contrato estará rescindido de pleno direito, de forma automática e irrevogável, sem necessidade de interpelação judicial ou extrajudicial adicional.', { html: true }),
         p('<b>8.1.1</b> O encerramento do Contrato nessa situação não impedirá que a VENDEDORA utilize de medidas judiciais e extrajudiciais cabíveis, incluindo a retenção e/ou busca e apreensão dos equipamentos já instalados ou a instalar, bem como a retenção de todos os valores já pagos e a busca por indenização em perdas e danos, sem prejuízo da aplicação das demais penalidades previstas neste contrato.', { html: true, indent: true }),
         p('<b>8.2 Encerramento por desistência ou arrependimento do Comprador.</b> Em caso de arrependimento ou desistência deste Contrato pelo COMPRADOR, serão aplicadas as seguintes disposições:', { html: true }),
         p('<b>8.2.1 Desistência do Comprador Antes da Ordem de Fabricação dos Equipamentos:</b> Caso o COMPRADOR desista deste contrato antes do pagamento da entrada/da ordem de fabricação dos equipamentos, o COMPRADOR deverá indenizar a VENDEDORA pelos serviços que já tiverem sido prestados.', { html: true, indent: true }),
@@ -540,7 +633,7 @@
         p('<b>ii.</b> Ação de Autoridade Governamental que pudesse ser evitada se a parte responsável tivesse cumprido com as suas obrigações legais;', { html: true, indent: true }),
         p('<b>iii.</b> Insolvência, liquidação, falência, reorganização, encerramento, término ou evento semelhante de uma parte ou de terceiros;', { html: true, indent: true }),
         p('<b>iv.</b> Perda de mercado;', { html: true, indent: true }),
-        p('<b>v.</b> Greve e/ou interrupções trabalhistas ou medidas semelhantes, seja de empregados e contratados diretos de uma das partes e/ou de terceirizadas;', { html: true, indent: true }),
+        p('<b>v.</b> Greve de pessoal e/ou interrupções trabalhistas ou medidas semelhantes, seja de empregados e contratados diretos de uma das partes e/ou de terceirizadas;', { html: true, indent: true }),
         p('<b>vi.</b> Condições climáticas adversas que, considerando a história climática local, pudessem ser anteriormente previstas.', { html: true, indent: true }),
       ],
     });
@@ -564,7 +657,7 @@
         p(`<b>Dados do COMPRADOR:</b><br/>Nome: ${esc(contatoCompradorNome)}<br/>Cargo: ${esc(contatoCompradorCargo)}<br/>E-mail: ${esc(contatoCompradorEmail)}`, { html: true, callout: true }),
         p(`<b>Dados da VENDEDORA</b><br/>${contatosVpHtml}`, { html: true, callout: true }),
         p('<b>10.2 Manutenção do direito e novação.</b> A tolerância de qualquer das Partes quanto a qualquer violação a dispositivos deste contrato será sempre entendida como mera liberalidade, não constituindo ou configurando desistência, transigência ou novação, podendo, a qualquer momento, exercer a plenitude de seus direitos.', { html: true }),
-        p('<b>10.3 Cessão do Contrato.</b> As Partes não poderão ceder e/ou transferir os direitos e obrigações decorrentes do presente Contrato ou aliená-los, a qualquer título, sem que tenha prévia e expressa anuência por escrito da VENDEDORA e desde que esteja em dia com todas as obrigações assumidas.', { html: true }),
+        p('<b>10.3 Cessão do Contrato.</b> O COMPRADOR não poderá ceder ou transferir, a qualquer título, os direitos e obrigações decorrentes deste Contrato sem a prévia e expressa anuência por escrito da VENDEDORA, e desde que esteja em dia com todas as obrigações assumidas.', { html: true }),
         p('<b>10.4 Responsabilização Perante Terceiros:</b> Cada parte será única e exclusivamente responsável, em qualquer esfera, por quaisquer danos causados pela respectiva parte a terceiros, oriundas da execução das suas atividades, incluindo condutas de seus prepostos, dolosa ou culposamente, ainda que praticados pelos seus auxiliares.', { html: true }),
         p('<b>10.5 Sucessão contratual.</b> O presente Contrato vincula e obriga as partes, bem como os seus respectivos herdeiros ou sucessores, na forma da lei.', { html: true }),
         p('<b>10.6 Vínculos.</b> As Partes reconhecem que não existe entre elas qualquer relação de sociedade, associação, agenciamento ou vínculo trabalhista em decorrência deste Contrato e que nenhuma parte terá qualquer direito, poder ou autoridade de agir ou vincular a outra, de qualquer maneira e a qualquer título, exceto na medida em que esteja expressamente previsto neste instrumento.', { html: true }),
@@ -574,7 +667,7 @@
         p('<b>10.9 Título Executivo Extrajudicial:</b> As Partes reconhecem o presente contrato enquanto título executivo extrajudicial, na forma do inciso III do artigo 784 do Código de Processo Civil.', { html: true }),
         p('<b>10.10 Ciência inequívoca.</b> As partes contratantes declaram expressamente que leram e entenderam o conteúdo do presente contrato, ficando vedada qualquer arguição quanto à validade de todas as suas cláusulas e condições aqui ajustadas.', { html: true }),
         p('<b>10.11 Ato Jurídico Perfeito:</b> Este contrato representa um ato jurídico perfeito firmado entre as partes, sem que haja ou tenha havido, nas negociações preliminares, qualquer das hipóteses de anulabilidade ou nulidade do negócio jurídico ora firmado.', { html: true }),
-        p('<b>10.12 Foro.</b> Fica eleito o Foro da Comarca de Guarulhos, capital do estado de São Paulo, prevalecendo sobre qualquer outro, por mais privilegiado que seja, para dirimir eventuais dúvidas ou controvérsias judiciais ou extrajudiciais oriundas do presente Contrato.', { html: true }),
+        p('<b>10.12 Foro.</b> Fica eleito o Foro da Comarca de Guarulhos, Estado de São Paulo, prevalecendo sobre qualquer outro, por mais privilegiado que seja, para dirimir eventuais dúvidas ou controvérsias judiciais ou extrajudiciais oriundas do presente Contrato.', { html: true }),
         p('<b>10.13 Assinatura digital.</b> As Partes desde já estabelecem que o presente contrato ou outros instrumentos necessários à sua continuação poderão ser firmados por meios eletrônicos, digitais e informáticos, com uso de assinatura eletrônica, e que as testemunhas, reconhecem a forma de contratação por meios eletrônicos, digitais e informáticos com válida e plenamente eficaz, constituindo título executivo extrajudicial para todos os fins de direito, ainda que seja estabelecida com assinatura eletrônica ou certificado fora dos padrões ICP – BRASIL, conforme disposto pelo art. 10 da Medida Provisória n. 2.200-2 em vigor no Brasil.', { html: true }),
         p(`Guarulhos, ${dataBR(new Date())}.`, { center: true, sign: true }),
       ],
@@ -584,15 +677,15 @@
       sections,
       meta: { especial, longa, dist, descEq, numero, valor, compRazao, compRep, compCpf },
       contratante: V,
-      comprador: { razao: compRazao, cnpj: compCnpj, endereco: compEnd, rep: compRep, repCpf: compCpf, repCargo: c.repCargo },
-      titulo: 'CONTRATO DE COMPRA E VENDA DE EQUIPAMENTOS E PRESTAÇÃO DE SERVIÇOS DE INSTALAÇÃO',
+      comprador: { tipoPessoa: ehPF ? 'PF' : 'PJ', razao: compRazao, cnpj: compCnpj, endereco: compEnd, rep: compRep, repCpf: compCpf, repCargo: c.repCargo },
+      titulo: 'CONTRATO DE COMPRA E VENDA DE EQUIPAMENTOS E PRESTAÇÃO DE SERVIÇOS DE INSTALAÇÃO & GARANTIA',
       numero: numeroExib,
       numeroInterno: numero,
       /* Bloco de assinaturas + testemunhas — renderizado à parte pelo preview,
          não como cláusula numerada (mesma estrutura da minuta oficial). */
       assinatura: {
         vendedora: { nome: V.rep, cpf: V.repCpf },
-        comprador: { razaoLabel: compRazao, nome: c.rep || '', cpf: c.repCpf || '' },
+        comprador: { razaoLabel: compRazao, nome: ehPF ? (c.razao || '') : (c.rep || ''), cpf: c.repCpf || '', pf: ehPF },
       },
     };
   }
@@ -625,7 +718,7 @@
   /* ---------- Exporta tudo em window.CV ---------- */
   window.CV = {
     VENDEDORA, EQUIPAMENTOS, CONTATOS_VP,
-    onlyDigits, isCPFValid, montarEndereco, maskCNPJ, maskCPF, maskPhone, maskCEP, maskMoney, parseMoney, brl, dataBR,
+    onlyDigits, isCPFValid, documentoDoCliente, clienteComCadastro, cronogramaDaProposta, paradasDaEspecificacao, papelAssinaturaComprador, montarEndereco, maskCNPJ, maskCPF, maskPhone, maskCEP, maskMoney, parseMoney, brl, dataBR,
     descEquipamento, defaultState, numeroExibicao, propostaExibicao,
     buildContract,
     calcularD0, addDias,  // ISSUE #6

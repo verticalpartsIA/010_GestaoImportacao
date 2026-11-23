@@ -3,7 +3,7 @@
 > Documento de referência para as sessões do Claude e para a equipe. Atualizado em 24/10/2026.
 > Este repositório é público: aqui não vão telefones, e-mails pessoais, chaves nem detalhes de acesso.
 >
-> **01/11/2026:** estas regras foram concatenadas em `docs/modulos/15_servicos.md` (S2) e comparadas com o código do serviço. Diferenças achadas (registradas lá, em S2.10, sem corrigir este arquivo): a leitura de feriados do HUB está **ligada** desde 24/10 (abaixo consta desligada); o montador externo é reconhecido por "sem e-mail + com telefone" e só no papel "Contratado", não pela marca `externo: true`. Fonte da verdade dos serviços: `15_servicos.md`.
+> **01/11/2026:** estas regras foram concatenadas em `docs/modulos/16_servicos.md` (S2) e comparadas com o código do serviço. Diferenças achadas (registradas lá, em S2.10, sem corrigir este arquivo): a leitura de feriados do HUB está **ligada** desde 24/10 (abaixo consta desligada); o montador externo é reconhecido por "sem e-mail + com telefone" e só no papel "Contratado", não pela marca `externo: true`. Fonte da verdade dos serviços: `16_servicos.md`.
 
 ## O que é
 O **gi-avisos** é o serviço que avisa por WhatsApp a pessoa que precisa agir na próxima etapa do fluxo do VP Gestão

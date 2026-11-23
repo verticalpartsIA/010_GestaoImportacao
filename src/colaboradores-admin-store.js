@@ -25,7 +25,7 @@
     'Geral', 'CRM', 'Cadastros Mestres', 'Comercial | Pré-venda', 'Financeiro & Preços',
     'Contratos & Jurídico', 'Suprimentos & Importação', 'Engenharia & Produto',
     'Obras & Instalação', 'Entrega & Documentação', 'Parceiros & Instaladores',
-    'Logística Interna', 'Fabricação', 'Administração',
+    'Logística Interna', 'Fabricação', 'Quadros de Comando', 'Administração',
   ];
 
   async function listarColaboradores() {
@@ -192,9 +192,20 @@
     ]},
     { grupo: 'ADM/ Financeiro', itens: [
       { modulo: 'cotacoes-fornecedor', label: 'Cotações a Fornecedor' },
-      { modulo: 'precificacao', label: 'Precificação' },
+      { modulo: 'precificacao', label: 'Precificação', capacidades: [
+        ...ACOES_PADRAO,
+        { chave: 'calcular', label: 'Calcular a precificação' },
+        { chave: 'aprovar', label: 'Aprovar a precificação (cria a Proposta)' },
+      ]},
       { modulo: 'aval-financeiro', label: 'Aval Financeiro' },
       { modulo: 'emissao-nf', label: 'Emissão de NF' },
+      /* 17/11/2026: só leitura. Gelson, Diego e Juliana têm acesso total fixo no banco (boletos_avisos_pode_gerir);
+         quem receber esta caixa só vê a tela, sem enviar aviso, atualizar do Omie nem mexer no envio automático. */
+      { modulo: 'boletos-avisos', label: 'Boletos Avisos', capacidades: [
+        { chave: 'ver', label: 'Vê a tela Boletos Avisos (somente leitura)' },
+        { chave: 'atualizar', label: 'Atualiza os boletos do Omie (botão "Atualizar do Omie"; só lê o Omie, não envia aviso)' },
+        { chave: 'tratar', label: 'Trata os casos da aba Tratativas (anota, muda o status e o responsável; não envia aviso)' },
+      ]},
     ]},
     { grupo: 'Jurídico', itens: [
       { modulo: 'contrato-venda-equipamentos', label: 'Contrato Venda de Equipamentos' },
@@ -210,7 +221,11 @@
       { modulo: 'ims-importacao', label: 'IMS' },
       { modulo: 'embarques-importacao', label: 'Embarques' },
       { modulo: 'gi-analise-precos', label: 'Análise de Preços' },
-      { modulo: 'compras', label: 'Importação Varejo' },
+      { modulo: 'compras', label: 'Importação Varejo', capacidades: [
+        ...ACOES_PADRAO,
+        { chave: 'solicitar', label: 'Envia solicitação de compra ao comprador (vendedor)' },
+        { chave: 'tratar_solicitacoes', label: 'Trata solicitações: aloca em cotação, devolve ao vendedor (comprador)' },
+      ]},
       { modulo: 'cotacoes-varejo', label: 'Cotações de Varejo' },
       { modulo: 'pedidos-acompanhamento', label: 'Pedidos' },
     ]},
@@ -268,8 +283,6 @@
       { modulo: 'montagem-produto', label: 'Montagem do Produto' },
       { modulo: 'lista-fios', label: 'Lista de fios do quadro (Montagem do Produto)' },
       { modulo: 'simulacao-producao', label: 'Simulação' },
-      { modulo: 'mes', label: 'MES — Sistema de Execução da Manufatura' },
-      { modulo: 'mes-cadastros', label: 'MES — Cadastros do chão de fábrica' },
       { modulo: 'relatorios-pcp', label: 'Relatórios do PCP' },
       { modulo: 'expedicao', label: 'Expedição' },
       { modulo: 'separacao', label: 'Separação (painel TV dos pedidos a separar)', capacidades: [
@@ -279,6 +292,14 @@
       ]},
       { modulo: 'fabricacao-corrimao', label: 'Fabricação Corrimão' },
       { modulo: 'fabricacao-corte', label: 'Fabricação Corte' },
+      { modulo: 'quadros-pedidos', label: 'Quadros de Comando — Pedidos', capacidades: [
+        ...ACOES_PADRAO,
+        { chave: 'link_cliente', label: 'Gera/cancela o link do formulário do cliente e corrige as respostas' },
+      ]},
+      { modulo: 'quadros-formularios-respondidos', label: 'Quadros de Comando — Formulários Respondidos (só leitura das respostas do link público)' },
+      { modulo: 'quadros-separacao', label: 'Quadros de Comando — Separação PV QC' },
+      { modulo: 'quadros-separacao-fab', label: 'Quadros de Comando — Separação FAB QC (a gravação do Peguei usa a alçada da Separação PV QC)' },
+      { modulo: 'quadros-calculadora-cabos', label: 'Quadros de Comando — Calculadora de Cabos (só cálculo na tela, não grava nada)' },
       /* Etiquetas (endereço, item…). Spec: docs/superpowers/specs/2026-10-17-modulo-etiquetas-design.md. As chaves são as que o SQL confere
          (migration 20261017160000: política de etiqueta_impressoes). Só quem tem 'imprimir' imprime; 'reimprimir' é outra alçada e exige motivo. */
       { modulo: 'etiquetas', label: 'Etiquetas (endereço, item, palete…)', capacidades: [
@@ -323,7 +344,7 @@
     'CRM': ['leads'],
     'Cadastros Mestres': ['cadastro-clientes', 'cadastro-fornecedores', 'cadastro-materias-primas', 'cadastro-produtos'],
     'Comercial | Pré-venda': ['formularios', 'controle-cotacoes', 'cotacoes-fornecedor', 'propostas', 'contratos-sociais'],
-    'Financeiro & Preços': ['cadastro-custos', 'precificacao', 'aval-financeiro', 'emissao-nf'],
+    'Financeiro & Preços': ['cadastro-custos', 'precificacao', 'aval-financeiro', 'emissao-nf', 'boletos-avisos'],
     'Contratos & Jurídico': ['contrato-venda-equipamentos', 'aval-juridico', 'juridico'],
     'Suprimentos & Importação': ['importacao', 'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos', 'ncm-catalogo', 'compras', 'cotacoes-varejo', 'pedidos-acompanhamento'],
     'Engenharia & Produto': ['engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'solicitacoes-produto', 'ficha-tecnica', 'ncm-catalogo', 'linha-do-tempo'],
@@ -333,10 +354,11 @@
     'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'mapa-obras', 'cronograma', 'art'],
     'Entrega & Documentação': ['central-documentos', 'databook', 'handover', 'repositorio-documentos'],
     'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador', 'cronograma'],
-    'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'pcp', 'mes', 'mes-cadastros', 'relatorios-pcp', 'expedicao', 'separacao', 'etiquetas', 'fabricacao-corrimao', 'fabricacao-corte'],
+    'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'pcp', 'relatorios-pcp', 'expedicao', 'separacao', 'etiquetas', 'fabricacao-corrimao', 'fabricacao-corte'],
     /* Fabricação saiu de Logística Interna (17/10/2026). Logística Interna mantém a lista completa de propósito: quem já tinha o grupo alocado não perde nada. */
     /* Matérias-Primas e Produtos passaram a morar aqui no menu (18/10/2026); continuam também em Cadastros Mestres acima, para ninguém perder a alçada já concedida. */
-    'Fabricação': ['pcp', 'mes', 'mes-cadastros', 'carga-maquina', 'cadastro-materias-primas', 'cadastro-produtos', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'relatorios-pcp', 'fabricacao-corrimao', 'fabricacao-corte'],
+    'Fabricação': ['pcp', 'carga-maquina', 'cadastro-materias-primas', 'cadastro-produtos', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'relatorios-pcp', 'fabricacao-corrimao', 'fabricacao-corte'],
+    'Quadros de Comando': ['quadros-pedidos', 'quadros-formularios-respondidos', 'quadros-separacao', 'quadros-separacao-fab', 'quadros-calculadora-cabos'],
     'Administração': ['logs'],
   };
 
@@ -374,6 +396,15 @@
     const { data } = await c.from('perfis').select('acesso_manual').eq('id', perfilId).maybeSingle();
     return !!(data && data.acesso_manual);
   }
+  /* "Valores R$" da pessoa (modo todos/nenhum + liberar/esconder por etiqueta
+     modulo.etiqueta). Só LEITURA: quem grava é o vpsistema.com/administracao
+     (vpsistema-sync). Falha de leitura NÃO vira "sem valores": devolve { erro }. */
+  async function valoresAcessoDe(perfilId) {
+    const c = sb(); if (!c) return { erro: 'Supabase não carregado' };
+    const { data, error } = await c.from('valores_acesso').select('modo, liberar, esconder, atualizado_em').eq('perfil_id', perfilId).maybeSingle();
+    if (error) return { erro: error.message || 'Não foi possível ler os valores.' };
+    return { dados: data || null };
+  }
   async function rpcManual(nome, args) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { data, error } = await c.rpc(nome, args);
@@ -393,9 +424,15 @@
      mesmo id de profiles/colaboradores_vpsistema) e enriquece
      window.__VP_USER com foto real + os grupos alocados, depois redispara
      o evento pra Shell/sidebar re-renderizarem já com a foto. */
+  /* Uma tentativa por usuário: quem não tem foto cadastrada continuava com avatarUrl vazio, o listener abaixo
+     chamava esta função de novo, que redisparava 'vpprd:user' — loop infinito que remontava Dashboard e Shell
+     (tela "tremendo", 11/11/2026). Só repete se for outro usuário ou se a chamada falhou. */
+  let enriquecidoId = null;
   async function enriquecerUsuarioLogado() {
     const c = sb(); const u = window.__VP_USER;
     if (!c || !u || !u.id || u.id === 'dev-local') return;
+    if (enriquecidoId === u.id) return;
+    enriquecidoId = u.id;
     try {
       const { data: col } = await c.from('colaboradores_vpsistema').select('id, avatar_url, departamento').eq('id', u.id).maybeSingle();
       if (!col) return;
@@ -403,7 +440,7 @@
       window.__VP_USER = { ...u, avatarUrl: col.avatar_url || null, departamentoReal: col.departamento || null, gruposAlocados: (aloc || []).map((a) => a.grupo_modulo) };
       try { sessionStorage.setItem('vpprd_user', JSON.stringify(window.__VP_USER)); } catch (e) {}
       window.dispatchEvent(new CustomEvent('vpprd:user', { detail: window.__VP_USER }));
-    } catch (e) { console.warn('[ColaboradoresAdminStore] enriquecerUsuarioLogado falhou', e); }
+    } catch (e) { enriquecidoId = null; console.warn('[ColaboradoresAdminStore] enriquecerUsuarioLogado falhou', e); }
   }
 
   window.addEventListener('vpprd:user', () => { if (!(window.__VP_USER || {}).avatarUrl) enriquecerUsuarioLogado(); });
@@ -414,6 +451,6 @@
     alocar, desalocar, removerTodasAlocacoes, enriquecerUsuarioLogado,
     ACOES_PADRAO, CATALOGO_MODULOS, listarCapacidadesConcedidas, concederCapacidade,
     MODULOS_POR_GRUPO_SIDEBAR, capacidadesDoGrupo, concederGrupoInteiro,
-    acessoManual, definirAcessoManual, definirAlcadaManual,
+    acessoManual, definirAcessoManual, definirAlcadaManual, valoresAcessoDe,
   };
 }());

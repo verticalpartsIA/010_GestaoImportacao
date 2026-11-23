@@ -1787,7 +1787,7 @@ async function ciBaixarPdf(recLeve) {
 
     // blocos "atômicos" — nunca partidos ao meio entre 2 páginas
     const cssToCanvas = canvas.width / sheetBox.width;
-    const atoms = Array.from(sheetEl.querySelectorAll('.ci-doc-clause, .ci-doc-sign-block, .ci-doc-digital, .ci-doc-witness'))
+    const atoms = Array.from(sheetEl.querySelectorAll('.ci-doc-clause, .ci-doc-sign-block, .ci-doc-digital, .ci-doc-witness, .ci-doc-selo'))
       .map((el) => {
         const r = el.getBoundingClientRect();
         return { top: Math.round((r.top - sheetBox.top) * cssToCanvas), bottom: Math.round((r.bottom - sheetBox.top) * cssToCanvas) };
@@ -2292,8 +2292,11 @@ function CIDashboard() {
 
   _ciUE(() => {
     window.CIStore.sweepExpired().then(refresh);
-    const t = setInterval(refresh, 15000);
-    return () => clearInterval(t);
+    /* pausa com a aba oculta; ao voltar para a aba atualiza na hora. */
+    const t = setInterval(() => { if (!document.hidden) refresh(); }, 15000);
+    const vis = () => { if (!document.hidden) refresh(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
   }, []);
 
   const [editRec, setEditRec] = _ciUS(null);

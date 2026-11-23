@@ -66,6 +66,14 @@
        Com precificacaoId, essa heurística some de propósito: o chamador
        mandou qual é, e a cotação do fornecedor vem só do vínculo DELA
        (nunca do "melhor" entre as cotações da família inteira). */
+    /* Escada/esteira têm tabela própria (preço de venda lançado pelo Financeiro).
+       Falha de leitura não derruba a herança: o valor só fica em branco. */
+    let precificacoesEscEst = [];
+    try {
+      const r = await c.from('precificacoes_escada_esteira').select('*').eq('numero_cotacao', numero);
+      if (!r.error) precificacoesEscEst = r.data || [];
+    } catch (e) { /* sem tabela/permissão: segue sem preço */ }
+
     const lista = cotacoes || [];
     const listaPz = precificacoes || [];
     const precificacao = precificacaoId
@@ -87,6 +95,29 @@
       unidades: unidades || [],
       cotacao,
       precificacao,
+      precificacoesEscEst,
+    };
+  }
+
+  /* Dados do cliente (Cadastro) no formato da Proposta. 17/11/2026: pessoa física herda o CPF em campo próprio
+     (`cpf` + `tipo_pessoa`); antes só existia `cnpj` e o CPF era digitado ali dentro como "CPF: …".
+     O Contrato de Venda lê estes campos (CV.documentoDoCliente). */
+  function clienteParaProposta(cliente) {
+    cliente = cliente || {};
+    return {
+      nome: cliente.razao_social || '',
+      cnpj: cliente.cnpj || '',
+      tipo_pessoa: cliente.tipo_pessoa === 'PF' ? 'PF' : 'PJ',
+      cpf: cliente.cpf || '',
+      responsavel: cliente.contato || '',
+      endereco: cliente.endereco_logradouro || '',
+      numero: '',
+      bairro: cliente.endereco_bairro || '',
+      cidade: cliente.endereco_cidade || '',
+      uf: cliente.endereco_estado || '',
+      cep: cliente.endereco_cep || '',
+      email: cliente.email || '',
+      telefone: cliente.telefone || '',
     };
   }
 
@@ -267,21 +298,19 @@
       (Array.isArray(e.codigos) ? e.codigos : []).forEach((c) => { if (!g.codigos.includes(c)) g.codigos.push(c); });
     });
     if (grupos.size < 2) return [];
-    const dim = (l, a) => ((l || a) ? `${l || '?'} x ${a || '?'}mm` : '');
+    const divsCotacao = window.PropostaCotado ? window.PropostaCotado.detectarDivergencias(fontes) : [];
     return [...grupos.entries()].map(([chave, g]) => {
       const u = g.unidade || {};
-      const abertura = String(u.porta_tipo_abertura || '').trim();
-      const legado = {
-        modeloCabine: u.modelo || '',
-        acabamentoMat: u.aco_cabina || '',
-        subTeto: u.teto_falso || '',
-        painelOperacao: u.botoeira_cabine || '',
-        pisoCabina: u.piso_cabina || '',
-        modeloPorta: abertura ? `Automática ${abertura}` : '',
-        dimPortaCabine: dim(u.porta_largura_mm, u.porta_altura_mm),
-        acabPortaCabine: u.acabamento_porta_cabina || '',
-        portasPavimento: u.acabamento_porta_pavimento || '',
-        botoeirasPavimento: u.botoeira_pavimento || '',
+      const PC = window.PropostaCotado;
+      const tecU = envio.find((x) => x.unidade_id === (u.id || u.unidade_id)) || {};
+      /* 13/11/2026 — o que vale é o COTADO (resposta do fornecedor > snapshot enviado > Unidade). Porta de vidro continua
+         pela descrição própria (portas-vidro-calc.js). */
+      const legado = PC ? PC.legadoDaUnidade(u, tecU, divsCotacao, {
+        descricaoPorta: (un, lado) => (window.PortasVidro ? window.PortasVidro.descricao(un, lado, 'pt') : ''),
+      }) : {
+        modeloCabine: u.modelo || '', acabamentoMat: u.aco_cabina || '', subTeto: u.teto_falso || '', painelOperacao: u.botoeira_cabine || '',
+        pisoCabina: u.piso_cabina || '', modeloPorta: u.porta_tipo_abertura ? `Automática ${u.porta_tipo_abertura}` : '',
+        acabPortaCabine: u.acabamento_porta_cabina || '', portasPavimento: u.acabamento_porta_pavimento || '', botoeirasPavimento: u.botoeira_pavimento || '',
       };
       return {
         id: 'perfil_' + chave.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
@@ -369,7 +398,11 @@
     // V2 (nunca recalculada desde a migração).
     const resultado = (precificacao && precificacao.resultado_v2 && precificacao.resultado_v2.precificacao)
       || (precificacao && precificacao.resultado && precificacao.resultado.precificacao) || null;
-    const especificacoes = montarEspecificacoes(fontes);
+    /* 13/11/2026 — a proposta herda o que foi realmente COTADO: o que o fornecedor propôs diferente do pedido
+       (`respostas.itens[].divergencias`) vale, e fica registrado em `divergencias` para o vendedor aceitar ou recusar. */
+    const PC = window.PropostaCotado;
+    const divergencias = PC ? PC.detectarDivergencias(fontes) : [];
+    const especificacoes = PC ? PC.aplicarNasEspecs(montarEspecificacoes(fontes), divergencias) : montarEspecificacoes(fontes);
 
     const qtdTotal = especificacoes.reduce((s, e) => s + (Number(e.qtd) || 0), 0) || 1;
     const equipamentos = [...new Set(especificacoes.map((e) => e.modelo).filter(Boolean))].join(', ');
@@ -380,19 +413,7 @@
       masterId: cotacao ? cotacao.numero_documento : null,
       precificacaoId: precificacao ? precificacao.id : null,
       ativos: montarAtivos(fontes),
-      cliente: {
-        nome: cliente.razao_social || '',
-        cnpj: cliente.cnpj || '',
-        responsavel: cliente.contato || '',
-        endereco: cliente.endereco_logradouro || '',
-        numero: '',
-        bairro: cliente.endereco_bairro || '',
-        cidade: cliente.endereco_cidade || '',
-        uf: cliente.endereco_estado || '',
-        cep: cliente.endereco_cep || '',
-        email: cliente.email || '',
-        telefone: cliente.telefone || '',
-      },
+      cliente: clienteParaProposta(cliente),
       obra: {
         nome: formulario.local_obra_cidade || '',
         endereco: formulario.endereco_obra_logradouro || formulario.endereco_logradouro || '',
@@ -431,12 +452,22 @@
       /* UM item por EQUIPAMENTO FÍSICO, com o código dele (VPEL-EL0963-13…): cada equipamento é único e o
          cliente pode pedir mudança num específico. Unidade de quantidade N vira N itens (quantidade 1). */
       valores.itens = [];
+      /* 06/11/2026 — coluna "Alterar valor" da Precificação: o preço do equipamento é o rateio BASE + a diferença
+         que o Financeiro digitou para ELE (os outros não mudam). O total fecha em precoVendaProposta (= base + soma). */
+      const ajMap = (precificacao && precificacao.resultado_v2 && precificacao.resultado_v2.ajustes
+        && precificacao.resultado_v2.ajustes.porEquipamento) || {};
+      const moL = (precificacao && precificacao.mo_lookup) || [];
+      const ajDe = (cod) => {
+        const f = cod ? moL.find((x) => x.identificador === cod) : null;
+        return f ? (Number(ajMap[`${f.unidadeId}:${f.equipamentoIndice || 1}`]) || 0) : 0;
+      };
       especificacoes.forEach((e, i) => {
-        const unit = c2(e.valorUnitarioRs) || mediaFallback;
+        const unit0 = c2(e.valorUnitarioRs) || mediaFallback;
         const n = Math.max(1, Number(e.qtd) || 1);
         const codigos = (Array.isArray(e.codigos) && e.codigos.length === n) ? e.codigos : null;
         for (let k = 0; k < n; k++) {
           const cod = codigos ? codigos[k] : (n === 1 ? (e.id || e.codigoAtivo || `Equipamento ${i + 1}`) : null);
+          const unit = c2(unit0 + ajDe(cod));
           valores.itens.push({
             id: cod || e.id || `Equipamento ${i + 1}`,
             unidadeId: e.unidadeId || '',
@@ -511,8 +542,20 @@
       if (especificacoes.length) prefill.elevador.especificacoes = especificacoes;
       const perfis = montarPerfis(fontes, especificacoes);
       if (perfis.length) prefill.elevador.perfis = perfis;
+      /* Cotação de UM tipo só: antes os acabamentos não vinham de lugar nenhum (o vendedor digitava). Agora vêm do cotado. */
+      if (!perfis.length && PC) {
+        const envioU = (cotacao && cotacao.dados_envio && cotacao.dados_envio.unidades) || [];
+        const u0 = (fontes.unidades || [])[0] || (envioU[0] ? { ...envioU[0], id: envioU[0].unidade_id } : null);
+        if (u0) {
+          const tec0 = envioU.find((x) => x.unidade_id === (u0.id || u0.unidade_id)) || {};
+          prefill.elevador.acabamentos = PC.legadoDaUnidade(u0, tec0, divergencias, {
+            descricaoPorta: (un, lado) => (window.PortasVidro ? window.PortasVidro.descricao(un, lado, 'pt') : ''),
+          });
+        }
+      }
       if (Object.keys(valores).length) prefill.elevador.valores = valores;
     }
+    if (divergencias.length) prefill.divergencias = divergencias;
     return prefill;
   }
 
@@ -522,7 +565,9 @@
      planilhas técnicas); a proposta usa SELECTS com listas fixas (OPTIONS em
      proposta-form.jsx). Por isso cada valor é normalizado para a opção
      equivalente — texto que não casa com nenhuma opção ficaria em branco no
-     select. Não há Precificação própria de escada/esteira: sem valores. */
+     select. O preço vem da Precificação de escada/esteira (preço de venda
+     lançado à mão pelo Financeiro, tabela precificacoes_escada_esteira);
+     sem ela finalizada, valorUnit fica em branco. */
   const ESC_OPTS = {
     escada: {
       empreendimento: ['Comercial', 'Supermercado', 'Shopping', 'Hospital', 'Aeroporto'],
@@ -570,6 +615,12 @@
         : { ...base, desnivelComp: _mm(e.desnivel_vertical || e.comprimento_total), largPallet: _opt(e.largura_palete, O.largura) };
     });
     const qtd = especificacoes.reduce((s, x) => s + (Number(x.qtd) || 0), 0);
+    /* Preço de venda lançado na Precificação de escada/esteira (só a finalizada). */
+    const calc = (typeof window !== 'undefined') && window.PrecificacaoEscEstCalc;
+    if (calc) {
+      const pz = calc.escolherParaProposta(fontes.precificacoesEscEst, calc.categoriaDoTipo(tipo));
+      if (pz) especificacoes.splice(0, especificacoes.length, ...calc.aplicarPrecosNaProposta(especificacoes, pz));
+    }
     return {
       especificacoes,
       valores: { equipamento: tipo === 'escada' ? 'Escada Rolante' : 'Esteira Rolante', quantidade: String(qtd) },
@@ -593,5 +644,5 @@
     return partes.join(' · ');
   }
 
-  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes, montarAtivos, montarEspecificacoes, montarPerfis, perfisAPartirDaProposta, dividirPerfisPorEquipamento, montarBlocoEscadaEsteira };
+  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes, montarAtivos, montarEspecificacoes, clienteParaProposta, montarPerfis, perfisAPartirDaProposta, dividirPerfisPorEquipamento, montarBlocoEscadaEsteira };
 }());

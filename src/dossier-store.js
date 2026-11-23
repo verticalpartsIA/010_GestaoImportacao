@@ -39,6 +39,7 @@ window.__DOSSIER = window.__DOSSIER || (() => {
       const { data, error } = await sb.from('dossier_obra').insert({
         id,
         lead_id: lead.id,
+        cliente_id: lead.cliente_id || null,
         client_name: clientName.trim(),
         building_name: lead.building,
         equip_type: lead.equip?.split('·')[0]?.toLowerCase()?.trim() || null,

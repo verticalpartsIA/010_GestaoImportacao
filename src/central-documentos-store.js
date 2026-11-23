@@ -100,23 +100,36 @@
     const { data: empresas } = await c.from('parceiros_instaladores')
       .select('id, nome').in('id', parceiroInstaladorIds);
 
+    /* 3 consultas no total (antes: 1 por empresa + 1 por colaborador): colaboradores de todas as empresas de uma vez e
+       documentos de todos os colaboradores de uma vez, agrupados aqui na memória. */
+    const empresaIds = (empresas || []).map((e) => e.id);
+    const { data: todosColabs } = empresaIds.length
+      ? await c.from('parceiros_colaboradores').select('id, nome_completo, empresa_id').in('empresa_id', empresaIds)
+      : { data: [] };
+    const colabIds = (todosColabs || []).map((x) => x.id);
+    const { data: todosDocs } = colabIds.length
+      ? await c.from('parceiros_documentos_colaborador')
+          .select('*, parceiros_doc_catalogo(nome, obrigatorio)').in('colaborador_id', colabIds)
+      : { data: [] };
+    const docsPorColab = new Map();
+    (todosDocs || []).forEach((d) => {
+      if (!docsPorColab.has(d.colaborador_id)) docsPorColab.set(d.colaborador_id, []);
+      docsPorColab.get(d.colaborador_id).push(d);
+    });
+    const colabsPorEmpresa = new Map();
+    (todosColabs || []).forEach((x) => {
+      if (!colabsPorEmpresa.has(x.empresa_id)) colabsPorEmpresa.set(x.empresa_id, []);
+      colabsPorEmpresa.get(x.empresa_id).push(x);
+    });
     const resultado = [];
     for (const empresa of (empresas || [])) {
-      const { data: colaboradores } = await c.from('parceiros_colaboradores')
-        .select('id, nome_completo').eq('empresa_id', empresa.id);
-      const colabsComDocs = [];
-      for (const colab of (colaboradores || [])) {
-        const { data: docs } = await c.from('parceiros_documentos_colaborador')
-          .select('*, parceiros_doc_catalogo(nome, obrigatorio)')
-          .eq('colaborador_id', colab.id);
-        colabsComDocs.push({
-          ...colab,
-          documentos: (docs || []).map((d) => ({
-            ...d,
-            status: d.status === 'VALIDO' ? 'disponivel' : (d.status === 'VENCIDO' ? 'pendente' : 'na'),
-          })),
-        });
-      }
+      const colabsComDocs = (colabsPorEmpresa.get(empresa.id) || []).map(({ empresa_id, ...colab }) => ({
+        ...colab,
+        documentos: (docsPorColab.get(colab.id) || []).map((d) => ({
+          ...d,
+          status: d.status === 'VALIDO' ? 'disponivel' : (d.status === 'VENCIDO' ? 'pendente' : 'na'),
+        })),
+      }));
       resultado.push({ empresa, colaboradores: colabsComDocs });
     }
     return resultado;

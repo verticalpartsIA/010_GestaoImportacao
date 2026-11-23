@@ -59,3 +59,20 @@ test('montarEspecificacoes — só largura OU só profundidade da cabine ainda m
   const out = montarEspecificacoes({ unidades: [{ id: 'U1', identificador: 'X', cabina_largura_mm: 1500 }], cotacao: null, precificacao: null });
   assert.equal(out[0].dimensoesCabine, '1500 x ?mm');
 });
+
+test('clienteParaProposta — pessoa física herda tipo e CPF em campos próprios; cnpj não vira depósito de CPF', () => {
+  const c = window.PropostaHeranca.clienteParaProposta({ razao_social: 'Weng Meihuan', tipo_pessoa: 'PF', cpf: '22729596879', cnpj: null, email: 'w@x.com', telefone: '11999990000', endereco_logradouro: 'R. Vinte e Cinco de Março', endereco_cidade: 'São Paulo', endereco_estado: 'SP', endereco_cep: '01021-100' });
+  assert.equal(c.tipo_pessoa, 'PF');
+  assert.equal(c.cpf, '22729596879');
+  assert.equal(c.cnpj, '');
+  assert.equal(c.email, 'w@x.com');
+  assert.equal(c.telefone, '11999990000');
+  assert.equal(c.uf, 'SP');
+});
+
+test('clienteParaProposta — pessoa jurídica continua com CNPJ e tipo PJ', () => {
+  const c = window.PropostaHeranca.clienteParaProposta({ razao_social: 'AGRA', cnpj: '01623480000100' });
+  assert.equal(c.tipo_pessoa, 'PJ');
+  assert.equal(c.cnpj, '01623480000100');
+  assert.equal(c.cpf, '');
+});

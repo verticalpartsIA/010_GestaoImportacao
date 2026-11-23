@@ -8,7 +8,7 @@ const path = require('node:path');
 
 function carregar() {
   global.window = {};
-  for (const f of ['proposta-opcoes.js', 'proposta-acabamentos-engine.js', 'proposta-conteudo-engine.js', 'proposta-textos-base.js', 'proposta-heranca.js']) {
+  for (const f of ['proposta-opcoes.js', 'proposta-acabamentos-engine.js', 'proposta-conteudo-engine.js', 'proposta-textos-base.js', 'proposta-cotado-calc.js', 'proposta-heranca.js']) {
     new Function('window', fs.readFileSync(path.join(__dirname, f), 'utf8'))(global.window);
   }
   return global.window;
