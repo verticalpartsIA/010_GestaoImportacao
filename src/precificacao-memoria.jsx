@@ -56,7 +56,10 @@ function PZMemoriaCalculo({ pz }) {
   }, [pz]);
 
   /* O mark-up é o do campo "MARK-UP" das Alavancas do Financeiro (margem sobre o PREÇO de venda). */
-  const markEff = Number(pz.mark_up_pct) || 0;
+  /* 13/11/2026 — com a coluna "Alterar valor" aplicada no último Calcular, o preço salvo fecha com o mark-up EFETIVO (conta inversa
+     do motor, resultado_v2.ajustes.markUpEfetivo), não com o digitado; a Memória usa o efetivo para bater com o preço do card. */
+  const aj = pz.resultado_v2 && pz.resultado_v2.ajustes;
+  const markEff = aj && aj.markUpEfetivo != null && isFinite(Number(aj.markUpEfetivo)) ? Number(aj.markUpEfetivo) : (Number(pz.mark_up_pct) || 0);
   const r = React.useMemo(() => {
     if (!base.r0) return null;
     try { return E.calcularPlanilha({ ...base.baseInputs, ...base.extras, markUpPct: markEff }); } catch (e) { return null; }
@@ -251,22 +254,25 @@ function PZMemoriaCalculo({ pz }) {
 
       {aba === 'containers' && (
         <div className="stack" style={{ gap: 12 }}>
-          <PMTabela colunas={['Tipo', 'Qtd', 'Preço do container (R$)', 'Capatazia (R$)', 'GRI (R$)', 'Total (R$)']}>
+          <PMTabela colunas={['ID-TAG', 'Porto', 'Tipo', 'Qtd', 'Preço do container (R$)', 'Capatazia (R$)', 'GRI (R$)', 'Taxa de porto (R$)', 'Total (R$)']}>
             {(baseInputs.containers || []).map((c, i) => {
               const qtd = Number(c.quantidade) || 0;
-              const tot = qtd * ((Number(c.preco_rs) || 0) + (Number(c.capatazia_rs) || 0) + (Number(c.gri_rs) || 0));
+              const tot = qtd * ((Number(c.preco_rs) || 0) + (Number(c.capatazia_rs) || 0) + (Number(c.gri_rs) || 0) + (Number(c.taxa_porto_rs) || 0));
               return (
                 <tr key={i}>
+                  <td className="mono">{c.id_tag || '—'}</td>
+                  <td>{c.porto || '—'}</td>
                   <td>{c.tipo_tamanho || '—'}</td>
                   <td className="pl-calc-cell mono">{qtd}</td>
                   <td className="pl-calc-cell mono">{pmBrl(c.preco_rs)}</td>
                   <td className="pl-calc-cell mono">{pmBrl(c.capatazia_rs)}</td>
                   <td className="pl-calc-cell mono">{pmBrl(c.gri_rs)}</td>
+                  <td className="pl-calc-cell mono">{pmBrl(c.taxa_porto_rs)}</td>
                   <td className="pl-calc-cell mono">{pmBrl(tot)}</td>
                 </tr>
               );
             })}
-            <tr className="pl-total"><td>TOTAL em R$ → convertido para US$ pelo câmbio e somado ao CIF</td><td/><td/><td/><td/><td className="pl-calc-cell mono">{pmBrl(r.planilha.containersRs)}</td></tr>
+            <tr className="pl-total"><td>TOTAL em R$ → convertido para US$ pelo câmbio e somado ao CIF</td><td/><td/><td/><td/><td/><td/><td/><td className="pl-calc-cell mono">{pmBrl(r.planilha.containersRs)}</td></tr>
           </PMTabela>
           <div className="pl-note">
             Em R$ → US$: {pmBrl(r.planilha.containersRs)} ÷ câmbio {(Number(baseInputs.txCambial) || 0).toFixed(4).replace('.', ',')} = <b>{pmUsd(r.planilha.containersUsd)}</b>, que entram no frete internacional (célula D8 da planilha)

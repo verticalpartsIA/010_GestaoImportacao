@@ -147,7 +147,7 @@ O início da jornada comercial: onde o lead é captado, qualificado e encaminhad
 **Armadilhas conhecidas (achados, sem correção — descrevem como o código se comporta):**
 - **"Em aberto" inclui "Sem retorno".** O filtro "Em aberto", o indicador "Leads ativos" e o subtítulo contam como aberto tudo que não é Convertido; a Análise (2.5) chama "Sem retorno" de "perdidos". O valor do pipeline, esse sim, exclui Convertido e Sem retorno.
 - **Origem fora da lista de escolha.** A janela só oferece 7 origens, mas as capturas automáticas gravam "Site verticalparts.com.br" e "Formulário Público — Quadro de Comando". Ao **editar** um lead assim, o seletor mostra a primeira opção ("Site") enquanto o valor guardado continua o original até alguém trocar. Na Conversão (2.3) "Site" e "Site verticalparts.com.br" contam separado.
-- **Valor com centavos.** `value` é `bigint` e a janela envia `parseFloat`. Digitar centavos (ex.: 1234,56) deve ser recusado pelo banco; **Não verificado em execução** (conferido só no código e no tipo da coluna).
+- **Valor com centavos.** `value` é `bigint`: a janela agora **recusa** valor com centavos ou negativo, antes de gravar, com a mensagem "Valor estimado deve ser um número inteiro em reais, sem centavos" (revisão de 02/11/2026; **Conferido** no código, sem teste de tela). Antes enviava `parseFloat` e o banco devolvia erro técnico.
 - **`id` do lead vem do relógio** (últimos 6 dígitos de `Date.now()`), igual na tela e na Edge Function: colisão é improvável, mas existe (a chave primária barra a repetição e a tela mostra o erro).
 - **Dois botões iguais ao lado** em cada linha ("Abrir" e a própria linha clicável) e dois pares WhatsApp/Email no Detalhe.
 - **Nome do log engana:** "Lead convertido em Dossiê da Obra" é gravado, mas o status do lead **não** vira Convertido.
@@ -179,6 +179,7 @@ Nenhuma decisão do Gelson registrada ainda para esta tela. Achados da 2.1.8 agu
 - **31/10/2026 (#1200 a #1203):** Kanban confere a gravação; log de criação/edição; página volta à 1 ao filtrar, KPI só dos em aberto e `waLink` único; cartão de erro com retry nas telas de `crm.jsx`.
 - **31/10/2026 (reconferência do documento):** todas as gravações que alteram `leads` passaram a conferir as linhas alteradas (`.select('id')`; 0 linhas = erro): salvar lead (edição), `cliente_id` no Detalhe, `criarOuVincularDeLead` e os 2 updates do passo de proposta assinada. Testes novos: `proposta-lead-cliente.test.js` (0 linhas vira falha do passo) e `cadastros-nunca-excluir.test.js` (0 linhas lança erro).
 - **31/10/2026 (#1228, T8 de Cadastros):** `criarOuVincularDeLead` desempata clientes de mesmo nome pelo e-mail, depois pelo telefone do lead.
+- **02/11/2026 (revisão de código do módulo):** (1) "Qualificar → Dossier" passa a gravar `dossier_obra.cliente_id` quando o lead já tem cliente (antes só `lead_id`; a "Vida do Cliente" não achava a obra); (2) valor com centavos é recusado na janela; (3) em **Editar Lead** o botão "Salvar" fica desabilitado ("Carregando cliente…") até os dados do cliente chegarem, para não mandar documento vazio ao cliente vinculado; (4) o relógio de 4 s da janela "Lead criado" deixa de reiniciar a cada atualização da lista; (5) **editar um lead que já tem cliente deixa de apagar o endereço, a cidade, a UF e a inscrição estadual do cliente**: `buscarOuCriarCliente` (com `clienteIdProvisorio`) só sobrescreve os campos opcionais que a chamada informa, e a janela do Lead não informa nenhum deles (**Conferido** no banco: 5 dos 9 clientes ligados a leads tinham endereço, cidade ou UF; teste `formulario-cliente-provisorio.test.js`). **Fora desta correção (achados, sem mudança):** até 10 consultas seguidas ao Omie por carga da lista (Art. 30); a busca junta prédio e contato sem separador; o filtro de responsável não zera quando o nome some da lista.
 
 ---
 
@@ -436,6 +437,8 @@ Chaves estrangeiras que **apontam para** `leads`: só `cotacoes` e `formularios_
 - Nenhum outro arquivo solto sobre CRM foi encontrado na raiz nem em `docs/` (busca por "lead" e "crm" em `docs/**/*.md`, raiz e `handoffs/`).
 
 ### PC-12 Benefícios trocados com os outros módulos
+
+- **Recebido de Quadros de Comando (04/11/2026, texto em `14_quadros_comando.md` PC-12, Art. 49):** (a) o Omie repete a linha do item com **quantidade 0** — somar por código e ignorar o zero antes de contar linhas ou unidades; (b) **metro e peça nunca se somam** — total por unidade de medida; (c) a caixa de uma tabela longa deve ter a **altura da janela**, para a barra de rolagem lateral ficar à vista; (d) função de banco nova se testa **numa transação que se desfaz**, incluindo um usuário ativo **sem** a alçada (a recusa por "sem sessão" não prova a trava de alçada); (e) a **observação do item** do pedido do Omie (`pcp_pedido_itens.obs_item`) guarda o que a proposta mostra dentro do item. **Conferido** (04/11/2026).
 *(Regra do Gelson, 31/10/2026, Art. 49: o que um módulo tem de bom e novo passa para os outros.)*
 - **Recebido do Geral (`01_geral.md`) e aplicado aqui:** a estrutura de 11 temas por tela, o selo de verificação, o glossário próprio, "Pendências" separadas de "Histórico", "achado, sem correção", a Parte comum e a contagem de testes que foram rodados de verdade.
 - **Doado ao Geral (já escrito em `01_geral.md` PC-9 e 1.1.10):** a regra da leitura paginada (`.range()` com ordem estável) para tabela que pode passar de 1000 linhas; a regra de datas `aaaa-mm-dd`; o cuidado de hooks antes de qualquer `return` antecipado; e o achado de que o Dashboard lê `leads` sem paginar.
@@ -449,9 +452,190 @@ Chaves estrangeiras que **apontam para** `leads`: só `cotacoes` e `formularios_
 - **Recebido de Parceiros & Instaladores (01/11/2026, texto em `11_parceiros_instaladores.md` PC-12):** nada específico do CRM; vale o bloco "Benefícios vindos de Parceiros & Instaladores" do `01_geral.md`.
 - **Recebido de Logística Interna (01/11/2026, texto em `12_logistica_interna.md` PC-12):** nada específico do CRM; vale o bloco "Benefícios vindos de Logística Interna" do `01_geral.md`.
 - **Recebido de Fabricação (01/11/2026, texto em `13_fabricacao.md` PC-12):** nada específico do CRM; vale o bloco "Benefícios vindos de Fabricação" do `01_geral.md`.
-- **Recebido de Administração (01/11/2026, texto em `14_administracao.md` PC-12):** nada específico do CRM; vale o bloco "Benefícios vindos de Administração" do `01_geral.md`.
+- **Recebido de Administração (01/11/2026, texto em `15_administracao.md` PC-12):** nada específico do CRM; vale o bloco "Benefícios vindos de Administração" do `01_geral.md`.
 - **Recebido de Suprimentos & Importação (31/10/2026, texto em `07_suprimentos_importacao.md` PC-12):** conferir se alguma tela de leitura do CRM engole erro (`catch → []`) e mostra zero, e se há tela que lê só uma tabela antiga enquanto o dado novo mora em outra. **Não verificado** no CRM; pendência de conferência, sem mudança de código.
 - **Recebido de Contratos & Jurídico (31/10/2026, texto em `06_contratos_juridico.md` PC-12):** conferir se as políticas de `leads` e `clientes` perguntam por um nome de alçada que existe no catálogo (no contrato, a política de exclusão perguntava por um nome sem concessão); e procurar `update` sem filtro de estado. **Não verificado** no CRM; fica como pendência de conferência, sem mudança de código.
 - **Recebido do Geral em 31/10/2026 (padrões de URL) e ainda não aplicado:** o seletor **Lista/Kanban** de `/crm/leads` é só `useState` (`comercial.jsx`, `view`), então F5, link e Voltar/Avançar não guardam a visão. O padrão é o do Dashboard (`window.useRouteTab`, `01_geral.md` PC-9 e 1.1.2). **Achado, sem correção** (Não verificado em navegador; conferido só pela leitura do código em 31/10/2026).
 - **Duas implementações da mesma regra (a corrigir quando o Gelson decidir):** a consulta "Omie primeiro" existe em `comercial.jsx` (`buscarClienteOmie`) e em `enderecos-api.js` (`consultarCnpjOmieFirst`); a leitura de leads existe como `reloadLeads` (sem paginar) e `useLeadsBase` (paginada). A doação natural é a de `useLeadsBase` e `consultarCnpjOmieFirst` para a tela de Leads. **Não feito:** mudança de código não pedida.
-- **Recebido de Serviços (01/11/2026, texto em `15_servicos.md` PC-2):** todo alerta com destinatário também vira WhatsApp pelo gi-avisos; para chegar certo, título curto com o essencial na frente, sem "teste", sem R$ no título e com o dia da semana por extenso, a obra ou o código do contrato quando houver vários no mesmo dia (o agrupamento de 24 h apaga números). **Conferido** no código do gi-avisos.
+- **Recebido de Serviços (01/11/2026, texto em `16_servicos.md` PC-2):** todo alerta com destinatário também vira WhatsApp pelo gi-avisos; para chegar certo, título curto com o essencial na frente, sem "teste", sem R$ no título e com o dia da semana por extenso, a obra ou o código do contrato quando houver vários no mesmo dia (o agrupamento de 24 h apaga números). **Conferido** no código do gi-avisos.
+
+#### Mapa do site
+
+```mermaid
+flowchart TD
+    Root[Menu Principal: CRM] --> R1["/crm/leads (Pipeline de Leads)"]
+    Root --> R2["/crm/crm-canais (Canais)"]
+    Root --> R3["/crm/crm-conversao (Conversão)"]
+    Root --> R4["/crm/crm-automacao (Automação)"]
+    Root --> R5["/crm/crm-analise (Análise)"]
+
+    R1 --> V1[Visão Lista]
+    R1 --> V2[Visão Kanban]
+
+    R1 --> M1["Janela: Novo / Editar Lead"]
+    R1 --> M2["Janela: Lead Criado (Auto-fechamento 4s)"]
+    R1 --> M3["Janela: Excluir Lead?"]
+
+    R1 --> D1["/crm/lead-detail/:id (Detalhe do Lead)"]
+    
+    D1 --> DM1["Janela: Editar Lead"]
+    D1 --> Ext1["Formulário de Elevador (/formulario-elevador)"]
+    D1 --> Ext2["Dossiê da Obra (/dossier-obra)"]
+
+    R2 --> D1
+    R4 --> Ext3["Cadastros > Clientes"]
+```
+
+#### Wireframe
+
+```text
++-----------------------------------------------------------------------------------------+
+| CRM / Leads                                                                             |
+| Pipeline de Leads — 13 leads em aberto · pipeline R$ X · 0 convertido(s) (0%)           |
++-----------------------------------------------------------------------------------------+
+| [ KPI 1: Leads Ativos ] [ KPI 2: Em Qualificação ] [ KPI 3: Propostas ] [ KPI 4: Valor ]|
++-----------------------------------------------------------------------------------------+
+| Visão: [ (X) Lista | ( ) Kanban ]   [ Exportar CSV ]   [ + Novo Lead ]                  |
+| Filtros: [ Todos ] [ Em aberto ] [ Em qualificação ] ... | Resp: [Todos v] [Buscar...]   |
++-----------------------------------------------------------------------------------------+
+| ID      | Lead / Prédio   | Contato      | Origem | Status     | Valor | Ações          |
++---------+-----------------+--------------+--------+------------+-------+----------------+
+| LD-1234 | Condomínio X    | João (Sínd.) | Site   | Qualific.  | 10k   | [Abrir] [Lix]  |
+| LD-5678 | Edifício Y      | Maria (Adm)  | Indic. | Ag. Cotação| 25k   | [Abrir] [Lix]  |
++---------+-----------------+--------------+--------+------------+-------+----------------+
+| Exibindo 1-15 de 13 leads                              Paginação: [ < Anterior ] [Próxima >]|
++-----------------------------------------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------+
+| [< Voltar para Leads]  LD-1234 · Origem: Site                              Última at. X |
+| Condomínio X — Razão Social Exemplo (CNPJ: 00.000.000/0001-00)                          |
+| Status: [ Em qualificação ]  Prioridade: [ Alta ]                                       |
+| Ações rápidas: [ WhatsApp ] [ E-mail ] [ Editar Lead ] [ Formulário ] [ Qualificar Dossier ]|
++------------------------------------+----------------------------------------------------+
+| COLUNA ESQUERDA                    | COLUNA DIREITA                                     |
+| +--------------------------------+ | +------------------------------------------------+ |
+| | CARTÃO: CLIENTE                | | | CARTÃO: CONTATO                              | |
+| | Razão Social: ...              | | | Nome: João Silva                             | |
+| | CNPJ: 00.000.000/0001-00       | | | Cargo: Síndico                               | |
+| | Valor Estimado: R$ 10.000,00    | | | Tel: (11) 99999-9999  [ WhatsApp ]            | |
+| +--------------------------------+ | | Email: joao@email.com   [ Email ]              | |
+| | CARTÃO: HISTÓRICO ATIVIDADES   | | +------------------------------------------------+ |
+| | • Lead criado via Site         | | | CARTÃO: ESPECIFICAÇÃO TÉCNICA                | |
+| | • Status alterado              | | | (Campos do formulário público, se houver)     | |
+| +--------------------------------+ | +------------------------------------------------+ |
+| | CARTÃO: PRÓXIMO PASSO          | | | CARTÃO: ATRIBUIÇÃO                           | |
+| | Abrir Formulário e alocar equip| | | Resp: Comercial | Origem: Site                 | |
+| +--------------------------------+ | | Comissão prevista: R$ 200,00 (2% — padrão)     | |
+|                                    | +------------------------------------------------+ |
++------------------------------------+----------------------------------------------------+
+```
+
+#### Storyboard
+
+```text
+[ Tela 1: Lista de Leads ] --------> [ Tela 2: Janela Novo Lead ] ------> [ Tela 3: Lead Criado (Modal) ]
+  Ação: Clica em "+ Novo Lead"          Ação: Preenche dados e CNPJ         Ação: Clica em "Fechar" ou aguarda
+         |                                                                           |
+         v                                                                           v
+[ Tela 6: Dossiê da Obra ] <------- [ Tela 5: Detalhe do Lead ] <------- [ Tela 4: Visão Kanban ]
+  Ação: Dossiê aberto criado            Ação: Clica em "Qualificar Dossier" Ação: Arrasta para "Aguardando..."
+```
+
+#### Fluxograma de tarefa crítica
+
+```mermaid
+flowchart TD
+    A[Início: Ação de Converter Lead] --> B{Origem da Ação?}
+    
+    B -->|Proposta Assinada| C[Rastreia cotacao -> formulario -> lead]
+    B -->|Edição Manual / Kanban| D[Chama criarOuVincularDeLead]
+    B -->|Botão Automação| D
+
+    C --> E{Lead já tem cliente_id?}
+    E -->|Sim| F[Usa cliente do Formulário no Lead]
+    E -->|Não| D
+
+    D --> G{Lead já possui cliente_id?}
+    G -->|Sim| H[Completa ICMS e vincula Quadros]
+    G -->|Não| I[Busca Cliente por Razão Social/Nome]
+
+    I --> J{Encontrou Clientes?}
+    J -->|2 ou mais| K[Desempata por E-mail -> Telefone -> Ativo]
+    J -->|1 encontrado| L[Vincular Cliente Existo]
+    J -->|Nenhum| M[Criar Novo Cliente em Cadastros]
+
+    K --> L
+    F --> H
+    L --> H
+    M --> H
+
+    H --> N[Executa trigger trg_leads_vincular_quadros]
+    N --> O[Atualiza quadros_comando.cliente_id]
+    O --> P[Atualiza status leads.status = Convertido]
+    P --> Q[Fim: Cliente Vinculado e Lead Convertido]
+```
+
+#### Organograma
+
+```mermaid
+flowchart TD
+    Root[Módulo CRM] --> Sec1[1. Gestão de Leads]
+    Root --> Sec2[2. Canais de Comunicação]
+    Root --> Sec3[3. Origem & Conversão]
+    Root --> Sec4[4. Automação de Processos]
+    Root --> Sec5[5. Análise & Performance]
+
+    Sec1 --> Sub1_1[Pipeline / Lista de Leads]
+    Sec1 --> Sub1_2[Quadro Kanban]
+    Sec1 --> Sub1_3[Detalhe do Lead]
+    Sec1 --> Sub1_4[Modais de Operação]
+
+    Sec2 --> Sub2_1[Disparo Rápido WhatsApp]
+    Sec2 --> Sub2_2[Integração Email / Inbox]
+
+    Sec3 --> Sub3_1[Relatório de Fontes de Captura]
+    Sec3 --> Sub3_2[Captura Automática Site / Elementor]
+
+    Sec4 --> Sub4_1[Regra Lead Convertido -> Cliente]
+    Sec4 --> Sub4_2[Consolidador de Vínculos Pendentes]
+
+    Sec5 --> Sub5_1[Indicadores KPIs de Pipeline]
+    Sec5 --> Sub5_2[Funil por Status]
+    Sec5 --> Sub5_3[Desempenho por Responsável]
+```
+
+#### Diagrama de teia
+
+```mermaid
+graph TD
+    LEAD((Nó Central: LEAD))
+
+    LEAD <-->|Lê/Grava Dados| DB_LEADS[(Tabela: leads)]
+    LEAD -->|Cria/Vincula| CLI[(Cadastros: Clientes)]
+    LEAD -->|Preenche Dados| FORM[(Formulário de Elevador)]
+    LEAD -->|Gera Obra| DOSSIER[(Dossiê da Obra)]
+    LEAD <-->|Mapeia Pedidos| QUADROS[(Quadro de Comando)]
+    LEAD -->|Consome Dados| OMIE[(API Omie ERP)]
+    LEAD -->|Valida CNPJ/CPF| BRASILAPI[(BrasilAPI)]
+    LEAD -->|Registra Auditoria| VPLOGS[(Tabela: vp_logs)]
+    LEAD -->|Dispara Atendimento| WA[WhatsApp wa.me]
+    LEAD -->|Alimenta KPIs| DASH[(Dashboard Comercial)]
+```
+
+#### Diagrama de estrela
+
+```mermaid
+graph TD
+    CENTER((Detalhe do Lead<br>/crm/lead-detail/:id))
+
+    CENTER <-- Navegação / Rota Direct --> P1["Visão Lista (/crm/leads)"]
+    CENTER <-- Navegação Direct --> P2["Visão Kanban (/crm/leads)"]
+    CENTER <-- Redirecionamento --> P3["Tela de Canais (/crm/crm-canais)"]
+    CENTER <-- Deep Link / Busca --> P4["Busca Global do Cabeçalho"]
+    
+    CENTER --> A1["Ação: WhatsApp (wa.me)"]
+    CENTER --> A2["Ação: Email (mailto:)"]
+    CENTER --> A3["Ação: Modal Editar Lead"]
+    CENTER --> A4["Ação: Abrir Formulário Elevador"]
+    CENTER --> A5["Ação: Qualificar -> Dossier"]
+```

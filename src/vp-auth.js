@@ -47,7 +47,7 @@
       try {
         cli.auth.onAuthStateChange(function (ev, s) {
           usuario = (s && s.user) || null;
-          ouvintes.forEach(function (f) { try { f(ev, usuario); } catch (e) {} });
+          ouvintes.forEach(function (f) { try { f(ev, usuario, s); } catch (e) {} });
         });
       } catch (e) { /* sem ouvinte: segue */ }
     }

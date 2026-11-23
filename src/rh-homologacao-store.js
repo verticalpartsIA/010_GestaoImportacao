@@ -351,9 +351,16 @@
 
     let vencidos = 0;
     let faltando = 0;
+    /* 1 consulta para todos os colaboradores (antes: 1 por colaborador) */
+    const { data: todosDocs } = await c.from('parceiros_documentos_colaborador')
+      .select('colaborador_id, documento_id, status').in('colaborador_id', colaboradores.map((x) => x.id));
+    const docsPorColab = new Map();
+    (todosDocs || []).forEach((d) => {
+      if (!docsPorColab.has(d.colaborador_id)) docsPorColab.set(d.colaborador_id, []);
+      docsPorColab.get(d.colaborador_id).push(d);
+    });
     for (const col of colaboradores) {
-      const { data: docs } = await c.from('parceiros_documentos_colaborador')
-        .select('documento_id, status').eq('colaborador_id', col.id);
+      const docs = docsPorColab.get(col.id) || [];
       const tiposPresentes = new Set((docs || []).map((d) => d.documento_id));
       vencidos += (docs || []).filter((d) => d.status === 'VENCIDO').length;
       faltando += catalogoObrig.filter((t) => !tiposPresentes.has(t.id)).length;

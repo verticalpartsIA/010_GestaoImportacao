@@ -170,6 +170,20 @@
     return criarDecisao(args);
   }
 
+  let _ultimoToastPermissaoEm = 0;
+  function tratarErroLeitura(onde, error) {
+    console.warn('[DecisoesStore] ' + onde + ' falhou', error);
+    const semPermissao = error && (error.code === '42501' || error.status === 401 || error.status === 403 || /permission denied|row-level security/i.test(error.message || ''));
+    if (semPermissao) {
+      const agora = Date.now();
+      if (agora - _ultimoToastPermissaoEm >= 5 * 60 * 1000) {
+        _ultimoToastPermissaoEm = agora;
+        if (window.toast) window.toast('Sem sessão ou permissão para carregar decisões. Recarregue o sistema pelo vpsistema.', 'error');
+      }
+    }
+    return [];
+  }
+
   /* ---------- Consulta ---------- */
   async function listarPendentesParaMim() {
     const c = sb(); if (!c) return [];
@@ -177,7 +191,7 @@
     if (!email) return [];
     const { data, error } = await c.from('decisoes_gerenciais')
       .select('*').in('status', ['pendente']).order('criado_em', { ascending: false });
-    if (error) { console.warn('[DecisoesStore] listarPendentesParaMim falhou', error); return []; }
+    if (error) return tratarErroLeitura('listarPendentesParaMim', error);
     return (await atualizarAprovadores(data || [])).filter(souAprovador);
   }
 
@@ -195,7 +209,7 @@
       q = q.or(`decidido_por.eq."${e}",solicitado_por.eq."${e}",aprovadores_esperados.cs.{"${e}"}`);
     }
     const { data, error } = await q.order('decidido_em', { ascending: false, nullsFirst: false }).limit(limite);
-    if (error) { console.warn('[DecisoesStore] listarDecididas falhou', error); return []; }
+    if (error) return tratarErroLeitura('listarDecididas', error);
     if (todas) return data || [];
     return (data || []).filter((d) => souAprovador(d) || (d.decidido_por || '').toLowerCase() === email || (d.solicitado_por || '').toLowerCase() === email);
   }
@@ -210,7 +224,7 @@
     const c = sb(); if (!c) return [];
     const { data, error } = await c.from('decisoes_gerenciais')
       .select('*').in('status', ['pendente', 'bloqueada_por_dependencia']).order('criado_em', { ascending: false });
-    if (error) { console.warn('[DecisoesStore] listarTodasEmAberto falhou', error); return []; }
+    if (error) return tratarErroLeitura('listarTodasEmAberto', error);
     return atualizarAprovadores(data || []);
   }
 
@@ -267,12 +281,18 @@
   async function desbloquearDependentes(c, decisaoId) {
     const { data: dependentes } = await c.from('decisoes_gerenciais')
       .select('id, depende_de').eq('status', 'bloqueada_por_dependencia').contains('depende_de', [decisaoId]);
-    for (const dep of dependentes || []) {
-      const { data: pais } = await c.from('decisoes_gerenciais').select('id, status').in('id', dep.depende_de);
-      const todasAprovadas = (pais || []).every((p) => p.status === 'aprovada');
-      if (todasAprovadas) {
-        await c.from('decisoes_gerenciais').update({ status: 'pendente', atualizado_em: new Date().toISOString() }).eq('id', dep.id);
-      }
+    if (!dependentes || !dependentes.length) return;
+    /* 1 consulta para todos os pais (antes: 1 por dependente) e 1 atualização para todos os liberados. */
+    const idsPais = [...new Set(dependentes.flatMap((d) => d.depende_de || []))];
+    const { data: pais } = idsPais.length ? await c.from('decisoes_gerenciais').select('id, status').in('id', idsPais) : { data: [] };
+    const statusPai = new Map((pais || []).map((p) => [p.id, p.status]));
+    const liberar = dependentes.filter((dep) => {
+      /* mesmo comportamento de antes: só libera se TODOS os pais encontrados estão aprovados (lista de pais vazia libera) */
+      const encontrados = (dep.depende_de || []).filter((id) => statusPai.has(id));
+      return encontrados.every((id) => statusPai.get(id) === 'aprovada');
+    }).map((dep) => dep.id);
+    if (liberar.length) {
+      await c.from('decisoes_gerenciais').update({ status: 'pendente', atualizado_em: new Date().toISOString() }).in('id', liberar);
     }
   }
 
@@ -466,7 +486,9 @@
      Margem desconhecida (sem precificação finalizada pra essa cotação)
      mantém o CEO no circuito por segurança, igual ao comportamento
      anterior. */
-  const LIMITE_MARGEM_SEM_CEO = 0.15;
+  /* 13/11/2026 — DECISÃO do Gelson ("Confirmo remover"): o gate do CEO por margem (< 15%) saiu. Não existe "margem mínima" na
+     Precificação (não consta da planilha) e o CEO deixa de entrar por margem no envio da proposta, na compra e no Aval Financeiro.
+     Decisões `envio_proposta_ceo`/`compra_equipamento_ceo` já criadas antes continuam visíveis na Central, mas não travam mais. */
 
   async function margemEfetivaDaCotacao(numeroCotacao) {
     const c = sb(); if (!c) return null;
@@ -486,9 +508,9 @@
      por AvalFinanceiroStore.podeIniciarCompra e pela tela Aval Financeiro
      (29/09: a mesma regra dos 15% vale pra compra na China). */
   async function precisaAprovacaoCeo(numeroCotacao) {
-    if (numeroCotacao == null) return { precisa: true, margem: null };
-    const margem = await margemEfetivaDaCotacao(numeroCotacao);
-    return { precisa: margem == null || margem < LIMITE_MARGEM_SEM_CEO, margem };
+    // Sem gate por margem (13/11/2026): o CEO nunca é exigido por margem. A margem segue devolvida só como informação.
+    const margem = numeroCotacao == null ? null : await margemEfetivaDaCotacao(numeroCotacao);
+    return { precisa: false, margem };
   }
 
   /* Envio de proposta exige Gestor Comercial (Regiane OU Guilherme) sempre
@@ -506,17 +528,9 @@
       gestor = await criarDecisaoSeNaoExiste({ tipo: 'envio_proposta_gestor', papelRequerido: 'gestor_comercial', numeroCotacao, contexto: await contextoDaCotacao(numeroCotacao) });
     }
     gestor = await garantirAtiva(gestor);
-    ceo = await garantirAtiva(ceo);
     if (gestor.status === 'reprovada') return { ok: false, motivo: `Envio reprovado pelo Gestor Comercial (${gestor.decidido_por || ''}): ${gestor.motivo || 'sem motivo informado'}.` };
     if (gestor.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do Gestor Comercial (Regiane ou Guilherme) para enviar a proposta.' };
-    if (!ceo) {
-      const margem = await margemEfetivaDaCotacao(numeroCotacao);
-      const precisaCeo = margem == null || margem < LIMITE_MARGEM_SEM_CEO;
-      if (!precisaCeo) return { ok: true };
-      ceo = await criarDecisaoSeNaoExiste({ tipo: 'envio_proposta_ceo', papelRequerido: 'ceo', numeroCotacao, dependeDe: [gestor.id], contexto: await contextoDaCotacao(numeroCotacao, { margem_efetiva_pct: margem }) });
-    }
-    if (ceo.status === 'reprovada') return { ok: false, motivo: `Envio reprovado pelo CEO (${ceo.decidido_por || ''}): ${ceo.motivo || 'sem motivo informado'}.` };
-    if (ceo.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para enviar a proposta — a margem desta proposta ficou abaixo da regra de 15%.' };
+    // 13/11/2026: o CEO não entra mais por margem — só o Gestor Comercial decide o envio (decisão do Gelson).
     return { ok: true };
   }
 

@@ -159,7 +159,9 @@ Todos são **achados, sem correção** (Art. 45), salvo onde dito.
 - **14/09/2026:** `documento_pendente` existia na tabela mas a tela não deixava ver nem limpar; hoje é caixa do formulário e selo da lista.
 - **21/09/2026:** `VPCLI-0001` fixo como reserva do código colidiu com um cliente real; hoje a falha da função é erro claro.
 - **04/10/2026:** CPF/CNPJ com dígito verificador e coerente com o tipo (PC-4); todos os 1.043 CNPJ e 75 CPF da época eram válidos.
+- **17/11/2026:** formulário mostra CPF e CNPJ juntos (o do outro tipo, opcional); ver PC-4.
 - **31/10/2026:** nunca excluir com transação, documento único, busca com pontuação, aviso de cadastro inexistente e desempate de homônimo do lead (PC-4, PC-5, 3.1.6). Decisões do Gelson em PC-5.
+- **02/11/2026 (revisão de código):** (1) editar cliente antigo apagava cidade, UF e endereço — 157 clientes têm cidade/UF só nas colunas de compatibilidade (`cidade`, `estado`) e 7 só o texto `endereco`, e a store regrava essas três a partir dos campos `endereco_*`; o formulário agora preenche `endereco_*` a partir delas ao abrir (**Conferido**: banco e teste e2e). (2) O Histórico contava leads excluídos (`excluido_em`); agora filtra. **Conferido** (e2e `e2e/cadastros.spec.js`, 6 testes). Achados **não corrigidos**: clique duplo em Salvar durante a consulta de CNPJ pode gravar duas vezes; `listarAtivos` devolve lista vazia sem aviso se o banco falhar (área blindada do RFQ); a leitura de clientes pagina sem desempate (`criado_em` repete em 15 grupos; hoje sem falha); busca não ignora acento.
 
 ---
 
@@ -327,6 +329,7 @@ Achados, sem correção, salvo onde dito.
 **Conferido** em `enderecos-api.js` e nas duas stores, 31/10/2026.
 - **Validação (`validarDocumento(tipo, valor)`):** vazio é aceito (documento pendente); o tamanho precisa combinar com o tipo (PF = 11, PJ = 14) e a mensagem sugere trocar o tipo quando o número parece do outro ("parece um CNPJ"); os **dois dígitos verificadores** conferem (recusa sequência repetida, como `000.000.000-00`). As duas stores validam **antes de gravar** e lançam o erro; sem o módulo carregado, aceitam só os dígitos.
 - **Documento gravado pelo tipo escolhido** (PJ: `cnpj`, `cpf` nulo; PF: o contrário). Só dígitos no banco.
+- **CPF e CNPJ convivem (17/11/2026, pedido do Gelson):** o documento do tipo escolhido segue obrigatório e é gravado como acima; o do **outro** tipo é **opcional** (PJ: "CPF do responsável"; PF: "CNPJ, ex.: MEI") e, se preenchido, também passa pela validação por dígito verificador e pela conferência de documento único (agora nas duas colunas). **Limite (Conferido no banco, 17/11/2026):** os índices únicos `clientes_cpf_unico` e `clientes_cnpj_unico` valem por coluna; um CPF de responsável já usado por outro cliente (ex.: o sócio é cliente PF) é **recusado** com a mensagem do cadastro que o usa. Quem herda: Proposta (`clienteParaProposta`, `tipo_pessoa` + `cpf`) e Contrato de Venda (04 e 06). **Conferido** por teste unitário e e2e (`e2e/cadastros.spec.js`); RG, estado civil e profissão **não** existem no cadastro (decisão do Gelson: o contrato de pessoa física herda só endereço, CPF, e-mail e telefone).
 - **Documento único (31/10/2026):** antes de criar ou editar, a store procura o mesmo documento em **outro** cadastro (inativo também conta) e recusa com o código e a razão social de quem o usa, avisando "reative esse cadastro em vez de criar outro" se estiver inativo. Falha ao conferir = nada é gravado. Na criação a conferência roda **antes** de gerar o código. O banco reforça com índices únicos parciais (PC-8); a recusa do índice (código `23505`) vira a mesma mensagem clara. Medição de 31/10/2026: 0 documentos repetidos.
 - Observação: o Formulário de Elevador cria cliente por insert próprio e **não** passa pela conferência da store; quem o protege é o índice do banco (**Conferido** no código).
 
@@ -345,6 +348,7 @@ A **lei** está no `CLAUDE.md` (Art. 16 e a seção "🔒 ÁREA BLINDADA — Cad
 - **Estado real da segurança (banco, 31/10/2026):** `clientes` tem RLS ligada com uma política `ALL` liberada a `anon` e outra a `authenticated` (`qual = true`); `fornecedores` e `fornecedores_avaliacoes` têm RLS ligada com leitura, inclusão, alteração e exclusão liberadas a `public` (`true`). **Qualquer pessoa com a chave pública lê e escreve nas três tabelas.** A tabela do NPS (`fornecedor_avaliacoes`, nasce nas Cotações de Varejo) é a exceção: RLS ligada, só `authenticated`, com leitura e inclusão (sem alteração nem exclusão). Trava na tela é organização, não segurança (Art. 25); o isolamento verdadeiro é a issue #571 (`01_geral.md` PC-6). A **trava de exclusão** (PC-5) é a única proteção que vale também fora da tela.
 - **Alçadas:** ver 3.1.3 e 3.2.3. Existem no catálogo e no banco; a tela não as consulta.
 - **Identidade nos registros:** `fornecedores.criado_por` guarda o e-mail da sessão; `clientes.criado_por` é uuid de `auth.users` e **nunca é gravado** (3.1.10, item 9).
+- **Corte do DELETE do `anon` em 56 tabelas (aplicado em produção em 01/11/2026; texto completo em `01_geral.md` PC-6).** `clientes`, `fornecedores` e `fornecedores_avaliacoes` ficaram **de fora**: a tela exclui (só cadastro sem transação, PC-5) e a trava `BEFORE DELETE` do banco é a proteção que vale. Tirar o DELETE da chave pública ali mudaria a regra de exclusão (área blindada, Art. 15 e 16). Das tabelas citadas neste documento entraram no corte `convites`, `eventos_fluxo`, `formularios_elevador`, `produtos` e `quadros_comando`. **Herdado** (#1285).
 
 ### PC-7 Gatilhos e rotinas
 - `trg_evfluxo_cliente_cadastrado` (`AFTER INSERT` em `clientes`): grava o evento "Cliente cadastrado" (módulo Comercial) em `eventos_fluxo`; falha engolida de propósito. **Conferido** (4 eventos até 31/10/2026).
@@ -373,12 +377,14 @@ A **lei** está no `CLAUDE.md` (Art. 16 e a seção "🔒 ÁREA BLINDADA — Cad
 - **Do `CLAUDE.md`** (continua lá só o que é lei ou o que é de outro módulo): as seções mistas **"Consulta de CNPJ 'Omie primeiro' — Clientes, Fornecedores, Formulário e Leads"** e **"CPF/CNPJ de verdade + comissão manual do lead"** (a parte de Clientes e Fornecedores está em PC-3 e PC-4; a de Leads já estava em `02_crm.md`), o item **"Razões sociais repetidas em `clientes`"** da "Auditoria #843" (PC-5) e o item 15 da "Auditoria de amarrações" (Histórico do cliente por lead e cotação, 3.1.6 e 3.1.10). Cada uma ganhou uma nota "→ parte já migrada para Cadastros Mestres"; **nada foi apagado**.
 - **Fica no `CLAUDE.md` por ser lei:** Art. 16 e a seção "🔒 ÁREA BLINDADA — Cadastros Mestres".
 - **De outro módulo (apontado, não copiado):** o item 18 da "Auditoria de amarrações" (conversão de cotação da planilha histórica em Formulário: PF/PJ do documento) é do Formulário (módulo 4); as cotações de varejo e o NPS são do módulo 7 (aqui só a leitura do NPS).
-- **Só histórico, ficam onde estão:** `AUDITORIA_FORENSE_E2E_SCORE.md` (raiz, 19/10/2026) cita as duas telas apenas como "já investigadas"; `docs/seguranca/cascata-assinatura.md` cita `criarOuVincularDeLead` como um passo da cascata da assinatura (módulo 14 e `01_geral.md` PC-3); `docs/CONTEXTO_workflow_setores_vpclick.md` não trata destes cadastros (as menções são de outro assunto); `README.md` da raiz descreve o produto.
+- **Só histórico, ficam onde estão:** `AUDITORIA_FORENSE_E2E_SCORE.md` (raiz, 19/10/2026) cita as duas telas apenas como "já investigadas"; `docs/seguranca/cascata-assinatura.md` cita `criarOuVincularDeLead` como um passo da cascata da assinatura (módulo 15 e `01_geral.md` PC-3); `docs/CONTEXTO_workflow_setores_vpclick.md` não trata destes cadastros (as menções são de outro assunto); `README.md` da raiz descreve o produto.
 - **Tutoriais** (`TreinamentoVP/cadastros-mestres/*`): pertencem à sessão de tutoriais (PC-10). Os de `materias-primas` e `produtos` ficam sob esta pasta embora as telas sejam do módulo 13: **a decidir** com a sessão de tutoriais.
 - **Candidatos a obsoletos para o Gelson decidir:** nenhum arquivo solto sobre Cadastros foi achado para descarte. Os arquivos não versionados de `docs/` (planos de Separação) e de `TreinamentoVP/` não são deste módulo e não foram tocados.
 - Nenhum outro arquivo sobre Clientes ou Fornecedores foi encontrado na raiz, em `docs/`, `docs/superpowers/specs/`, `docs/superpowers/plans/`, `docs/seguranca/`, `docs/revisoes/` nem em `handoffs/` (busca por "cadastros mestres", "cadastro-clientes", "cadastro-fornecedores", nomes das stores, `VPCLI`, `VPFOR` e `cadastro_vinculos`).
 
 ### PC-12 Benefícios trocados com os outros módulos
+
+- **Recebido de Quadros de Comando (04/11/2026, texto em `14_quadros_comando.md` PC-12, Art. 49):** (a) o Omie repete a linha do item com **quantidade 0** — somar por código e ignorar o zero antes de contar linhas ou unidades; (b) **metro e peça nunca se somam** — total por unidade de medida; (c) a caixa de uma tabela longa deve ter a **altura da janela**, para a barra de rolagem lateral ficar à vista; (d) função de banco nova se testa **numa transação que se desfaz**, incluindo um usuário ativo **sem** a alçada (a recusa por "sem sessão" não prova a trava de alçada); (e) a **observação do item** do pedido do Omie (`pcp_pedido_itens.obs_item`) guarda o que a proposta mostra dentro do item. **Conferido** (04/11/2026).
 *(Regra do Gelson, 31/10/2026, Art. 49: o que um módulo tem de bom e novo passa para os outros.)*
 - **Recebido do Geral (`01_geral.md`) e aplicado aqui:** os 11 temas por tela, o selo de verificação, o glossário próprio, a Parte comum, "achado, sem correção", a contagem de testes rodados de verdade e os padrões de PC-9: leitura paginada com cartão de erro (já existia), hooks antes do `return` (**Conferido**: respeitado em `cadastros.jsx`).
 - **Recebido do CRM (`02_crm.md`) e aplicado aqui:** a regra da **data pura `aaaa-mm-dd`** (gerou o achado 3.1.10, item 4: a frase do Score) e a de **atualizar uma linha sem recarregar** (gerou o item 6); as colunas do Omie em `clientes` são gravadas pela tela de Leads (`gravarOmieNoCliente`, `02_crm.md` PC-4): encontrado grava data e código do Omie; não encontrado grava a data vazia e marca como verificado; **falha de consulta (`null`) não grava nada**. Quem mexer nessas colunas aqui deve respeitar essas três regras.
@@ -391,7 +397,7 @@ A **lei** está no `CLAUDE.md` (Art. 16 e a seção "🔒 ÁREA BLINDADA — Cad
 - **Recebido de Parceiros & Instaladores (01/11/2026, texto em `11_parceiros_instaladores.md` PC-12):** empresa instaladora e colaborador **não** são deste módulo (11.1), mas são cadastros de terceiros com CPF, RG, CNH e dados bancários e com **exclusão física**; o Art. 16 (cadastro com transação não se exclui) não os cobre. Estender a regra é decisão do Gelson (11.1.10). **Conferido** no código e no banco, 01/11/2026.
 - **Recebido de Logística Interna (01/11/2026, texto em `12_logistica_interna.md` PC-12):** nada específico de Cadastros Mestres; vale o bloco do `01_geral.md`. Matérias-Primas e Produtos moram hoje no grupo Fabricação (13).
 - **Recebido de Fabricação (01/11/2026, texto em `13_fabricacao.md` PC-12):** Matérias-Primas e Produtos (agora 13.5 e 13.6) são listas **somente leitura** do Omie, com a regra única de matéria-prima `VPMP%`; não decidir por tipo SPED. **Conferido** no código, 01/11/2026.
-- **Recebido de Administração (01/11/2026, texto em `14_administracao.md` PC-12):** três listas de pessoas coexistem sem chave única (`perfis` 39 ativos, `usuarios` 34, `colaboradores_vpsistema` 51); o cadastro de pessoas não é de Cadastros Mestres, mas quem cruzar e-mail de pessoa com cliente/fornecedor deve saber. **Conferido** no banco, 01/11/2026.
+- **Recebido de Administração (01/11/2026, texto em `15_administracao.md` PC-12):** três listas de pessoas coexistem sem chave única (`perfis` 39 ativos, `usuarios` 34, `colaboradores_vpsistema` 51); o cadastro de pessoas não é de Cadastros Mestres, mas quem cruzar e-mail de pessoa com cliente/fornecedor deve saber. **Conferido** no banco, 01/11/2026.
 - **Recebido de Suprimentos & Importação (31/10/2026, texto em `07_suprimentos_importacao.md` PC-12):** (1) o **Catálogo Siscomex** exclui produto e, junto, as **fichas técnicas** vinculadas (`DELETE` em cadeia, policy aberta ao público): é o mesmo tipo de risco que a área blindada de exclusão de cliente/fornecedor evita; vale procurar `delete()` em cadeia nos cadastros (**Conferido** no catálogo; **Não verificado** aqui). (2) Existem **duas avaliações de fornecedor** (`fornecedor_avaliacoes`, NPS 0–5 das Cotações de Varejo, e `fornecedores_avaliacoes`, nota única do cadastro) ainda não unificadas — decisão do Gelson, afeta 3.2.
 - **Recebido de Contratos & Jurídico (31/10/2026, texto em `06_contratos_juridico.md` PC-12):** o nome da alçada tem de ser o mesmo no catálogo, na tela e na política do banco. A exclusão de cliente e fornecedor tem trava própria no banco (gatilhos); **Não verificado** se as demais políticas de `clientes` e `fornecedores` usam o nome certo. Sem mudança de código.
 - **Doado ao Geral e ao CRM (texto completo em `01_geral.md` PC-9; o CRM aponta):**
@@ -399,7 +405,207 @@ A **lei** está no `CLAUDE.md` (Art. 16 e a seção "🔒 ÁREA BLINDADA — Cad
   - **Código humano pela sequência do banco, sem reserva fixa:** nunca "maior código + 1" no navegador nem um código constante quando o banco falha; falha vira erro claro. Para o CRM: o `id` do lead (`LD-` + 6 dígitos do relógio, gerado no navegador) é do tipo que a regra desencoraja; ver `02_crm.md` 2.1.10.
   - **Link para registro que não existe:** mostrar aviso com "Voltar à lista" em vez de abrir a tela como se fosse "Novo".
 - **Doado a Cadastros por outros módulos e ainda sem aplicação (pendência de código, não feita aqui):** atualizar só a linha depois de salvar; olhar o erro nas consultas do Histórico (3.1.10 itens 3 e 6).
-- **Recebido de Serviços (01/11/2026, texto em `15_servicos.md` PC-2):** todo alerta com destinatário também vira WhatsApp pelo gi-avisos; para chegar certo, título curto com o essencial na frente, sem "teste", sem R$ no título e com o dia da semana por extenso, a obra ou o código do contrato quando houver vários no mesmo dia (o agrupamento de 24 h apaga números). **Conferido** no código do gi-avisos.
+- **Recebido de Serviços (01/11/2026, texto em `16_servicos.md` PC-2):** todo alerta com destinatário também vira WhatsApp pelo gi-avisos; para chegar certo, título curto com o essencial na frente, sem "teste", sem R$ no título e com o dia da semana por extenso, a obra ou o código do contrato quando houver vários no mesmo dia (o agrupamento de 24 h apaga números). **Conferido** no código do gi-avisos.
 
 ---
 *Documento reescrito em 31/10/2026 no molde de `01_geral.md` e `02_crm.md`. Aprovado como REAL pelo Gelson em 31/10/2026.*
+
+--------------------------------------------------
+
+### 1) Mapa do site em Mermaid flowchart TD
+
+```mermaid
+flowchart TD
+    Menu[Menu: Cadastros Mestres] --> Clientes[Clientes: /cadastros/cadastro-clientes]
+    Menu --> Fornecedores[Fornecedores: /cadastros/cadastro-fornecedores]
+    
+    Clientes --> CliNovo[Novo Cliente: /novo]
+    Clientes --> CliEdit[Editar Cliente: /<id>]
+    Clientes --> CliHist[Modal Histórico: /<id>/historico]
+    
+    Fornecedores --> FornNovo[Novo Fornecedor: /novo]
+    Fornecedores --> FornEdit[Editar Fornecedor: /<id>]
+
+```
+
+---
+
+### 2) Wireframe da home e de uma página interna em texto/ASCII
+
+```text
+======================================================================
+  Cadastros > Clientes                                 [ Novo cliente ]
+  Cadastro central de clientes — inclui os criados automaticamente... 
+======================================================================
+  [ Buscar por código, nome ou CNPJ/CPF... ]       N cliente(s) enc.
+----------------------------------------------------------------------
+  Código ▲ | Razão social ▲ | CNPJ/CPF ▲ | Cidade/UF ▲ | Status | Ações
+  VPCLI-.. | Empresa A      | 00.00...   | São José..  | Ativo  | [Ed][Ex][H]
+----------------------------------------------------------------------
+
+======================================================================
+  Editar cliente <VPCLI-NNNN>                               
+======================================================================
+  (o) PJ   ( ) PF
+  CNPJ: [ 00.000.000/0001-00 ]                     [ Buscar CNPJ ]
+  Razão social / Nome *: [ Empresa A                             ]
+  Contribuinte de ICMS *: [ Sim — contribuinte (tem inscrição) v ]
+  [x] Documento pendente (CNPJ/CPF ainda não regularizado)
+
+  Endereço
+  Logradouro: [ Rua X... ] Número: [ 123 ] Bairro: [ Centro      ]
+  
+  [x] Cliente ativo            [ Cancelar ] [ Salvar alterações ]
+======================================================================
+
+```
+
+---
+
+### 3) Storyboard de 5–8 telas da jornada principal
+
+**Jornada: Cadastro de Novo Cliente**
+
+1. **Tela 1 (Lista):** O usuário acessa a lista vazia e clica no botão superior "Novo cliente".
+
+
+2. **Tela 2 (Formulário Limpo):** A URL muda para `/novo`. O usuário seleciona o Tipo de pessoa "PJ", digita o CNPJ e clica em "Buscar CNPJ".
+
+
+3. **Tela 3 (Autopreenchimento):** O sistema chama a Edge Function `omie-buscar-cliente` (ou BrasilAPI) e preenche os campos vazios (Razão Social, Endereço). O usuário vê uma notificação indicando a origem dos dados.
+
+
+4. **Tela 4 (Preenchimento Manual):** O usuário seleciona a opção "Sim" no campo obrigatório "Contribuinte de ICMS?" e clica em "Cadastrar cliente".
+
+
+5. **Tela 5 (Processamento e Validação):** A store executa conferências em background: valida dígitos do CNPJ, verifica se há duplicata de documento único no banco, e chama o RPC para gerar o código `VPCLI-NNNN`.
+
+
+6. **Tela 6 (Sucesso):** O sistema exibe o toast "Cliente cadastrado.", retorna para a lista e recarrega todos os registros para exibir o novo cliente inserido.
+
+
+
+---
+
+### 4) Fluxograma de tarefa crítica em Mermaid
+
+```mermaid
+flowchart TD
+    Start([Usuário clica no ícone da Lixeira]) --> CallRPC[Chama função cadastro_vinculos no banco]
+    CallRPC --> CheckFail{Consulta falhou?}
+    CheckFail -- Sim --> ShowError[Mostra erro e não apaga nada]
+    CheckFail -- Não --> CheckTrans{Possui transações?}
+    
+    CheckTrans -- Sim --> CheckStatus{Já está inativo?}
+    CheckStatus -- Sim --> ShowWarn[Avisa que não pode excluir e mantém como está]
+    CheckStatus -- Não --> OfferInact[Lista fontes das transações e oferece Inativar]
+    OfferInact --> ConfInact[Usuário confirma inativação?]
+    ConfInact -- Sim --> Update[Grava ativo = false]
+    
+    CheckTrans -- Não --> ConfirmDel[Pede confirmação: Excluir definitivamente?]
+    ConfirmDel -- Sim --> Delete[Executa comando DELETE no banco]
+
+```
+
+---
+
+### 5) Organograma das seções em Mermaid
+
+```mermaid
+flowchart TD
+    Doc[3. Cadastros Mestres] --> T31[3.1 Clientes]
+    Doc --> T32[3.2 Fornecedores]
+    Doc --> TPC[Parte Comum]
+
+    T31 --> T311[3.1.1 O que é]
+    T31 --> T314[3.1.4 O que mostra]
+    T31 --> T316[3.1.6 Comportamento]
+    T31 --> T31X[...até 3.1.11]
+
+    T32 --> T321[3.2.1 O que é]
+    T32 --> T328[3.2.8 Regras e armadilhas]
+    T32 --> T3210[3.2.10 Pendências]
+    T32 --> T32X[...até 3.2.11]
+
+    TPC --> PC1[PC-1 Mapa de ligações]
+    TPC --> PC3[PC-3 Consulta Omie]
+    TPC --> PC5[PC-5 Nunca excluir com transação]
+    TPC --> PCX[...até PC-12]
+
+```
+
+---
+
+### 6) Diagrama de teia para relações não hierárquicas em Mermaid
+```mermaid
+graph TD
+    CLI((Clientes)) --- FORM[Formulário de Elevador]
+    CLI --- PROP[Proposta]
+    CLI --- LEADS[Leads / CRM]
+    CLI --- DOSS[Dossiê da Obra]
+    CLI --- PROJ[Projeto de Elevadores]
+
+    FORN((Fornecedores)) --- PI[P.I.]
+    FORN --- EMB[Embarques]
+    FORN --- VAREJ[Cotações de Varejo]
+    FORN --- RFQ[RFQ de Importação]
+    
+    FORM -.- FORN
+
+```
+
+---
+
+### 7) Diagrama de estrela com nó central em Mermaid
+```mermaid
+flowchart TD
+    Centro((Cadastro\nÚnico\nFornecedores)) --- Cat1([Agente de Carga])
+    Centro --- Cat2([Transportador])
+    Centro --- Cat3([Prestador IMS])
+    Centro --- Cat4([Fornecedor padrão])
+    Centro --- Atrib[Dados: CNPJ,\nAvaliações, Status]
+
+```
+
+---
+
+### 8) Diagrama de arquitetura front-end/back-end em Mermaid flowchart LR
+```mermaid
+flowchart LR
+    subgraph Front-end React
+        UI[cadastros.jsx / Componentes PI]
+        StoreCLI[cadastros-clientes-store.js]
+        StoreFORN[cadastros-fornecedores-store.js]
+        EndAPI[enderecos-api.js]
+    end
+
+    subgraph Middleware / APIs
+        EdgeOmie[Edge Function:\nomie-buscar-cliente]
+        BrasilAPI[BrasilAPI / ViaCEP]
+    end
+
+    subgraph Supabase Backend
+        TCLI[(Tabela: clientes)]
+        TFORN[(Tabela: fornecedores)]
+        RPC1[[RPC: gerar_codigo_*]]
+        RPC2[[RPC: cadastro_vinculos]]
+        Trig[[Gatilho: bloquear_exclusao]]
+    end
+
+    UI --> StoreCLI
+    UI --> StoreFORN
+    UI --> EndAPI
+    
+    EndAPI --> EdgeOmie
+    EndAPI --> BrasilAPI
+    
+    StoreCLI --> TCLI
+    StoreFORN --> TFORN
+    
+    StoreCLI --> RPC1
+    UI --> RPC2
+    
+    TCLI --> Trig
+    TFORN --> Trig
+
+```

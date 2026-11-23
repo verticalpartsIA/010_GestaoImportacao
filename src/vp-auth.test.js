@@ -181,3 +181,90 @@ test('F1: outro 403 (sem hint vp_valores) continua sendo refeito com a chave pú
   assert.equal(r.status, 200);
   assert.equal(chamadas.fetch.length, 2);
 });
+
+// ---- PR-B: sincronização do token no canal Realtime (sb.realtime.setAuth) ----
+const SRC_SB = fs.readFileSync(path.join(__dirname, 'supabase.js'), 'utf8');
+
+function ambienteRealtime({ modo, sessao = null, resposta = { ok: true, status: 200, json: { token_hash: 'th', email: 'a@exemplo.com' } }, piloto = 'shadow', setAuthErro = false } = {}) {
+  const setAuthCalls = [];
+  let atual = sessao;
+  let authCb = null;
+  const store = new Map(modo ? [['vp_auth_mode', modo]] : []);
+  const ss = new Map([['vpprd_user', JSON.stringify({ email: 'a@exemplo.com', nome: 'A' })]]);
+  const win = {
+    location: { search: '', pathname: '/', hostname: 'localhost', replace() {} },
+    history: { replaceState() {} },
+    dispatchEvent() {},
+    CustomEvent: function (name, detail) { return { name, detail }; },
+    supabase: {
+      createClient: (url, key, opts) => {
+        if (opts && opts.auth) {
+          return {
+            auth: {
+              getSession: async () => ({ data: { session: atual } }),
+              verifyOtp: async () => { atual = { access_token: 'tok-inicial', user: { email: 'a@exemplo.com' } }; return { data: { session: atual }, error: null }; },
+              signOut: async () => { atual = null; },
+              onAuthStateChange: (cb) => { authCb = cb; },
+            },
+            rpc: async () => ({ data: piloto, error: null }),
+          };
+        }
+        return {
+          realtime: {
+            setAuth: (tok) => {
+              setAuthCalls.push(tok);
+              if (setAuthErro) throw new Error('falha setAuth');
+            },
+          },
+        };
+      },
+    },
+  };
+  const ctx = {
+    console: { warn() {}, log() {}, info() {} },
+    navigator: { webdriver: false },
+    Headers, setTimeout, URLSearchParams, atob: (s) => Buffer.from(s, 'base64').toString('binary'),
+    fetch: async () => ({ ok: resposta.ok, status: resposta.status, json: async () => resposta.json }),
+    localStorage: { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) },
+    sessionStorage: { getItem: (k) => (ss.has(k) ? ss.get(k) : null), setItem: (k, v) => ss.set(k, v) },
+    window: win,
+  };
+  win.window = win;
+  vm.createContext(ctx);
+  vm.runInContext(SRC, ctx);
+  vm.runInContext(SRC_SB, ctx);
+  const flush = () => new Promise((r) => setTimeout(r, 15));
+  return {
+    setAuthCalls,
+    dispararAuth: (ev, s) => { atual = s; if (authCb) authCb(ev, s); },
+    flush,
+    V: ctx.window.VpAuth,
+  };
+}
+
+test('PR-B: modo on aplica setAuth no login e na renovação de token (onAuthStateChange)', async () => {
+  const env = ambienteRealtime({ modo: 'on', sessao: { access_token: 'tok-1', user: { email: 'a@exemplo.com' } } });
+  await env.flush();
+  assert.deepEqual(env.setAuthCalls, ['tok-1']);
+  env.dispararAuth('TOKEN_REFRESHED', { access_token: 'tok-2', user: { email: 'a@exemplo.com' } });
+  assert.deepEqual(env.setAuthCalls, ['tok-1', 'tok-2']);
+});
+
+test('PR-B: modo shadow e off não chamam sb.realtime.setAuth mesmo ao renovar token', async () => {
+  const sh = ambienteRealtime({ modo: 'shadow', sessao: { access_token: 'tok-sh', user: { email: 'a@exemplo.com' } } });
+  await sh.flush();
+  sh.dispararAuth('TOKEN_REFRESHED', { access_token: 'tok-sh-2', user: { email: 'a@exemplo.com' } });
+  assert.deepEqual(sh.setAuthCalls, []);
+
+  const off = ambienteRealtime({ modo: 'off', sessao: { access_token: 'tok-off', user: { email: 'a@exemplo.com' } } });
+  await off.flush();
+  off.dispararAuth('TOKEN_REFRESHED', { access_token: 'tok-off-2', user: { email: 'a@exemplo.com' } });
+  assert.deepEqual(off.setAuthCalls, []);
+});
+
+test('PR-B: erro em sb.realtime.setAuth nunca lança exceção', async () => {
+  const env = ambienteRealtime({ modo: 'on', sessao: { access_token: 'tok-err', user: { email: 'a@exemplo.com' } }, setAuthErro: true });
+  await env.flush();
+  assert.doesNotThrow(() => env.dispararAuth('TOKEN_REFRESHED', { access_token: 'tok-err-2', user: { email: 'a@exemplo.com' } }));
+  assert.deepEqual(env.setAuthCalls, ['tok-err', 'tok-err-2']);
+});

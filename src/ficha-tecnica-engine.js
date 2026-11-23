@@ -134,6 +134,34 @@
 
   function hoje() { return new Date().toLocaleDateString('pt-BR'); }
 
+  /* Autoria da ficha para o rodapé. Puro (testado).
+     Fonte: `fichas_historico` (acao 'criou'/'editou', com ator_nome) + datas da própria ficha.
+     `fichas_tecnicas.criado_por` é uuid e nunca foi preenchido (0 de 422 em 18/11/2026), por isso não serve.
+     Não inventa: sem evento 'criou' no histórico (fichas antigas), `criadoPor` fica null e o rodapé diz "autor não registrado". */
+  function autoriaFicha(ficha, historico) {
+    const ev = (Array.isArray(historico) ? historico : []).slice()
+      .sort((a, b) => new Date(a.criado_em) - new Date(b.criado_em));
+    const criou = ev.find((e) => e.acao === 'criou') || null;
+    const edicoes = ev.filter((e) => e.acao === 'editou');
+    const ultima = edicoes.length ? edicoes[edicoes.length - 1] : null;
+    const criadoEm = (ficha && ficha.criado_em) || (criou && criou.criado_em) || null;
+    let atualizadoEm = ultima ? ultima.criado_em : null;
+    let atualizadoSemAutor = false;
+    /* ficha antiga sem evento de edição, mas com data de atualização bem depois da criação */
+    if (!ultima && ficha && ficha.atualizado_em && criadoEm
+        && new Date(ficha.atualizado_em) - new Date(criadoEm) > 5 * 60 * 1000) {
+      atualizadoEm = ficha.atualizado_em; atualizadoSemAutor = true;
+    }
+    return {
+      criadoPor: criou ? (criou.ator_nome || null) : null,
+      criadoEm,
+      versao: 1 + edicoes.length,
+      atualizadoPor: ultima ? (ultima.ator_nome || null) : null,
+      atualizadoEm,
+      atualizadoSemAutor,
+    };
+  }
+
   /* Cache da biblioteca persistente (carregada via FTStore.loadLibrary).
      Estrutura: { cats: [{id, nome, icon}], campos: [{cat_id, k, nome, unidade, tipo}] } */
   let LIB_EXTRAS = { cats: [], campos: [] };
@@ -410,10 +438,81 @@
     return { sku: partes.join('-'), faltas: [] };
   }
 
+  /* ---------- Copiar ficha ----------
+     Monta o estado de um editor NOVO a partir de uma ficha já salva. Nada é
+     gravado aqui. Ficam de fora, de propósito: código do produto, part number e
+     SKU (o código repetido faria a publicação atualizar o produto ORIGINAL no
+     Omie), a publicação no Omie, a etapa e o vínculo com o Catálogo. As fotos
+     seguem como caminho da original em `__copiaDe` e são copiadas no Salvar. */
+  function copiarFicha(ficha) {
+    const st = freshState();
+    const f = ficha || {};
+    const ident = f.identificacao || {};
+    st.identificacao = Object.assign({}, st.identificacao, ident, { codigoProduto: '', partNumber: '', sku: '' });
+    st.cats = JSON.parse(JSON.stringify(f.cats || freshCats()));
+    st.midia = { desenho: (f.midia && f.midia.desenho) || null, foto: (f.midia && f.midia.foto) || null };
+    st.insumo = f.insumo || '';
+    st.funcao_aplicacao = f.funcao_aplicacao || '';
+    st.eh_parte_de = f.eh_parte_de || '';
+    st.forma_estado = f.forma_estado || '';
+    st.ncm_recomendado = f.ncm_recomendado || '';
+    st.ncm_descricao = f.ncm_descricao || '';
+    st.descricao_duimp = f.descricao_duimp || '';
+    st.omie_publicado_em = null;
+    st.__copiaDe = { id: f.id || null, numero: f.numero_documento || null };
+    return st;
+  }
+
+  /* ---------- Trocar valores ----------
+     Pares {de, para} aplicados (texto literal) em: nome, descrições, part number,
+     marca, modelo, Descrição DUIMP e no valor dos campos técnicos. Não mexe no
+     código do produto nem no SKU. Devolve o estado novo + o que mudou por campo. */
+  const TROCA_CAMPOS_IDENT = [
+    ['nomeProduto', 'Nome do produto'], ['descricaoComercial', 'Descrição comercial'],
+    ['descricaoTecnica', 'Descrição técnica'], ['partNumber', 'Part number'],
+    ['marca', 'Marca'], ['modelo', 'Modelo'],
+  ];
+  function _trocarTexto(txt, pares, ignorarCaixa) {
+    let out = String(txt == null ? '' : txt), n = 0;
+    pares.forEach((p) => {
+      if (!p.de) return;
+      const re = new RegExp(p.de.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), ignorarCaixa ? 'gi' : 'g');
+      out = out.replace(re, () => { n++; return p.para; });
+    });
+    return { texto: out, n };
+  }
+  function substituirEmFicha(state, pares, opts) {
+    const ic = !!(opts && opts.ignorarCaixa);
+    const validos = (pares || []).map((p) => ({ de: String((p && p.de) || ''), para: String((p && p.para) || '') })).filter((p) => p.de);
+    const mudou = [];
+    const ident = Object.assign({}, state.identificacao);
+    TROCA_CAMPOS_IDENT.forEach(([k, rot]) => {
+      if (ident[k] == null || ident[k] === '') return;
+      const r = _trocarTexto(ident[k], validos, ic);
+      if (r.n) { ident[k] = r.texto; mudou.push({ campo: rot, n: r.n }); }
+    });
+    const next = Object.assign({}, state, { identificacao: ident });
+    if (state.descricao_duimp) {
+      const r = _trocarTexto(state.descricao_duimp, validos, ic);
+      if (r.n) { next.descricao_duimp = r.texto; mudou.push({ campo: 'Descrição DUIMP', n: r.n }); }
+    }
+    next.cats = (state.cats || []).map((c) => Object.assign({}, c, {
+      campos: (c.campos || []).map((fld) => {
+        if (fld.valor == null || fld.valor === '') return fld;
+        const r = _trocarTexto(fld.valor, validos, ic);
+        if (!r.n) return fld;
+        mudou.push({ campo: c.nome + ' › ' + fld.nome, n: r.n });
+        return Object.assign({}, fld, { valor: r.texto });
+      }),
+    }));
+    return { state: next, mudou, total: mudou.reduce((a, m) => a + m.n, 0) };
+  }
+
   window.FT = {
     UNIDADES, LIB, TEMPLATES, PROTECTED_CUSTOM_CATS,
     slug, hoje, freshCats, freshState, normalizeNome,
     compile, aplicarTemplate, nextOrdem, podeGerar,
     setLibraryExtras, buildSKU,
+    copiarFicha, substituirEmFicha, autoriaFicha,
   };
 }());

@@ -28,6 +28,16 @@
   'use strict';
 
   function sb() { return (window.__VP_SB || {}).sb; }
+  let _ultimoToastPermissaoEm = 0;
+  function avisarErroPermissao(error) {
+    if (error && (error.code === '42501' || error.status === 401 || error.status === 403 || /permission denied|row-level security/i.test(error.message || ''))) {
+      const agora = Date.now();
+      if (agora - _ultimoToastPermissaoEm >= 5 * 60 * 1000) {
+        _ultimoToastPermissaoEm = agora;
+        if (window.toast) window.toast('Sem sessão ou permissão para carregar o Aval Jurídico. Recarregue pelo vpsistema.', 'error');
+      }
+    }
+  }
 
   async function getByPropostaId(propostaId) {
     const c = sb(); if (!c || !propostaId) return null;
@@ -124,7 +134,11 @@
         .select('id, numero_documento, status, comprador_razao_social, valor_total_num, proposta_id, signed_at')
         .or('status.is.null,status.neq.em_preenchimento'), // rascunho do assistente não é contrato
     ]);
-    if (error) { console.warn('[AvalJuridicoStore] listarFila falhou', error); return []; }
+    if (error) {
+      console.warn('[AvalJuridicoStore] listarFila falhou', error);
+      avisarErroPermissao(error);
+      return [];
+    }
     const contratoPorProposta = {};
     (contratos || []).forEach((ct) => { if (ct.proposta_id && !contratoPorProposta[ct.proposta_id]) contratoPorProposta[ct.proposta_id] = ct; });
 

@@ -98,7 +98,7 @@ function CV_SignBlock({ doc }) {
         <div className="cv-doc-sign-cpf">CPF: {vend.cpf}</div>
       </div>
       <div className="cv-doc-sign-col">
-        <div className="cv-doc-sign-role">COMPRADOR<br/>{comp.razaoLabel} LTDA.</div>
+        <div className="cv-doc-sign-role">COMPRADOR<br/>{comp.razaoLabel}{comp.pf ? '' : ' LTDA.'}</div>
         <div className="cv-doc-sign-x">X</div>
         <div className="cv-doc-sign-line2"></div>
         <div className="cv-doc-sign-name">NOME: {comp.nome || ''}</div>

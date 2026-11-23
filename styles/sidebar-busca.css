@@ -1,0 +1,92 @@
+/* ============================================================
+   sidebar-busca.css — busca Ctrl K, interruptores Vidro/Escuro e
+   acabamento da sidebar (05/11/2026). Vem DEPOIS de app.css.
+   Vidro e Escuro são opcionais e guardados por navegador
+   (vp_sidebar_vidro / vp_tema_escuro); padrão = visual de sempre.
+   ============================================================ */
+
+/* ---- botão de busca no topo da sidebar ---- */
+.sidebar__busca {
+  display: flex; align-items: center; gap: 10px;
+  margin: 10px 10px 0; padding: 0 12px; height: 38px;
+  border: 1px solid rgba(255,255,255,.1); border-radius: 10px;
+  background: rgba(255,255,255,.05); color: rgba(255,255,255,.62);
+  font: inherit; font-size: 12.5px; cursor: pointer; text-align: left;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.sidebar__busca:hover, .sidebar__busca:focus-visible { border-color: var(--vp-yellow); color: #fff; }
+.sidebar__busca span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sidebar__busca kbd {
+  font: 600 10px var(--font-mono, monospace); padding: 2px 6px; border-radius: 6px;
+  border: 1px solid rgba(255,255,255,.18); color: rgba(255,255,255,.55); background: rgba(255,255,255,.06);
+}
+.app[data-sidebar="collapsed"] .sidebar__busca { justify-content: center; padding: 0; margin: 10px auto 0; width: 40px; }
+.app[data-sidebar="collapsed"] .sidebar__busca span,
+.app[data-sidebar="collapsed"] .sidebar__busca kbd { display: none; }
+
+/* ---- interruptores no rodapé ---- */
+.sidebar__tgls { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.sidebar__tgl {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 6px 10px; border: 0; border-radius: 10px; background: transparent;
+  color: rgba(255,255,255,.7); font: inherit; font-size: 12px; cursor: pointer;
+}
+.sidebar__tgl:hover, .sidebar__tgl:focus-visible { background: rgba(255,255,255,.07); color: #fff; }
+.sidebar__tgl-sw { width: 34px; height: 20px; border-radius: 20px; background: rgba(255,255,255,.18); position: relative; flex: none; transition: background var(--dur-fast) var(--ease-out); }
+.sidebar__tgl-sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform var(--dur-fast) var(--ease-out); }
+.sidebar__tgl[aria-checked="true"] .sidebar__tgl-sw { background: var(--vp-yellow); }
+.sidebar__tgl[aria-checked="true"] .sidebar__tgl-sw::after { transform: translateX(14px); background: #000; }
+.app[data-sidebar="collapsed"] .sidebar__tgl { justify-content: center; padding: 6px 0; }
+.app[data-sidebar="collapsed"] .sidebar__tgl > span:first-child { display: none; }
+.app[data-sidebar="collapsed"] .sidebar__tgl-sw { width: 30px; }
+
+/* ---- item ativo: barrinha lateral ---- */
+.nav-item.is-active { position: relative; }
+.nav-item.is-active::before {
+  content: ""; position: absolute; left: -10px; top: 9px; bottom: 9px; width: 3px;
+  border-radius: 0 3px 3px 0; background: var(--vp-yellow);
+}
+.nav-item:focus-visible { outline: 2px solid var(--vp-yellow); outline-offset: -2px; }
+
+/* ---- paleta Ctrl K ---- */
+.sbusca { position: fixed; inset: 0; z-index: 400; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; padding-top: 14vh; }
+.sbusca__box { width: min(560px, 92vw); background: #0d0d0d; color: #eee; border: 1px solid #2a2a2a; border-radius: 18px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+.sbusca__input { display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid #222; color: #8d8d88; }
+.sbusca__input input { flex: 1; background: none; border: 0; outline: 0; color: #fff; font: inherit; font-size: 15px; padding: 16px 0; min-width: 0; }
+.sbusca__input kbd { font: 600 10px var(--font-mono, monospace); padding: 2px 6px; border-radius: 6px; border: 1px solid #333; color: #aaa; background: #181818; }
+.sbusca__lista { max-height: 50vh; overflow-y: auto; padding: 6px; }
+.sbusca__op { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; font-size: 13.5px; cursor: pointer; }
+.sbusca__op.is-sel { background: rgba(245,196,0,.16); color: #FFE27A; }
+.sbusca__ic { display: inline-flex; flex: none; }
+.sbusca__nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sbusca__grupo { font-size: 11px; color: #777; white-space: nowrap; }
+.sbusca__vazio { padding: 18px; text-align: center; font-size: 13px; color: #888; }
+
+/* ---- modo vidro (opcional): painel flutuante com desfoque ---- */
+:root[data-vp-vidro="1"] .app { background: linear-gradient(135deg, rgba(245,196,0,.35) -10%, var(--vp-gray-50) 38%); }
+:root[data-vp-vidro="1"] .sidebar {
+  margin: 10px 0 10px 10px; border-radius: 24px;
+  background: rgba(14,12,10,.62);
+  -webkit-backdrop-filter: blur(26px); backdrop-filter: blur(26px);
+  border: 1px solid rgba(255,255,255,.18);
+  box-shadow: 0 15px 45px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.12);
+}
+:root[data-vp-vidro="1"] .sidebar::after { display: none; }
+:root[data-vp-vidro="1"] .app[data-sidebar="collapsed"] .sidebar { margin-right: 0; }
+
+/* ---- tema escuro (opcional): sidebar e cabeçalho; as telas internas seguem claras ---- */
+:root[data-vp-escuro="1"] .header {
+  --fg: #f2f2f0; --fg1: #f2f2f0; --fg2: #cfcfca; --fg3: #9a9a94; --border: #2c2c34;
+  background: #16161a; color: #f2f2f0;
+}
+:root[data-vp-escuro="1"] .header .header__search,
+:root[data-vp-escuro="1"] .header .header__btn { background: #1f1f25; border-color: #2c2c34; color: #f2f2f0; }
+:root[data-vp-escuro="1"] .header input { color: #f2f2f0; }
+:root[data-vp-escuro="1"] .header .breadcrumb__link { color: #cfcfca; }
+:root[data-vp-escuro="1"] .header .role-dropdown__trigger { background: #1f1f25; border-color: #2c2c34; color: #f2f2f0; }
+:root[data-vp-escuro="1"] .header .role-dropdown__label { color: #9a9a94; }
+
+/* ---- movimento reduzido ---- */
+@media (prefers-reduced-motion: reduce) {
+  .app, .sidebar, .sidebar *, .sbusca, .sbusca * { transition: none !important; animation: none !important; }
+}

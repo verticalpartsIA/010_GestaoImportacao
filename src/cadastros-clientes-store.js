@@ -77,7 +77,7 @@
     const c = sb(); if (!c || !clienteId) return null;
 
     const { data: leads } = await c.from('leads')
-      .select('id, building, origin, owner, status, date').eq('cliente_id', clienteId)
+      .select('id, building, origin, owner, status, date').eq('cliente_id', clienteId).is('excluido_em', null)
       .order('date', { ascending: true });
 
     /* Auditoria 12/10: só 2 de 67 dossiês têm cliente_id gravado — a "Vida do Cliente" quase nunca mostrava obras.
@@ -119,6 +119,17 @@
     const val = window.EnderecoAPI && window.EnderecoAPI.validarDocumento ? window.EnderecoAPI.validarDocumento(tipoDoc, bruto) : { ok: true, digitos: String(bruto || '').replace(/\D/g, '') };
     if (!val.ok) throw new Error(val.msg);
     const doc = val.digitos;
+    /* 17/11/2026 (pedido do Gelson): CPF e CNPJ convivem. O documento do tipo escolhido segue obrigatório
+       (regra acima); o OUTRO é opcional — PJ pode guardar o CPF do responsável, PF o CNPJ (ex.: MEI) — e,
+       se preenchido, também precisa conferir (dígito verificador). */
+    const outroTipo = tipoDoc === 'PF' ? 'PJ' : 'PF';
+    const brutoOutro = tipoDoc === 'PF' ? form.cnpj : form.cpf;
+    let outroDoc = null;
+    if (String(brutoOutro || '').replace(/\D/g, '')) {
+      const v2 = window.EnderecoAPI && window.EnderecoAPI.validarDocumento ? window.EnderecoAPI.validarDocumento(outroTipo, brutoOutro) : { ok: true, digitos: String(brutoOutro).replace(/\D/g, '') };
+      if (!v2.ok) throw new Error((tipoDoc === 'PF' ? 'CNPJ' : 'CPF') + ' (opcional): ' + v2.msg);
+      outroDoc = v2.digitos || null;
+    }
     const endereco = {
       logradouro: form.endereco_logradouro, complemento: form.endereco_complemento, bairro: form.endereco_bairro,
       cep: form.endereco_cep, cidade: form.endereco_cidade, estado: form.endereco_estado,
@@ -126,8 +137,8 @@
     return {
       razao_social: form.razao_social || null, nome_fantasia: form.nome_fantasia || null,
       tipo_pessoa: form.tipo_pessoa || 'PJ',
-      cnpj: form.tipo_pessoa === 'PF' ? null : (doc || null),
-      cpf: form.tipo_pessoa === 'PF' ? (doc || null) : null,
+      cnpj: form.tipo_pessoa === 'PF' ? outroDoc : (doc || null),
+      cpf: form.tipo_pessoa === 'PF' ? (doc || null) : outroDoc,
       inscricao_estadual: form.inscricao_estadual || null,
       contribuinte_icms: typeof form.contribuinte_icms === 'boolean' ? form.contribuinte_icms : null,
       /* 14/09 — achado real (auditoria do tour.md): documento_pendente já
@@ -148,14 +159,16 @@
   /* T2 #1222 (31/10/2026): o mesmo CNPJ/CPF não pode ter dois cadastros (o banco também recusa, por índice
      único). Confere antes de gravar para dizer QUAL cadastro já usa o documento; falha ao conferir = não grava. */
   async function garantirDocumentoUnico(c, row, idAtual) {
-    const campo = row.cnpj ? 'cnpj' : (row.cpf ? 'cpf' : null);
-    if (!campo) return;
-    let q = c.from('clientes').select('id, codigo, razao_social, ativo').eq(campo, row[campo]).limit(1);
-    if (idAtual) q = q.neq('id', idAtual);
-    const { data, error } = await q;
-    if (error) throw new Error('Não foi possível conferir se o ' + campo.toUpperCase() + ' já está cadastrado — nada foi gravado. (' + (error.message || 'erro') + ')');
-    const ja = data && data[0];
-    if (ja) throw new Error('Este ' + campo.toUpperCase() + ' já está cadastrado em ' + (ja.codigo || 'outro cliente') + ' — ' + (ja.razao_social || '') + (ja.ativo === false ? ' (inativo: reative esse cadastro em vez de criar outro)' : '') + '.');
+    /* Com CPF e CNPJ no mesmo cadastro, confere os dois (o banco tem índice único em cada coluna). */
+    for (const campo of ['cnpj', 'cpf']) {
+      if (!row[campo]) continue;
+      let q = c.from('clientes').select('id, codigo, razao_social, ativo').eq(campo, row[campo]).limit(1);
+      if (idAtual) q = q.neq('id', idAtual);
+      const { data, error } = await q;
+      if (error) throw new Error('Não foi possível conferir se o ' + campo.toUpperCase() + ' já está cadastrado — nada foi gravado. (' + (error.message || 'erro') + ')');
+      const ja = data && data[0];
+      if (ja) throw new Error('Este ' + campo.toUpperCase() + ' já está cadastrado em ' + (ja.codigo || 'outro cliente') + ' — ' + (ja.razao_social || '') + (ja.ativo === false ? ' (inativo: reative esse cadastro em vez de criar outro)' : '') + '.');
+    }
   }
 
   /* Se o banco recusar pelo índice único (duas pessoas ao mesmo tempo), mostra a mesma mensagem clara. */

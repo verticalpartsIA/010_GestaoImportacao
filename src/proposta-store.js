@@ -698,7 +698,14 @@
 
   const _capacidadeCache = {};
   function resetAlcadasCache() { _perfilAtualCache = undefined; Object.keys(_capacidadeCache).forEach((k) => delete _capacidadeCache[k]); }
+  // Só localhost (/?dev=admin | /?dev=pleno, ver supabase.js): sem perfil real em `perfis`, o dev local
+  // vira "Administrador" ou "pleno" (usuário comum com todas as alçadas). Em produção nunca entra aqui.
+  function devLocal() {
+    const u = window.__VP_USER || {};
+    return u.id === 'dev-local' && /^(localhost|127\.0\.0\.1|0\.0\.0\.0)/.test(window.location.hostname) ? (u.devPerfil === 'nenhum' ? null : u.devPerfil || 'admin') : null;
+  }
   async function temCapacidade(modulo, capacidade) {
+    if (devLocal()) return true;
     const perfil = await resolverPerfilAtual();
     if (!perfil) return false;
     if (perfil.nivel === 'Administrador') return true;
@@ -765,6 +772,59 @@
     return { destravada_em: now, destravada_por: por };
   }
 
+  /* Pedido de destrave (13/11/2026): o vendedor não destrava; pede aos Líderes (alçada propostas.destravar_aprovada). */
+  async function pedirDestrave(id, motivo) {
+    const txt = String(motivo || '').trim();
+    if (txt.length < 10) throw new Error('Explique o que precisa mudar e por quê (mínimo 10 letras).');
+    const c = sb(); if (!c) throw new Error('Supabase indisponível');
+    const { data: row } = await c.from('propostas').select('numero_documento, numero_cotacao').eq('id', id).maybeSingle();
+    const { data: lideres } = await c.from('alcadas_capacidade').select('perfil_id').eq('modulo', 'propostas').eq('capacidade', 'destravar_aprovada');
+    const ids = [...new Set((lideres || []).map((l) => l.perfil_id))];
+    let emails = [];
+    if (ids.length) { const { data: ps } = await c.from('perfis').select('email').in('id', ids); emails = (ps || []).map((p) => p.email).filter(Boolean); }
+    if (!emails.length) throw new Error('Nenhum Líder tem a alçada de destrave cadastrada. Avise o administrador.');
+    const por = (window.__VP_USER || {}).email || 'Um vendedor';
+    for (const em of emails) {
+      const { error } = await c.from('alertas').insert({
+        id: `prop-pedido-destrave-${id}-${em}-${Date.now()}`, level: 'warning', module: 'Comercial', resolved: false,
+        title: `Pedido de destrave — proposta ${row?.numero_documento || ''}`, sub: `${por} pede para editar: ${txt}`,
+        destinatario_email: em, rota: '/comercial/proposta-editor/' + encodeURIComponent(String(id)),
+      });
+      if (error) throw error;
+    }
+    try { window.VPLog?.registrar({ modulo: 'Propostas', acao: 'Pediu destrave da proposta', alvo: 'Proposta', alvo_id: id, detalhe: { motivo: txt, cotacao: row?.numero_cotacao || null } }); } catch (_) {}
+    return emails.length;
+  }
+
+  /* Divergência do fornecedor (13/11/2026): Aceitar / Recusar / Reabrir. Grava só `data_json.divergencias`, que NÃO é
+     campo travado — por isso vale com a proposta travada. Recusar avisa quem precisa pedir nova revisão da cotação. */
+  async function decidirDivergencia(id, divId, decisao) {
+    const PC = window.PropostaCotado; if (!PC) throw new Error('Módulo de divergências não carregado.');
+    const c = sb(); if (!c) throw new Error('Supabase indisponível');
+    const { data: row, error: e0 } = await c.from('propostas').select('data_json, numero_documento, numero_cotacao, log').eq('id', id).maybeSingle();
+    if (e0) throw e0; if (!row) throw new Error('Proposta não encontrada.');
+    const por = (window.__VP_USER || {}).email || null;
+    const dj = row.data_json || {};
+    const divs = PC.decidir(dj.divergencias, divId, decisao, por);
+    const alvo = divs.find((d) => d.id === divId);
+    const log = Array.isArray(row.log) ? row.log.slice() : [];
+    log.push({ status: 'divergencia_' + decisao, at: new Date().toISOString(), meta: { por, campo: alvo && alvo.rotulo, pedido: alvo && alvo.pedido, cotado: alvo && alvo.cotado } });
+    const { error } = await c.from('propostas').update({ data_json: { ...dj, divergencias: divs }, log }).eq('id', id);
+    if (error) throw error;
+    try { window.VPLog?.registrar({ modulo: 'Propostas', acao: 'Divergência do fornecedor: ' + decisao, alvo: 'Proposta', alvo_id: id, detalhe: { campo: alvo && alvo.rotulo, pedido: alvo && alvo.pedido, cotado: alvo && alvo.cotado } }); } catch (_) {}
+    if (decisao === 'recusada' && alvo) {
+      try {
+        await c.from('alertas').insert({
+          id: `prop-div-recusada-${id}-${divId}-${Date.now()}`, level: 'warning', module: 'Comercial', resolved: false,
+          title: `Pedir nova revisão da cotação Nº ${row.numero_cotacao || ''} a ${alvo.fornecedor || 'o fornecedor'}`,
+          sub: `${alvo.rotulo}: pedido "${alvo.pedido}", o fornecedor cotou "${alvo.cotado}". Proposta ${row.numero_documento || ''} segue bloqueada para envio.`,
+          rota: '/comercial/proposta-editor/' + encodeURIComponent(String(id)),
+        });
+      } catch (_) {}
+    }
+    return divs;
+  }
+
   /* Quem pode ocultar/reexibir equipamento na proposta (23/10/2026): o DONO (vendedor_id da proposta) ou quem tem a
      alçada de líder (propostas.destravar_aprovada — Regiane; Administrador passa). Proposta ainda não salva = do próprio
      usuário. Checagem de interface (RLS aberta, issue #571) — a trava de status continua em salvar(). */
@@ -793,6 +853,16 @@
     return true;
   }
 
+  /* Nº padrão da proposta: VPPR-<Nº da cotação, 4 dígitos>[-letra da revisão]. A letra vem do Master ID da cotação
+     (VPCT-1004-A) ou do de equipamento (VPEL-EL1004-A). Sem Nº de cotação válido, devolve null. */
+  function numeroPadrao(numeroCotacao, masterId) {
+    const M = window.MasterIdEngine;
+    const cot = M.parseNumeroCotacao(numeroCotacao);
+    if (cot == null) return null;
+    const m = String(masterId == null ? '' : masterId).trim().match(/^VP[A-Z]{2}-[A-Z]{0,2}\d+-([A-Za-z]+)$/);
+    return M.etapaId('proposta', cot, m ? m[1] : null);
+  }
+
   /* data/eq: o shape completo do editor (cliente/obra/elevador|escada|
      esteira/...). valorTotal: calculado pelo editor (calcularValorTotal),
      que já entende o shape por equipamento — o store não precisa saber
@@ -805,17 +875,33 @@
     if (!data?.cliente?.nome?.trim()) return { erro: 'Preencha o nome do cliente para salvar.' };
 
     const vpUser = window.__VP_USER || {};
-    const chave = (data.numero || '').trim() || null; // → numero_documento (texto)
+    let chave = (data.numero || '').trim() || null; // → numero_documento (texto)
+    /* REGRA (Gelson, 06/11/2026), só para as propostas de agora em diante: o Nº da proposta é o da cotação
+       (VPPR-<Nº da cotação>[-letra]) e ninguém o digita. Proposta NOVA que ainda está com o número padrão do editor
+       (VP-<ano>-001) ou sem número recebe o da cotação; depois de criada o número não muda (ver abaixo). Propostas
+       que já existem ficam exatamente como estão. */
+    const padrao = numeroPadrao(data.numeroCotacao, data.masterId);
+    if (!editId && padrao && (!chave || /^VP-\d{4}-\d{3}$/.test(chave))) chave = padrao;
     try {
       /* Trava por aprovação: editar uma proposta aprovada exige destrave
          prévio (capacidade 'destravar_aprovada'). Checagem aqui, não só na
          UI — quem chama salvar() direto não deveria conseguir passar por
          cima do botão desabilitado. Ao salvar, retrava sozinho na hora. */
       let destravadaAgora = false;
+      let numeroFixo = null; // número da proposta que já existe: nunca é trocado por salvar()
       if (editId) {
-        const { data: atual } = await c.from('propostas').select('status, destravada_em').eq('id', editId).maybeSingle();
+        const { data: atual } = await c.from('propostas').select('status, destravada_em, numero_documento, numero_cotacao, precificacao_id, proposal_type, data_json').eq('id', editId).maybeSingle();
+        numeroFixo = (atual && atual.numero_documento) || null;
         if (atual && STATUS_TRAVADOS.includes(atual.status) && !atual.destravada_em) {
           return { erro: 'Proposta enviada ao cliente está travada para edição. Peça o destrave ao Líder (informando o motivo).' };
+        }
+        /* REGRA (Gelson, 13/11/2026): proposta que nasceu da cotação (tem Nº de cotação e Precificação) não muda o que foi
+           cotado — especificações e acabamentos — sem o destrave do Líder, nem em rascunho. Conferido aqui, não só na tela. */
+        if (atual && !atual.destravada_em && eq === 'elevador' && window.PropostaCotado && window.PropostaCotado.ehCotada(atual)) {
+          const alteradas = window.PropostaCotado.alteracoesProtegidas((atual.data_json || {}).elevador, (data || {}).elevador);
+          if (alteradas.length) {
+            return { erro: `Esta proposta nasceu da cotação e o que foi cotado está travado (${alteradas.join(' e ')}). Peça o destrave ao Líder (informando o motivo).` };
+          }
         }
         if (atual && atual.destravada_em) destravadaAgora = true;
       }
@@ -832,6 +918,11 @@
         ...(destravadaAgora ? { destravada_em: null, destravada_por: null } : {}),
       };
 
+      /* REGRA (06/11/2026): o número de uma proposta que já existe NÃO muda por salvar() (ex.: alguém digitou "993 A").
+         Não se envia numero_documento e o data_json acompanha o número gravado. */
+      if (numeroFixo) { delete payload.numero_documento; payload.data_json = { ...payload.data_json, numero: numeroFixo }; }
+      else if (chave) { payload.data_json = { ...payload.data_json, numero: chave }; }
+
       /* vendedor_id é NOT NULL — só mandamos quando resolve, pra um update
          não apagar o vendedor que já estava gravado. */
       const vendedorId = await resolverVendedorId();
@@ -844,9 +935,20 @@
       // uma proposta já enviada/assinada.
       let existing = editId ? { id: editId } : null;
       if (!existing && chave) {
-        const { data: rows } = await c.from('propostas').select('id')
+        const { data: rows } = await c.from('propostas').select('id, status, vendedor_id, destravada_em')
           .eq('numero_documento', chave).order('criado_em', { ascending: false }).limit(1);
         existing = rows && rows[0];
+        /* 02/11/2026 (revisão do módulo 4): a proposta nova nasce com o número padrão VP-<ano>-001 e esta busca por número
+           atualizava QUALQUER proposta que já tivesse esse número (a de outro vendedor, e sem conferir a trava de proposta
+           enviada). Sem editId, só se atualiza o próprio rascunho do vendedor (caso de quem perdeu o id da tela); do contrário
+           recusa e pede para abrir a proposta existente ou mudar o número. */
+        if (existing && existing.id) {
+          const meu = await resolverVendedorId();
+          const proprioRascunho = existing.status === 'rascunho' && !!meu && existing.vendedor_id === meu;
+          if (!proprioRascunho) {
+            return { erro: `Já existe a proposta ${chave} (${existing.status || 'sem status'}) e ela não é um rascunho seu. Abra essa proposta pela lista para editá-la, ou mude o Nº da proposta para criar outra.` };
+          }
+        }
       }
 
       /* precificacao_id pendurado: um rascunho salvo no navegador (ver
@@ -956,7 +1058,7 @@
           ({ data: row, error } = await c.from('propostas').update({ ...payload, precificacao_id: null }).eq('id', existing.id).select('id, token').single());
         }
         if (error) throw error;
-        return { ...row, precificacaoOrfa };
+        return { ...row, numero_documento: numeroFixo || chave, precificacaoOrfa };
       } else {
         let { data: row, error } = await c.from('propostas').insert([{ ...payload, ...extrasRevisao, status: 'rascunho' }]).select('id, token').single();
         if (error && ehFkPrecificacaoMorta(error)) {
@@ -968,7 +1070,7 @@
           evento: 'PROPOSTA_ELABORADA', numeroCotacao: payload.numero_cotacao,
           alvoLabel: payload.titulo, alvoId: row.id,
         });
-        return { ...row, precificacaoOrfa };
+        return { ...row, numero_documento: chave, precificacaoOrfa };
       }
     } catch (e) {
       // Antes o erro era engolido e o usuário via "salva localmente" — uma
@@ -985,9 +1087,9 @@
     publicar, conteudoVigente, conteudoRenderizavel, resolverEq, normalizarEq,
     markSent, markViewed, markSigned, refuse, solicitarRevisao, decidirRevisao,
     executarEfeitosAssinatura,
-    salvar,
+    salvar, numeroPadrao,
     resolverEscopoVisibilidade, resetEscopoVisibilidadeCache,
     resolverPerfilAtual, temCapacidade, podeConcederAlcadas, resetAlcadasCache,
-    listarAlcadas, concederAlcada, destravar, excluir, podeOcultarEquipamento,
+    listarAlcadas, concederAlcada, destravar, pedirDestrave, decidirDivergencia, excluir, podeOcultarEquipamento,
   };
 }());

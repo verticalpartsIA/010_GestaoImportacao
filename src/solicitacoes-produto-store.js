@@ -44,20 +44,15 @@ window.SolicitacoesProdutoStore = (() => {
     return out;
   }
 
-  // Fluxo definido com o usuário em 30/10/2026 (substitui o de 20/09):
-  // 1) Alguém não achou o produto no site e preenche a Solicitação (o "chamado"): WhatsApp para Gelson, Vinicius e
-  //    Alexandre, que entendem o pedido e criam a Ficha Técnica.
-  // 2) Criada a Ficha Técnica (converterEmFicha): WhatsApp para Beatriz e Andréia, que conferem o NCM e publicam no Omie.
-  // O aviso é uma linha em `alertas` por pessoa (o gi-avisos entrega no WhatsApp). Trocar alguém = editar as listas abaixo.
-  const DESTINATARIOS_NOVA_SOLICITACAO = [
-    'gelson.simoes@verticalparts.com.br',
-    'vinicius.leite@verticalparts.com.br',
-    'alexandre@verticalparts.com.br',
-  ];
-  const DESTINATARIOS_FICHA_CRIADA = [
-    'beatriz@verticalparts.com.br',
-    'andreia.oliveira@verticalparts.com.br',
-  ];
+  // Fluxo definido com o Gelson em 03/11/2026 (substitui o de 30/10, que avisava listas fixas):
+  // 1) Quem abre a Solicitação ESCOLHE UMA pessoa da Engenharia (Gelson, Alexandre, Vinicius ou Brayan) para ser avisada
+  //    por WhatsApp de que há uma Ficha Técnica a criar.
+  // 2) Na edição da Ficha Técnica, quem terminou ESCOLHE UMA pessoa da Importação (Andreia, Beatriz ou Bianca) para
+  //    conferir o NCM e publicar no Omie (avisarImportacao).
+  // Quem foi avisado e quem de fato executa podem ser pessoas diferentes: a linha do tempo grava os dois separados
+  // (tabela `solicitacao_produto_eventos`). O aviso é uma linha em `alertas` (o gi-avisos entrega no WhatsApp).
+  // As listas de quem pode ser avisado ficam em window.SolProdTimeline (solicitacoes-produto-timeline-calc.js).
+  const TL = () => window.SolProdTimeline;
 
   async function _avisar(emails, { idBase, title, sub, rota }) {
     try {
@@ -72,28 +67,220 @@ window.SolicitacoesProdutoStore = (() => {
         destinatario_email: email,
       }));
       const { error } = await window.__VP_SB.sb.from('alertas').insert(linhas);
-      if (error) console.warn('[SolicitacoesProdutoStore] Erro ao avisar:', error);
+      if (error) { console.warn('[SolicitacoesProdutoStore] Erro ao avisar:', error); return false; }
+      return true;
     } catch (e) {
       console.warn('[SolicitacoesProdutoStore] Erro ao avisar:', e);
+      return false;
     }
   }
 
-  function _notificarEngenharia(solicitacao) {
-    return _avisar(DESTINATARIOS_NOVA_SOLICITACAO, {
+  /* Linha imutável da linha do tempo. O autor é SEMPRE o usuário logado (o banco confere). Falha de gravação nunca
+     derruba a ação principal, mas é avisada na tela (Art. 9): sem o registro a linha do tempo fica com buraco. */
+  async function _registrarEvento(solicitacaoId, tipo, { alvo, detalhe } = {}) {
+    try {
+      const u = window.__VP_USER || {};
+      const { error } = await window.__VP_SB.sb.from('solicitacao_produto_eventos').insert([{
+        solicitacao_id: solicitacaoId,
+        tipo,
+        ator_nome: u.nome || null,
+        ator_email: u.email || '',
+        alvo_nome: alvo ? alvo.nome : null,
+        alvo_email: alvo ? alvo.email : null,
+        detalhe: detalhe || {},
+      }]);
+      if (error) throw error;
+      return true;
+    } catch (e) {
+      console.warn('[SolicitacoesProdutoStore] evento não gravado:', tipo, e);
+      window.toast?.('A ação foi feita, mas não consegui registrar na linha do tempo (' + tipo + '): ' + (e.message || e), 'error');
+      return false;
+    }
+  }
+
+  async function listarEventos(solicitacaoId) {
+    const { data, error } = await window.__VP_SB.sb
+      .from('solicitacao_produto_eventos')
+      .select('*')
+      .eq('solicitacao_id', solicitacaoId)
+      .order('criado_em', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  }
+
+  /* Eventos de várias solicitações de uma vez (indicador de etapas da lista): { [solicitacao_id]: [eventos] }. */
+  async function listarEventosDeVarias(ids) {
+    const lista = (ids || []).filter((x) => x != null);
+    if (!lista.length) return {};
+    const { data, error } = await window.__VP_SB.sb
+      .from('solicitacao_produto_eventos')
+      .select('solicitacao_id, tipo, criado_em')
+      .in('solicitacao_id', lista);
+    if (error) throw error;
+    const mapa = {};
+    (data || []).forEach((e) => { (mapa[e.solicitacao_id] = mapa[e.solicitacao_id] || []).push(e); });
+    return mapa;
+  }
+
+  /* O título do aviso leva um resumo do pedido: o gi-avisos agrupa por 24 h os avisos de mesmo título (sem números),
+     então "Nova Solicitação — SOL-…" de duas solicitações no mesmo dia faria a segunda não sair. */
+  function _notificarEngenharia(solicitacao, alvo) {
+    return _avisar([alvo.email], {
       idBase: `sol-${solicitacao.numero_solicitacao}`,
-      title: `Nova Solicitação de Produto — ${solicitacao.numero_solicitacao}`,
-      sub: [solicitacao.cliente_nome, solicitacao.categoria_sku, solicitacao.solicitante_nome].filter(Boolean).join(' · '),
+      title: `${TL().resumo(solicitacao.descricao_inicial, 40)} — pedido de Ficha Técnica`,
+      sub: [`${solicitacao.numero_solicitacao}`, solicitacao.cliente_nome, solicitacao.categoria_sku, `pedido por ${solicitacao.solicitante_nome}`].filter(Boolean).join(' · '),
       rota: `/engenharia/solicitacoes-produto/${solicitacao.id}`,
     });
   }
 
-  function _notificarFichaCriada(solicitacao, fichaId) {
-    return _avisar(DESTINATARIOS_FICHA_CRIADA, {
-      idBase: `sol-ficha-${solicitacao.numero_solicitacao}`,
-      title: `Ficha Técnica criada — conferir NCM e publicar no Omie — ${solicitacao.numero_solicitacao}`,
-      sub: [solicitacao.categoria_sku, solicitacao.cliente_nome].filter(Boolean).join(' · '),
+  /* Ficha → solicitação de origem (se houver). Fichas criadas direto na Ficha Técnica não têm. */
+  async function porFicha(fichaId) {
+    if (!fichaId) return null;
+    try {
+      const { data, error } = await window.__VP_SB.sb
+        .from('solicitacoes_produto')
+        .select('*')
+        .eq('ficha_tecnica_id', fichaId)
+        .is('excluido_em', null)
+        .maybeSingle();
+      if (error) throw error;
+      return data || null;
+    } catch (e) {
+      console.warn('[SolicitacoesProdutoStore] solicitação da ficha indisponível:', e);
+      return null;
+    }
+  }
+
+  /* Chamado na edição da Ficha Técnica: avisa UMA pessoa da Importação para conferir o NCM e publicar no Omie.
+     `solicitacao` pode ser nula (ficha criada direto na Ficha Técnica): o aviso sai igual, só não há linha do tempo.
+     `ficha` = { id, codigoProduto } da própria ficha (usada no link e no texto quando não há solicitação). */
+  async function avisarImportacao(solicitacao, email, nomeProduto, ficha) {
+    const alvo = TL().pessoa(TL().IMPORTACAO, email);
+    if (!alvo) throw new Error('Escolha Andreia, Beatriz ou Bianca.');
+    const f = ficha || {};
+    const fichaId = (solicitacao && solicitacao.ficha_tecnica_id) || f.id || null;
+    if (!solicitacao && !fichaId) throw new Error('Salve a ficha antes de avisar a Importação.');
+    const ref = solicitacao ? solicitacao.numero_solicitacao : (f.codigoProduto || 'ficha sem solicitação');
+    const ok = await _avisar([alvo.email], {
+      idBase: `sol-ficha-${solicitacao ? solicitacao.numero_solicitacao : String(fichaId).slice(0, 8)}-${Date.now().toString(36)}`,
+      title: `${TL().resumo(nomeProduto || (solicitacao && solicitacao.descricao_inicial) || ref, 40)} — ficha pronta: conferir NCM e publicar`,
+      sub: solicitacao
+        ? [`${solicitacao.numero_solicitacao}`, solicitacao.categoria_sku, solicitacao.cliente_nome].filter(Boolean).join(' · ')
+        : [ref, 'ficha criada direto na Ficha Técnica'].filter(Boolean).join(' · '),
       rota: fichaId ? `/engenharia/ficha-tecnica/${fichaId}` : '/engenharia/ficha-tecnica',
     });
+    if (!ok) throw new Error('Não consegui enviar o aviso para ' + alvo.nome + '.');
+    if (solicitacao) await _registrarEvento(solicitacao.id, 'aviso_importacao', { alvo });
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: solicitacao ? 'Solicitações de Produto' : 'Ficha Técnica', acao: 'Avisou a Importação para conferir NCM e publicar',
+      alvo: ref, alvo_id: solicitacao ? solicitacao.id : fichaId, detalhe: { avisado: alvo.email, ficha_id: fichaId },
+    });
+    return alvo;
+  }
+
+  /* Chamado depois de publicar a ficha no Omie: registra quem publicou na linha do tempo da solicitação de origem. */
+  async function registrarPublicacao(fichaId, { codigo_produto, republicou } = {}) {
+    const sol = await porFicha(fichaId);
+    if (!sol) return false;
+    return _registrarEvento(sol.id, 'ficha_publicada', {
+      detalhe: { codigo_produto: codigo_produto || null, acao: republicou ? 'republicou ficha no Omie' : 'publicou ficha no Omie' },
+    });
+  }
+
+  /* ---------- Chat interno e devolução com pendência (8.3, spec de 04/11/2026) ---------- */
+  const _sbc = () => { const c = window.__VP_SB && window.__VP_SB.sb; if (!c) throw new Error('Supabase não carregado'); return c; };
+
+  let _adminCache = null;
+  async function souAdmin() {
+    if (_adminCache !== null) return _adminCache;
+    try {
+      const email = String((window.__VP_USER || {}).email || '').toLowerCase();
+      const { data } = await _sbc().from('perfis').select('nivel').eq('email', email).maybeSingle();
+      _adminCache = !!data && data.nivel === 'Administrador';
+    } catch (e) { _adminCache = false; }
+    return _adminCache;
+  }
+
+  /* Feriados que contam no SLA (mesma tabela do motor de gatilhos). Falha de leitura = só fim de semana, e avisa no console. */
+  async function _feriados() {
+    try {
+      const { data, error } = await _sbc().from('calendario_feriados').select('data, conta_no_sla').eq('ativo', true);
+      if (error) throw error;
+      return (data || []).filter((l) => l.conta_no_sla !== false).map((l) => l.data);
+    } catch (e) { console.warn('[SolicitacoesProdutoStore] feriados indisponíveis — prazo usa só fim de semana', e); return []; }
+  }
+
+  /* A Ficha já foi publicada no Omie? (lê omie_publicado_em, NÃO a `etapa`: 93 fichas publicadas e só 1 em "publicado".)
+     null = não consegui ler (a função do banco confere de qualquer modo). */
+  async function fichaPublicada(sol) {
+    if (!sol || !sol.ficha_tecnica_id) return false;
+    try {
+      const { data, error } = await _sbc().from('fichas_tecnicas').select('omie_publicado_em').eq('id', sol.ficha_tecnica_id).maybeSingle();
+      if (error) throw error;
+      return !!(data && data.omie_publicado_em);
+    } catch (e) { console.warn('[SolicitacoesProdutoStore] não li a publicação da ficha:', e); return null; }
+  }
+
+  async function listarMensagens(solicitacaoId) {
+    const { data, error } = await _sbc().from('solicitacao_produto_mensagens')
+      .select('*').eq('solicitacao_id', solicitacaoId).order('criado_em', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  }
+
+  /* Aviso por WhatsApp (alertas → gi-avisos). O título leva um resumo da mensagem: o gi-avisos agrupa por 24 h os avisos de
+     mesmo título sem números e ignora "teste", "claude" e "excluir". Devolve { enviados, falhas } — nunca silencioso (Art. 9). */
+  async function _avisarMensagem(sol, emails, texto, quem) {
+    const lista = Array.from(new Set((emails || []).map((e) => String(e || '').trim().toLowerCase()).filter(Boolean)));
+    if (!lista.length) return { enviados: 0, falhas: 0 };
+    const ok = await _avisar(lista, {
+      idBase: `sol-chat-${sol.numero_solicitacao}-${Date.now().toString(36)}`,
+      title: `${TL().resumo(texto, 40)} — conversa sobre pedido de produto`,
+      sub: [sol.numero_solicitacao, quem ? quem + ' escreveu' : null, sol.cliente_nome].filter(Boolean).join(' · '),
+      rota: `/engenharia/solicitacoes-produto/${sol.id}/chat`,
+    });
+    return ok ? { enviados: lista.length, falhas: 0 } : { enviados: 0, falhas: lista.length };
+  }
+
+  async function enviarMensagem(sol, { texto, anexos, setor, whatsapp }) {
+    const u = window.__VP_USER || {};
+    const t = String(texto || '').trim();
+    if (!t) throw new Error('Escreva a mensagem.');
+    const { error } = await _sbc().from('solicitacao_produto_mensagens').insert([{
+      solicitacao_id: sol.id, autor_email: String(u.email || '').toLowerCase(), autor_nome: u.nome || null,
+      setor, tipo: 'mensagem', texto: t, anexos: anexos || [],
+    }]);
+    if (error) throw new Error(error.message);
+    return _avisarMensagem(sol, whatsapp, t, u.nome);
+  }
+
+  /* Abre a pendência (a função do banco confere status, ficha publicada e pendência já aberta, e grava mensagem + evento). */
+  async function devolver(sol, { para, motivo, setor, cita, whatsapp }) {
+    const u = window.__VP_USER || {};
+    const prazo = TL().prazoDevolucao(new Date(), await _feriados());
+    const { error } = await _sbc().rpc('solicitacao_devolver', {
+      p_id: sol.id, p_para: para, p_motivo: motivo, p_setor_autor: setor, p_autor_nome: u.nome || null,
+      p_cita_email: cita ? cita.email : null, p_cita_nome: cita ? cita.nome : null, p_prazo: prazo.toISOString(),
+    });
+    if (error) throw new Error(error.message);
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Solicitações de Produto', acao: 'Devolveu a solicitação — ' + (TL().DESTINOS[para] || para),
+      alvo: sol.numero_solicitacao, alvo_id: sol.id, detalhe: { para, prazo: prazo.toISOString() },
+    });
+    const aviso = await _avisarMensagem(sol, whatsapp, 'Devolvida: ' + motivo, u.nome);
+    return { prazo, aviso };
+  }
+
+  async function responder(sol, { texto, anexos, setor, whatsapp }) {
+    const u = window.__VP_USER || {};
+    const { error } = await _sbc().rpc('solicitacao_responder', {
+      p_id: sol.id, p_texto: texto, p_setor_autor: setor, p_autor_nome: u.nome || null, p_anexos: anexos || [],
+    });
+    if (error) throw new Error(error.message);
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Solicitações de Produto', acao: 'Respondeu a devolução', alvo: sol.numero_solicitacao, alvo_id: sol.id,
+    });
+    return _avisarMensagem(sol, whatsapp, 'Resposta: ' + texto, u.nome);
   }
 
   function _gerarNumero() {
@@ -150,6 +337,9 @@ window.SolicitacoesProdutoStore = (() => {
 
   async function criar(dados) {
     try {
+      // Quem abre a solicitação escolhe UMA pessoa da Engenharia para ser avisada (decisão de 03/11/2026).
+      const avisado = TL().pessoa(TL().ENGENHARIA, dados.avisar_email);
+      if (!avisado) throw new Error('Escolha quem da Engenharia deve ser avisado(a).');
       const payload = {
         numero_solicitacao: _gerarNumero(),
         status: 'novo',
@@ -184,7 +374,10 @@ window.SolicitacoesProdutoStore = (() => {
         alvo: data.numero_solicitacao, alvo_id: data.id,
         detalhe: { tipo_equipamento: data.tipo_equipamento, categoria_sku: data.categoria_sku, cliente_nome: data.cliente_nome || null },
       });
-      _notificarEngenharia(data);
+      await _registrarEvento(data.id, 'aberta');
+      const avisou = await _notificarEngenharia(data, avisado);
+      if (!avisou) window.toast?.('Solicitação criada, mas o aviso para ' + avisado.nome + ' não saiu. Avise essa pessoa.', 'error');
+      await _registrarEvento(data.id, 'aviso_engenharia', { alvo: avisado, detalhe: avisou ? {} : { aviso_enviado: false } });
       return data;
     } catch (e) {
       console.error('[SolicitacoesProdutoStore] Erro ao criar:', e);
@@ -268,6 +461,7 @@ window.SolicitacoesProdutoStore = (() => {
       modulo: 'Solicitações de Produto', acao: 'Iniciou análise da solicitação',
       alvo: atualizada.numero_solicitacao, alvo_id: id,
     });
+    await _registrarEvento(id, 'analise_iniciada');
     return atualizada;
   }
 
@@ -295,7 +489,8 @@ window.SolicitacoesProdutoStore = (() => {
       modulo: 'Solicitações de Produto', acao: 'Converteu solicitação em Ficha Técnica',
       alvo: atualizada.numero_solicitacao, alvo_id: id, detalhe: { ficha_tecnica_id },
     });
-    _notificarFichaCriada(atualizada, ficha_tecnica_id);
+    // Não avisa mais a Importação aqui: quem termina a ficha escolhe quem avisar, na edição da Ficha Técnica.
+    await _registrarEvento(id, 'ficha_criada', { detalhe: { ficha_tecnica_id } });
     return atualizada;
   }
 
@@ -377,5 +572,16 @@ window.SolicitacoesProdutoStore = (() => {
     marcarPronto,
     converterEmFicha,
     excluir,
+    listarEventos,
+    listarEventosDeVarias,
+    souAdmin,
+    fichaPublicada,
+    listarMensagens,
+    enviarMensagem,
+    devolver,
+    responder,
+    porFicha,
+    avisarImportacao,
+    registrarPublicacao,
   };
 })();

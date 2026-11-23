@@ -516,6 +516,25 @@
     /* Trava de pagamento pelo envio diário do Acompanhamento de Obra (21/10/2026) — cláusula em destaque. */
     const nTrava = String(nBanco).split('.')[0] + '.2';
     items.push({ n: nTrava, destaque: true, text:'LIBERAÇÃO DOS PAGAMENTOS PELO ENVIO DIÁRIO DO ACOMPANHAMENTO DE OBRA: a CONTRATADA deverá enviar, DIARIAMENTE e a cada etapa concluída, o checklist do Acompanhamento de Obra pelo link individual que lhe for fornecido pela CONTRATANTE. Os envios registram o andamento real da obra e calculam, automaticamente, o seu percentual de evolução. Os pagamentos previstos no item 5.1 vinculados à metade da execução e à finalização somente serão liberados quando o percentual correspondente constar dos envios feitos. A ausência dos envios diários SUSPENDE a liberação de qualquer pagamento até a regularização, sem incidência de multa, juros ou correção sobre o período de suspensão. Solicitação de pagamento, por qualquer meio, não substitui nem antecipa os envios: quem libera os pagamentos são exclusivamente os envios do checklist.' });
+    /* Adiantamento, restituição e medição (redação do advogado, 02/11/2026). Números 5.3–5.9: o primeiro segmento é reescrito por renumClauseItems;
+       as referências a outras cláusulas/itens usam __ID__ (ordinal) e [[item:id:sufixo]] (número real), resolvidos no fim de buildContract. */
+    const remo = isRemocao(s);
+    const servExec = remo ? 'executados e comprovados' : 'executados e aproveitáveis';
+    items.push({ n:'5.3', text:'O valor pago à CONTRATADA a título de entrada constitui adiantamento do preço contratado, destinado à execução dos serviços objeto deste instrumento, não possuindo natureza de arras penitenciais e não conferindo à CONTRATADA direito de desistência imotivada da contratação.' });
+    items.push({ n:'5.4', text:'Na hipótese de resolução contratual decorrente de inadimplemento imputável à CONTRATADA, os valores antecipadamente pagos pela CONTRATANTE deverão ser abatidos com o valor dos serviços efetivamente executados.' });
+    items.push({ n:'5.5', text:'Ocorrendo desistência injustificada, abandono da obra ou inexecução total dos serviços, sem que tenha havido execução de serviços, a CONTRATADA ficará obrigada a restituir integralmente os valores antecipadamente recebidos, inclusive a entrada prevista no item [[item:pagamento:1.1]].' });
+    items.push({ n:'5.6', text:'Havendo execução parcial dos serviços, será realizada medição técnica para apuração:', listType:'alpha', list:[
+      'das etapas efetivamente executadas e comprovadas;',
+      'da conformidade dos serviços com as especificações contratuais;',
+      'do valor correspondente aos serviços ' + servExec + ', observados os critérios estabelecidos no ' + (remo ? 'cronograma de pagamento' : 'Cronograma de Pagamento da Instalação') + ', mantido em meio eletrônico pela CONTRATANTE;',
+      'da existência de serviços defeituosos e dos custos necessários à sua correção, quando imputáveis à CONTRATADA;',
+      'dos valores já pagos e do saldo financeiro resultante da apuração.',
+    ] });
+    items.push({ n:'5.6.1', text:'A medição deverá ser fundamentada em registros técnicos, fotografias, relatórios de acompanhamento e demais elementos pertinentes, assegurada à CONTRATADA a possibilidade de apresentar esclarecimentos e contestação fundamentada no prazo de 3 (três) dias úteis após o recebimento do demonstrativo.' });
+    items.push({ n:'5.6.2', text:'Eventual divergência relevante quanto à medição poderá ser submetida à avaliação técnica independente, por profissional habilitado, sem prejuízo das medidas judiciais cabíveis.' });
+    items.push({ n:'5.7', text:'Os valores antecipadamente recebidos que excederem a remuneração devida pelos serviços executados deverão ser restituídos pela CONTRATADA no prazo de 5 (cinco) dias corridos, contados do recebimento da notificação acompanhada do demonstrativo financeiro e dos documentos técnicos que fundamentem a apuração, ao menos quanto à parcela incontroversa.' });
+    items.push({ n:'5.8', text:'A contestação fundamentada de parcela do demonstrativo não suspenderá a obrigação de restituir os valores incontroversos, permanecendo a parcela controvertida sujeita à apuração definitiva, sem prejuízo do direito de cobrança pelos meios legalmente admitidos.' });
+    items.push({ n:'5.9', text:'A restituição dos adiantamentos não prejudicará a aplicação das penalidades previstas na Cláusula __PENALIDADES__, desde que presentes seus pressupostos e observada a vedação ao enriquecimento sem causa e à dupla reparação pelo mesmo prejuízo.' });
     return items;
   }
 
@@ -547,6 +566,13 @@
   function buildContract(s, numeroDoc) {
     const numero = numeroDoc || 'VPNI________';
     const clauses = [];
+    /* Termos que mudam com a modalidade nas cláusulas 4, 5, 8 e 10 (redação do advogado, 02/11/2026).
+       Instalação: "montagem", serviços "aproveitáveis", segurança "da instalação".
+       Remoção / remoção e adequação: "desmontagem, remoção ou adequação", serviços "comprovados", e o equipamento desmontado entra na devolução. */
+    const rem = isRemocao(s);
+    const defeitosExec = rem ? 'defeitos de desmontagem, remoção ou adequação' : 'defeitos de montagem';
+    const servAproveit = rem ? 'executados e comprovados' : 'executados e aproveitáveis';
+    const segurancaObra = rem ? 'da obra, do equipamento e das pessoas envolvidas' : 'da instalação';
 
     /* OBJETO */
     const objetoItems = [
@@ -622,6 +648,9 @@
         { n:'2.11', text:'Garantir a execução deste contrato por sua equipe de profissionais, sendo permitida a subcontratação por parte da CONTRATADA, sob sua exclusiva responsabilidade.' },
         { n:'2.12', text:'Executar os serviços contratados através da fixação de parâmetros técnicos e a tempo certo, obedecendo ao cronograma e prazos estipulados entre as partes.' },
         { n:'2.13', text:'É obrigação da CONTRATADA nos enviar uma cópia dos documentos e certificações exigidas pelas normas de Segurança do Trabalho para a prestação dos serviços objeto deste contrato, conforme lista abaixo, não excluindo nenhuma outra certificação que seja pertinente ao trabalho:', list: ANEXOS.map(a => a.label) },
+        /* Redação do advogado (02/11/2026). O documento recebido pulava de 2.14 para 2.16; aqui o item de relatório é o 2.15. */
+        { n:'2.14', text:'É vedado à CONTRATADA abandonar injustificadamente a obra, interromper definitivamente a prestação dos serviços ou promover a retirada de sua equipe em descumprimento das obrigações contratuais, ressalvadas as hipóteses de suspensão juridicamente justificadas.' },
+        { n:'2.15', text:'Na hipótese de resolução, suspensão prolongada ou encerramento antecipado deste contrato, a CONTRATADA deverá fornecer à CONTRATANTE relatório dos serviços executados, pendentes e eventualmente defeituosos, acompanhado dos registros técnicos disponíveis, informações necessárias à continuidade dos trabalhos e relação dos materiais ou equipamentos sob sua responsabilidade.' },
       ],
     });
 
@@ -641,9 +670,11 @@
       items: [
         { n:'4.1', text:'A CONTRATADA responderá pelos encargos trabalhistas, fiscais, comerciais e previdenciários resultantes da execução deste contrato, não transferindo à CONTRATANTE, em caso de inadimplência da CONTRATADA com referência a esses encargos, a responsabilidade por seu pagamento, nem podendo onerar o objeto deste contrato.' },
         { n:'4.2', text:'Caberão à CONTRATADA os prejuízos causados à CONTRATANTE ou a terceiros, por atos de sua responsabilidade e decorrentes da execução dos serviços estipulados neste contrato, por culpa ou dolo, excluídos os casos em que a CONTRATANTE der causa, seja por sua ação ou omissão.' },
-        { n:'4.3', text:'A CONTRATADA responderá pelos danos materiais e demais prejuízos comprovadamente decorrentes de falhas na execução dos serviços, negligência, imprudência, imperícia ou inobservância das especificações técnicas e normas de segurança aplicáveis, inclusive quando praticados por profissionais regularmente contratados ou subcontratados sob sua responsabilidade.' },
-        { n:'4.3.1', text:'Na hipótese de a CONTRATANTE suportar prejuízos, despesas de reparação ou indenizações decorrentes de atos comprovadamente imputáveis à CONTRATADA, ficará assegurado o direito de regresso pelos valores correspondentes, observados o nexo causal e a efetiva extensão do dano.' },
-        { n:'4.3.2', text:'A responsabilidade da CONTRATADA não abrangerá defeitos de projeto, fabricação ou fornecimento dos equipamentos, tampouco irregularidades estruturais da obra que não lhe sejam imputáveis, ressalvada sua responsabilidade quando, tendo identificado condições inadequadas, prosseguir indevidamente na execução dos serviços.' },
+        /* Redação do advogado (02/11/2026): vícios/defeitos, plano de correção, reparação por terceiros e responsabilidade pós-encerramento. */
+        { n:'4.3', text:`A CONTRATADA responderá pelos vícios, ${defeitosExec}, falhas de execução e desconformidades técnicas que lhe sejam imputáveis, obrigando-se a promover, às suas expensas, as correções necessárias, observados os prazos de garantia contratual e as condições técnicas de segurança.` },
+        { n:'4.3.1', text:'Constatadas irregularidades, a CONTRATANTE notificará a CONTRATADA para apresentação de plano de correção em prazo compatível e razoável com a natureza e a gravidade dos defeitos, sem prejuízo da adoção imediata de medidas preventivas quando necessárias à segurança de pessoas e equipamentos.' },
+        { n:'4.3.2', text:'Na hipótese de recusa injustificada, omissão ou impossibilidade de correção tempestiva imputável à CONTRATADA, a CONTRATANTE poderá providenciar a reparação por terceiros tecnicamente habilitados, mediante documentação das irregularidades e dos custos necessários, assegurado o posterior ressarcimento.' },
+        { n:'4.4', text:'As responsabilidades por atos, omissões ou defeitos de execução imputáveis à CONTRATADA subsistirão ao encerramento contratual, pelo prazo de 90 dias, não abrangendo defeitos exclusivamente decorrentes de projeto, materiais ou intervenções de terceiros pelos quais não seja responsável, ressalvadas as hipóteses legais de responsabilidade concorrente.' },
       ],
     });
 
@@ -671,20 +702,39 @@
       { n:'6.1', text:'O contrato não poderá ser objeto de cessão ou transferência, no todo ou em parte, a não ser com prévio e expresso consentimento da CONTRATANTE, sob pena de imediata rescisão do mesmo.' },
     ]});
 
-    /* RESCISÃO */
+    /* RESCISÃO — redação do advogado (02/11/2026). */
     clauses.push({ id:'rescisao', titulo:'DA RESCISÃO', baseNum:7, items:[
-      { n:'7.1', text:'Constituem motivos para a rescisão deste contrato:', list:[
-        'não cumprimento de cláusulas, especificações e prazos;',
-        'atraso ou paralisação injustificada e/ou sem comunicação à CONTRATANTE na execução dos serviços;',
-        'desatendimento às determinações da fiscalização da CONTRATANTE;',
-        'alteração social ou modificação da finalidade ou estrutura da CONTRATADA que impossibilite ou venha prejudicar a execução do Contrato;',
-        'atraso no pagamento dos serviços superior a 30 (trinta) dias, conforme disposto na Cláusula __PAGAMENTO__.',
-      ], listType:'alpha', refInList:'pagamento' },
-      { n:'7.2', text:'A rescisão do Contrato poderá ser:', list:[
-        'determinada por ato unilateral e escrito da CONTRATANTE, caso a CONTRATADA descumpra quaisquer cláusulas ou condições ora pactuadas;',
-        'amigável, por acordo entre as partes, reduzido a termo, desde que haja conveniência para a CONTRATANTE;',
-        'judicial, nos termos da legislação.',
-      ], listType:'alpha' },
+      { n:'7.1', text:'Constituem motivos para a resolução do presente contrato por inadimplemento imputável à CONTRATADA:', listType:'alpha', list:[
+        'o descumprimento de obrigações contratuais essenciais, especificações técnicas, condições de segurança ou prazos estabelecidos neste instrumento;',
+        'a desistência injustificada da execução dos serviços, antes ou após o início das atividades contratadas;',
+        'o abandono injustificado da obra, caracterizado nos termos desta cláusula;',
+        'o atraso relevante e injustificado no início, desenvolvimento ou conclusão das etapas contratadas, quando comprometer substancialmente o cronograma da obra;',
+        'a execução defeituosa dos serviços, acompanhada da recusa injustificada em corrigir as irregularidades identificadas;',
+        'o descumprimento de determinações legítimas de fiscalização técnica, qualidade e segurança;',
+        'a subcontratação ou transferência das obrigações contratuais em desacordo com as disposições deste instrumento;',
+        'a perda das condições legais ou técnicas indispensáveis à execução dos serviços.',
+      ] },
+      { n:'7.2', text:'Para fins deste instrumento, poderá ser caracterizado abandono da obra quando a CONTRATADA, sem justificativa legítima, deixar de executar as atividades programadas por período igual ou superior a 2 (dois) dias consecutivos, estando a frente de trabalho liberada e disponíveis as condições necessárias à execução, e não apresentar justificativa idônea ou plano efetivo de retomada no prazo de 24 (vinte e quatro) horas após o recebimento da notificação.' },
+      { n:'7.3', text:'A comunicação expressa e inequívoca da CONTRATADA de que não pretende cumprir as obrigações contratuais, sem motivo juridicamente justificável, poderá caracterizar inadimplemento definitivo, independentemente do decurso do prazo previsto no item [[item:rescisao:2]].' },
+      { n:'7.4', text:'Constatado descumprimento contratual passível de regularização, a parte prejudicada notificará a parte inadimplente para que sane a irregularidade no prazo de 2 (dois) dias úteis, salvo prazo diverso estabelecido neste instrumento ou tecnicamente necessário, devidamente justificado.' },
+      { n:'7.4.1', text:'Não será exigida oportunidade de regularização quando houver recusa definitiva de cumprimento, inadimplemento irremediável, perda objetiva da utilidade da prestação ou risco grave e iminente à segurança de pessoas ou equipamentos, sem prejuízo do dever de comunicação.' },
+      { n:'7.5', text:'Configurado o inadimplemento essencial e não regularizada a obrigação quando cabível, a parte prejudicada poderá declarar resolvido o contrato, mediante comunicação escrita que identifique os fundamentos da resolução, sua data de eficácia e as providências necessárias ao encerramento da contratação, observadas as disposições do Código Civil.' },
+      { n:'7.6', text:'Na hipótese de resolução contratual por inadimplemento imputável à CONTRATADA, esta ficará obrigada a:', listType:'alpha', list:[
+        'restituir os valores antecipadamente recebidos que não correspondam aos serviços ' + servAproveit + ', conforme a medição prevista na Cláusula __PAGAMENTO__;',
+        'pagar a multa compensatória contratualmente estabelecida;',
+        'responder pelos prejuízos suplementares comprovados, nos termos da Cláusula __PENALIDADES__ e da legislação aplicável;',
+        'fornecer os relatórios, registros, documentos técnicos e demais informações necessárias à continuidade dos serviços;',
+        'devolver materiais, componentes, ferramentas e outros bens de propriedade da CONTRATANTE que estejam sob sua guarda' + (rem ? ', inclusive o equipamento desmontado, suas peças e acessórios;' : ';'),
+        'adotar as providências necessárias à preservação da segurança e da integridade dos equipamentos, sem prejudicar a execução de medidas urgentes pela CONTRATANTE.',
+      ] },
+      { n:'7.7', text:'Ocorrendo resolução por inadimplemento imputável à CONTRATADA, a CONTRATANTE poderá contratar terceiros para continuidade ou conclusão dos serviços, independentemente de autorização da CONTRATADA, observadas as medidas necessárias à segurança ' + segurancaObra + ' e à mitigação dos prejuízos.' },
+      { n:'7.7.1', text:'Os custos adicionais imputáveis à CONTRATADA serão apurados considerando a diferença entre o custo razoável e necessário da contratação substitutiva e o saldo do preço originalmente previsto para os serviços remanescentes, acrescida, quando cabível, das despesas comprovadas de correção, retrabalho e remobilização.' },
+      { n:'7.8', text:'A CONTRATADA poderá suspender legitimamente a execução dos serviços quando comprovadamente presentes circunstâncias que impossibilitem a continuidade por causa imputável à CONTRATANTE, condições de insegurança grave ou outras hipóteses legalmente justificadas, obrigando-se a comunicar o impedimento tão logo seja possível e a adotar medidas razoáveis para evitar o agravamento dos prejuízos.' },
+      { n:'7.9', text:'O atraso no pagamento de obrigação líquida e exigível da CONTRATANTE por período superior a 30 (trinta) dias, sem justificativa contratualmente legítima, poderá ensejar a resolução por iniciativa da CONTRATADA, mediante notificação escrita e concessão de prazo final de 5 (cinco) dias úteis para regularização.' },
+      { n:'7.10', text:'Eventuais indenizações contratuais e legais de mesma natureza e decorrentes do mesmo fato não serão cumuladas de modo a proporcionar dupla reparação.' },
+      { n:'7.11', text:'A ocorrência de caso fortuito ou força maior que impeça a execução contratual deverá ser comunicada à outra parte tão logo seja possível, acompanhada dos elementos disponíveis para demonstração de sua causa, extensão e efeitos sobre o cronograma.' },
+      { n:'7.12', text:'A extinção do contrato, por qualquer motivo, não prejudicará a exigibilidade das obrigações de restituição, responsabilidade por danos, garantia, confidencialidade e demais obrigações que, por sua natureza, devam subsistir ao encerramento.' },
+      { n:'7.13', text:'A rescisão amigável será formalizada por termo escrito, que conterá a relação de valores pagos e devidos, as responsabilidades remanescentes e a extensão de eventual quitação.' },
     ]});
 
     /* VIGÊNCIA */
@@ -693,10 +743,26 @@
       { n:'8.2', text:'Este contrato é válido até o término do serviço objeto deste contrato, vide Cláusula __OBJETO__, não ficando as partes isentas de seus compromissos éticos após a invalidação do mesmo, podendo ser prorrogado e/ou alterado por acordo entre as partes, mediante termo aditivo.', ref:'objeto' },
     ]});
 
-    /* PENALIDADES */
+    /* PENALIDADES — redação do advogado (02/11/2026). */
     clauses.push({ id:'penalidades', titulo:'DAS PENALIDADES', baseNum:9, items:[
-      { n:'9.1', text:'Em caso de rescisão sem justo motivo por uma das partes antes do prazo final do contrato, ou de qualquer uma das ocorrências previstas na Cláusula __RESCISAO__ deste instrumento, este Contrato será rescindido automaticamente e caberá à parte infratora multa equivalente a 20% (vinte por cento) sobre o total do contrato, a ser paga em até 5 (cinco) dias corridos da rescisão.', ref:'rescisao' },
-      { n:'9.2', text:'O atraso injustificado de etapa por fato imputável à CONTRATADA sujeitá-la-á à multa moratória de 0,5% (meio por cento) por dia corrido de atraso, calculada sobre o valor da etapa inadimplida, até o limite de 20% (vinte por cento) do valor total do contrato, após comunicação escrita da ocorrência e sem prejuízo da demonstração de causa excludente.' },
+      { n:'9.1', text:'O inadimplemento essencial imputável a qualquer das partes, quando constituir causa de resolução contratual, sujeitará a parte inadimplente ao pagamento de multa compensatória equivalente a 20% (vinte por cento) do valor global do contrato, observadas as disposições dos arts. 412 e 413 do Código Civil.' },
+      { n:'9.1.1', text:'A multa compensatória estabelecida neste item não será exigível em razão de distrato consensual ou exercício regular de direito de encerramento que não constitua inadimplemento contratual.' },
+      { n:'9.2', text:'O atraso injustificado e imputável à CONTRATADA na execução de etapa contratual sujeitará esta ao pagamento de multa moratória equivalente a 0,2% (dois décimos por cento) do valor global contratado por dia útil de atraso, limitada a 10% (dez por cento) do valor total do contrato.' },
+      { n:'9.3', text:'A multa moratória prevista no item anterior poderá ser exigida juntamente com o cumprimento da obrigação em atraso, observadas as disposições do art. 411 do Código Civil. Caso o mesmo inadimplemento evolua para resolução contratual, os valores correspondentes à multa moratória relativa ao mesmo fato serão considerados na apuração da multa compensatória, vedada a duplicidade de penalização pelo mesmo descumprimento.' },
+      { n:'9.4', text:'A aplicação da multa compensatória não afastará a obrigação de restituição dos valores antecipadamente pagos sem correspondente execução dos serviços, por se tratar de obrigação restitutória distinta da penalidade pelo inadimplemento.' },
+      { n:'9.5', text:'Fica expressamente convencionada, nos termos do art. 416, parágrafo único, do Código Civil, a possibilidade de exigir indenização suplementar quando os prejuízos comprovadamente decorrentes do inadimplemento excederem o valor da multa compensatória, hipótese em que a cláusula penal valerá como mínimo da indenização, competindo à parte prejudicada comprovar o prejuízo excedente.' },
+      { n:'9.6', text:'Para fins de indenização suplementar, poderão ser considerados os prejuízos diretos, necessários, razoáveis e comprovadamente decorrentes do inadimplemento, inclusive:', listType:'alpha', list:[
+        'custos adicionais de contratação de terceiros para a conclusão dos serviços, apurados na forma do item [[item:rescisao:7.1]];',
+        'despesas com correções e retrabalhos decorrentes de execução defeituosa;',
+        'despesas extraordinárias de mobilização, transporte e hospedagem diretamente relacionadas à substituição da equipe inadimplente;',
+        'custos de reposição ou reparação de materiais e componentes danificados por fato imputável à parte responsável;',
+        'penalidades efetivamente exigíveis por terceiros, quando comprovados o nexo causal, a previsibilidade razoável do prejuízo e sua relação direta com o inadimplemento.',
+      ] },
+      { n:'9.7', text:'A indenização suplementar não compreenderá valores que constituam despesas ordinárias já previstas na execução do contrato, nem prejuízos hipotéticos, não comprovados ou cuja cobrança implique duplicidade de ressarcimento.' },
+      { n:'9.8', text:'Os valores sujeitos à restituição serão atualizados monetariamente pelo IPCA desde o respectivo desembolso, incidindo juros moratórios calculados pela taxa legal prevista no art. 406 do Código Civil a partir do vencimento do prazo contratual de restituição, sem prejuízo das demais consequências legalmente cabíveis.' },
+      { n:'9.8.1', text:'As multas e demais obrigações pecuniárias terão seus respectivos vencimentos indicados na notificação de cobrança, acompanhada de demonstrativo discriminado, incidindo, após a constituição em mora, a atualização e os juros legal ou contratualmente aplicáveis.' },
+      { n:'9.9', text:'Nenhuma penalidade será exigível quando demonstrado que o inadimplemento decorreu de fato imputável exclusivamente à parte prejudicada ou de circunstância legalmente apta a excluir a responsabilidade da parte apontada como inadimplente.' },
+      { n:'9.10', text:'A eventual incidência de indenização legal decorrente de encerramento antecipado e imotivado não autorizará a cumulação automática com multa compensatória de mesma finalidade, devendo ser observadas a natureza jurídica da contratação, a legislação aplicável e a vedação à dupla reparação.' },
     ]});
 
     /* TOLERÂNCIA */
@@ -724,10 +790,17 @@
       c.ord = ORDINAIS[i] || ('#'+(i+1));
       renumClauseItems(c, i + 1);
     });
+    const numById = {};
+    clauses.forEach((c, i) => { numById[c.id] = i + 1; });
+    /* "[[item:id:7.1]]" vira o número REAL do item (ex.: "8.7.1"), pois a posição da cláusula muda com as condicionais (equipamento especial, logística). */
+    const resolveRefs = (t) => String(t)
+      .replace(/\[\[item:([a-z_]+):([\d.]+)\]\]/g, (m, id, suf) => numById[id] ? numById[id] + '.' + suf : '____')
+      .replace(/__([A-Z_]+)__/g, (m, k) => ordById[k.toLowerCase()] || m);
     clauses.forEach(c => c.items.forEach(it => {
       if (it.ref) it.text = it.text.replace(`__${it.ref.toUpperCase()}__`, ordById[it.ref] || '____');
       if (it.refInList && it.list) it.list = it.list.map(li => li.replace(`__${it.refInList.toUpperCase()}__`, ordById[it.refInList] || '____'));
-      it.text = it.text.replace(/__([A-Z_]+)__/g, (m, k) => ordById[k.toLowerCase()] || m);
+      it.text = resolveRefs(it.text);
+      if (it.list) it.list = it.list.map(resolveRefs);
     }));
 
     return {

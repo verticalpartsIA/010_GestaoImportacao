@@ -241,12 +241,9 @@
       const t = String(texto || '').trim().toLowerCase();
       let ops = data || [];
       if (t) ops = ops.filter((o) => [o.numero, o.titulo, o.produto, o.cliente].some((v) => String(v || '').toLowerCase().includes(t)));
-      const ids = ops.map((o) => o.id);
-      let series = {};
-      if (ids.length) {
-        const r = await sb.from('mes_ordens').select('ordem_id, numero_serie').in('ordem_id', ids);
-        (r.data || []).forEach((m) => { if (m.numero_serie) series[m.ordem_id] = m.numero_serie; });
-      }
+      // 04/11/2026: o MES saiu do produto, então a série não vem mais de mes_ordens. Fica vazia e a pessoa digita na tela de etiqueta
+      // (campo editável); quando a Fabricação QC guardar o número de série da OP, ler daqui.
+      const series = {};
       // Nº do pedido do Omie (só para EXIBIÇÃO na tela de escolha — nunca entra no QR/código de barras
       // impresso: op_txt/qr/barras de dadosOpQuadro continuam usando o `numero` puro da OP, formato já
       // registrado na issue #862).

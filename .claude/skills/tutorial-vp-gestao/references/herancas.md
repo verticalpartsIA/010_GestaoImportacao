@@ -39,6 +39,8 @@ Fornecedores ──► Cotações a Fornecedor ──► (preço do fornecedor) 
 | Prazos & Pendências | Gatilhos (motor) | etapas da cadeia de cada cotação | `gatilhos-engine.js` |
 | Dashboard | Propostas, Contratos, Leads | indicadores | `supabase.js` (confirmar) |
 | Inbox | E-mails enviados (Propostas, Contratos, Cotações) | vínculo por Nº de cotação ou referência | `logistica.jsx` |
+| Ficha Técnica | Solicitações de Produto | nome, descrições, categoria e 1ª imagem (botão Converter em Ficha) | `solicitacoes-produto.jsx` (`_converterEmFicha`) |
+| Ficha Técnica | Relatórios do PCP | código e nome do item (atalho "Criar ficha deste item", `vp_pcp_ficha_nova`) | `ficha-tecnica.jsx` |
 | Mapa de Obras | Dossiê da Obra, equipamentos_obra, Embarque, P.I. (nº de série), Diário de Obra, Instaladores, Vistorias | obra/fase/endereço, datas, navio/rolagens/ETA/canal, andamento | `mapa-obras.jsx`, `evolucao-equipamentos.jsx` (`useEvolucaoItens`) |
 
 ## Quem doa para quem (visão reversa)
@@ -58,3 +60,4 @@ Fornecedores ──► Cotações a Fornecedor ──► (preço do fornecedor) 
 2. Acrescentar uma linha na tabela "Relações, tela por tela" com o arquivo e a função.
 3. Acrescentar a relação reversa em "Quem doa para quem".
 4. Citar a dependência no tutorial da tela que recebe.
+- **Ficha Técnica** → Catálogo de Produtos (cada ficha salva), Omie (publicar), Catálogo Siscomex (NCM/DUIMP), foto do produto nas Cotações de Varejo e no painel "Produtos com foto" do PCP, busca de produto na P.I. (`docs/modulos/08_engenharia_produto.md`).
