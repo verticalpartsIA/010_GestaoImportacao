@@ -195,6 +195,10 @@
     const O = o.opcoes || (typeof window !== 'undefined' ? window.PropostaOpcoes : null);
     const d = dataAtual || {};
     const v = (d.elevador && d.elevador.valores) || {};
+    /* 26/11/2026 (VPPR-1052-E): proposta de 1 equipamento não tem lista `itens` — o preço mora em valorUnit × quantidade.
+       Antes esta função só sabia ler `itens` e a proposta de 1 equipamento nunca recebia o preço novo. */
+    const temItensNovos = Array.isArray(valoresNovos && valoresNovos.itens) && valoresNovos.itens.length > 0;
+    if (!Array.isArray(v.itens) && !temItensNovos) return aplicarValorSimples(d, v, valoresNovos || {}, o, O);
     const novos = Array.isArray(valoresNovos && valoresNovos.itens) ? valoresNovos.itens : [];
     const antigos = Array.isArray(v.itens) ? v.itens : [];
     const porId = new Map(antigos.map((it) => [it && it.id, it]));
@@ -223,11 +227,18 @@
     const ocultos = new Set(Array.isArray(v.ocultos) ? v.ocultos : []);
     const somaVisivel = (lista) => lista.filter((it) => !ocultos.has(it.id)).reduce((s, it) => s + parseNum(it.valorUnit) * (Number(it.quantidade) || 1), 0);
     const total = arred(somaVisivel(itens));
-    const totalAnterior = arred(somaVisivel(antigos));
+    /* proposta que era de 1 equipamento (sem `itens`) e passou a ter lista: o total anterior é valorUnit × quantidade */
+    const totalAnterior = arred(antigos.length ? somaVisivel(antigos) : parseNum(v.valorUnit) * (Number(v.quantidade) || 1));
     if (Math.abs(total - totalAnterior) >= 0.01) mudou = true;
     if (!mudou) return { mudou: false, valores: v, propostaAtendida: null, atendidos: [], total, totalAnterior };
 
-    /* parcelas: mesmo tipo e quantidade que a proposta já tinha, refeitas sobre o total novo */
+    const pg = refazerPagamento(d, v, valoresNovos, total, por, quando, O, atendidos);
+    return { mudou: true, valores: { itens, parcelas: pg.parcelas, formaTipo: pg.formaTipo, qtdParcelas: pg.qtdParcelas, forma: pg.forma }, propostaAtendida: pg.propostaAtendida, atendidos, total, totalAnterior };
+  }
+
+  /* Parcelas (mesmo tipo e quantidade que a proposta já tinha, refeitas sobre o total novo) e o pedido de aumento/desconto
+     da proposta inteira. Usado pelos dois formatos de proposta (com `itens` e de 1 equipamento). */
+  function refazerPagamento(d, v, valoresNovos, total, por, quando, O, atendidos) {
     const formaTipo = v.formaTipo || (valoresNovos && valoresNovos.formaTipo) || 'parcelado';
     let parcelas = [], forma, qtdParcelas = v.qtdParcelas;
     if (formaTipo === 'vista') { forma = '100% à vista'; }
@@ -247,7 +258,27 @@
         propostaAtendida = { aumentoPendente: { ...d.aumentoPendente, valorAtual: total }, aumentoLog: d.aumentoLog || [] };
       }
     }
-    return { mudou: true, valores: { itens, parcelas, formaTipo, qtdParcelas, forma }, propostaAtendida, atendidos, total, totalAnterior };
+    return { parcelas, formaTipo, qtdParcelas, forma, propostaAtendida };
+  }
+
+  /* Proposta de 1 equipamento (sem `itens`): o preço é valorUnit × quantidade. Mesma regra da versão com itens: preço
+     novo entra, parcelas refeitas no padrão mantendo a forma de pagamento, pedido de aumento/desconto da proposta é
+     atendido se a Precificação mudou. Pura. */
+  function aplicarValorSimples(d, v, valoresNovos, o, O) {
+    const quando = o.agora || new Date().toISOString();
+    const por = o.por || null;
+    const qtd = Number(valoresNovos.quantidade) || Number(v.quantidade) || 1;
+    const unitNovo = parseNum(valoresNovos.valorUnit);
+    const totalAnterior = arred(parseNum(v.valorUnit) * (Number(v.quantidade) || 1));
+    const total = arred(unitNovo * qtd);
+    if (!(unitNovo > 0) || Math.abs(total - totalAnterior) < 0.01) {
+      return { mudou: false, valores: v, propostaAtendida: null, atendidos: [], total: totalAnterior, totalAnterior };
+    }
+    const atendidos = [];
+    const pg = refazerPagamento(d, v, valoresNovos, total, por, quando, O, atendidos);
+    const valorUnit = (O && O.textoBR) ? O.textoBR(unitNovo) : String(valoresNovos.valorUnit);
+    return { mudou: true, valores: { valorUnit, quantidade: String(qtd), parcelas: pg.parcelas, formaTipo: pg.formaTipo, qtdParcelas: pg.qtdParcelas, forma: pg.forma },
+      propostaAtendida: pg.propostaAtendida, atendidos, total, totalAnterior };
   }
 
   /* Há pedido aberto em algum nível da proposta? (proposta inteira ou itens) */

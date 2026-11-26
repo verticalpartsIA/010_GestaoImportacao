@@ -1168,6 +1168,8 @@
       await criarPropostaAutomatica({ ...pz, numero_cotacao: pz.numero_cotacao });
     } catch (e) {
       console.warn('[PrecificacaoElevadorStore] Falha ao criar proposta automática ao aprovar:', e);
+      /* Art. 9 (erro nunca é silencioso): a Precificação fica aprovada, mas quem aprovou fica sabendo que a Proposta não acompanhou. */
+      try { window.toast?.(`Precificação aprovada, mas a Proposta não foi criada/atualizada: ${(e && e.message) || e}. Abra a Proposta e confira o valor.`, 'warning'); } catch (_) {}
     }
   }
 
@@ -1192,8 +1194,16 @@
        pela Proposta já existente da revisão original/anterior. */
     const { data: existentes } = await c.from('propostas').select('id, numero_documento')
       .eq('numero_cotacao', pz.numero_cotacao).eq('proposal_type', 'elevador');
-    const jaTemEstaRevisao = (existentes || []).some((p) => (window.MasterIdEngine.parseRevisao(p.numero_documento) || null) === letra);
-    if (jaTemEstaRevisao) return;
+    const daRevisao = (existentes || []).find((p) => (window.MasterIdEngine.parseRevisao(p.numero_documento) || null) === letra);
+    if (daRevisao) {
+      /* 26/11/2026 (VPPR-1052-E): a Precificação desta revisão foi recalculada e aprovada de novo depois que a Proposta
+         nasceu. Antes saía daqui sem fazer nada e a Proposta ficava com o preço da 1ª aprovação. Agora aplica a regra
+         "reprecificou, a proposta herda" (rascunho recebe o preço novo; proposta que o cliente já viu só fica marcada). */
+      if (window.PropostaAumentoStore && window.PropostaAumentoStore.sincronizarPreco) {
+        await window.PropostaAumentoStore.sincronizarPreco(pz.numero_cotacao, daRevisao.id);
+      }
+      return;
+    }
 
     /* precificacaoId: pz.id — pina NESTA precificação (achado real do Codex,
        23/10): sem isso, prefillPorNumeroCotacao() prefere qualquer
@@ -1204,14 +1214,17 @@
     const r = await window.PropostaHeranca.prefillPorNumeroCotacao(pz.numero_cotacao, { precificacaoId: pz.id });
     if (!r.encontrado) return;
     const numero = window.MasterIdEngine.etapaId('proposta', pz.numero_cotacao, letra);
-    const valorUnit = Number((r.prefill.elevador || {}).valores?.valorUnit) || 0;
-    const quantidade = Number((r.prefill.elevador || {}).valores?.quantidade) || 1;
     /* deepMergeProposta (não deepMergeHeranca): proposta nova (editId: null),
        sem digitação de vendedor pra proteger. deepMergeHeranca tratava o
        placeholder do makeDefaultProposta() como conteúdo real e descartava a
        herança quando havia mais de 1 equipamento (achado na cotação 950). */
     const dadosCompletos = window.deepMergeProposta(window.makeDefaultProposta(), { ...r.prefill, numero });
-    await window.PropostaStore.salvar({ data: dadosCompletos, eq: 'elevador', editId: null, valorTotal: valorUnit * quantidade });
+    /* 26/11/2026: o valor vem em texto pt-BR ("351019,05"); Number() dava NaN e a proposta nascia com valor_total 0.
+       totalOficial é a mesma soma do editor (lista de equipamentos ou valorUnit × quantidade). */
+    const valorTotal = window.PropostaOpcoes && window.PropostaOpcoes.totalOficial
+      ? Math.round(window.PropostaOpcoes.totalOficial(dadosCompletos, 'elevador') * 100) / 100 : 0;
+    const salvo = await window.PropostaStore.salvar({ data: dadosCompletos, eq: 'elevador', editId: null, valorTotal });
+    if (salvo && salvo.erro) throw new Error(salvo.erro);
   }
 
   /* ---------- Ressincroniza modelos/vmle a partir da resposta do fornecedor ----------

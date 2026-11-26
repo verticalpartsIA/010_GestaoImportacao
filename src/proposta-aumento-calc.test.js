@@ -324,3 +324,30 @@ test('montarAviso: pedido de desconto e de aumento têm títulos diferentes; a r
   assert.match(rc.sub, /Margem não comporta/);
   assert.match(rc.sub, /já pode ser enviada/);
 });
+
+/* ---------- 26/11/2026 — proposta de 1 equipamento (sem `itens`) também herda o preço novo (caso VPPR-1052-E) ---------- */
+function propostaUmEquipamento() {
+  return { cliente: { nome: 'Cli' }, elevador: { valores: {
+    equipamento: 'GEP', quantidade: '1', valorUnit: '351019,05', formaTipo: 'parcelado', qtdParcelas: 5,
+    parcelas: [{ valor: '140.407,62' }, { valor: '52.652,86' }, { valor: '52.652,86' }, { valor: '52.652,86' }, { valor: '52.652,85' }],
+  } } };
+}
+
+test('aplicarNovosValores (1 equipamento): recebe o preço novo e refaz as parcelas sobre ele', () => {
+  const A = carregar();
+  const r = A.aplicarNovosValores(propostaUmEquipamento(), { quantidade: '1', valorUnit: '520190,84', formaTipo: 'parcelado', qtdParcelas: 5 }, { agora: AGORA });
+  assert.strictEqual(r.mudou, true);
+  assert.strictEqual(r.totalAnterior, 351019.05);
+  assert.strictEqual(r.total, 520190.84);
+  assert.strictEqual(A.parseNum(r.valores.valorUnit), 520190.84);
+  assert.strictEqual(r.valores.itens, undefined, 'continua no formato de 1 equipamento');
+  assert.strictEqual(r.valores.parcelas.length, 5);
+  const soma = r.valores.parcelas.reduce((s, p) => s + A.parseNum(p.valor), 0);
+  assert.ok(Math.abs(soma - 520190.84) < 0.01, 'parcelas fecham no total novo');
+});
+
+test('aplicarNovosValores (1 equipamento): preço igual não mexe; Precificação sem preço não zera a proposta', () => {
+  const A = carregar();
+  assert.strictEqual(A.aplicarNovosValores(propostaUmEquipamento(), { quantidade: '1', valorUnit: '351019,05' }).mudou, false);
+  assert.strictEqual(A.aplicarNovosValores(propostaUmEquipamento(), { quantidade: '1', valorUnit: '' }).mudou, false);
+});
