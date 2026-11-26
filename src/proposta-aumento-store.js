@@ -277,18 +277,37 @@
     const saida = { atualizadas: [], marcadas: [] };
     if (!c || !A() || !window.PropostaHeranca || numeroCotacao == null) return saida;
     try {
-      let q = c.from('propostas').select('id, status, proposal_type, data_json, vendedor_id, numero_cotacao, numero_documento, valor_total').eq('numero_cotacao', Number(numeroCotacao));
+      let q = c.from('propostas').select('id, status, proposal_type, data_json, vendedor_id, numero_cotacao, numero_documento, valor_total, precificacao_id').eq('numero_cotacao', Number(numeroCotacao));
       if (apenasPropostaId) q = q.eq('id', apenasPropostaId);
-      const { data: rows } = await q;
+      const { data: rows, error: errLeitura } = await q;
+      if (errLeitura) { console.warn('[PropostaAumentoStore] não leu as propostas da cotação', errLeitura); return saida; }
+      /* 26/11/2026 (VPPR-1052-E): proposta de 1 equipamento não tem `itens` (o preço mora em valorUnit). Antes ela era
+         descartada aqui e nunca recebia o preço novo. */
+      const temPreco = (v) => !!v && (Array.isArray(v.itens) || A().parseNum(v.valorUnit) > 0);
       const alvo = (rows || []).filter((r) => !STATUS_FORA.includes(r.status) && (!r.proposal_type || r.proposal_type === 'elevador')
-        && r.data_json && r.data_json.elevador && r.data_json.elevador.valores && Array.isArray(r.data_json.elevador.valores.itens));
+        && r.data_json && r.data_json.elevador && temPreco(r.data_json.elevador.valores));
       if (!alvo.length) return saida;
-      const r = await window.PropostaHeranca.prefillPorNumeroCotacao(String(numeroCotacao));
-      const valoresNovos = r && r.encontrado && r.prefill && r.prefill.elevador && r.prefill.elevador.valores;
-      if (!valoresNovos || !Array.isArray(valoresNovos.itens) || !valoresNovos.itens.length) return saida;
+      /* 26/11/2026 (VPPR-1066-B, VPPR-0990): cada proposta segue a SUA Precificação (a revisão que a gerou). Antes todas
+         as propostas da cotação recebiam o preço da Precificação mais recente — a proposta da revisão B ficava com o
+         preço da revisão C. Proposta sem vínculo (antiga) continua com a regra antiga (a aprovada mais recente). */
+      const cacheValores = new Map();
+      const valoresDa = async (pzId) => {
+        const chave = pzId || '';
+        if (!cacheValores.has(chave)) {
+          const r = await window.PropostaHeranca.prefillPorNumeroCotacao(String(numeroCotacao), pzId ? { precificacaoId: pzId } : undefined);
+          const vn = r && r.encontrado && r.prefill && r.prefill.elevador && r.prefill.elevador.valores;
+          const ok = vn && ((Array.isArray(vn.itens) && vn.itens.length) || A().parseNum(vn.valorUnit) > 0);
+          cacheValores.set(chave, ok ? vn : null);
+        }
+        return cacheValores.get(chave);
+      };
       for (const row of alvo) {
         const dj = row.data_json;
-        const temPedido = !!dj.aumentoPendente || dj.elevador.valores.itens.some((it) => it && it.aumentoPendente);
+        const valoresNovos = await valoresDa(row.precificacao_id || dj.precificacaoId || null);
+        if (!valoresNovos) continue;
+        /* proposta com lista de equipamentos e Precificação sem lista: formatos diferentes, não se mexe sozinho */
+        if (Array.isArray(dj.elevador.valores.itens) && !(Array.isArray(valoresNovos.itens) && valoresNovos.itens.length)) continue;
+        const temPedido = !!dj.aumentoPendente || (dj.elevador.valores.itens || []).some((it) => it && it.aumentoPendente);
         const vista = STATUS_VISTOS.includes(row.status);
         const res = A().aplicarNovosValores(dj, valoresNovos, { por: 'sistema (Precificação)' });
         if (!res.mudou) {
