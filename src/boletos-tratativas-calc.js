@@ -61,6 +61,27 @@ window.BoletosTratativasCalc = (() => {
     return t.tipo;
   }
 
+  /* Resposta ao cliente (etapa 2): quem pode receber = e-mails do cliente + remetentes de respostas dele (nunca devolução/servidor).
+     A função do servidor refaz esta conferência; aqui só decide o que a tela oferece e o que já vem marcado
+     (quem respondeu por último; sem resposta, os e-mails do cliente). */
+  const AUTOMATICO_RE = /^(postmaster|mailer-daemon|mail-daemon|microsoftexchange[0-9a-f]*)@/i;
+  function opcoesDestinatarios(emailsCliente, itens) {
+    const respostas = (itens || []).filter(i => i.tipo === 'resposta' && i.deEmail && !AUTOMATICO_RE.test(i.deEmail))
+      .sort((a, b) => ms(b.quando) - ms(a.quando));
+    const ultimo = respostas[0] ? String(respostas[0].deEmail).trim().toLowerCase() : null;
+    const vistos = new Set(), lista = [];
+    const add = (email, origem) => { const e = String(email || '').trim().toLowerCase(); if (!e || vistos.has(e)) return; vistos.add(e); lista.push({ email: e, origem }); };
+    if (ultimo) add(ultimo, 'respondeu');
+    for (const e of emailsCliente || []) add(e, 'cliente');
+    for (const r of respostas) add(r.deEmail, 'respondeu');
+    return lista.map(o => ({ ...o, marcado: ultimo ? o.email === ultimo : o.origem === 'cliente' }));
+  }
+  function assuntoDaResposta(itens) {
+    const avisos = (itens || []).filter(i => (i.tipo === 'aviso' || i.tipo === 'aviso_erro') && i.texto).sort((a, b) => ms(b.quando) - ms(a.quando));
+    const base = avisos[0] ? String(avisos[0].texto).replace(/^\s*\[MODO TESTE\]\s*/i, '').replace(/^(\s*re:\s*)+/i, '').trim() : 'Boletos em aberto';
+    return 'Re: ' + base;
+  }
+
   /* Promessa vencida: a data já passou e o caso não está resolvido (só aviso visual; não há alerta automático). */
   function promessaVencida(caso, hojeISO) {
     return !!(caso && caso.promessa_pagamento && caso.status !== 'resolvido' && String(caso.promessa_pagamento) < hojeISO);
@@ -122,5 +143,5 @@ window.BoletosTratativasCalc = (() => {
     return (casos || []).filter((c) => c.semRespostaNossa || c.promessaVencida || c.status === 'novo').length;
   }
 
-  return { STATUS, ROTULO_STATUS, classificarEntrada, linhaDoTempo, tituloDaTratativa, promessaVencida, casosAtivos, pedemAcao, trecho };
+  return { STATUS, ROTULO_STATUS, classificarEntrada, linhaDoTempo, tituloDaTratativa, promessaVencida, opcoesDestinatarios, assuntoDaResposta, casosAtivos, pedemAcao, trecho };
 })();

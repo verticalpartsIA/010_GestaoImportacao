@@ -7,6 +7,9 @@
 //   automatico   (cron) manda os avisos D-5 / D-1 / D0 / D+1 pela caixa hub@ e avisa o financeiro (Joice e Maximira) dos atrasos
 //                       (só age se boletos_avisos_config.envio_automatico = true)
 //   enviar       (tela) aviso manual de um cliente {codigo_cliente_omie}
+//   responder    (tela) resposta ao cliente por e-mail {codigo_cliente_omie, para[], assunto, texto, envio_id?, simular?}
+//                       (20/11/2026, aba Tratativas). Só os 3 fixos ou quem tem a alçada "tratar". O destinatário só pode ser
+//                       e-mail do cliente (Omie) ou o remetente de uma resposta dele ligada a um aviso — nunca um endereço livre.
 //   sincronizar também pode ser pedido pela tela. Os três e-mails da lista (ver migration) são os únicos
 //   que passam; qualquer outro recebe 403. A lista mora no banco (boletos_avisos_email_permitido).
 //
@@ -682,6 +685,73 @@ async function avisarFinanceiro(boletos, porCliente, hoje, feriados) {
   return `alerta de atraso para ${ALERTA_ATRASO_PARA.length} pessoa(s): ${porCli.size} cliente(s)`;
 }
 
+/* ---------- resposta ao cliente (aba Tratativas, 20/11/2026) ---------- */
+// BEGIN RESPONDER
+const REMETENTE_AUTOMATICO_RE = /^(postmaster|mailer-daemon|mail-daemon|microsoftexchange[0-9a-f]*)@/i;
+function validarResposta(corpo, permitidos) {
+  const lim = new Set((permitidos || []).map((e) => String(e || "").trim().toLowerCase()));
+  const para = [...new Set((Array.isArray(corpo?.para) ? corpo.para : []).map((e) => String(e || "").trim().toLowerCase()).filter(Boolean))];
+  if (!para.length) return { ok: false, erro: "Escolha ao menos um destinatário." };
+  if (para.length > 5) return { ok: false, erro: "No máximo 5 destinatários." };
+  const fora = para.filter((e) => !lim.has(e));
+  if (fora.length) return { ok: false, erro: "Destinatário não permitido: " + fora.join(", ") + ". Só vale e-mail do cliente ou de quem respondeu o aviso." };
+  const assunto = String(corpo?.assunto || "").replace(/[\r\n]+/g, " ").trim();
+  if (assunto.length < 3 || assunto.length > 200) return { ok: false, erro: "O assunto precisa ter de 3 a 200 letras." };
+  const texto = String(corpo?.texto || "").replace(/\r\n/g, "\n").trim();
+  if (texto.length < 3) return { ok: false, erro: "Escreva a mensagem." };
+  if (texto.length > 8000) return { ok: false, erro: "A mensagem passa de 8000 letras." };
+  return { ok: true, para, assunto, texto };
+}
+// END RESPONDER
+
+async function responderCliente(p, email) {
+  const codigo = Number(p.codigo_cliente_omie);
+  if (!Number.isFinite(codigo) || codigo <= 0) return { status: 400, corpo: { error: "Cliente inválido." } };
+  const cliente = ((await pgSelect("boletos_avisos_clientes", `select=codigo_cliente_omie,razao_social,emails&codigo_cliente_omie=eq.${codigo}`)) || [])[0];
+  if (!cliente) return { status: 404, corpo: { error: "Cliente não encontrado em Boletos Avisos." } };
+  const envios = (await pgSelect("boletos_avisos_envios", `select=id,status,criado_em&codigo_cliente_omie=eq.${codigo}&order=criado_em.desc&limit=200`)) || [];
+  if (!envios.length) return { status: 400, corpo: { error: "Este cliente ainda não recebeu nenhum aviso: não há conversa para responder." } };
+  const ids = envios.map((e) => e.id);
+  // remetentes de respostas (entrada) ligadas a avisos deste cliente: também podem receber
+  const entradas = (await pgSelect("emails_projeto", `select=de_email&direcao=eq.entrada&referencia_tipo=eq.boleto_aviso&referencia_id=in.(${ids.join(",")})&limit=500`)) || [];
+  const dosRemetentes = entradas.map((m) => String(m.de_email || "").trim().toLowerCase()).filter((e) => EMAIL_RE.test(e) && !REMETENTE_AUTOMATICO_RE.test(e));
+  const permitidos = [...emailsDoCliente(cliente), ...dosRemetentes];
+  const v = validarResposta(p, permitidos);
+  if (!v.ok) return { status: 400, corpo: { error: v.erro } };
+  // o envio de origem (liga a resposta do cliente ao mesmo caso): o informado, se for deste cliente, senão o último enviado
+  const origem = p.envio_id && ids.includes(p.envio_id) ? p.envio_id : (envios.find((e) => e.status === "enviado") || envios[0]).id;
+  const config = ((await pgSelect("boletos_avisos_config", "select=destino_teste&id=eq.true")) || [])[0] || {};
+  const modoTeste = !!config.destino_teste;
+  const para = modoTeste ? [config.destino_teste] : v.para;
+  const aviso = `[MODO TESTE — esta resposta iria para: ${v.para.join(", ")}]`;
+  const assunto = (modoTeste ? "[MODO TESTE] " : "") + v.assunto;
+  const texto = (modoTeste ? aviso + "\n\n" : "") + v.texto;
+  const cc = !modoTeste && EMAIL_RE.test(CC_FINANCEIRO) && !para.includes(CC_FINANCEIRO) ? [CC_FINANCEIRO] : [];
+  if (p.simular) return { status: 200, corpo: { ok: true, simulado: true, para, cc, assunto, texto, envioId: origem } };
+
+  let messageId;
+  try { messageId = await enviarGraph(para, assunto, texto, null, cc); }
+  catch (e) { return { status: 502, corpo: { error: "Não foi possível enviar: " + String(e?.message || e) } }; }
+  // daqui para a frente o e-mail JÁ saiu: falha de registro vira aviso, nunca erro de envio
+  const avisos = [];
+  try {
+    await pgInsert("emails_projeto", [{
+      numero_cotacao: null, referencia_tipo: "boleto_aviso", referencia_id: origem, direcao: "saida",
+      de_email: SENDER, de_nome: FROM_NAME, para, cc, assunto, corpo_texto: texto, corpo_html: null,
+      message_id: messageId, data_mensagem: new Date().toISOString(), anexos: [], enviado_por: email,
+    }], "return=minimal");
+  } catch (e) { avisos.push("Inbox: " + String(e?.message || e)); }
+  try {
+    await pgInsert("boletos_avisos_tratativas", [{
+      codigo_cliente_omie: codigo, tipo: "resposta_enviada", texto: v.texto, autor: email,
+      meta: { para: v.para, assunto: v.assunto, message_id: messageId, envio_id: origem, modo_teste: modoTeste },
+    }], "return=minimal");
+    const agora = new Date().toISOString();
+    await pgUpsert("boletos_avisos_casos", "codigo_cliente_omie", [{ codigo_cliente_omie: codigo, status: "aguardando_cliente", resolvido_em: null, atualizado_em: agora, atualizado_por: email }]);
+  } catch (e) { avisos.push("Tratativa: " + String(e?.message || e)); }
+  return { status: 200, corpo: { ok: true, para, envioId: origem, messageId, avisos } };
+}
+
 async function enviarManual(codigo, email, simular) {
   const { config, boletos, porCliente, feriados } = await carregarBase();
   const cliente = porCliente.get(Number(codigo));
@@ -710,7 +780,10 @@ async function autenticar(req) {
     if (!email) return null;
     if ((await rpc("boletos_avisos_email_permitido", { p_email: email })) === true) return { modo: "usuario", email };
     // 18/11/2026: quem tem só a alçada "atualizar" (Administração › Alçadas) pode ler o Omie; o resto continua dos 3 fixos
-    if ((await rpc("boletos_avisos_email_pode_atualizar", { p_email: email })) === true) return { modo: "usuario", email, soAtualizar: true };
+    // 20/11/2026: quem tem "tratar" pode responder o cliente (aba Tratativas) e mais nada
+    const podeAtualizar = (await rpc("boletos_avisos_email_pode_atualizar", { p_email: email })) === true;
+    const podeTratar = (await rpc("boletos_avisos_email_pode_tratar", { p_email: email })) === true;
+    if (podeAtualizar || podeTratar) return { modo: "usuario", email, soAtualizar: true, podeAtualizar, podeTratar };
     return { modo: "negado", email };
   } catch (_) { return null; }
 }
@@ -725,7 +798,15 @@ Deno.serve(async (req) => {
   try { p = await req.json(); } catch (_) { /* corpo vazio */ }
   const acao = p?.acao;
   try {
+    if (acao === "responder") {
+      if (auth.modo !== "usuario") return json({ error: "Só pela tela." }, 403);
+      if (auth.soAtualizar && !auth.podeTratar) return json({ error: "Responder o cliente exige a alçada \"tratar\"." }, 403);
+      if (!SENDER || !Deno.env.get("AZURE_TENANT_ID")) return json({ error: "Microsoft Graph não configurada" }, 503);
+      const r = await responderCliente(p, auth.email);
+      return json(r.corpo, r.status);
+    }
     if (acao === "sincronizar") {
+      if (auth.soAtualizar && !auth.podeAtualizar) return json({ error: "Sem a alçada \"atualizar\", não dá para atualizar do Omie." }, 403);
       if (!omieKey || !omieSecret) return json({ error: "OMIE_API_KEY / OMIE_API_SECRET não configuradas" }, 500);
       if (auth.soAtualizar) {
         // protege o Omie (limite de consumo): quem não é dos 3 fixos só atualiza se a última leitura tiver mais de 5 minutos
@@ -738,7 +819,7 @@ Deno.serve(async (req) => {
       }
       return json({ ok: true, ...(await sincronizar()) });
     }
-    if (auth.soAtualizar) return json({ error: "Com a alçada \"atualizar\" só dá para atualizar do Omie." }, 403);
+    if (auth.soAtualizar) return json({ error: "Com as alçadas \"atualizar\" e \"tratar\" só dá para atualizar do Omie e responder clientes." }, 403);
     if (acao === "automatico") {
       if (auth.modo === "usuario" && !p.simular) return json({ error: "Pela tela só dá para simular; o envio automático roda pela rotina." }, 403);
       if (!SENDER || !Deno.env.get("AZURE_TENANT_ID")) return json({ error: "Microsoft Graph não configurada" }, 503);

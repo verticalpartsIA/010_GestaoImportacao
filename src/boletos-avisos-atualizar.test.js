@@ -14,7 +14,7 @@ test('função: quem tem só "atualizar" não envia aviso nem roda o automático
   const iAuto = fn.indexOf('if (acao === "automatico")');
   const iEnviar = fn.indexOf('if (acao === "enviar")');
   assert.ok(i > 0 && i < iAuto && iAuto < iEnviar, 'o bloqueio precisa vir antes de automatico e enviar');
-  assert.match(fn.slice(i, i + 140), /403/);
+  assert.match(fn.slice(i, i + 220), /403/);
 });
 test('função: "sincronizar" tem intervalo mínimo só para quem não é dos 3 fixos', () => {
   const i = fn.indexOf('if (acao === "sincronizar")');
