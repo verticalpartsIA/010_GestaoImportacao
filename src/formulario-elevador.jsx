@@ -171,7 +171,7 @@ const FE_SECOES_POR_TIPO = { escada: FE_SECOES_ESCADA, esteira: FE_SECOES_ESTEIR
    já existiam nas seções livres abaixo e continuam lá). Não troque esses nomes
    sem atualizar a herança da Proposta junto (ver proposta-heranca-escada.test.js). */
 const FE_APLICACAO_USO = ['Comercial', 'Alto Tráfego'];
-const FE_LARGURA_DEGRAU_POR_TIPO = { escada: ['600 mm', '800 mm', '1.000 mm'], esteira: ['800 mm', '1.000 mm', '1.400 mm'] };
+const FE_LARGURA_DEGRAU_POR_TIPO = { escada: ['600 mm', '800 mm', '1.000 mm'], esteira: ['800 mm', '1.000 mm', '1.400 mm', '1.600 mm'] };
 const FE_INCLINACAO_ESCADA = ['30°', '35°'];
 const FE_DEGRAUS_NIVEL = ['Padrão (2)', 'Especial (3 ou 4)'];
 const FE_MATERIAL_DEGRAU = ['Alumínio Acinzentado', 'Inox Preto'];
