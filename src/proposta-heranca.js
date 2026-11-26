@@ -389,9 +389,31 @@
     return out.sort((a, b) => n(a) - n(b));
   }
 
+  /* 26/11/2026 (VPPR-1009-A e VPPR-1011-A): a proposta de ELEVADOR só leva as unidades que a Precificação dela
+     precificou. Antes levava todas as unidades do Formulário: a escada e a esteira de um Formulário misto (1009) e uma
+     unidade de elevador nunca enviada ao fornecedor (1011) entravam na proposta com o preço MÉDIO por equipamento,
+     inflando o total. Precificação sem nenhuma unidade identificada (antiga) ou ausente: fica só o que é elevador
+     (tipo_equipamento 'elevador' ou vazio). Escada/esteira têm bloco próprio (montarBlocoEscadaEsteira), que não passa por aqui. */
+  function soUnidadesDoElevador(fontes) {
+    const unidades = Array.isArray(fontes.unidades) ? fontes.unidades : [];
+    if (!unidades.length) return fontes;
+    const pz = fontes.precificacao || null;
+    const ids = new Set([]
+      .concat((pz && pz.modelos) || [])
+      .concat((pz && pz.resultado_v2 && pz.resultado_v2.modelos) || [])
+      .concat((pz && pz.resultado && pz.resultado.modelos) || [])
+      .map((m) => m && m.unidadeId).filter(Boolean));
+    const ehElevador = (u) => !u.tipo_equipamento || u.tipo_equipamento === 'elevador';
+    const filtradas = ids.size ? unidades.filter((u) => ids.has(u.id)) : unidades.filter(ehElevador);
+    /* nenhuma casou (ids de outro formato): não esvazia a proposta — mantém só os elevadores */
+    const finais = filtradas.length ? filtradas : unidades.filter(ehElevador);
+    return finais.length === unidades.length ? fontes : { ...fontes, unidades: finais };
+  }
+
   /* ---------- Prefill no formato do PropostaEditor ---------- */
-  function montarPrefill(fontes) {
-    if (!fontes || !fontes.encontrado) return null;
+  function montarPrefill(fontesOriginais) {
+    if (!fontesOriginais || !fontesOriginais.encontrado) return null;
+    const fontes = soUnidadesDoElevador(fontesOriginais);
     const { formulario, cliente, cotacao, precificacao, numeroCotacao } = fontes;
     // V2 (custo econômico completo) é o motor oficial desde 29/08 — usa o
     // preço dele; cai pro V1 só em precificação antiga que nunca rodou o
