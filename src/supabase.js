@@ -162,11 +162,32 @@
     // Segurança real (#571) — troca o login do vpsistema por uma sessão nativa do vpprd (Edge Function
     // sso-exchange). Em modo 'shadow' só observa; em 'on' (piloto F0) o cliente de dados acima passa a usar a
     // sessão. Uma falha aqui nunca quebra o app (VpAuth.init não lança; sem sessão = chave pública).
+    function sincronizarRealtime(token) {
+      try {
+        if (!token || !sb || !sb.realtime || typeof sb.realtime.setAuth !== 'function') return;
+        sb.realtime.setAuth(token);
+      } catch (e) { /* Realtime nunca bloqueia o app */ }
+    }
+
     try {
       if (window.VpAuth) {
+        if (typeof window.VpAuth.onChange === 'function') {
+          window.VpAuth.onChange(function (_ev, _u, sessao) {
+            try {
+              const s = window.VpAuth.status && window.VpAuth.status();
+              const tok = sessao && sessao.access_token;
+              if (s && s.dados === 'sessao' && tok) sincronizarRealtime(tok);
+            } catch (e) {}
+          });
+        }
         window.VpAuth.init({ ssoToken: ssoToken || null }).then(function () {
           const s = window.VpAuth.status();
           if (s.modo !== 'off') console.info('[VpAuth] modo=' + s.modo + ' estado=' + s.estado + (s.motivo ? ' (' + s.motivo + ')' : ''));
+          if (s.dados === 'sessao' && window.VpAuth.getAccessToken) {
+            Promise.resolve(window.VpAuth.getAccessToken()).then(function (tok) {
+              if (tok) sincronizarRealtime(tok);
+            }).catch(function () {});
+          }
         });
       }
     } catch (e) { /* sombra: nunca bloqueia */ }

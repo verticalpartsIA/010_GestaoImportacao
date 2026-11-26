@@ -164,7 +164,8 @@ const NAV_GROUPS = [
        evolucao-fabricacao, então links antigos (/logistica/evolucao-fabricacao) seguem abrindo. */
     { id: "evolucao-fabricacao", label: "Fabricação QC", icon: "history" },
     { id: "quadros-calculadora-cabos", label: "Calculadora de Cabos", icon: "bolt" },
-    { id: "quadros-formularios-respondidos", label: "Formulários Respondidos", icon: "fileText" },
+    /* 23/11/2026 (pedido do Gelson): os vendedores ("Comercial | Pré-venda" alocado) também veem este item, sem abrir o resto do grupo. */
+    { id: "quadros-formularios-respondidos", label: "Formulários Respondidos", icon: "fileText", gruposExtras: ["Comercial | Pré-venda"] },
   ]},
   { label: "Administração", items: [
     { id: "logs", label: "Logs de Atividade", icon: "history", restrict: ["admin"] },
@@ -255,7 +256,10 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
   const filtrarPorAlocacao = Array.isArray(gruposAlocados) && gruposAlocados.length > 0;
   /* Quem já tinha "Logística Interna" alocada continua vendo o grupo novo (o PCP/MES saiu de lá). */
   const GRUPO_ALIAS = { "Fabricação": ["Logística Interna"], "Quadros de Comando": ["Fabricação", "Logística Interna"] };
-  const grupoVisivel = (group) => !filtrarPorAlocacao || group.label === "Geral" || group.empty || gruposAlocados.includes(group.label) || (GRUPO_ALIAS[group.label] || []).some((a) => gruposAlocados.includes(a));
+  const grupoAlocadoInteiro = (group) => !filtrarPorAlocacao || group.label === "Geral" || group.empty || gruposAlocados.includes(group.label) || (GRUPO_ALIAS[group.label] || []).some((a) => gruposAlocados.includes(a));
+  /* Item com `gruposExtras` aparece também para quem tem um desses grupos, mesmo sem o grupo do item (só ele, não o grupo inteiro). */
+  const itemPorAlocacao = (group, item) => grupoAlocadoInteiro(group) || (item.gruposExtras || []).some((g) => gruposAlocados.includes(g));
+  const grupoVisivel = (group) => grupoAlocadoInteiro(group) || group.items.some((i) => itemPorAlocacao(group, i));
   /* Módulos recolhidos individualmente (clique no título) — persiste por navegador. */
   const [collapsedGroups, setCollapsedGroups] = React.useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem(GROUPS_LS_KEY) || "[]")); }
@@ -286,7 +290,7 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
   const version = window.__VP_VERSION;
   const versionLabel = version && formatBuildTime(version.buildTime);
   /* Lista da busca = a MESMA filtragem que desenha o menu (perfil + alocação): não mostra tela que a pessoa não vê. */
-  const gruposBusca = NAV_GROUPS.filter((g) => grupoVisivel(g)).map((g) => ({ label: g.label, items: g.items.filter(filterVisible) }));
+  const gruposBusca = NAV_GROUPS.filter((g) => grupoVisivel(g)).map((g) => ({ label: g.label, items: g.items.filter((i) => filterVisible(i) && itemPorAlocacao(g, i)) }));
   return (
     <aside className="sidebar">
       <div className="sidebar__brand">
@@ -306,7 +310,7 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
         onEscolher={(r) => { setBuscaAberta(false); setRoute(r.id); }}/> : null}
       <div className="sidebar__scroll">
         {NAV_GROUPS.filter((group) => grupoVisivel(group)).map((group) => {
-          const items = group.items.filter(filterVisible);
+          const items = group.items.filter((i) => filterVisible(i) && itemPorAlocacao(group, i));
           /* Seção com `empty: true` é placeholder proposital sem nenhum item —
              mostra o label mesmo assim. Seção comum sem itens visíveis
              (todos ocultados pela role atual) continua oculta por completo. */
