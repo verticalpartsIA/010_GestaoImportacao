@@ -351,3 +351,15 @@ test('aplicarNovosValores (1 equipamento): preço igual não mexe; Precificaçã
   assert.strictEqual(A.aplicarNovosValores(propostaUmEquipamento(), { quantidade: '1', valorUnit: '351019,05' }).mudou, false);
   assert.strictEqual(A.aplicarNovosValores(propostaUmEquipamento(), { quantidade: '1', valorUnit: '' }).mudou, false);
 });
+
+test('aplicarNovosValores (1 equipamento): a opção de 90 dias acompanha a Precificação (atualiza ou some)', () => {
+  const A = carregar();
+  const antiga = propostaUmEquipamento();
+  antiga.elevador.valores.opcao90 = { valorUnit: 400000 };
+  const nova = A.aplicarNovosValores(antiga, { quantidade: '1', valorUnit: '520190,84', opcao90: { valorUnit: 560000 } }, { agora: AGORA });
+  assert.deepStrictEqual(nova.valores.opcao90, { valorUnit: 560000 });
+  const sem = A.aplicarNovosValores(antiga, { quantidade: '1', valorUnit: '520190,84' }, { agora: AGORA });
+  assert.strictEqual(sem.valores.opcao90, null, 'Precificação sem 90 dias: a opção antiga não fica');
+  const nunca = A.aplicarNovosValores(propostaUmEquipamento(), { quantidade: '1', valorUnit: '520190,84' }, { agora: AGORA });
+  assert.ok(!('opcao90' in nunca.valores), 'proposta que nunca teve a opção não ganha campo');
+});

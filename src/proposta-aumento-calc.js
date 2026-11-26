@@ -277,8 +277,10 @@
     const atendidos = [];
     const pg = refazerPagamento(d, v, valoresNovos, total, por, quando, O, atendidos);
     const valorUnit = (O && O.textoBR) ? O.textoBR(unitNovo) : String(valoresNovos.valorUnit);
-    return { mudou: true, valores: { valorUnit, quantidade: String(qtd), parcelas: pg.parcelas, formaTipo: pg.formaTipo, qtdParcelas: pg.qtdParcelas, forma: pg.forma },
-      propostaAtendida: pg.propostaAtendida, atendidos, total, totalAnterior };
+    const valores = { valorUnit, quantidade: String(qtd), parcelas: pg.parcelas, formaTipo: pg.formaTipo, qtdParcelas: pg.qtdParcelas, forma: pg.forma };
+    /* A opção de entrega em 90 dias acompanha a Precificação: vem a nova ou some a antiga (nunca fica um preço de 90 dias velho). */
+    if (valoresNovos.opcao90 || v.opcao90) valores.opcao90 = valoresNovos.opcao90 || null;
+    return { mudou: true, valores, propostaAtendida: pg.propostaAtendida, atendidos, total, totalAnterior };
   }
 
   /* Há pedido aberto em algum nível da proposta? (proposta inteira ou itens) */
