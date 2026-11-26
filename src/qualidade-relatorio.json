@@ -1,0 +1,148 @@
+{
+  "geradoEm": "2026-11-08T04:11:21.703Z",
+  "baseCommit": "de8617b",
+  "ferramenta": "@axe-core/playwright 4.10.2",
+  "regras": "WCAG 2.2 A/AA (wcag2a, wcag2aa, wcag21a, wcag21aa, wcag22aa); só gravidade crítica e séria",
+  "limites": [
+    "Supabase simulado e vazio: só o estado inicial da tela (sem tabela preenchida, modal aberto ou erro).",
+    "O axe cobre só parte do WCAG; teclado, leitor de tela, zoom e celular não são testados.",
+    "Só as telas listadas abaixo foram medidas; as demais rotas do hub não."
+  ],
+  "totalTelas": 8,
+  "totalViolacoes": 10,
+  "totalNovas": 0,
+  "telas": [
+    {
+      "tela": "aval-financeiro",
+      "rotulo": "Aval Financeiro",
+      "rota": "/geral/aval-financeiro",
+      "violacoes": 1,
+      "novas": 0,
+      "achados": [
+        {
+          "regra": "color-contrast",
+          "impacto": "serious",
+          "alvo": ".page-head__eyebrow",
+          "conhecida": true
+        }
+      ]
+    },
+    {
+      "tela": "cadastro-clientes",
+      "rotulo": "Cadastros › Clientes",
+      "rota": "/geral/cadastro-clientes",
+      "violacoes": 1,
+      "novas": 0,
+      "achados": [
+        {
+          "regra": "color-contrast",
+          "impacto": "serious",
+          "alvo": ".page-head__eyebrow",
+          "conhecida": true
+        }
+      ]
+    },
+    {
+      "tela": "dashboard",
+      "rotulo": "Dashboard",
+      "rota": "/geral/dashboard",
+      "violacoes": 2,
+      "novas": 0,
+      "achados": [
+        {
+          "regra": "color-contrast",
+          "impacto": "serious",
+          "alvo": ".page-head__eyebrow",
+          "conhecida": true
+        },
+        {
+          "regra": "scrollable-region-focusable",
+          "impacto": "serious",
+          "alvo": ".gantt",
+          "conhecida": true
+        }
+      ]
+    },
+    {
+      "tela": "decisoes",
+      "rotulo": "Central de Decisões",
+      "rota": "/geral/decisoes",
+      "violacoes": 1,
+      "novas": 0,
+      "achados": [
+        {
+          "regra": "color-contrast",
+          "impacto": "serious",
+          "alvo": ".page-head__eyebrow",
+          "conhecida": true
+        }
+      ]
+    },
+    {
+      "tela": "formulario-elevador",
+      "rotulo": "Formulário de Elevador",
+      "rota": "/geral/formulario-elevador",
+      "violacoes": 2,
+      "novas": 0,
+      "achados": [
+        {
+          "regra": "color-contrast",
+          "impacto": "serious",
+          "alvo": ".page-head__eyebrow",
+          "conhecida": true
+        },
+        {
+          "regra": "color-contrast",
+          "impacto": "serious",
+          "alvo": ".mono",
+          "conhecida": true
+        }
+      ]
+    },
+    {
+      "tela": "formulario-quadro-comando",
+      "rotulo": "Formulário do Quadro de Comando",
+      "rota": "/geral/formulario-quadro-comando",
+      "violacoes": 1,
+      "novas": 0,
+      "achados": [
+        {
+          "regra": "color-contrast",
+          "impacto": "serious",
+          "alvo": ".page-head__eyebrow",
+          "conhecida": true
+        }
+      ]
+    },
+    {
+      "tela": "propostas",
+      "rotulo": "Propostas",
+      "rota": "/geral/propostas",
+      "violacoes": 1,
+      "novas": 0,
+      "achados": [
+        {
+          "regra": "color-contrast",
+          "impacto": "serious",
+          "alvo": ".page-head__eyebrow",
+          "conhecida": true
+        }
+      ]
+    },
+    {
+      "tela": "separacao",
+      "rotulo": "Separação (pedidos a separar)",
+      "rota": "/geral/separacao",
+      "violacoes": 1,
+      "novas": 0,
+      "achados": [
+        {
+          "regra": "color-contrast",
+          "impacto": "serious",
+          "alvo": ".page-head__eyebrow",
+          "conhecida": true
+        }
+      ]
+    }
+  ]
+}
